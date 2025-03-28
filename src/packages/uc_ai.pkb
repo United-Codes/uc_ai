@@ -1,17 +1,181 @@
 create or replace package body uc_ai as
 
-  FUNCTION get_tool_schema(p_tool_id IN NUMBER) 
-    RETURN JSON_OBJECT_T 
-  AS
-    l_tool_code VARCHAR2(255);
-    l_tool_description VARCHAR2(4000);
+  procedure wrap_as_array (
+    p_row         in uc_ai_tool_parameters%rowtype
+  , pio_param_obj in out nocopy json_object_t
+  )
+  as
+    l_param_copy json_object_t := pio_param_obj;
+  begin
+    pio_param_obj := json_object_t();
+
+    pio_param_obj.put('type', 'array');
+    pio_param_obj.put('items', l_param_copy);
+
+    if p_row.array_min_items is not null then
+      pio_param_obj.put('minItems', p_row.array_min_items);
+    end if;
+
+    if p_row.array_max_items is not null then
+      pio_param_obj.put('maxItems', p_row.array_max_items);
+    end if;
+  exception
+    when others then
+      apex_debug.error('Error in wrap_as_array: %s', sqlerrm || ' ' || dbms_utility.format_call_stack);
+      raise;
+  end wrap_as_array;
+
+  procedure prepare_single_parameter (
+    p_row          in uc_ai_tool_parameters%rowtype
+  , pio_required   in out nocopy json_array_t
+  , po_param_obj   out    json_object_t
+  )
+  as
+    e_unhandled_type EXCEPTION;
+
+    l_obj_attrs     json_object_t;
+    l_obj_required  json_array_t;
+  begin
+    po_param_obj := json_object_t();
+    -- Add description
+    po_param_obj.put('description', p_row.description);
+    
+    
+    -- Handle scalar types
+    po_param_obj.put('type', p_row.data_type);
+    
+    -- Add type-specific constraints
+    CASE p_row.data_type
+      WHEN 'string' THEN
+        IF p_row.min_length IS NOT NULL THEN
+          po_param_obj.put('minLength', p_row.min_length);
+        END IF;
+        
+        IF p_row.max_length IS NOT NULL THEN
+          po_param_obj.put('maxLength', p_row.max_length);
+        END IF;
+        
+        IF p_row.pattern IS NOT NULL THEN
+          po_param_obj.put('pattern', p_row.pattern);
+        END IF;
+        
+        IF p_row.format IS NOT NULL THEN
+          po_param_obj.put('format', p_row.format);
+        END IF;
+      
+      WHEN 'number' THEN
+        IF p_row.min_num_val IS NOT NULL THEN
+          po_param_obj.put('minimum', p_row.min_num_val);
+        END IF;
+        
+        IF p_row.max_num_val IS NOT NULL THEN
+          po_param_obj.put('maximum', p_row.max_num_val);
+        END IF;
+      
+      WHEN 'integer' THEN
+        IF p_row.min_num_val IS NOT NULL THEN
+          po_param_obj.put('minimum', FLOOR(p_row.min_num_val));
+        END IF;
+        
+        IF p_row.max_num_val IS NOT NULL THEN
+          po_param_obj.put('maximum', FLOOR(p_row.max_num_val));
+        END IF;
+      WHEN 'boolean' THEN
+        null;
+      WHEN 'object' THEN
+        l_obj_attrs    := json_object_t();
+        l_obj_required := json_array_t();
+        for sub_param in (
+          select *
+            from uc_ai_tool_parameters
+           where parent_param_id = p_row.id
+        )
+        loop
+          declare
+            l_sub_param_obj json_object_t := json_object_t();
+          begin
+            -- Prepare the sub-parameter
+            prepare_single_parameter(sub_param, l_obj_required, l_sub_param_obj);
+            
+            -- Add to object attributes
+            l_obj_attrs.put(sub_param.name, l_sub_param_obj);
+          end;
+        end loop;
+        po_param_obj.put('properties', l_obj_attrs);
+        po_param_obj.put('required', l_obj_required);
+      ELSE
+        apex_debug.error('Unhandled data type: %s', p_row.data_type);
+        raise e_unhandled_type;
+    END CASE;
+    
+    -- Add enum values for scalar types
+    IF p_row.data_type IN ('string', 'number', 'integer') AND p_row.enum_values IS NOT NULL THEN
+      declare
+        l_enum_values apex_t_varchar2;
+        l_enum_arr    json_array_t := json_array_t();
+      begin
+        l_enum_values := apex_string.split(p_row.enum_values, ':');
+        for i in 1 .. l_enum_values.count loop
+          l_enum_arr.append(l_enum_values(i));
+        end loop;
+        -- Parse the JSON array from enum_values CLOB
+        po_param_obj.put('enum', l_enum_arr);
+      end;
+    END IF;
+ 
+    -- Add default value if specified
+    IF p_row.default_value IS NOT NULL THEN
+      -- Handle different types of default values
+      IF p_row.data_type = 'string' THEN
+        po_param_obj.put('default', p_row.default_value);
+      ELSIF p_row.data_type = 'boolean' THEN
+        -- Convert string representation to boolean
+        IF LOWER(p_row.default_value) IN ('true', '1') THEN
+          po_param_obj.put('default', TRUE);
+        ELSE
+          po_param_obj.put('default', FALSE);
+        END IF;
+      ELSIF p_row.data_type = 'number' THEN
+        po_param_obj.put('default', TO_NUMBER(p_row.default_value));
+      ELSIF p_row.data_type = 'integer' THEN
+        po_param_obj.put('default', FLOOR(TO_NUMBER(p_row.default_value)));
+      ELSIF p_row.data_type = 'array' AND p_row.default_value LIKE '[%]' THEN
+        -- Parse JSON array from default_value
+        po_param_obj.put('default', JSON_ARRAY_T.parse(p_row.default_value));
+      END IF;
+    END IF;
+
+      -- Handle array type
+    if p_row.is_array = 1 then
+      po_param_obj.put('type', 'array');
+      wrap_as_array(p_row, po_param_obj);
+    end if;
+
+    -- Add to required array if needed
+    IF p_row.required = 1 THEN
+      pio_required.append(p_row.name);
+    END IF;
+
+  exception
+    when others then
+      apex_debug.error('Error in prepare_single_parameter: %s', sqlerrm || ' ' || dbms_utility.format_call_stack);
+      raise;
+  end prepare_single_parameter;
+
+
+  function get_tool_schema(
+    p_tool_id in uc_ai_tools.id%type
+  ) 
+    return json_object_t 
+  as
+    l_tool_code        uc_ai_tools.code%type;
+    l_tool_description uc_ai_tools.description%type;
     
     -- JSON objects
-    l_result     JSON_OBJECT_T := JSON_OBJECT_T();
-    l_function   JSON_OBJECT_T := JSON_OBJECT_T();
-    l_parameters JSON_OBJECT_T := JSON_OBJECT_T();
-    l_properties JSON_OBJECT_T := JSON_OBJECT_T();
-    l_required   JSON_ARRAY_T  := JSON_ARRAY_T();
+    l_function     JSON_OBJECT_T := JSON_OBJECT_T();
+    l_input_schema JSON_OBJECT_T := JSON_OBJECT_T();
+    l_properties   JSON_OBJECT_T := JSON_OBJECT_T();
+    l_required     JSON_ARRAY_T  := JSON_ARRAY_T();
     
   BEGIN
     -- Get tool information
@@ -22,158 +186,34 @@ create or replace package body uc_ai as
     
     -- Process each parameter
     FOR param_rec IN (
-      SELECT 
-        name,
-        description,
-        data_type,
-        required,
-        min_num_val,
-        max_num_val,
-        enum_values,
-        default_value,
-        array_min_items,
-        array_max_items,
-        pattern,
-        format,
-        min_length,
-        max_length
+      SELECT *
       FROM uc_ai_tool_parameters
       WHERE tool_id = p_tool_id
+        AND parent_param_id IS NULL
       ORDER BY name
     ) LOOP
       -- Create JSON object for this parameter
       DECLARE
         l_param_obj JSON_OBJECT_T := JSON_OBJECT_T();
       BEGIN
-        -- Add description
-        l_param_obj.put('description', param_rec.description);
-        
-        -- Handle different data types
-        IF param_rec.data_type = 'array' THEN
-          l_param_obj.put('type', 'array');
-          
-          -- Create items specification
-          DECLARE
-            l_items_obj JSON_OBJECT_T := JSON_OBJECT_T();
-          BEGIN
-            l_items_obj.put('type', param_rec.data_type);
-            
-            -- Add additional array item constraints
-            IF param_rec.data_type = 'string' AND param_rec.pattern IS NOT NULL THEN
-              l_items_obj.put('pattern', param_rec.pattern);
-            END IF;
-            
-            -- Handle enum values for array items
-            IF param_rec.data_type IN ('string', 'number', 'integer') AND param_rec.enum_values IS NOT NULL THEN
-              -- Parse the JSON array from enum_values CLOB
-              l_items_obj.put('enum', JSON_ARRAY_T.parse(param_rec.enum_values));
-            END IF;
-            
-            l_param_obj.put('items', l_items_obj);
-          END;
-          
-          -- Array constraints
-          IF param_rec.array_min_items IS NOT NULL THEN
-            l_param_obj.put('minItems', param_rec.array_min_items);
-          END IF;
-          
-          IF param_rec.array_max_items IS NOT NULL THEN
-            l_param_obj.put('maxItems', param_rec.array_max_items);
-          END IF;
-        ELSE
-          -- Handle scalar types
-          l_param_obj.put('type', param_rec.data_type);
-          
-          -- Add type-specific constraints
-          CASE param_rec.data_type
-            WHEN 'string' THEN
-              IF param_rec.min_length IS NOT NULL THEN
-                l_param_obj.put('minLength', param_rec.min_length);
-              END IF;
-              
-              IF param_rec.max_length IS NOT NULL THEN
-                l_param_obj.put('maxLength', param_rec.max_length);
-              END IF;
-              
-              IF param_rec.pattern IS NOT NULL THEN
-                l_param_obj.put('pattern', param_rec.pattern);
-              END IF;
-              
-              IF param_rec.format IS NOT NULL THEN
-                l_param_obj.put('format', param_rec.format);
-              END IF;
-            
-            WHEN 'number' THEN
-              IF param_rec.min_num_val IS NOT NULL THEN
-                l_param_obj.put('minimum', param_rec.min_num_val);
-              END IF;
-              
-              IF param_rec.max_num_val IS NOT NULL THEN
-                l_param_obj.put('maximum', param_rec.max_num_val);
-              END IF;
-            
-            WHEN 'integer' THEN
-              IF param_rec.min_num_val IS NOT NULL THEN
-                l_param_obj.put('minimum', FLOOR(param_rec.min_num_val));
-              END IF;
-              
-              IF param_rec.max_num_val IS NOT NULL THEN
-                l_param_obj.put('maximum', FLOOR(param_rec.max_num_val));
-              END IF;
-          END CASE;
-          
-          -- Add enum values for scalar types
-          IF param_rec.data_type IN ('string', 'number', 'integer') AND param_rec.enum_values IS NOT NULL THEN
-            -- Parse the JSON array from enum_values CLOB
-            l_param_obj.put('enum', JSON_ARRAY_T.parse(param_rec.enum_values));
-          END IF;
-        END IF;
-        
-        -- Add default value if specified
-        IF param_rec.default_value IS NOT NULL THEN
-          -- Handle different types of default values
-          IF param_rec.data_type = 'string' THEN
-            l_param_obj.put('default', param_rec.default_value);
-          ELSIF param_rec.data_type = 'boolean' THEN
-            -- Convert string representation to boolean
-            IF LOWER(param_rec.default_value) IN ('true', '1') THEN
-              l_param_obj.put('default', TRUE);
-            ELSE
-              l_param_obj.put('default', FALSE);
-            END IF;
-          ELSIF param_rec.data_type = 'number' THEN
-            l_param_obj.put('default', TO_NUMBER(param_rec.default_value));
-          ELSIF param_rec.data_type = 'integer' THEN
-            l_param_obj.put('default', FLOOR(TO_NUMBER(param_rec.default_value)));
-          ELSIF param_rec.data_type = 'array' AND param_rec.default_value LIKE '[%]' THEN
-            -- Parse JSON array from default_value
-            l_param_obj.put('default', JSON_ARRAY_T.parse(param_rec.default_value));
-          END IF;
-        END IF;
-        
+        prepare_single_parameter(param_rec, l_required, l_param_obj);
         -- Add parameter to properties
         l_properties.put(param_rec.name, l_param_obj);
-        
-        -- Add to required array if needed
-        IF param_rec.required = 1 THEN
-          l_required.append(param_rec.name);
-        END IF;
       END;
     END LOOP;
     
     -- Build the complete JSON structure
-    l_parameters.put('type', 'object');
-    l_parameters.put('properties', l_properties);
-    l_parameters.put('required', l_required);
+    l_input_schema.put('type', 'object');
+    l_input_schema.put('properties', l_properties);
+    l_input_schema.put('required', l_required);
+    l_input_schema.put('additionalProperties', FALSE);
+    l_input_schema.put('$schema', 'http://json-schema.org/draft-07/schema#');
     
     l_function.put('name', l_tool_code);
     l_function.put('description', l_tool_description);
-    l_function.put('parameters', l_parameters);
-    
-    l_result.put('type', 'function');
-    l_result.put('function', l_function);
-    
-    return l_result;
+    l_function.put('input_schema', l_input_schema);
+  
+    return l_function;
   exception
     when others then
       apex_debug.error('Error in get_tool_schema: %s', sqlerrm || ' ' || dbms_utility.format_call_stack);

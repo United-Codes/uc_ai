@@ -52,6 +52,7 @@ create table uc_ai_tool_parameters(
   format              varchar2(255),                 -- Format specifier (e.g., date-time, email)
   min_length          number,                        -- For string parameters
   max_length          number,                        -- For string parameters
+  parent_param_id     number,                        -- For nested parameters
   created_by          varchar2(255) not null,
   created_at          timestamp not null,
   updated_by          varchar2(255) not null,
@@ -63,7 +64,7 @@ create table uc_ai_tool_parameters(
   constraint uc_ai_tool_parameters_tool_id_fk foreign key (tool_id) references uc_ai_tools(id) on delete cascade,
 
   constraint uc_ai_tool_parameters_data_type_ck check (
-    data_type in ('string', 'number', 'integer', 'boolean', 'array', 'object')
+    data_type in ('string', 'number', 'integer', 'boolean', 'object')
   ),
 
   -- For number/integer type: only min_num_val and max_num_val should be filled
@@ -111,7 +112,9 @@ create table uc_ai_tool_parameters(
       (enum_values is not null and data_type in ('string', 'number', 'integer')) 
       or 
       (enum_values is null)
-  )
+  ),
+
+  constraint uc_ai_tool_parameters_parent_param_id_fk foreign key (parent_param_id) references uc_ai_tool_parameters(id) on delete cascade
 );  
 
 
