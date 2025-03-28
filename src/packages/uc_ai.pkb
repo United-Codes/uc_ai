@@ -1,5 +1,7 @@
 create or replace package body uc_ai as
 
+  gc_scope_prefix constant varchar2(31) := lower($$plsql_unit) || '.';
+
   procedure wrap_as_array (
     p_row         in uc_ai_tool_parameters%rowtype
   , pio_param_obj in out nocopy json_object_t
@@ -219,6 +221,55 @@ create or replace package body uc_ai as
       apex_debug.error('Error in get_tool_schema: %s', sqlerrm || ' ' || dbms_utility.format_call_stack);
       raise;
   END get_tool_schema;
+
+
+  function get_tools_array (
+    p_flavor in varchar2 default 'openai'
+  ) return json_array_t
+  as
+    l_tools_array  json_array_t := json_array_t();
+    l_tool_obj     json_object_t;
+    l_tool_cpy_obj json_object_t;
+  begin
+    for rec in (
+      select id
+        from uc_ai_tools
+    )
+    loop
+      l_tool_obj := get_tool_schema(rec.id);
+
+      if p_flavor = 'openai' then
+        l_tool_cpy_obj := l_tool_obj;
+
+        l_tool_obj := json_object_t();
+        l_tool_obj.put('type', 'function');
+        l_tool_obj.put('function', l_tool_cpy_obj);
+      end if;
+
+      l_tools_array.append(l_tool_obj);
+    end loop;
+
+    return l_tools_array;
+  exception
+    when others then
+      apex_debug.error('Error in get_tools_array: %s', sqlerrm || ' ' || dbms_utility.format_call_stack);
+      raise;
+  end get_tools_array;
+
+
+
+  procedure generate_text (
+    p_prompt        in clob
+  , p_system_prompt in clob default null
+  )
+  as
+  begin
+    uc_ai_openai.generate_text(
+      p_prompt        => p_prompt
+    , p_system_prompt => p_system_prompt
+    );
+
+  end generate_text;
 
 end uc_ai;
 /

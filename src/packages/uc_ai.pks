@@ -6,8 +6,13 @@ create or replace package uc_ai as
     return json_object_t 
   ;
 
+  function get_tools_array (
+    p_flavor in varchar2 default 'openai'
+  ) return json_array_t;
+
   procedure generate_text (
-    p_prompt in varchar2
+    p_prompt        in clob
+  , p_system_prompt in clob default null
   );
 
 end uc_ai;
