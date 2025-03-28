@@ -1,0 +1,133 @@
+create sequence uc_ai_categories_seq;
+
+create table uc_ai_categories(
+  id                   number default on null uc_ai_categories_seq.nextval not null,
+  name                 varchar2(255)  not null,
+  description          varchar2(4000),
+  created_by           varchar2(255) not null,
+  created_at           timestamp not null,
+  updated_by           varchar2(255) not null,
+  updated_at           timestamp not null,
+  constraint uc_ai_categories_pk primary key (id),
+  constraint uc_ai_categories_uk unique (name)
+);  
+
+create sequence uc_ai_tools_seq;
+
+create table uc_ai_tools(
+  id                   number default on null uc_ai_tools_seq.nextval not null,
+  code                 varchar2(255)  not null,
+  description          varchar2(4000) not null,
+  active               number(1) default 1 not null,
+  response_schema      clob,
+  version              varchar2(50) default '1.0' not null,
+  function_call        clob not null,
+  authorization_schema varchar2(255),
+  created_by           varchar2(255) not null,
+  created_at           timestamp not null,
+  updated_by           varchar2(255) not null,
+  updated_at           timestamp not null,
+  constraint uc_ai_tools_pk primary key (id),
+  constraint uc_ai_tools_uk unique (code),
+  constraint uc_ai_tools_active_ck check (active in (0,1))
+);  
+
+create sequence uc_ai_tool_parameters_seq;
+
+create table uc_ai_tool_parameters(
+  id                  number default on null uc_ai_tool_parameters_seq.nextval not null,
+  tool_id             number not null,
+  name                varchar2(255)  not null,
+  description         varchar2(4000) not null,
+  required            number(1) default 1 not null,
+  data_type           varchar2(255) not null,
+  min_num_val         number,
+  max_num_val         number,
+  enum_values         varchar2(4000),                -- For parameters with enumerated values, : seperated
+  default_value       varchar2(4000),                -- Default value for the parameter
+  is_array            number(1) default 0 not null,  -- Specify if the data_type is expected as an array (e. g. number -> number[])
+  array_min_items     number,                        -- Minimum number of items in array
+  array_max_items     number,                        -- Maximum number of items in array
+  pattern             varchar2(4000),                -- Regex pattern for string validation
+  format              varchar2(255),                 -- Format specifier (e.g., date-time, email)
+  min_length          number,                        -- For string parameters
+  max_length          number,                        -- For string parameters
+  created_by          varchar2(255) not null,
+  created_at          timestamp not null,
+  updated_by          varchar2(255) not null,
+  updated_at          timestamp not null,
+  constraint uc_ai_tool_parameters_pk primary key (id),
+  constraint uc_ai_tool_parameters_uk unique (tool_id, name),
+  constraint uc_ai_tool_parameters_required_ck check (required in (0,1)),
+
+  constraint uc_ai_tool_parameters_tool_id_fk foreign key (tool_id) references uc_ai_tools(id) on delete cascade,
+
+  constraint uc_ai_tool_parameters_data_type_ck check (
+    data_type in ('string', 'number', 'integer', 'boolean', 'array', 'object')
+  ),
+
+  -- For number/integer type: only min_num_val and max_num_val should be filled
+  constraint uc_ai_tool_parameters_number_cols_ck check (
+      (data_type in ('number', 'integer') and 
+      (min_length is null and max_length is null and pattern is null)) 
+      or 
+      (data_type not in ('number', 'integer'))
+  ),
+
+  -- For string type: only min_length, max_length, pattern, and format should be filled
+  constraint uc_ai_tool_parameters_string_cols_ck check (
+      (data_type = 'string' and 
+      (min_num_val is null and max_num_val is null)) 
+      or 
+      (data_type != 'string')
+  ),
+
+  -- For boolean type: most validation fields should be null
+  constraint uc_ai_tool_parameters_boolean_cols_ck check (
+      (data_type = 'boolean' and 
+      (min_num_val is null and max_num_val is null and 
+        min_length is null and max_length is null and 
+        pattern is null and format is null)) 
+      or 
+      (data_type != 'boolean')
+  ),
+
+  -- For array type: ensure array flags are properly set
+  constraint uc_ai_tool_parameters_array_cols_ck check (
+      (data_type = 'array' and is_array = 1) 
+      or 
+      (data_type != 'array')
+  ),
+
+  -- Ensure array properties are only set when is_array = 1
+  constraint uc_ai_tool_parameters_array_props_ck check (
+      (is_array = 1 and (array_min_items is not null or array_max_items is not null)) 
+      or 
+      (is_array = 0 and array_min_items is null and array_max_items is null)
+  ),
+
+  -- For enum values: ensure they're only used with appropriate types
+  constraint uc_ai_tool_parameters_enum_ck check (
+      (enum_values is not null and data_type in ('string', 'number', 'integer')) 
+      or 
+      (enum_values is null)
+  )
+);  
+
+
+
+create sequence uc_ai_tool_categories_seq;
+
+create table uc_ai_tool_categories(
+  id                   number default on null uc_ai_tool_categories_seq.nextval not null,
+  tool_id              number not null,
+  category_id          number not null,
+  created_by           varchar2(255) not null,
+  created_at           timestamp not null,
+  updated_by           varchar2(255) not null,
+  updated_at           timestamp not null,
+  constraint uc_ai_tool_categories_pk primary key (id),
+  constraint uc_ai_tool_categories_uk unique (tool_id, category_id),
+  constraint uc_ai_tool_categories_tool_id_fk foreign key (tool_id) references uc_ai_tools(id) on delete cascade,
+  constraint uc_ai_tool_categories_category_id_fk foreign key (category_id) references uc_ai_categories(id) on delete cascade
+);  
