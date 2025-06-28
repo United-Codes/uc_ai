@@ -1,6 +1,6 @@
 create or replace package body uc_ai as
 
-  gc_scope_prefix constant varchar2(31) := lower($$plsql_unit) || '.';
+  gc_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
 
   procedure generate_text (
     p_prompt        in clob
@@ -8,6 +8,7 @@ create or replace package body uc_ai as
   )
   as
   begin
+    -- TODO: Implement provider selection logic if needed
     uc_ai_openai.generate_text(
       p_prompt        => p_prompt
     , p_system_prompt => p_system_prompt
