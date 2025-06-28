@@ -4,34 +4,20 @@ create or replace package body uc_ai_openai as
 
   g_calls number := 0;  -- Global counter to prevent infinite tool calling loops
 
-  /*
-   * Core conversation handler with OpenAI API
-   * 
-   * Critical workflow for AI function calling:
-   * 1. Sends messages + available tools to OpenAI API  
-   * 2. If finish_reason = 'tool_calls': extracts tool calls, executes each tool,
-   *    adds tool results as new messages, recursively calls itself
-   * 3. Continues until finish_reason != 'tool_calls' (conversation complete)
-   * 4. g_calls counter prevents infinite loops
-   * 
-   * Tool execution flow:
-   * - AI returns tool_calls array with [id, function.name, function.arguments]
-   * - We execute each tool via uc_ai_tools_api.execute_tool()
-   * - Add tool results as messages with role='tool', tool_call_id=id
-   * - Send updated conversation back to API
-   */
-  procedure generate_text (
-    p_messages  in json_array_t
-  , p_max_calls in number default 3
-  )
+
+  function internal_generate_text (
+    p_messages       in json_array_t
+  , p_max_tool_calls in pls_integer
+  , p_input_obj      in json_object_t
+  ) return json_array_t
   as
     e_max_calls_exceeded exception;
+    e_error_response exception;
 
-    l_scope logger_logs.scope%type := gc_scope_prefix || 'generate_text';
-
-    l_input_obj    json_object_t := json_object_t();
+    l_scope logger_logs.scope%type := gc_scope_prefix || 'internal_generate_text';
     l_messages     json_array_t := json_array_t();
-    l_tools        json_array_t;
+    l_new_messages json_array_t;
+    l_input_obj    json_object_t;
 
     l_resp      clob;
     l_resp_json json_object_t;
@@ -40,21 +26,14 @@ create or replace package body uc_ai_openai as
     l_choice    json_object_t;
     l_finish_reason varchar2(255 char);
   begin
-    if g_calls >= coalesce(p_max_calls, 20) then
+    if g_calls >= p_max_tool_calls then
       logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_calls);
       raise e_max_calls_exceeded;
     end if;
 
     l_messages := p_messages;
-
-    -- Build request body with messages and available tools
-    l_input_obj.put('model', 'gpt-4o-mini');
+    l_input_obj := p_input_obj;
     l_input_obj.put('messages', l_messages);
-    --l_input_obj.put('transfer_timeout', '60');
-
-    -- Get all available tools formatted for OpenAI
-    l_tools := uc_ai_tools_api.get_tools_array('openai');
-    l_input_obj.put('tools', l_tools);
 
     logger.log('Request body', l_scope, l_input_obj.to_clob);
 
@@ -79,7 +58,8 @@ create or replace package body uc_ai_openai as
     if l_resp_json.has('error') then
       l_temp_obj := l_resp_json.get_object('error');
       logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-      raise_application_error(-20001, 'Error in response: ' || l_temp_obj.get_string('message'));
+      logger.log_error('Error message: ', l_scope,l_temp_obj.get_string('message'));
+      raise e_error_response;
     end if;
 
     l_choices := l_resp_json.get_array('choices');
@@ -138,42 +118,99 @@ create or replace package body uc_ai_openai as
           end loop tool_call_loop;
 
           -- Continue conversation with tool results - recursive call
-          generate_text(
-            p_messages => l_messages
-          , p_max_calls => p_max_calls
+          l_new_messages := internal_generate_text(
+            p_messages       => l_messages
+          , p_max_tool_calls => p_max_tool_calls
+          , p_input_obj      => p_input_obj
           );
+
+          -- Merge new messages into existing conversation
+          <<l_new_messages_loop>>
+          for k in 0 .. l_new_messages.get_size - 1
+          loop
+            l_messages.append(l_new_messages.get(k));
+          end loop l_new_messages_loop;
         end;
+      elsif l_finish_reason = 'stop' then
+        -- Normal completion - add AI's message to conversation
+        l_messages.append(l_choice.get_object('message'));
+      elsif l_finish_reason = 'length' then
+        -- Response truncated due to length - log and continue
+        logger.log_warn('Response truncated due to length', l_scope);
+        l_messages.append(l_choice.get_object('message'));
+      elsif l_finish_reason = 'content_filter' then
+        -- Content filter triggered - log and continue
+        logger.log_warn('Content filter triggered', l_scope);
+        l_messages.append(l_choice.get_object('message'));
+      else
+        -- Unexpected finish reason - log and continue
+        logger.log_warn('Unexpected finish reason: ' || l_finish_reason, l_scope);
+        l_messages.append(l_choice.get_object('message'));
       end if;
     end loop choices_loop;
-  end generate_text;
+
+    return l_messages;
+
+  end internal_generate_text;
 
 
   /*
-   * Simple wrapper that converts prompt + system_prompt into message array format
-   * Most common entry point for basic AI interactions
+   * Core conversation handler with OpenAI API
+   * 
+   * Critical workflow for AI function calling:
+   * 1. Sends messages + available tools to OpenAI API  
+   * 2. If finish_reason = 'tool_calls': extracts tool calls, executes each tool,
+   *    adds tool results as new messages, recursively calls itself
+   * 3. Continues until finish_reason != 'tool_calls' (conversation complete)
+   * 4. g_calls counter prevents infinite loops
+   * 
+   * Tool execution flow:
+   * - AI returns tool_calls array with [id, function.name, function.arguments]
+   * - We execute each tool via uc_ai_tools_api.execute_tool()
+   * - Add tool results as messages with role='tool', tool_call_id=id
+   * - Send updated conversation back to API
    */
-  procedure generate_text (
-    p_prompt        in clob
-  , p_system_prompt in clob default null
-  )
+  function generate_text (
+    p_user_prompt    in clob
+  , p_system_prompt  in clob default null
+  , p_max_tool_calls in pls_integer
+  ) return json_array_t
   as
-    l_curr_message json_object_t;
+    l_scope logger_logs.scope%type := gc_scope_prefix || 'generate_text';
+
+    l_input_obj    json_object_t := json_object_t();
     l_messages     json_array_t := json_array_t();
+    l_message      json_object_t;
+    l_tools        json_array_t;
   begin
+    -- Initialize messages array
+    l_message := json_object_t();
     if p_system_prompt is not null then
-      l_curr_message := json_object_t();
-      l_curr_message.put('role', 'system');
-      l_curr_message.put('content', p_system_prompt);
-      l_messages.append(l_curr_message);
+      -- Add system prompt as first message
+      l_message.put('role', 'system');
+      l_message.put('content', p_system_prompt);
+      l_messages.append(l_message);
     end if;
+    l_message := json_object_t();
+    l_message.put('role', 'user');
+    l_message.put('content', p_user_prompt);
+    l_messages.append(l_message);
 
+    -- Build request body with messages and available tools
+    l_input_obj.put('model', 'gpt-4o-mini');
+    --l_input_obj.put('transfer_timeout', '60');
 
-    l_curr_message := json_object_t();
-    l_curr_message.put('role', 'user');
-    l_curr_message.put('content', p_prompt);
-    l_messages.append(l_curr_message);
-    
-    generate_text(l_messages);
+    -- Get all available tools formatted for OpenAI
+    l_tools := uc_ai_tools_api.get_tools_array('openai');
+    l_input_obj.put('tools', l_tools);
+
+    l_messages := internal_generate_text(
+      p_messages       => l_messages
+    , p_max_tool_calls => p_max_tool_calls
+    , p_input_obj      => l_input_obj
+    );
+
+    return l_messages;
   end generate_text;
 
 end uc_ai_openai;
