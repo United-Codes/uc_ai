@@ -28,7 +28,7 @@ create or replace package body uc_ai_tools_api as
     end if;
   exception
     when others then
-      apex_debug.error('Error in wrap_as_array: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      logger.log_error('Error in wrap_as_array: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end wrap_as_array;
 
@@ -118,7 +118,7 @@ create or replace package body uc_ai_tools_api as
         po_param_obj.put('properties', l_obj_attrs);
         po_param_obj.put('required', l_obj_required);
       ELSE
-        apex_debug.error('Unhandled data type: %s', p_row.data_type);
+        logger.log_error('Unhandled data type: %s', p_row.data_type);
         raise e_unhandled_type;
     END CASE;
     
@@ -308,6 +308,12 @@ create or replace package body uc_ai_tools_api as
     l_bind_list    apex_plugin_util.t_bind_list := apex_plugin_util.c_empty_bind_list;
     l_bind         apex_plugin_util.t_bind;
     l_return       clob;
+
+    l_clob         clob;
+    l_cursor_id    pls_integer;
+    l_rows_fetched pls_integer;
+    l_bind_value   clob;
+    l_plsql_block  varchar2(32767 char);
   begin
     select function_call
       into l_fc_code
@@ -324,43 +330,111 @@ create or replace package body uc_ai_tools_api as
     , p_subexpression => '1'
     );
 
-    if l_found_binds is null or l_found_binds.count = 0 then
-      null;
-    elsif l_found_binds.count = 1 then
-      -- Bind the entire JSON arguments object to the single parameter
-      -- Tool function must parse JSON to extract individual values
-      l_bind.name  := upper(l_found_binds(1));
-      l_bind.value := p_arguments.to_clob;
-      l_bind_list(1) := l_bind;
-      logger.log('Bind variable found', l_scope, l_bind.name || ' = ' || l_bind.value);
+    -- use apex_plugin_util.get_plsql_func_result_clob if apex_session is available
+    if sys_context('APEX$SESSION', 'APP_SESSION') is not null then
+
+      logger.log('Executing tool with apex_plugin_util.get_plsql_func_result_clob', l_scope, l_fc_code);
+
+      if l_found_binds is null or l_found_binds.count = 0 then
+        null;
+      elsif l_found_binds.count = 1 then
+        -- Bind the entire JSON arguments object to the single parameter
+        -- Tool function must parse JSON to extract individual values
+        l_bind.name  := upper(l_found_binds(1));
+        l_bind.value := p_arguments.to_clob;
+        l_bind_list(1) := l_bind;
+        logger.log('Bind variable found', l_scope, l_bind.name || ' = ' || l_bind.value);
+      else
+        logger.log_error('Error in execute_tool: %s', 'Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
+        raise_application_error(-20001, 'You are only allowed to set one parameter bind. Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
+      end if;
+
+      logger.log('Executing tool', l_scope, l_fc_code);
+
+      -- Execute the tool's PL/SQL function with bound arguments
+      -- Function should return CLOB result that gets sent back to AI
+      l_return := apex_plugin_util.get_plsql_func_result_clob (
+        p_plsql_function   => l_fc_code
+      , p_auto_bind_items  => false
+      , p_bind_list        => l_bind_list
+      );
+    
+      logger.log('Tool execution result', l_scope, l_return);
+
+      if l_return is null then
+        logger.log_error('Error in execute_tool: %s', 'Tool execution returned NULL');
+        raise_application_error(-20001, 'Tool execution returned NULL');
+      end if;
+
+      return l_return;
+
     else
-      logger.log_error('Error in execute_tool: %s', 'Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
-      raise_application_error(-20001, 'You are only allowed to set one parameter bind. Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
+      logger.log('Executing tool with dbms_sql', l_scope, l_fc_code);
+
+      l_plsql_block := '
+        DECLARE
+          function user_function
+          return clob
+          as
+          begin
+            ' || l_fc_code || '
+          end user_function;
+        BEGIN
+          :return_val := user_function;
+        END;';
+
+      if l_found_binds is null or l_found_binds.count = 0 then
+        -- No binds, directly execute a block that selects the function result into a CLOB variable
+        -- For DBMS_SQL, we need a full PL/SQL block that assigns the result to an OUT variable
+        
+        l_cursor_id := sys.dbms_sql.open_cursor;
+        logger.log('l_plsql_block', l_scope, l_plsql_block);
+        sys.dbms_sql.parse(l_cursor_id, l_plsql_block, sys.dbms_sql.native);
+        sys.dbms_sql.bind_variable(l_cursor_id, ':return_val', l_clob); -- Bind the OUT variable
+
+        l_rows_fetched := sys.dbms_sql.execute(l_cursor_id);
+        sys.dbms_sql.variable_value(l_cursor_id, ':return_val', l_clob); -- Get the value from the OUT variable
+        sys.dbms_sql.close_cursor(l_cursor_id);
+
+        l_return := l_clob;
+      elsif l_found_binds.count = 1 then
+        -- Bind the entire JSON arguments object to the single parameter
+        -- Tool function must parse JSON to extract individual values
+        l_bind.name  := upper(l_found_binds(1));
+        l_bind.value := p_arguments.to_clob;
+        l_bind_value := l_bind.value;
+
+        logger.log('Bind variable found', l_scope, l_bind.name || ' = ' || l_bind.value);
+
+        -- Construct the PL/SQL block for DBMS_SQL with a bind variable and an OUT parameter
+        l_plsql_block := replace(l_plsql_block, ':' || l_bind.name, ':' || l_bind.name);
+        logger.log('l_plsql_block', l_scope, l_plsql_block);
+
+        l_cursor_id := sys.dbms_sql.open_cursor;
+        sys.dbms_sql.parse(l_cursor_id, l_plsql_block, sys.dbms_sql.native);
+
+        -- Bind the input CLOB variable
+        sys.dbms_sql.bind_variable(l_cursor_id, ':' || l_bind.name, l_bind_value);
+        -- Bind the OUT CLOB variable for the function's result
+        sys.dbms_sql.bind_variable(l_cursor_id, ':return_val', l_clob);
+
+        l_rows_fetched := sys.dbms_sql.execute(l_cursor_id);
+        sys.dbms_sql.variable_value(l_cursor_id, ':return_val', l_clob); -- Get the value from the OUT variable
+        sys.dbms_sql.close_cursor(l_cursor_id);
+
+        l_return := l_clob;
+
+      else
+        logger.log_error('Error in execute_tool: %s', 'Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
+        raise_application_error(-20001, 'You are only allowed to set one parameter bind. Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
+      end if;
+
+      return l_return;
+
     end if;
-
-    logger.log('Executing tool', l_scope, l_fc_code);
-
-    -- Execute the tool's PL/SQL function with bound arguments
-    -- Function should return CLOB result that gets sent back to AI
-    l_return := apex_plugin_util.get_plsql_func_result_clob (
-      p_plsql_function   => l_fc_code
-    , p_auto_bind_items  => false
-    , p_bind_list        => l_bind_list
-    );
-  
-    logger.log('Tool execution result', l_scope, l_return);
-
-    if l_return is null then
-      logger.log_error('Error in execute_tool: %s', 'Tool execution returned NULL');
-      raise_application_error(-20001, 'Tool execution returned NULL');
-    end if;
-
-    return l_return;
-
   exception
     when others then
-      apex_debug.error('Error in execute_tool: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
-      raise;
+      logger.log_error('Error in execute_tool: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);      raise;
 
   end execute_tool;
 

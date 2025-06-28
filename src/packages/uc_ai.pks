@@ -6,6 +6,7 @@ create or replace package uc_ai as
    * 
    * Returns comprehensive result object with:
    * - messages: conversation history (json_array_t)
+   * - final_message: last message in conversation (json_object_t)
    * - finish_reason: completion reason (varchar2)
    * - usage: token usage info (json_object_t)
    * - tool_calls_count: number of tool calls executed (number)

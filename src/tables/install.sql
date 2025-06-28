@@ -2,11 +2,11 @@ create sequence uc_ai_categories_seq;
 
 create table uc_ai_categories(
   id                   number default on null uc_ai_categories_seq.nextval not null,
-  name                 varchar2(255)  not null,
-  description          varchar2(4000),
-  created_by           varchar2(255) not null,
+  name                 varchar2(255 char)  not null,
+  description          varchar2(4000 char),
+  created_by           varchar2(255 char) not null,
   created_at           timestamp not null,
-  updated_by           varchar2(255) not null,
+  updated_by           varchar2(255 char) not null,
   updated_at           timestamp not null,
   constraint uc_ai_categories_pk primary key (id),
   constraint uc_ai_categories_uk unique (name)
@@ -16,16 +16,16 @@ create sequence uc_ai_tools_seq;
 
 create table uc_ai_tools(
   id                   number default on null uc_ai_tools_seq.nextval not null,
-  code                 varchar2(255)  not null,
-  description          varchar2(4000) not null,
-  active               number(1) default 1 not null,
+  code                 varchar2(255 char)  not null,
+  description          varchar2(4000 char) not null,
+  active               number(1) default on null 1 not null,
   response_schema      clob,
-  version              varchar2(50) default '1.0' not null,
+  version              varchar2(50 char) default on null '1.0' not null,
   function_call        clob not null,
-  authorization_schema varchar2(255),
-  created_by           varchar2(255) not null,
+  authorization_schema varchar2(255 char),
+  created_by           varchar2(255 char) not null,
   created_at           timestamp not null,
-  updated_by           varchar2(255) not null,
+  updated_by           varchar2(255 char) not null,
   updated_at           timestamp not null,
   constraint uc_ai_tools_pk primary key (id),
   constraint uc_ai_tools_uk unique (code),
@@ -37,25 +37,25 @@ create sequence uc_ai_tool_parameters_seq;
 create table uc_ai_tool_parameters(
   id                  number default on null uc_ai_tool_parameters_seq.nextval not null,
   tool_id             number not null,
-  name                varchar2(255)  not null,
-  description         varchar2(4000) not null,
-  required            number(1) default 1 not null,
-  data_type           varchar2(255) not null,
+  name                varchar2(255 char)  not null,
+  description         varchar2(4000 char) not null,
+  required            number(1) default on null 1 not null,
+  data_type           varchar2(255 char) not null,
   min_num_val         number,
   max_num_val         number,
-  enum_values         varchar2(4000),                -- For parameters with enumerated values, : seperated
-  default_value       varchar2(4000),                -- Default value for the parameter
-  is_array            number(1) default 0 not null,  -- Specify if the data_type is expected as an array (e. g. number -> number[])
+  enum_values         varchar2(4000 char),                -- For parameters with enumerated values, : seperated
+  default_value       varchar2(4000 char),                -- Default value for the parameter
+  is_array            number(1) default on null 0 not null,  -- Specify if the data_type is expected as an array (e. g. number -> number[])
   array_min_items     number,                        -- Minimum number of items in array
   array_max_items     number,                        -- Maximum number of items in array
-  pattern             varchar2(4000),                -- Regex pattern for string validation
-  format              varchar2(255),                 -- Format specifier (e.g., date-time, email)
+  pattern             varchar2(4000 char),                -- Regex pattern for string validation
+  format              varchar2(255 char),                 -- Format specifier (e.g., date-time, email)
   min_length          number,                        -- For string parameters
   max_length          number,                        -- For string parameters
   parent_param_id     number,                        -- For nested parameters
-  created_by          varchar2(255) not null,
+  created_by          varchar2(255 char) not null,
   created_at          timestamp not null,
-  updated_by          varchar2(255) not null,
+  updated_by          varchar2(255 char) not null,
   updated_at          timestamp not null,
   constraint uc_ai_tool_parameters_pk primary key (id),
   constraint uc_ai_tool_parameters_uk unique (tool_id, name),
@@ -125,9 +125,9 @@ create table uc_ai_tool_categories(
   id                   number default on null uc_ai_tool_categories_seq.nextval not null,
   tool_id              number not null,
   category_id          number not null,
-  created_by           varchar2(255) not null,
+  created_by           varchar2(255 char) not null,
   created_at           timestamp not null,
-  updated_by           varchar2(255) not null,
+  updated_by           varchar2(255 char) not null,
   updated_at           timestamp not null,
   constraint uc_ai_tool_categories_pk primary key (id),
   constraint uc_ai_tool_categories_uk unique (tool_id, category_id),

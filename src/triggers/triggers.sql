@@ -11,6 +11,7 @@ begin
     :new.updated_at := systimestamp;
     :new.updated_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
 end uc_ai_tools_biu;
+/
 
 create or replace trigger uc_ai_tool_parameters_biu
     before insert or update on uc_ai_tool_parameters
@@ -25,6 +26,7 @@ begin
     :new.updated_at := systimestamp;
     :new.updated_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
 end uc_ai_tool_parameters_biu;
+/
 
 
 create or replace trigger uc_ai_categories_biu
@@ -40,6 +42,7 @@ begin
     :new.updated_at := systimestamp;
     :new.updated_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
 end uc_ai_categories_biu;
+/
 
 create or replace trigger uc_ai_tool_categories_biu
     before insert or update on uc_ai_tool_categories
@@ -54,3 +57,4 @@ begin
     :new.updated_at := systimestamp;
     :new.updated_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
 end uc_ai_tool_categories_biu;
+/

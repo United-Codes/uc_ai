@@ -17,7 +17,6 @@ create or replace package body uc_ai_openai as
 
     l_scope logger_logs.scope%type := gc_scope_prefix || 'internal_generate_text';
     l_messages     json_array_t := json_array_t();
-    l_new_messages json_array_t;
     l_input_obj    json_object_t;
 
     l_resp      clob;
@@ -45,7 +44,7 @@ create or replace package body uc_ai_openai as
       p_name_01  => 'Content-Type',
       p_value_01 => 'application/json',
       p_name_02  => 'Authorization',
-      p_value_02 => 'Bearer '||OPENAI_KEY
+      p_value_02 => 'Bearer '||uc_ai_openai_key
     );
 
     l_resp := apex_web_service.make_rest_request(
@@ -96,7 +95,7 @@ create or replace package body uc_ai_openai as
     for i in 0 .. l_choices.get_size - 1
     loop
       l_choice := treat( l_choices.get(i) as json_object_t );
-      logger.log('Choice', l_scope, l_choice.to_clob);
+      logger.log('Choice (' || i || ')', l_scope, l_choice.to_clob);
       l_finish_reason := l_choice.get_string('finish_reason');
       
       -- Store finish reason in result object
@@ -153,22 +152,16 @@ create or replace package body uc_ai_openai as
           pio_result.put('tool_calls_count', g_tool_calls);
 
           -- Continue conversation with tool results - recursive call
-          l_new_messages := internal_generate_text(
+          l_messages := internal_generate_text(
             p_messages       => l_messages
           , p_max_tool_calls => p_max_tool_calls
           , p_input_obj      => p_input_obj
           , pio_result       => pio_result
           );
-
-          -- Merge new messages into existing conversation
-          <<l_new_messages_loop>>
-          for k in 0 .. l_new_messages.get_size - 1
-          loop
-            l_messages.append(l_new_messages.get(k));
-          end loop l_new_messages_loop;
         end;
       elsif l_finish_reason = 'stop' then
         -- Normal completion - add AI's message to conversation
+        logger.log('Stop received', l_scope);
         l_messages.append(l_choice.get_object('message'));
       elsif l_finish_reason = 'length' then
         -- Response truncated due to length - log and continue
@@ -184,6 +177,8 @@ create or replace package body uc_ai_openai as
         l_messages.append(l_choice.get_object('message'));
       end if;
     end loop choices_loop;
+
+    logger.log('End internal_generate_text - final messages count: ' || l_messages.get_size, l_scope);
 
     return l_messages;
 
@@ -208,6 +203,7 @@ create or replace package body uc_ai_openai as
    * 
    * Returns comprehensive result object with:
    * - messages: full conversation history
+   * - final_message: last message in conversation for simple usage
    * - finish_reason: completion reason (stop, tool_calls, length, etc.)
    * - usage: token usage statistics
    * - tool_calls_count: total number of tool calls executed
@@ -262,6 +258,12 @@ create or replace package body uc_ai_openai as
 
     -- Add final messages to result
     l_result.put('messages', l_messages);
+    
+    -- Add final message (only the text)
+    if l_messages.get_size > 0 then
+      l_message := treat(l_messages.get(l_messages.get_size - 1) as json_object_t);
+      l_result.put('final_message', l_message.get_clob('content'));
+    end if;
     
     -- Add provider info to the result
     l_result.put('provider', 'openai');
