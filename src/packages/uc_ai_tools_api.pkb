@@ -52,10 +52,14 @@ create or replace package body uc_ai_tools_api as
 
     l_obj_attrs     json_object_t;
     l_obj_required  json_array_t;
+
+    l_new_required json_array_t;
   begin
     po_param_obj := json_object_t();
     po_param_obj.put('type', p_row.data_type);
     po_param_obj.put('description', p_row.description);
+
+    l_new_required := pio_required;
     
     -- Add type-specific constraints
     CASE p_row.data_type
@@ -168,10 +172,12 @@ create or replace package body uc_ai_tools_api as
     apex_debug.trace('Is parameter required: ' || p_row.name || ', required: ' ||  p_row.required);
     -- Add to required array if needed
     IF p_row.required = 1 THEN
-      pio_required.append(p_row.name);
-      apex_debug.trace('Added to pio_required: ' || pio_required.stringify);
+      l_new_required.append(p_row.name);
+      apex_debug.trace('Added to l_new_required: ' || pio_required.stringify);
     END IF;
 
+
+    pio_required := l_new_required;
   exception
     when others then
       apex_debug.error('Error in prepare_single_parameter: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
@@ -196,12 +202,17 @@ create or replace package body uc_ai_tools_api as
   as
     l_tool_code        uc_ai_tools.code%type;
     l_tool_description uc_ai_tools.description%type;
+
+    l_param_count pls_integer;
     
     -- JSON objects
     l_function     json_object_t := json_object_t();
     l_input_schema json_object_t := json_object_t();
     l_properties   json_object_t := json_object_t();
     l_required     json_array_t  := json_array_t();
+
+    l_param_rec uc_ai_tool_parameters%rowtype;
+    l_param_obj JSON_OBJECT_T := JSON_OBJECT_T();
     
   BEGIN
     -- Get tool information
@@ -209,36 +220,45 @@ create or replace package body uc_ai_tools_api as
     INTO l_tool_code, l_tool_description
     FROM uc_ai_tools
     WHERE id = p_tool_id;
-    
-    -- Process each parameter
-    <<fetch_parameters>>
-    FOR param_rec IN (
+
+    select count(*)
+      into l_param_count
+      from uc_ai_tool_parameters
+     where tool_id = p_tool_id
+       and parent_param_id is null;
+
+    if l_param_count = 1 then
+      
       SELECT *
-      FROM uc_ai_tool_parameters
-      WHERE tool_id = p_tool_id
-        AND parent_param_id IS NULL
-      ORDER BY name
-    ) LOOP
-      -- Create JSON object for this parameter
-      DECLARE
-        l_param_obj JSON_OBJECT_T := JSON_OBJECT_T();
-      BEGIN
-        prepare_single_parameter(param_rec, l_required, l_param_obj);
-        -- Add parameter to properties
-        l_properties.put(param_rec.name, l_param_obj);
-      END;
-    END LOOP fetch_parameters;
+        INTO l_param_rec
+        FROM uc_ai_tool_parameters
+       WHERE tool_id = p_tool_id
+         AND parent_param_id IS NULL
+      ;
+
+      prepare_single_parameter(l_param_rec, l_required, l_param_obj);
+      l_properties.put(l_param_rec.name, l_param_obj);
     
-    -- Build the complete JSON structure
-    l_input_schema.put('type', 'object');
-    l_input_schema.put('properties', l_properties);
-    l_input_schema.put('required', l_required);
-    l_input_schema.put('additionalProperties', FALSE);
-    l_input_schema.put('$schema', 'http://json-schema.org/draft-07/schema#');
+      -- Build the complete JSON structure
+      l_input_schema.put('type', 'object');
+      l_input_schema.put('properties', l_properties);
+      l_input_schema.put('required', l_required);
+      l_input_schema.put('additionalProperties', FALSE);
+      l_input_schema.put('$schema', 'http://json-schema.org/draft-07/schema#');
     
+    elsif l_param_count > 1 then
+      raise_application_error(-20001, 'If your tool has more than one parameter, you must define a single parent object with the parameters as attributes. This is required for the AI to understand the tool parameters.');
+    else
+      -- when no parameters are defined, use an empty object schema
+      l_input_schema.put('type', 'object');
+      l_input_schema.put('properties', json_object_t());
+      l_input_schema.put('required', json_array_t());
+      l_input_schema.put('$schema', 'http://json-schema.org/draft-07/schema#');
+    end if;
+    
+    l_function.put('input_schema', l_input_schema);
     l_function.put('name', l_tool_code);
     l_function.put('description', l_tool_description);
-    l_function.put('input_schema', l_input_schema);
   
     return l_function;
   exception
@@ -249,7 +269,7 @@ create or replace package body uc_ai_tools_api as
 
 
   function get_tools_array (
-    p_flavor in varchar2 default 'openai'
+    p_provider in uc_ai.provider_type
   ) return json_array_t
   as
     l_tools_array  json_array_t := json_array_t();
@@ -264,7 +284,10 @@ create or replace package body uc_ai_tools_api as
     loop
       l_tool_obj := get_tool_schema(rec.id);
 
-      if p_flavor = 'openai' then
+      -- openai has an additional object wrapper for function calls
+      -- {type: "function", function: {...}}
+      -- where others like anthropic/claude use the function object directly
+      if p_provider = uc_ai.c_provider_openai then
         l_tool_cpy_obj := l_tool_obj;
 
         l_tool_obj := json_object_t();
@@ -438,6 +461,33 @@ create or replace package body uc_ai_tools_api as
       raise;
 
   end execute_tool;
+
+
+  function get_tools_object_param_name (
+    p_tool_code in uc_ai_tools.code%type
+  ) return uc_ai_tool_parameters.name%type result_cache
+  as
+    l_scope logger_logs.scope%type := gc_scope_prefix || 'get_tools_object_param_name';
+    l_param_name uc_ai_tool_parameters.name%type;
+  begin
+    -- Get the parameter name for the tool's input object
+    select tp.name
+      into l_param_name
+      from uc_ai_tool_parameters tp
+      join uc_ai_tools t
+        on tp.tool_id = t.id
+     where t.code = p_tool_code
+       and parent_param_id is null
+    ;
+
+    return l_param_name;
+  exception
+    when no_data_found then
+      return null; -- No parameter found, return null
+    when others then
+      logger.log_error('Error in get_tools_object_param_name: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      raise;
+  end get_tools_object_param_name;
 
 end uc_ai_tools_api;
 /

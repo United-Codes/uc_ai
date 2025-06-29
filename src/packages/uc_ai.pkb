@@ -24,8 +24,12 @@ create or replace package body uc_ai as
         , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
         );
       when c_provider_anthropic then
-        -- Placeholder for future implementation
-        raise e_unknown_provider;
+        l_result := uc_ai_anthropic.generate_text(
+          p_user_prompt    => p_user_prompt
+        , p_system_prompt  => p_system_prompt
+        , p_model          => p_model
+        , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        );
       else
         raise e_unknown_provider;
     end case;

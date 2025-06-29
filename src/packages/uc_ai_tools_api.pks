@@ -14,19 +14,6 @@
 create or replace package uc_ai_tools_api as
 
   /*
-   * Builds JSON schema for a specific tool's parameters
-   * 
-   * Converts database parameter definitions into proper JSON schema format
-   * that AI models can understand for function calling.
-   * Handles nested objects, arrays, validation rules (min/max, patterns, enums).
-   */
-  function get_tool_schema(
-    p_tool_id in uc_ai_tools.id%type
-  ) 
-    return json_object_t 
-  ;
-
-  /*
    * Returns array of all active tools formatted for specific AI provider
    * 
    * p_flavor: 'openai' wraps tools in {type: "function", function: {...}} format
@@ -35,7 +22,7 @@ create or replace package uc_ai_tools_api as
    * This is what gets sent to AI models so they know what tools are available.
    */
   function get_tools_array (
-    p_flavor in varchar2 default 'openai'
+    p_provider in uc_ai.provider_type
   ) return json_array_t;
 
   /*
@@ -51,6 +38,11 @@ create or replace package uc_ai_tools_api as
     p_tool_code in uc_ai_tools.code%type
   , p_arguments in json_object_t
   ) return clob;
+
+
+  function get_tools_object_param_name (
+    p_tool_code in uc_ai_tools.code%type
+  ) return uc_ai_tool_parameters.name%type result_cache;
 
 end uc_ai_tools_api;
 /

@@ -430,6 +430,8 @@ as
     l_project_name VARCHAR2(255 char);
     l_notes VARCHAR2(4000 char);
 begin
+    logger.log_info('clock_in_json called with parameters: ' || p_parameters);
+
     l_json := json_object_t(p_parameters);
     l_user_email := l_json.get_string('user_email');
     l_project_name := l_json.get_string('project_name');
