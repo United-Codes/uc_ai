@@ -1,7 +1,7 @@
 create or replace package body uc_ai_openai as 
 
-  gc_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
-  gc_api_url constant varchar2(255 char) := 'https://api.openai.com/v1/chat/completions';
+  c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
+  c_api_url constant varchar2(255 char) := 'https://api.openai.com/v1/chat/completions';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
 
@@ -13,7 +13,7 @@ create or replace package body uc_ai_openai as
   , pio_result       in out json_object_t
   ) return json_array_t
   as
-    l_scope logger_logs.scope%type := gc_scope_prefix || 'internal_generate_text';
+    l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
     l_messages     json_array_t := json_array_t();
     l_input_obj    json_object_t;
 
@@ -42,11 +42,11 @@ create or replace package body uc_ai_openai as
       p_name_01  => 'Content-Type',
       p_value_01 => 'application/json',
       p_name_02  => 'Authorization',
-      p_value_02 => 'Bearer '||uc_ai_openai_key
+      p_value_02 => 'Bearer '||uc_ai_get_key(uc_ai.c_provider_openai)
     );
 
     l_resp := apex_web_service.make_rest_request(
-      p_url => gc_api_url,
+      p_url => c_api_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob
     );
@@ -210,6 +210,7 @@ create or replace package body uc_ai_openai as
   function generate_text (
     p_user_prompt    in clob
   , p_system_prompt  in clob default null
+  , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   ) return json_object_t
   as
@@ -239,8 +240,7 @@ create or replace package body uc_ai_openai as
     l_message.put('content', p_user_prompt);
     l_messages.append(l_message);
 
-    -- Build request body with messages and available tools
-    l_input_obj.put('model', 'gpt-4o-mini');
+    l_input_obj.put('model', p_model);
     --l_input_obj.put('transfer_timeout', '60');
 
     -- Get all available tools formatted for OpenAI

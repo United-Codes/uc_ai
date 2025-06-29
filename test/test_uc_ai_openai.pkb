@@ -80,7 +80,9 @@ Example parameters: {"user_email": "user@example.com","project_name": "TV Market
   begin
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What an I cook with that?',
-      p_system_prompt => 'You are an assistant helping users to get recipes. Please answer in short sentences.'
+      p_system_prompt => 'You are an assistant helping users to get recipes. Please answer in short sentences.',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_4o_mini
     );
 
     l_final_message := l_result.get_clob('final_message');
@@ -109,7 +111,9 @@ Example parameters: {"user_email": "user@example.com","project_name": "TV Market
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'What is the email address of Jim?',
-      p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.'
+      p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_4o_mini
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
@@ -156,7 +160,9 @@ Example parameters: {"user_email": "user@example.com","project_name": "TV Market
       p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.
         The current user is Michael Scott.
 
-        If you clock somebody in, answer with: "You are now clocked in to the project "{{project_name}}" with the note "{{notes| - }}".'
+        If you clock somebody in, answer with: "You are now clocked in to the project "{{project_name}}" with the note "{{notes| - }}".',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_4o_mini
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
@@ -196,7 +202,9 @@ Example parameters: {"user_email": "user@example.com","project_name": "TV Market
       p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.
         The current user is Michael Scott.
 
-        If you clock somebody in, answer with: "You are now clocked in to the project "{{project_name}}" with the note "{{notes| - }}".'
+        If you clock somebody in, answer with: "You are now clocked in to the project "{{project_name}}" with the note "{{notes| - }}".',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_4o_mini
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);

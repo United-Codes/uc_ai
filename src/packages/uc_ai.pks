@@ -1,5 +1,11 @@
 create or replace package uc_ai as
 
+  subtype provider_type is varchar2(64 char);
+  c_provider_openai    constant provider_type := 'openai';
+  c_provider_anthropic constant provider_type := 'anthropic';
+
+  subtype model_type is varchar2(128 char);
+
   subtype finish_reason_type is varchar2(64 char);
 
   c_finish_reason_tool_calls     constant finish_reason_type := 'tool_calls';
@@ -29,6 +35,8 @@ create or replace package uc_ai as
   function generate_text (
     p_user_prompt    in clob
   , p_system_prompt  in clob default null
+  , p_provider       in provider_type
+  , p_model          in model_type
   , p_max_tool_calls in pls_integer default null
   ) return json_object_t;
 
