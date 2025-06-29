@@ -1,5 +1,18 @@
 create or replace package uc_ai as
 
+  subtype finish_reason_type is varchar2(64 char);
+
+  c_finish_reason_tool_calls     constant finish_reason_type := 'tool_calls';
+  c_finish_reason_stop           constant finish_reason_type := 'stop';
+  c_finish_reason_length         constant finish_reason_type := 'length';
+  c_finish_reason_content_filter constant finish_reason_type := 'content_filter';
+
+
+  e_max_calls_exceeded exception;
+  pragma exception_init(e_max_calls_exceeded, -28301);
+  e_error_response exception;
+  pragma exception_init(e_error_response, -28302);
+
   /*
    * Main interface for AI text generation
    * Routes to OpenAI implementation - could be extended for provider selection

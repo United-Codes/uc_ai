@@ -434,7 +434,8 @@ create or replace package body uc_ai_tools_api as
     end if;
   exception
     when others then
-      logger.log_error('Error in execute_tool: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);      raise;
+      logger.log_error('Error in execute_tool: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      raise;
 
   end execute_tool;
 

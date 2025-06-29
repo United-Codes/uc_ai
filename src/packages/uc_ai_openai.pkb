@@ -1,6 +1,7 @@
 create or replace package body uc_ai_openai as 
 
   gc_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
+  gc_api_url constant varchar2(255 char) := 'https://api.openai.com/v1/chat/completions';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
 
@@ -12,9 +13,6 @@ create or replace package body uc_ai_openai as
   , pio_result       in out json_object_t
   ) return json_array_t
   as
-    e_max_calls_exceeded exception;
-    e_error_response exception;
-
     l_scope logger_logs.scope%type := gc_scope_prefix || 'internal_generate_text';
     l_messages     json_array_t := json_array_t();
     l_input_obj    json_object_t;
@@ -31,7 +29,7 @@ create or replace package body uc_ai_openai as
     if g_tool_calls >= p_max_tool_calls then
       logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
-      raise e_max_calls_exceeded;
+      raise uc_ai.e_max_calls_exceeded;
     end if;
 
     l_messages := p_messages;
@@ -48,7 +46,7 @@ create or replace package body uc_ai_openai as
     );
 
     l_resp := apex_web_service.make_rest_request(
-      p_url => 'https://api.openai.com/v1/chat/completions',
+      p_url => gc_api_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob
     );
@@ -61,7 +59,7 @@ create or replace package body uc_ai_openai as
       l_temp_obj := l_resp_json.get_object('error');
       logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
       logger.log_error('Error message: ', l_scope,l_temp_obj.get_string('message'));
-      raise e_error_response;
+      raise uc_ai.e_error_response;
     end if;
 
     -- Extract and store usage information
@@ -101,7 +99,7 @@ create or replace package body uc_ai_openai as
       -- Store finish reason in result object
       pio_result.put('finish_reason', l_finish_reason);
 
-      if l_finish_reason = 'tool_calls' then
+      if l_finish_reason = uc_ai.c_finish_reason_tool_calls then
         -- AI wants to call tools - extract calls, execute them, add results to conversation
         declare
           l_resp_message   json_object_t;
@@ -159,15 +157,15 @@ create or replace package body uc_ai_openai as
           , pio_result       => pio_result
           );
         end;
-      elsif l_finish_reason = 'stop' then
+      elsif l_finish_reason = uc_ai.c_finish_reason_stop then
         -- Normal completion - add AI's message to conversation
         logger.log('Stop received', l_scope);
         l_messages.append(l_choice.get_object('message'));
-      elsif l_finish_reason = 'length' then
+      elsif l_finish_reason = uc_ai.c_finish_reason_length then
         -- Response truncated due to length - log and continue
         logger.log_warn('Response truncated due to length', l_scope);
         l_messages.append(l_choice.get_object('message'));
-      elsif l_finish_reason = 'content_filter' then
+      elsif l_finish_reason = uc_ai.c_finish_reason_content_filter then
         -- Content filter triggered - log and continue
         logger.log_warn('Content filter triggered', l_scope);
         l_messages.append(l_choice.get_object('message'));
