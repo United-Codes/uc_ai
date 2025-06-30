@@ -1,0 +1,71 @@
+---
+title: AI Providers
+description: Overview of supported AI providers and their capabilities
+sidebar:
+  order: 20
+---
+
+## Supported AI Providers
+
+Currently the framework supports the following AI providers:
+
+- **OpenAI**: GPT
+- **Anthropic**: Claude
+- **Google**: Gemini
+
+The goal is to make it easy to switch between providers without changing your code. Each provider has its own package with a consistent interface for text generation and function calling.
+
+## Selecting a Provider
+
+When using the `uc_ai.generate_text` function, you can specify the provider using the `p_provider` parameter. For example:
+
+```sql
+DECLARE
+  l_result JSON_OBJECT_T;
+BEGIN
+  -- openai example
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is APEX Office Print?',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini model
+  );
+
+  DBMS_OUTPUT.PUT_LINE('OpenAI Response: '
+  || l_result.get_string('final_message'));
+
+  -- anthropic example
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is APEX Office Print?',
+    p_provider => uc_ai.c_provider_anthropic,
+    p_model => uc_ai_anthropic.c_model_claude_3_5_haiku
+  );
+  DBMS_OUTPUT.PUT_LINE('Anthropic Response: '
+  || l_result.get_string('final_message'));
+
+  -- google example
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is APEX Office Print?',
+    p_provider => uc_ai.c_provider_google,
+    p_model => uc_ai_google.c_model_gemini_2_5_flash
+  );
+  DBMS_OUTPUT.PUT_LINE('Google Response: '
+  || l_result.get_string('final_message'));
+END;
+/
+```
+
+## Package Structure
+
+Each provider has its own package with a consistent interface. For example:
+
+- **OpenAI**: `uc_ai_openai`
+- **Anthropic**: `uc_ai_anthropic`
+- **Google**: `uc_ai_google`
+
+That way the API differences between providers are abstracted away, allowing you to switch providers easily.
+
+## Contribute
+
+I plan to add more providers in the future. You are welcome to contribute new provider packages or improvements to existing ones. Just follow the same interface conventions used in the current packages.
+
+Also see the way I build tests for the providers in the `tests` directory. Each provider has its own test suite that verifies the functionality of text generation and function calling.

@@ -1,0 +1,86 @@
+---
+title: UC AI Introduction
+description: AI framework for Oracle PL/SQL - Integrate AI models with function calling capabilities
+sidebar:
+  order: 10
+template: doc
+hero:
+  tagline: A comprehensive Oracle PL/SQL framework for integrating AI models (OpenAI GPT, Anthropic Claude, Google Gemini) with function calling capabilities directly in your database.
+  actions:
+    - text: Get Started
+      link: /getting-started/
+      icon: right-arrow
+    - text: View on GitHub
+      link: https://github.com/United-Codes/uc-ai
+      icon: external
+      variant: minimal
+---
+
+Ever heard that **"Python is best for AI development"**? I don't this should be true!
+
+The crucial part is having access to LLMs which is just calling an API. And it makes most sense to integrate AI capabilities directly into the database where your data lives.
+
+It is definetly true that Python (and other languages) have better integration with AI models and frameworks making it seamless to build AI applications. While Oracle does a solid job to also steer into that direction, they only give access to it in the 23ai database which is currently cloud only. I think it's time to take matters into our own hands and give easy access to AI models directly in our Oracle databases.
+
+## Key Features
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+<CardGrid>
+  <Card title="Multi-Provider Support" icon="rocket">
+    Support for OpenAI GPT, Anthropic Claude, and Google Gemini models with
+    unified API interface.
+  </Card>
+  <Card title="Function Calling" icon="puzzle">
+    AI models can execute PL/SQL functions with type-safe parameter passing and
+    JSON schema validation.
+  </Card>
+  <Card title="Unified API" icon="seti:json">
+    All AI providers have a consistent interface for text generation and
+    function calling. This allows you to switch providers without changing your
+    code.
+  </Card>
+  <Card title="Runs on older DBs" icon="seti:db">
+    It's just PL/SQL! This framework should work on Oracle Database 12.2 and
+    later!
+  </Card>
+</CardGrid>
+
+## Perfect for Oracle Developers
+
+This framework is specifically designed for Oracle Database developers who want to:
+
+- **Integrate AI**: Add AI capabilities directly to database applications and procedures
+- **Automate Tasks**: Let AI models execute database functions based on natural language prompts
+- **Build Smart Apps**: Create applications that can reason about data and take actions
+- **Extend Functionality**: Give AI models access to custom business logic and database operations
+- **Maintain Control**: Keep AI interactions secure with validated parameters and controlled execution
+
+## Supported AI Providers
+
+- **OpenAI**: GPT-4, GPT-4 Turbo, GPT-4o, GPT-4o Mini, GPT-3.5 Turbo, o1 series...
+- **Anthropic**: Claude 4 Sonnet, Claude 3.5 Haiku, Claude 4 Opus...
+- **Google**: Gemini 2.5 Flash, Gemini 2.5 Pro, ...
+
+## Quick Example
+
+```sql
+DECLARE
+  l_result JSON_OBJECT_T;
+BEGIN
+  -- Let AI calculate something using a custom tool
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'How many open tickets do I have?',
+    p_system_prompt => 'You are a helpful assistant to an ticketing system.
+    Use the provided tools to access the database.
+    You are currently talking to the user "John Doe"',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini
+  );
+
+  -- Get the AI's response
+  DBMS_OUTPUT.PUT_LINE('AI Response: ' || l_result.get_string('final_message'));
+  -- You have 5 open tickets.
+END;
+/
+```

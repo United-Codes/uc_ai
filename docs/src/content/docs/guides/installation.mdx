@@ -1,0 +1,97 @@
+---
+title: Installation
+description: Quick setup guide for UC Local APEX Dev environment
+sidebar:
+  order: 1
+---
+
+## Prerequisites
+
+- Oracle Database 12.2 or later
+- Oracle APEX (older versions are fine, this project uses some of the APIs)
+
+## Clone the repo
+
+Clone the [GitHub repository](https://github.com/United-Codes/uc_ai):
+
+```bash
+git clone https://github.com/United-Codes/uc_ai.git
+cd uc_ai
+```
+
+## Installing Logger
+
+The project uses the [Logger](https://github.com/OraOpenSource/Logger) package for logging. If something goes wrong all the trace is logged to help debugging.
+
+To install the Logger pacakge run the following script
+
+```bash
+# inside the uc_ai directory
+cd ./src/dependencies/logger_3.1.1
+sql ./logger_install.sql
+```
+
+Alternatively if you don't want the logger installed you can install it's "no op" (no operation) version which installs the necessary objects so that the packages compile but does not log anything.
+
+```bash
+# inside the uc_ai directory
+cd ./src/dependencies/logger_3.1.1
+sql ./logger_install_no_op.sql
+```
+
+## Installing UC AI
+
+```bash
+# inside the uc_ai directory
+sql ./install_uc_ai.sql
+```
+
+## Set up API Keys
+
+The installation script created the following function. Modify it to return your API keys for the AI providers you want to use.
+
+```sql
+create or replace function uc_ai_get_key (
+  p_provider in uc_ai.provider_type
+)
+  return varchar2
+as
+  e_unhandled_provider exception;
+begin
+  -- retrieve and return your keys from a secure location the way you prefer
+  case p_provider
+    when uc_ai.c_provider_openai then
+      return 'change_me';
+    when uc_ai.c_provider_anthropic then
+      return '...';
+    when uc_ai.c_provider_google then
+      return '...';
+    else
+      raise e_unhandled_provider;
+  end case;
+exception
+  when e_unhandled_provider then
+    raise_application_error(-20001, 'No key defined for provider: ' || p_provider);
+  when others then
+    raise;
+end uc_ai_get_key;
+/
+```
+
+## Test if it is working
+
+```sql
+DECLARE
+  l_result JSON_OBJECT_T;
+BEGIN
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is APEX Office Print?',
+    p_provider => uc_ai.c_provider_openai, -- change to your preferred provider
+    p_model => uc_ai_openai.c_model_gpt_4o_mini -- change to your preferred model
+  );
+
+  -- Get the AI's response
+  DBMS_OUTPUT.PUT_LINE('AI Response: ' || l_result.get_string('final_message'));
+END;
+/
+```

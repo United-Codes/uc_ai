@@ -1,0 +1,386 @@
+---
+title: Generate Text
+description: Detailed guide to the generate_text function with parameter and return object description
+sidebar:
+  order: 10
+---
+
+## Parameters
+
+The `uc_ai.generate_text()` function accepts the following parameters:
+
+### Function Signature
+
+```sql
+FUNCTION generate_text (
+  p_user_prompt    IN CLOB,
+  p_system_prompt  IN CLOB DEFAULT NULL,
+  p_provider       IN provider_type,
+  p_model          IN model_type,
+  p_max_tool_calls IN PLS_INTEGER DEFAULT NULL
+) RETURN JSON_OBJECT_T;
+```
+
+### Parameter Reference
+
+| Parameter          | Type            | Required | Description                                                                    |
+| ------------------ | --------------- | -------- | ------------------------------------------------------------------------------ |
+| `p_user_prompt`    | `CLOB`          | Yes      | The main prompt from the user. This is the primary input for the AI model.     |
+| `p_system_prompt`  | `CLOB`          | No       | System-level instructions that guide the AI's behavior and response style.     |
+| `p_provider`       | `provider_type` | Yes      | AI provider to use. See `uc_ai` spec for constants.                            |
+| `p_model`          | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants. |
+| `p_max_tool_calls` | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).        |
+
+### Parameter Details
+
+#### p_user_prompt (Required)
+
+The main user input that you want the AI to respond to. This can be a question, instruction, or any text you want the AI to process.
+
+```sql
+-- Simple example
+l_result := uc_ai.generate_text(
+  p_user_prompt => 'What is Oracle APEX?',
+  p_provider => uc_ai.c_provider_openai,
+  p_model => uc_ai_openai.c_model_gpt_4o_mini
+);
+
+-- Complex example with detailed instructions
+l_result := uc_ai.generate_text(
+  p_user_prompt => 'Analyze the following sales data and provide insights on trends, top performers, and recommendations for improvement: [data here]',
+  p_provider => uc_ai.c_provider_anthropic,
+  p_model => uc_ai_anthropic.c_model_claude_3_5_sonnet
+);
+```
+
+#### p_system_prompt (Optional)
+
+System-level instructions that define the AI's role, behavior, and response style. This helps shape how the AI interprets and responds to user prompts.
+
+```sql
+-- Professional assistant
+l_result := uc_ai.generate_text(
+  p_user_prompt => 'Explain database normalization',
+  p_system_prompt => 'You are a professional database consultant. Provide clear, technical explanations with practical examples.',
+  p_provider => uc_ai.c_provider_openai,
+  p_model => uc_ai_openai.c_model_gpt_4o
+);
+
+-- Casual tone
+l_result := uc_ai.generate_text(
+  p_user_prompt => 'How do I optimize this SQL query?',
+  p_system_prompt => 'You are a friendly database expert. Use simple language and provide step-by-step guidance.',
+  p_provider => uc_ai.c_provider_anthropic,
+  p_model => uc_ai_anthropic.c_model_claude_3_5_haiku
+);
+```
+
+#### p_provider (Required)
+
+Specifies which AI provider to use. Available providers:
+
+| Provider Constant            | Value         | Description             |
+| ---------------------------- | ------------- | ----------------------- |
+| `uc_ai.c_provider_openai`    | `'openai'`    | OpenAI GPT models       |
+| `uc_ai.c_provider_anthropic` | `'anthropic'` | Anthropic Claude models |
+| `uc_ai.c_provider_google`    | `'google'`    | Google Gemini models    |
+
+```sql
+-- Using different providers
+l_result := uc_ai.generate_text(
+  p_user_prompt => 'Explain machine learning',
+  p_provider => uc_ai.c_provider_openai,  -- or c_provider_anthropic, c_provider_google
+  p_model => uc_ai_openai.c_model_gpt_4o_mini
+);
+```
+
+#### p_model (Required)
+
+The specific AI model to use. See the package headers for available models under each provider. ls:\*\*
+
+- `uc_ai_openai`
+- `uc_ai_anthropic`
+- `uc_ai_google`
+
+```sql
+-- Model selection examples
+DECLARE
+  l_result JSON_OBJECT_T;
+BEGIN
+  -- For simple tasks - use fast, cost-effective models
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Summarize this paragraph',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini
+  );
+
+  -- For complex analysis - use more capable models
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Analyze this complex financial dataset and provide strategic recommendations',
+    p_provider => uc_ai.c_provider_anthropic,
+    p_model => uc_ai_anthropic.c_model_claude_4_sonnet
+  );
+END;
+/
+```
+
+#### p_max_tool_calls (Optional)
+
+Limits the maximum number of tool calls the AI can make during the conversation. This prevents infinite loops and controls costs.
+
+- **Default**: `NULL` (10 tool calls)
+- **Recommended**: Set to 3-10 for most use cases
+- **Use Cases**: Higher limits for complex multi-step operations, lower limits for simple tasks
+
+```sql
+-- Limiting tool calls
+l_result := uc_ai.generate_text(
+  p_user_prompt => 'Calculate monthly sales totals and create a summary report',
+  p_system_prompt => 'You have access to database tools to query sales data',
+  p_provider => uc_ai.c_provider_openai,
+  p_model => uc_ai_openai.c_model_gpt_4o,
+  p_max_tool_calls => 5  -- Allow up to 5 tool calls
+);
+
+-- Check if limit was exceeded
+IF l_result.get_string('finish_reason') = 'max_tool_calls_exceeded' THEN
+  DBMS_OUTPUT.PUT_LINE('Consider increasing max_tool_calls for this task');
+END IF;
+```
+
+### Complete Example
+
+```sql
+DECLARE
+  l_result JSON_OBJECT_T;
+  l_final_message CLOB;
+BEGIN
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Help me optimize this SQL query and explain the improvements',
+    p_system_prompt => 'You are an expert database performance tuner. Provide specific, actionable advice with explanations.',
+    p_provider => uc_ai.c_provider_anthropic,
+    p_model => uc_ai_anthropic.c_model_claude_3_5_sonnet_latest,
+    p_max_tool_calls => 3
+  );
+
+  l_final_message := l_result.get_string('final_message');
+  DBMS_OUTPUT.PUT_LINE('AI Response: ' || l_final_message);
+  DBMS_OUTPUT.PUT_LINE('Provider: ' || l_result.get_string('provider'));
+  DBMS_OUTPUT.PUT_LINE('Model: ' || l_result.get_string('model'));
+  DBMS_OUTPUT.PUT_LINE('Tool calls used: ' || l_result.get_number('tool_calls_count'));
+END;
+/
+```
+
+## Return Object Overview
+
+The `uc_ai.generate_text()` function returns a comprehensive `JSON_OBJECT_T` containing detailed information about the AI interaction, including the conversation history, usage statistics, and metadata about the AI model and provider used.
+
+### Structure
+
+The return object contains the following properties:
+
+```sql
+{
+  "final_message": "The AI's final response text",
+  "messages": [...],           -- Complete conversation history (JSON_ARRAY_T)
+  "finish_reason": "stop",     -- How the conversation ended (VARCHAR2)
+  "usage": {                   -- Token usage statistics (JSON_OBJECT_T)
+    "prompt_tokens": 45,
+    "completion_tokens": 23,
+    "total_tokens": 68
+  },
+  "tool_calls_count": 2,       -- Number of tools executed (NUMBER)
+  "model": "gpt-4o-mini",      -- AI model used (VARCHAR2)
+  "provider": "openai"         -- AI provider (VARCHAR2)
+}
+```
+
+### Properties Reference
+
+| Property           | Type            | Description                                                                                    |
+| ------------------ | --------------- | ---------------------------------------------------------------------------------------------- |
+| `final_message`    | `CLOB`          | The final assistant message from the conversation                                              |
+| `messages`         | `JSON_ARRAY_T`  | Complete conversation history including user, system, assistant, and tool messages             |
+| `finish_reason`    | `VARCHAR2`      | Completion reason: `stop`, `tool_calls`, `length`, `content_filter`, `max_tool_calls_exceeded` |
+| `usage`            | `JSON_OBJECT_T` | Token usage statistics with `prompt_tokens`, `completion_tokens`, and `total_tokens`           |
+| `tool_calls_count` | `NUMBER`        | Total number of tool calls executed during the conversation                                    |
+| `model`            | `VARCHAR2`      | The AI model used (e.g., `gpt-4o-mini`, `claude-3-5-haiku`)                                    |
+| `provider`         | `VARCHAR2`      | AI provider identifier (`openai`, `anthropic`, `google`)                                       |
+
+### Accessing Return Values
+
+#### Basic Usage
+
+```sql
+DECLARE
+  l_result JSON_OBJECT_T;
+  l_final_response CLOB;
+  l_finish_reason VARCHAR2(255);
+BEGIN
+  -- Make AI request
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is the weather like in London?',
+    p_system_prompt => 'You are a helpful weather assistant.'
+  );
+
+  -- Get the final AI response
+  l_final_response := l_result.get_string('final_message');
+  DBMS_OUTPUT.PUT_LINE('AI Response: ' || l_final_response);
+
+  -- Check how the conversation ended
+  l_finish_reason := l_result.get_string('finish_reason');
+  DBMS_OUTPUT.PUT_LINE('Finish reason: ' || l_finish_reason);
+END;
+/
+```
+
+#### Usage Statistics
+
+```sql
+DECLARE
+  l_result JSON_OBJECT_T;
+  l_usage JSON_OBJECT_T;
+  l_total_tokens NUMBER;
+  l_tool_calls_count NUMBER;
+BEGIN
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Calculate the area of a circle with radius 5',
+    p_max_tool_calls => 3
+  );
+
+  -- Get usage statistics
+  l_usage := l_result.get_object('usage');
+  l_total_tokens := l_usage.get_number('total_tokens');
+  l_tool_calls_count := l_result.get_number('tool_calls_count');
+
+  DBMS_OUTPUT.PUT_LINE('Tokens used: ' || l_total_tokens);
+  DBMS_OUTPUT.PUT_LINE('Tool calls made: ' || l_tool_calls_count);
+  DBMS_OUTPUT.PUT_LINE('Model: ' || l_result.get_string('model'));
+  DBMS_OUTPUT.PUT_LINE('Provider: ' || l_result.get_string('provider'));
+END;
+/
+```
+
+### Message History
+
+The `messages` array contains the complete conversation history with different message types:
+
+#### Message Structure
+
+```sql
+[
+  {
+    "role": "system",
+    "content": "You are a helpful assistant."
+  },
+  {
+    "role": "user",
+    "content": "What is the weather in London?"
+  },
+  {
+    "role": "assistant",
+    "content": null,
+    "tool_calls": [
+      {
+        "id": "call_123",
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "arguments": "{\"location\": \"London\"}"
+        }
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "tool_call_id": "call_123",
+    "content": "Temperature: 18°C, Condition: Partly cloudy"
+  },
+  {
+    "role": "assistant",
+    "content": "The current weather in London is 18°C and partly cloudy."
+  }
+]
+```
+
+#### Processing Message History
+
+```sql
+DECLARE
+  l_result JSON_OBJECT_T;
+  l_messages JSON_ARRAY_T;
+  l_message JSON_OBJECT_T;
+  l_role VARCHAR2(100);
+  l_content CLOB;
+BEGIN
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Tell me a joke and then explain why it is funny'
+  );
+
+  -- Get the complete message history
+  l_messages := l_result.get_array('messages');
+
+  -- Loop through all messages
+  FOR i IN 0 .. l_messages.get_size - 1 LOOP
+    l_message := JSON_OBJECT_T(l_messages.get(i));
+    l_role := l_message.get_string('role');
+    l_content := l_message.get_string('content');
+
+    DBMS_OUTPUT.PUT_LINE('Role: ' || l_role);
+    DBMS_OUTPUT.PUT_LINE('Content: ' || SUBSTR(l_content, 1, 200));
+    DBMS_OUTPUT.PUT_LINE('---');
+  END LOOP;
+END;
+/
+```
+
+### Finish Reasons
+
+The `finish_reason` indicates how the AI conversation ended:
+
+| Finish Reason             | Description                                    |
+| ------------------------- | ---------------------------------------------- |
+| `stop`                    | The model completed its response naturally     |
+| `tool_calls`              | The response ended with tool calls             |
+| `length`                  | Response was truncated due to max tokens limit |
+| `content_filter`          | Response was filtered due to content policy    |
+| `max_tool_calls_exceeded` | Maximum number of tool calls was reached       |
+
+#### Handling Different Finish Reasons
+
+```sql
+DECLARE
+  l_result JSON_OBJECT_T;
+  l_finish_reason VARCHAR2(255);
+BEGIN
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Analyze this complex data...',
+    p_max_tool_calls => 5
+  );
+
+  l_finish_reason := l_result.get_string('finish_reason');
+
+  CASE l_finish_reason
+    WHEN 'stop' THEN
+      DBMS_OUTPUT.PUT_LINE('Conversation completed successfully');
+
+    WHEN 'length' THEN
+      DBMS_OUTPUT.PUT_LINE('Response was truncated due to length limits');
+
+    WHEN 'max_tool_calls_exceeded' THEN
+      DBMS_OUTPUT.PUT_LINE('Maximum tool calls reached - consider increasing limit');
+
+    WHEN 'content_filter' THEN
+      DBMS_OUTPUT.PUT_LINE('Response was filtered due to content policy');
+
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Unexpected finish reason: ' || l_finish_reason);
+  END CASE;
+END;
+/
+```
+
+### Error Handling
+
+The `uc_ai.generate_text` function will raise an exception if the AI provider returns an error or if the request fails.
