@@ -6,8 +6,6 @@ stages:
 
 build:
   stage: build
-  only:
-    - docs
   script:
     - echo "Building the app"
     - sh ./docs/build-static-website.sh
@@ -21,8 +19,6 @@ build:
 
 pages:
   stage: deploy
-  only:
-    - docs
   before_script:
     - apt-get update && apt-get install -y zip
   script:
