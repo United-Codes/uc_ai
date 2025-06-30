@@ -12,6 +12,7 @@ create or replace package body uc_ai_google as
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
   , pio_result           in out json_object_t
+  , pio_standard_messages in out json_array_t
   ) return json_array_t
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
@@ -177,6 +178,8 @@ create or replace package body uc_ai_google as
           l_new_msg         json_object_t;
           l_param_name      uc_ai_tool_parameters.name%type;
           l_function_response json_object_t;
+          -- Standard format messages
+          l_std_tool_msg    json_object_t;
         begin
           -- Add AI's message with content (including functionCall parts) to conversation history
           l_resp_message.put('role', 'model');
@@ -231,6 +234,21 @@ create or replace package body uc_ai_google as
                   l_tool_result := 'Error executing function: ' || sqlerrm;
               end;
 
+              -- Add standard format tool result message
+              l_std_tool_msg := json_object_t();
+              l_std_tool_msg.put('role', 'tool');
+              l_std_tool_msg.put('tool_call_id', 'call_' || g_tool_calls);
+              l_std_tool_msg.put('content', 'parameters: ' || l_function_args.to_clob);
+              l_std_tool_msg.put('function_name', l_function_name);
+              pio_standard_messages.append(l_std_tool_msg);
+
+              l_std_tool_msg := json_object_t();
+              l_std_tool_msg.put('role', 'user');
+              l_std_tool_msg.put('tool_call_id', 'call_' || g_tool_calls);
+              l_std_tool_msg.put('content', l_tool_result);
+              l_std_tool_msg.put('function_name', l_function_name);
+              pio_standard_messages.append(l_std_tool_msg);
+
               -- Create function response part for the response
               l_function_response := json_object_t();
               declare
@@ -262,6 +280,7 @@ create or replace package body uc_ai_google as
           , p_max_tool_calls     => p_max_tool_calls
           , p_input_obj          => p_input_obj
           , pio_result           => pio_result
+          , pio_standard_messages => pio_standard_messages
           );
         end;
       else
@@ -269,10 +288,33 @@ create or replace package body uc_ai_google as
         logger.log('Normal completion received', l_scope);
         declare
           l_resp_message json_object_t := json_object_t();
+          l_std_asst_msg json_object_t := json_object_t();
+          l_content_text clob;
         begin
           l_resp_message.put('role', 'model');
           l_resp_message.put('parts', l_parts);
           l_messages.append(l_resp_message);
+          
+          -- Build standard format assistant message
+          l_std_asst_msg.put('role', 'assistant');
+          
+          -- Extract text content from parts
+          l_content_text := null;
+          <<extract_text_parts>>
+          for k in 0 .. l_parts.get_size - 1
+          loop
+            l_part := treat(l_parts.get(k) as json_object_t);
+            if l_part.has('text') then
+              if l_content_text is null then
+                l_content_text := l_part.get_clob('text');
+              else
+                l_content_text := l_content_text || l_part.get_clob('text');
+              end if;
+            end if;
+          end loop extract_text_parts;
+          
+          l_std_asst_msg.put('content', l_content_text);
+          pio_standard_messages.append(l_std_asst_msg);
         end;
       end if;
     else
@@ -321,7 +363,7 @@ create or replace package body uc_ai_google as
   as
     l_input_obj          json_object_t := json_object_t();
     l_messages           json_array_t := json_array_t();
-    l_end_messages       json_array_t := json_array_t();
+    l_standard_messages  json_array_t := json_array_t();
     l_message            json_object_t;
     l_parts              json_array_t;
     l_part               json_object_t;
@@ -337,6 +379,20 @@ create or replace package body uc_ai_google as
     l_result.put('tool_calls_count', 0);
     l_result.put('finish_reason', 'unknown');
     l_result.put('model', p_model);
+    
+    -- Add system prompt as first message to standard messages if provided
+    if p_system_prompt is not null then
+      l_message := json_object_t();
+      l_message.put('role', 'system');
+      l_message.put('content', p_system_prompt);
+      l_standard_messages.append(l_message);
+    end if;
+    
+    -- Add user message to standard messages
+    l_message := json_object_t();
+    l_message.put('role', 'user');
+    l_message.put('content', p_user_prompt);
+    l_standard_messages.append(l_message);
     
     -- Initialize messages array (Google Gemini format uses 'contents')
     l_parts := json_array_t();
@@ -373,11 +429,9 @@ create or replace package body uc_ai_google as
     , p_max_tool_calls     => p_max_tool_calls
     , p_input_obj          => l_input_obj
     , pio_result           => l_result
+    , pio_standard_messages => l_standard_messages
     );
 
-    -- Add final messages to result
-    l_result.put('messages', l_messages);
-    
     -- Extract final message text content (Google format)
     if l_messages.get_size > 0 then
       l_message := treat(l_messages.get(l_messages.get_size - 1) as json_object_t);
@@ -404,61 +458,8 @@ create or replace package body uc_ai_google as
     -- Add provider info to the result
     l_result.put('provider', 'google');
 
-    -- Convert Google format to standard format (consistent with OpenAI/Anthropic)
-    -- Add system prompt as first message if provided
-    if p_system_prompt is not null then
-      l_message := json_object_t();
-      l_message.put('role', 'system');
-      l_message.put('content', p_system_prompt);
-      l_end_messages.append(l_message);
-    end if;
-
-    -- Convert Google messages to standard format
-    <<convert_messages>>
-    for i in 0 .. l_messages.get_size - 1
-    loop
-      declare
-        l_orig_message json_object_t := treat(l_messages.get(i) as json_object_t);
-        l_conv_message json_object_t := json_object_t();
-        l_orig_parts json_array_t;
-        l_content_text clob;
-        l_role varchar2(64 char);
-      begin
-        l_role := l_orig_message.get_string('role');
-        -- Convert Google roles to standard roles
-        case l_role
-          when 'user' then
-            l_conv_message.put('role', 'user');
-          when 'model' then
-            l_conv_message.put('role', 'assistant');
-          else
-            l_conv_message.put('role', l_role);
-        end case;
-
-        -- Extract text content from parts
-        if l_orig_message.has('parts') then
-          l_orig_parts := l_orig_message.get_array('parts');
-          l_content_text := null;
-          <<extract_text_parts>>
-          for j in 0 .. l_orig_parts.get_size - 1
-          loop
-            l_part := treat(l_orig_parts.get(j) as json_object_t);
-            if l_part.has('text') then
-              if l_content_text is null then
-                l_content_text := l_part.get_clob('text');
-              else
-                l_content_text := l_content_text || l_part.get_clob('text');
-              end if;
-            end if;
-          end loop extract_text_parts;
-          l_conv_message.put('content', l_content_text);
-        end if;
-
-        l_end_messages.append(l_conv_message);
-      end;
-    end loop convert_messages;
-
-    l_result.put('messages', l_end_messages);
+    -- Use the standard messages array instead of converting
+    l_result.put('messages', l_standard_messages);
     
     return l_result;
   end generate_text;
