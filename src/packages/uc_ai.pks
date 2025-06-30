@@ -3,6 +3,7 @@ create or replace package uc_ai as
   subtype provider_type is varchar2(64 char);
   c_provider_openai    constant provider_type := 'openai';
   c_provider_anthropic constant provider_type := 'anthropic';
+  c_provider_google    constant provider_type := 'google';
 
   subtype model_type is varchar2(128 char);
 
@@ -15,9 +16,9 @@ create or replace package uc_ai as
 
 
   e_max_calls_exceeded exception;
-  pragma exception_init(e_max_calls_exceeded, -28301);
+  pragma exception_init(e_max_calls_exceeded, -20301);
   e_error_response exception;
-  pragma exception_init(e_error_response, -28302);
+  pragma exception_init(e_error_response, -20302);
 
   /*
    * Main interface for AI text generation

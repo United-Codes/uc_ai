@@ -11,6 +11,8 @@ begin
       return 'change_me';
     when uc_ai.c_provider_anthropic then
       return '...';
+    when uc_ai.c_provider_google then
+      return '...';
     else 
       raise e_unhandled_provider;
   end case;

@@ -196,7 +196,8 @@ create or replace package body uc_ai_tools_api as
    * 5. Returns format: {name, description, input_schema: {type: "object", properties: {...}}}
    */
   function get_tool_schema(
-    p_tool_id in uc_ai_tools.id%type
+    p_tool_id  in uc_ai_tools.id%type
+  , p_provider in uc_ai.provider_type
   ) 
     return json_object_t 
   as
@@ -213,6 +214,8 @@ create or replace package body uc_ai_tools_api as
 
     l_param_rec uc_ai_tool_parameters%rowtype;
     l_param_obj JSON_OBJECT_T := JSON_OBJECT_T();
+
+    l_input_schema_name varchar2(255 char);
     
   BEGIN
     -- Get tool information
@@ -243,8 +246,10 @@ create or replace package body uc_ai_tools_api as
       l_input_schema.put('type', 'object');
       l_input_schema.put('properties', l_properties);
       l_input_schema.put('required', l_required);
-      l_input_schema.put('additionalProperties', FALSE);
-      l_input_schema.put('$schema', 'http://json-schema.org/draft-07/schema#');
+      if p_provider != uc_ai.c_provider_google then
+        l_input_schema.put('additionalProperties', FALSE);
+        l_input_schema.put('$schema', 'http://json-schema.org/draft-07/schema#');
+      end if;
     
     elsif l_param_count > 1 then
       raise_application_error(-20001, 'If your tool has more than one parameter, you must define a single parent object with the parameters as attributes. This is required for the AI to understand the tool parameters.');
@@ -253,10 +258,18 @@ create or replace package body uc_ai_tools_api as
       l_input_schema.put('type', 'object');
       l_input_schema.put('properties', json_object_t());
       l_input_schema.put('required', json_array_t());
-      l_input_schema.put('$schema', 'http://json-schema.org/draft-07/schema#');
+      if p_provider != uc_ai.c_provider_google then
+        l_input_schema.put('$schema', 'http://json-schema.org/draft-07/schema#');
+      end if;
+    end if;
+
+    if p_provider = uc_ai.c_provider_google then
+      l_input_schema_name := 'parameters';
+    else
+      l_input_schema_name := 'input_schema';
     end if;
     
-    l_function.put('input_schema', l_input_schema);
+    l_function.put(l_input_schema_name, l_input_schema);
     l_function.put('name', l_tool_code);
     l_function.put('description', l_tool_description);
   
@@ -282,7 +295,7 @@ create or replace package body uc_ai_tools_api as
         from uc_ai_tools
     )
     loop
-      l_tool_obj := get_tool_schema(rec.id);
+      l_tool_obj := get_tool_schema(rec.id, p_provider);
 
       -- openai has an additional object wrapper for function calls
       -- {type: "function", function: {...}}

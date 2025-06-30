@@ -30,6 +30,13 @@ create or replace package body uc_ai as
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
         );
+      when c_provider_google then
+        l_result := uc_ai_google.generate_text(
+          p_user_prompt    => p_user_prompt
+        , p_system_prompt  => p_system_prompt
+        , p_model          => p_model
+        , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        );
       else
         raise e_unknown_provider;
     end case;
@@ -39,6 +46,10 @@ create or replace package body uc_ai as
   exception
     when e_unknown_provider then
       raise_application_error(-20001, 'Unknown AI provider: ' || p_provider);
+    when e_max_calls_exceeded then
+      raise_application_error(-20301, 'Maximum tool calls exceeded');
+    when e_error_response then
+      raise_application_error(-20302, 'Error response from AI provider. Check logs for details');
     when others then
       raise;
   end generate_text;
