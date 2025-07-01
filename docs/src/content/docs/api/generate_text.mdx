@@ -38,18 +38,10 @@ FUNCTION generate_text (
 The main user input that you want the AI to respond to. This can be a question, instruction, or any text you want the AI to process.
 
 ```sql
--- Simple example
 l_result := uc_ai.generate_text(
   p_user_prompt => 'What is Oracle APEX?',
   p_provider => uc_ai.c_provider_openai,
   p_model => uc_ai_openai.c_model_gpt_4o_mini
-);
-
--- Complex example with detailed instructions
-l_result := uc_ai.generate_text(
-  p_user_prompt => 'Analyze the following sales data and provide insights on trends, top performers, and recommendations for improvement: [data here]',
-  p_provider => uc_ai.c_provider_anthropic,
-  p_model => uc_ai_anthropic.c_model_claude_3_5_sonnet
 );
 ```
 
@@ -96,7 +88,7 @@ l_result := uc_ai.generate_text(
 
 #### p_model (Required)
 
-The specific AI model to use. See the package headers for available models under each provider. ls:\*\*
+The specific AI model to use. See the package headers for available models under each provider:
 
 - `uc_ai_openai`
 - `uc_ai_anthropic`
@@ -114,7 +106,7 @@ BEGIN
     p_model => uc_ai_openai.c_model_gpt_4o_mini
   );
 
-  -- For complex analysis - use more capable models
+  -- For complex analysis - use more capable models (GPT-4.5, Sonnet 4, Gemini 2.5 Pro, etc.)
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Analyze this complex financial dataset and provide strategic recommendations',
     p_provider => uc_ai.c_provider_anthropic,
@@ -129,8 +121,6 @@ END;
 Limits the maximum number of tool calls the AI can make during the conversation. This prevents infinite loops and controls costs.
 
 - **Default**: `NULL` (10 tool calls)
-- **Recommended**: Set to 3-10 for most use cases
-- **Use Cases**: Higher limits for complex multi-step operations, lower limits for simple tasks
 
 ```sql
 -- Limiting tool calls
@@ -146,30 +136,6 @@ l_result := uc_ai.generate_text(
 IF l_result.get_string('finish_reason') = 'max_tool_calls_exceeded' THEN
   DBMS_OUTPUT.PUT_LINE('Consider increasing max_tool_calls for this task');
 END IF;
-```
-
-### Complete Example
-
-```sql
-DECLARE
-  l_result JSON_OBJECT_T;
-  l_final_message CLOB;
-BEGIN
-  l_result := uc_ai.generate_text(
-    p_user_prompt => 'Help me optimize this SQL query and explain the improvements',
-    p_system_prompt => 'You are an expert database performance tuner. Provide specific, actionable advice with explanations.',
-    p_provider => uc_ai.c_provider_anthropic,
-    p_model => uc_ai_anthropic.c_model_claude_3_5_sonnet_latest,
-    p_max_tool_calls => 3
-  );
-
-  l_final_message := l_result.get_string('final_message');
-  DBMS_OUTPUT.PUT_LINE('AI Response: ' || l_final_message);
-  DBMS_OUTPUT.PUT_LINE('Provider: ' || l_result.get_string('provider'));
-  DBMS_OUTPUT.PUT_LINE('Model: ' || l_result.get_string('model'));
-  DBMS_OUTPUT.PUT_LINE('Tool calls used: ' || l_result.get_number('tool_calls_count'));
-END;
-/
 ```
 
 ## Return Object Overview
