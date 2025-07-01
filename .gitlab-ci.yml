@@ -2,6 +2,7 @@ image: oven/bun:1
 
 stages:
   - build
+  - package
   - deploy
 
 build:
@@ -13,22 +14,40 @@ build:
     - cp -r ./docs/dist/* $CI_PROJECT_DIR/public/
   artifacts:
     paths:
-      - public
+      - public/
     expire_in: 1 week
-    when: always
 
-pages:
-  stage: deploy
+package:
+  stage: package
+  image: debian:bullseye
   before_script:
     - apt-get update && apt-get install -y zip
   script:
-    - echo "Deploying the app"
-    - zip -r ./uc-ai-docs.zip public/*
-    - mv uc-ai-docs.zip public/
+  - cd public
+  - zip -r ../uc-ai.zip ./*
+  - cd ..
+  - mkdir -p deploy
+  - mv uc-ai.zip deploy/
   artifacts:
     paths:
-      - public
+      - deploy/uc-ai.zip
     expire_in: 1 week
-    when: always
   needs:
     - build
+
+deploy_to_production:
+  stage: deploy
+  tags:
+    - prod_web
+  script:
+    - echo "Deploying on webserver"
+    - unzip -o deploy/uc-ai.zip -d /var/www/united-codes/products/uc-ai/docs/
+    - sudo -n /bin/chown -R gitlab-deploy:gitlab-deploy /var/www/united-codes/products/uc-ai/docs/
+    - sudo -n /usr/bin/find /var/www/united-codes/products/uc-ai/docs/ -type d -exec chmod 755 {} \;
+    - sudo -n /usr/bin/find /var/www/united-codes/products/uc-ai/docs/ -type f -exec chmod 644 {} \;
+  environment:
+    name: production_webserver
+    url: https://www.united-codes.com/products/uc-ai/docs
+  needs:
+    - package
+
