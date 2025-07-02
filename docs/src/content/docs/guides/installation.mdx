@@ -10,16 +10,16 @@ sidebar:
 - Oracle Database 12.2 or later
 - Oracle APEX (older versions are fine, this project uses some of the APIs)
 
-## Clone the repo
+## Download the Project
 
-Clone the [GitHub repository](https://github.com/United-Codes/uc_ai):
+Either download the source code of the latest release from the [GitHub releases page](https://github.com/United-Codes/uc_ai/releases/) or clone the [GitHub repository](https://github.com/United-Codes/uc_ai):
 
 ```bash
 git clone https://github.com/United-Codes/uc_ai.git
 cd uc_ai
 ```
 
-## Installing Logger
+## Logger
 
 The project uses the [Logger](https://github.com/OraOpenSource/Logger) package for logging. If something goes wrong all the trace is logged to help debugging.
 
@@ -41,9 +41,18 @@ sql ./logger_install_no_op.sql
 
 ## Installing UC AI
 
+Run this script to install the UC AI with any SQL client:
+
 ```bash
 # inside the uc_ai directory
 sql ./install_uc_ai.sql
+```
+
+There is also a `install_with_logger.sql` script that installs the UC AI with the Logger package.
+
+```bash
+# inside the uc_ai directory
+sql ./install_with_logger.sql
 ```
 
 ## Set up API Keys
