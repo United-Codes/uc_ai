@@ -7,7 +7,7 @@ import starlightLinksValidator from "starlight-links-validator";
 // https://astro.build/config
 export default defineConfig({
 	site: "https://united-codes.com/products/uc-ai/docs",
-	base: "/products/uc-ai",
+	base: "/products/uc-ai/docs",
 	integrations: [
 		starlight({
 			title: "UC AI",
