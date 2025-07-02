@@ -1,5 +1,13 @@
 create or replace package uc_ai as
 
+  /**
+  * UC AI
+  * Package to integrate AI capabilities into Oracle databases.
+  * 
+  * Copyright (c) 2025 United Codes
+  * https://www.united-codes.com
+  */
+
   subtype provider_type is varchar2(64 char);
   c_provider_openai    constant provider_type := 'openai';
   c_provider_anthropic constant provider_type := 'anthropic';
@@ -24,14 +32,7 @@ create or replace package uc_ai as
    * Main interface for AI text generation
    * Routes to OpenAI implementation - could be extended for provider selection
    * 
-   * Returns comprehensive result object with:
-   * - messages: conversation history (json_array_t)
-   * - final_message: last message in conversation (json_object_t)
-   * - finish_reason: completion reason (varchar2)
-   * - usage: token usage info (json_object_t)
-   * - tool_calls_count: number of tool calls executed (number)
-   * - model: model used (varchar2)
-   * - provider: AI provider used (varchar2)
+   * See https://www.united-codes.com/products/uc-ai/docs/api/generate_text/ for API documentation
    */
   function generate_text (
     p_user_prompt    in clob

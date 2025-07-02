@@ -1,5 +1,14 @@
 create or replace package uc_ai_openai as
 
+  /**
+  * UC AI
+  * Package to integrate AI capabilities into Oracle databases.
+  * 
+  * Copyright (c) 2025 United Codes
+  * https://www.united-codes.com
+  */
+
+
   -- get from https://platform.openai.com/docs/pricing
   c_model_gpt_4_5 constant uc_ai.model_type := 'gpt-4.5-preview';
   c_model_gpt_4_1 constant uc_ai.model_type := 'gpt-4.1';
@@ -25,16 +34,7 @@ create or replace package uc_ai_openai as
   c_model_gpt_3_5_turbo constant uc_ai.model_type := 'gpt-3.5-turbo';
 
   /*
-   * OpenAI implementation for text generation with optional system prompt
-   * Converts prompt into message format and calls the full conversation handler
-   * 
-   * Returns comprehensive result object with:
-   * - messages: conversation history (json_array_t)
-   * - finish_reason: completion reason (varchar2)
-   * - usage: token usage info (json_object_t)
-   * - tool_calls_count: number of tool calls executed (number)
-   * - model: model used (varchar2)
-   * - provider: AI provider used (varchar2)
+   * OpenAI implementation for text generation
    */
   function generate_text (
     p_user_prompt    in clob

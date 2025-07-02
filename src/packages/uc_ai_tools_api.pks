@@ -1,24 +1,18 @@
-/*
- * UC AI Tools API Package
- * 
- * Core package for managing and executing AI tools configured in the database.
- * Tools are defined with parameters and JSON schemas that conform to OpenAI function calling format.
- * 
- * Key workflow:
- * 1. Tools are stored in uc_ai_tools table with PL/SQL function calls
- * 2. Parameters defined in uc_ai_tool_parameters with JSON schema validation rules
- * 3. AI models call get_tools_array() to get available tools
- * 4. When AI wants to use a tool, execute_tool() runs the PL/SQL function with arguments
- * 5. Tool result is returned to AI for further processing
- */
 create or replace package uc_ai_tools_api as
+
+  /**
+  * UC AI
+  * Package to integrate AI capabilities into Oracle databases.
+  * 
+  * Copyright (c) 2025 United Codes
+  * https://www.united-codes.com
+  */
+
+
 
   /*
    * Returns array of all active tools formatted for specific AI provider
-   * 
-   * p_flavor: 'openai' wraps tools in {type: "function", function: {...}} format
-   *           other values return tools in direct anthropic/claude format
-   * 
+   *
    * This is what gets sent to AI models so they know what tools are available.
    */
   function get_tools_array (
@@ -27,9 +21,6 @@ create or replace package uc_ai_tools_api as
 
   /*
    * Executes a tool by running its stored PL/SQL function
-   * 
-   * p_tool_code: the 'code' field from uc_ai_tools table (tool identifier)
-   * p_arguments: JSON object with parameters the AI wants to pass
    * 
    * Finds the tool's function_call PL/SQL code, binds the arguments JSON as :ARGUMENTS,
    * executes it and returns the result. Only supports single bind variable for security.
@@ -40,6 +31,10 @@ create or replace package uc_ai_tools_api as
   ) return clob;
 
 
+  /*
+   * Returns the name of the tool's parent parameter that contains the JSON object
+   * with the tool's arguments.
+   */
   function get_tools_object_param_name (
     p_tool_code in uc_ai_tools.code%type
   ) return uc_ai_tool_parameters.name%type result_cache;

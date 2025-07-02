@@ -1,5 +1,14 @@
 create or replace package uc_ai_anthropic as
 
+  /**
+  * UC AI
+  * Package to integrate AI capabilities into Oracle databases.
+  * 
+  * Copyright (c) 2025 United Codes
+  * https://www.united-codes.com
+  */
+
+
   -- Anthropic Claude models
   -- See https://docs.anthropic.com/en/docs/about-claude/models
   c_model_claude_4_opus constant uc_ai.model_type := 'claude-opus-4-0';
@@ -11,16 +20,7 @@ create or replace package uc_ai_anthropic as
   c_model_claude_3_opus     constant uc_ai.model_type := 'claude-3-opus-latest';
 
   /*
-   * Anthropic implementation for text generation with optional system prompt
-   * Converts prompt into message format and calls the full conversation handler
-   * 
-   * Returns comprehensive result object with:
-   * - messages: conversation history (json_array_t)
-   * - finish_reason: completion reason (varchar2)
-   * - usage: token usage info (json_object_t)
-   * - tool_calls_count: number of tool calls executed (number)
-   * - model: model used (varchar2)
-   * - provider: AI provider used (varchar2)
+   * Anthropic implementation for text generation
    */
   function generate_text (
     p_user_prompt    in clob

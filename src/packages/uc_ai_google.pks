@@ -1,5 +1,14 @@
 create or replace package uc_ai_google as
 
+  /**
+  * UC AI
+  * Package to integrate AI capabilities into Oracle databases.
+  * 
+  * Copyright (c) 2025 United Codes
+  * https://www.united-codes.com
+  */
+
+
   -- Google Gemini models
   -- See https://ai.google.dev/gemini-api/docs/models/gemini
   c_model_gemini_2_5_pro        constant uc_ai.model_type := 'gemini-2.5-pro';
@@ -14,16 +23,7 @@ create or replace package uc_ai_google as
   c_model_gemini_1_5_pro              constant uc_ai.model_type := 'gemini-1.5-pro';
 
   /*
-   * Google Gemini implementation for text generation with optional system prompt
-   * Converts prompt into message format and calls the full conversation handler
-   * 
-   * Returns comprehensive result object with:
-   * - messages: conversation history (json_array_t)
-   * - finish_reason: completion reason (varchar2)
-   * - usage: token usage info (json_object_t)
-   * - tool_calls_count: number of tool calls executed (number)
-   * - model: model used (varchar2)
-   * - provider: AI provider used (varchar2)
+   * Google Gemini implementation for text generation 
    */
   function generate_text (
     p_user_prompt    in clob
