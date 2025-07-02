@@ -38,4 +38,4 @@ Yes! One of UC AI's key features is function calling (tools). You can register d
 4. Set up your API keys for your chosen AI provider
 5. Start using `uc_ai.generate_text()` in your PL/SQL code
 
-Check out the [Installation Guide](/guides/installation/) for detailed steps.
+Check out the [Installation Guide](/products/uc-ai/docs/guides/installation/) for detailed steps.
