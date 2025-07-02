@@ -5,12 +5,11 @@ A comprehensive Oracle PL/SQL framework for integrating AI models (OpenAI GPT, A
 
 ## Empowering Oracle Developers
 
-You often hear that **Python is the best language for AI development**, but I disagree!
+You often hear that **Python is the best language for AI development**, but I don't think that has to be true! Python doesn't have some magic secret sauce you can't get with other languages.
 
-The programming language does offer magic pixie dust that you can't achieve with other languages. The most important part of AI integration is simply calling an API to access Large Language Models (LLMs). It's true that Python (and other languages) have better ways to connect with AI models and frameworks, which makes building AI apps easier. While Oracle is moving in that direction, they only offer this in their 23ai database, which is currently cloud-only. I think it's time we take control and make it easy to access AI models directly in our Oracle databases.
+The most important part of AI integration is really just calling an **API** to access Large Language Models (LLMs). Plus, I believe it makes the most sense to put AI features directly into your database, right where your data lives.
 
-I also think it makes the most sense to put AI features directly into your database, right where your data lives.
-
+It's true that Python (and other languages) have better ways to connect with AI models and frameworks, which definitely makes building AI apps easier. While Oracle is moving in that direction, they only offer this in their 23ai database, which is currently cloud-only. I think it's time we take control and make it easy to access AI models directly in our Oracle databases.
 
 ## Quick Demo
 
