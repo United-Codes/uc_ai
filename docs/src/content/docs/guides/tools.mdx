@@ -127,23 +127,47 @@ And this is the message array from the return object:
     },
     {
       "role": "user",
-      "content": "What is the email address of Jim?"
-    },
-    {
-      "role": "tool",
-      "tool_call_id": "call_1",
-      "content": "parameters: {}",
-      "function_name": "TT_GET_USERS"
-    },
-    {
-      "role": "user",
-      "tool_call_id": "call_1",
-      "content": "[{\"user_id\":2,\"first_name\":\"Pam\",\"last_name\":\"Beesly\",\"email\":\"pam.beesly@dundermifflin.com\",\"hire_date\":\"2024-11-01\",\"is_active\":\"Y\"},{\"user_id\":4,\"first_name\":\"Jim\",\"last_name\":\"Halpert\",\"email\":\"jim.halpert@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":6,\"first_name\":\"Kevin\",\"last_name\":\"Malone\",\"email\":\"kevin.malone@dundermifflin.com\",\"hire_date\":\"2024-10-01\",\"is_active\":\"N\"},{\"user_id\":5,\"first_name\":\"Angela\",\"last_name\":\"Martin\",\"email\":\"angela.martin@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"},{\"user_id\":3,\"first_name\":\"Dwight\",\"last_name\":\"Schrute\",\"email\":\"dwight.schrute@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":1,\"first_name\":\"Michael\",\"last_name\":\"Scott\",\"email\":\"michael.scott@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"}]",
-      "function_name": "TT_GET_USERS"
+      "content": [
+        {
+          "type": "text",
+          "text": "What is the email address of Jim?"
+        }
+      ]
     },
     {
       "role": "assistant",
-      "content": "Jim's email address is jim.halpert@dundermifflin.com."
+      "content": [
+        {
+          "type": "tool_call",
+          "toolCallId": "call_Xk2MJTRWFbIZWSGk2jAnQR9n",
+          "toolName": "TT_GET_USERS",
+          "args": "{}"
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "content": [
+        {
+          "type": "tool_result",
+          "toolCallId": "call_Xk2MJTRWFbIZWSGk2jAnQR9n",
+          "toolName": "TT_GET_USERS",
+          "result": "[{\"user_id\":2,\"first_name\":\"Pam\",\"last_name\":\"Beesly\",\"email\":\"pam.beesly@dundermifflin.com\",\"hire_date\":\"2024-11-01\",\"is_active\":\"Y\"},{\"user_id\":4,\"first_name\":\"Jim\",\"last_name\":\"Halpert\",\"email\":\"jim.halpert@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":6,\"first_name\":\"Kevin\",\"last_name\":\"Malone\",\"email\":\"kevin.malone@dundermifflin.com\",\"hire_date\":\"2024-10-01\",\"is_active\":\"N\"},{\"user_id\":5,\"first_name\":\"Angela\",\"last_name\":\"Martin\",\"email\":\"angela.martin@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"},{\"user_id\":3,\"first_name\":\"Dwight\",\"last_name\":\"Schrute\",\"email\":\"dwight.schrute@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":1,\"first_name\":\"Michael\",\"last_name\":\"Scott\",\"email\":\"michael.scott@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"}]"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "Jim's email address is jim.halpert@dundermifflin.com.",
+          "providerOptions": {
+            "refusal": null,
+            "annotations": []
+          }
+        }
+      ]
     }
   ]
 }
