@@ -4,6 +4,38 @@ create or replace package body uc_ai_openai as
   c_api_url constant varchar2(255 char) := 'https://api.openai.com/v1/chat/completions';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
+  g_messages json_array_t;  -- Global messages array to keep conversation history
+  g_final_message clob;
+
+  procedure process_text_message(
+    p_message in json_object_t
+  )
+  as
+    l_content clob;
+    l_provider_options json_object_t;
+    l_lm_text_content  json_object_t;
+    l_assistant_message json_object_t;
+    l_arr json_array_t;
+  begin
+    l_content := p_message.get_clob('content');
+    l_provider_options := p_message;
+    l_provider_options.remove('role');
+    l_provider_options.remove('content');
+
+    l_lm_text_content := uc_ai_message_api.create_text_content(
+      p_text             => l_content
+    , p_provider_options => l_provider_options
+    );
+
+    l_arr := json_array_t();
+    l_arr.append(l_lm_text_content);
+    l_assistant_message := uc_ai_message_api.create_assistant_message(
+      p_content => l_arr
+    );
+
+    g_final_message := l_content;
+    g_messages.append(l_assistant_message);
+  end process_text_message;
 
 
   function internal_generate_text (
@@ -14,6 +46,7 @@ create or replace package body uc_ai_openai as
   ) return json_array_t
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
+    l_message      json_object_t;
     l_messages     json_array_t := json_array_t();
     l_input_obj    json_object_t;
 
@@ -112,7 +145,13 @@ create or replace package body uc_ai_openai as
           l_args_json       json_object_t;
           l_tool_result     clob;
           l_new_msg         json_object_t;
+
+          l_lm_tool_calls   json_array_t;
+          l_lm_tool_results json_array_t;
         begin
+          l_lm_tool_calls   := json_array_t();
+          l_lm_tool_results := json_array_t();
+
           -- Add AI's message with tool_calls to conversation history
           l_resp_message := l_choice.get_object('message');
           l_messages.append(l_resp_message);
@@ -130,6 +169,15 @@ create or replace package body uc_ai_openai as
             l_tool_id := l_function.get_string('name');
             l_arguments := l_function.get_string('arguments');
 
+            l_lm_tool_calls.append(
+              uc_ai_message_api.create_tool_call_content(
+                p_tool_call_id => l_call_id
+              , p_tool_name    => l_tool_id
+              , p_args         => l_arguments
+              )
+            );
+
+
             logger.log('Tool call', l_scope, 'Tool ID: ' || l_tool_id || ', Call ID: ' || l_call_id || ', Arguments: ' || l_arguments);
             l_args_json := json_object_t.parse(l_arguments);
 
@@ -145,7 +193,19 @@ create or replace package body uc_ai_openai as
             l_new_msg.put('content', l_tool_result);
             l_new_msg.put('tool_call_id', l_call_id);
             l_messages.append(l_new_msg);
+
+            l_lm_tool_results.append(
+              uc_ai_message_api.create_tool_result_content(
+                p_tool_call_id => l_call_id
+              , p_tool_name    => l_tool_id
+              , p_result       => l_tool_result
+              )
+            );
           end loop tool_call_loop;
+
+          g_messages.append(uc_ai_message_api.create_assistant_message(l_lm_tool_calls));
+          g_messages.append(uc_ai_message_api.create_tool_message(l_lm_tool_results));
+
 
           pio_result.put('tool_calls_count', g_tool_calls);
 
@@ -160,11 +220,17 @@ create or replace package body uc_ai_openai as
       elsif l_finish_reason = uc_ai.c_finish_reason_stop then
         -- Normal completion - add AI's message to conversation
         logger.log('Stop received', l_scope);
-        l_messages.append(l_choice.get_object('message'));
+        l_message := l_choice.get_object('message');
+        l_messages.append(l_message);
+
+        process_text_message(l_message);
       elsif l_finish_reason = uc_ai.c_finish_reason_length then
         -- Response truncated due to length - log and continue
         logger.log_warn('Response truncated due to length', l_scope);
-        l_messages.append(l_choice.get_object('message'));
+        l_message := l_choice.get_object('message');
+        l_messages.append(l_message);
+
+        process_text_message(l_message);
       elsif l_finish_reason = uc_ai.c_finish_reason_content_filter then
         -- Content filter triggered - log and continue
         logger.log_warn('Content filter triggered', l_scope);
@@ -172,7 +238,10 @@ create or replace package body uc_ai_openai as
       else
         -- Unexpected finish reason - log and continue
         logger.log_warn('Unexpected finish reason: ' || l_finish_reason, l_scope);
-        l_messages.append(l_choice.get_object('message'));
+        l_message := l_choice.get_object('message');
+        l_messages.append(l_message);
+
+        process_text_message(l_message);
       end if;
     end loop choices_loop;
 
@@ -222,6 +291,7 @@ create or replace package body uc_ai_openai as
   begin
     -- Reset global call counter
     g_tool_calls := 0;
+    g_messages := json_array_t();
     
     -- Initialize result object with default values
     l_result.put('tool_calls_count', 0);
@@ -234,11 +304,19 @@ create or replace package body uc_ai_openai as
       l_message.put('role', 'system');
       l_message.put('content', p_system_prompt);
       l_messages.append(l_message);
+
+      l_message := uc_ai_message_api.create_system_message(p_system_prompt);
+      g_messages.append(l_message);
     end if;
+
+    -- user prompt
     l_message := json_object_t();
     l_message.put('role', 'user');
     l_message.put('content', p_user_prompt);
     l_messages.append(l_message);
+
+    l_message := uc_ai_message_api.create_simple_user_message(p_user_prompt);
+    g_messages.append(l_message);
 
     l_input_obj.put('model', p_model);
     --l_input_obj.put('transfer_timeout', '60');
@@ -255,16 +333,13 @@ create or replace package body uc_ai_openai as
     );
 
     -- Add final messages to result
-    l_result.put('messages', l_messages);
+    l_result.put('messages', g_messages);
     
     -- Add final message (only the text)
-    if l_messages.get_size > 0 then
-      l_message := treat(l_messages.get(l_messages.get_size - 1) as json_object_t);
-      l_result.put('final_message', l_message.get_clob('content'));
-    end if;
-    
+    l_result.put('final_message', g_final_message);
+ 
     -- Add provider info to the result
-    l_result.put('provider', 'openai');
+    l_result.put('provider', uc_ai.c_provider_openai);
     
     return l_result;
   end generate_text;
