@@ -353,9 +353,11 @@ create or replace package body uc_ai_anthropic as
     l_result.put('tool_calls_count', 0);
     l_result.put('finish_reason', 'unknown');
     
-    l_message := json_object_t();
-    l_message := uc_ai_message_api.create_system_message(p_system_prompt);
-    g_normalized_messages.append(l_message);
+    if p_system_prompt is not null then
+      l_message := json_object_t();
+      l_message := uc_ai_message_api.create_system_message(p_system_prompt);
+      g_normalized_messages.append(l_message);
+    end if;
 
     -- Initialize messages array (no system message in messages for Anthropic)
     l_message := json_object_t();
