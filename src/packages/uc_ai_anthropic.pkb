@@ -5,6 +5,52 @@ create or replace package body uc_ai_anthropic as
   c_anthropic_version constant varchar2(32 char) := '2023-06-01';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
+  g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
+  g_final_message clob;
+
+  -- Chat API reference: https://docs.anthropic.com/en/api/messages
+
+  function get_text_content (
+    p_message in json_object_t
+  ) return json_object_t
+  as
+    l_content clob;
+    l_provider_options json_object_t;
+    l_lm_text_content  json_object_t;
+  begin
+    l_content := p_message.get_clob('text');
+    l_provider_options := p_message;
+    l_provider_options.remove('type');
+    l_provider_options.remove('text');
+
+    l_lm_text_content := uc_ai_message_api.create_text_content(
+      p_text             => l_content
+    , p_provider_options => l_provider_options
+    );
+
+    g_final_message := l_content;
+
+    return l_lm_text_content;
+  end get_text_content;
+
+  procedure process_text_message(
+    p_message in json_object_t
+  )
+  as
+    l_lm_text_content  json_object_t;
+    l_assistant_message json_object_t;
+    l_arr json_array_t;
+  begin
+    l_lm_text_content := get_text_content(p_message);
+
+    l_arr := json_array_t();
+    l_arr.append(l_lm_text_content);
+    l_assistant_message := uc_ai_message_api.create_assistant_message(
+      p_content => l_arr
+    );
+
+    g_normalized_messages.append(l_assistant_message);
+  end process_text_message;
 
 
   function internal_generate_text (
@@ -23,7 +69,7 @@ create or replace package body uc_ai_anthropic as
     l_resp_json json_object_t;
     l_temp_obj  json_object_t;
     l_content   json_array_t;
-    l_content_block json_object_t;
+    l_content_prompt json_object_t;
     l_stop_reason varchar2(255 char);
     l_usage     json_object_t;
     l_model     varchar2(255 char);
@@ -130,8 +176,8 @@ create or replace package body uc_ai_anthropic as
     <<content_loop>>
     for i in 0 .. l_content.get_size - 1
     loop
-      l_content_block := treat(l_content.get(i) as json_object_t);
-      l_content_type := l_content_block.get_string('type');
+      l_content_prompt := treat(l_content.get(i) as json_object_t);
+      l_content_type := l_content_prompt.get_string('type');
       logger.log('Content block type: ' || l_content_type, l_scope);
       if l_content_type = 'tool_use' then
         l_has_tool_use := true;
@@ -145,12 +191,15 @@ create or replace package body uc_ai_anthropic as
         l_resp_message    json_object_t := json_object_t();
         l_tool_results    json_array_t := json_array_t();
         l_tool_result_obj json_object_t;
-        l_provider_tool_id varchar2(255 CHAR);
+        l_tool_call_id varchar2(255 CHAR);
         l_tool_name       uc_ai_tools.code%type;
         l_tool_input      json_object_t;
         l_tool_result     clob;
         l_new_msg         json_object_t;
         l_param_name      uc_ai_tool_parameters.name%type;
+
+        l_normalized_messages     json_array_t := json_array_t();
+        l_normalized_tool_results json_array_t := json_array_t();
       begin
         -- Add AI's message with content (including tool_use blocks) to conversation history
         l_resp_message.put('role', 'assistant');
@@ -161,16 +210,16 @@ create or replace package body uc_ai_anthropic as
         <<tool_use_loop>>
         for j in 0 .. l_content.get_size - 1
         loop
-          l_content_block := treat(l_content.get(j) as json_object_t);
+          l_content_prompt := treat(l_content.get(j) as json_object_t);
           
-          if l_content_block.get_string('type') = 'tool_use' then
-            logger.log('Executing tool use', l_scope, l_content_block.to_clob);
+          if l_content_prompt.get_string('type') = 'tool_use' then
+            logger.log('Executing tool use', l_scope, l_content_prompt.to_clob);
 
             g_tool_calls := g_tool_calls + 1;
 
-            l_provider_tool_id := l_content_block.get_string('id');
-            l_tool_name := l_content_block.get_string('name');
-            l_tool_input := l_content_block.get_object('input');
+            l_tool_call_id := l_content_prompt.get_string('id');
+            l_tool_name := l_content_prompt.get_string('name');
+            l_tool_input := l_content_prompt.get_object('input');
             if l_tool_input is not null then
               l_param_name := uc_ai_tools_api.get_tools_object_param_name(l_tool_name);
               if l_param_name is not null then
@@ -178,7 +227,14 @@ create or replace package body uc_ai_anthropic as
               end if;
             end if;
 
-            logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name || ', Tool ID: ' || l_provider_tool_id);
+            l_new_msg := uc_ai_message_api.create_tool_call_content(
+              p_tool_call_id => l_tool_call_id
+            , p_tool_name    => l_tool_name
+            , p_args         => l_tool_input.to_clob
+            );
+            l_normalized_messages.append(l_new_msg);
+
+            logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name || ', Tool ID: ' || l_tool_call_id);
             if l_tool_input is not null then
               logger.log('Tool input', l_scope, 'Input: ' || l_tool_input.to_clob);
             else
@@ -195,11 +251,31 @@ create or replace package body uc_ai_anthropic as
             -- Create tool result object for the content array
             l_tool_result_obj := json_object_t();
             l_tool_result_obj.put('type', 'tool_result');
-            l_tool_result_obj.put('tool_use_id', l_provider_tool_id);
+            l_tool_result_obj.put('tool_use_id', l_tool_call_id);
             l_tool_result_obj.put('content', l_tool_result);
             l_tool_results.append(l_tool_result_obj);
+           
+            l_new_msg := uc_ai_message_api.create_tool_result_content(
+              p_tool_call_id => l_tool_call_id,
+              p_tool_name    => l_tool_name,
+              p_result       => l_tool_result
+            );
+            l_normalized_tool_results.append(l_new_msg);
+          elsif l_content_prompt.get_string('type') = 'text' then
+            -- Handle text content blocks (if any)
+            logger.log('Text content block found', l_scope, l_content_prompt.to_clob);
+
+            l_new_msg := get_text_content(l_content_prompt);
+            l_normalized_messages.append(l_new_msg);
+          else
+            raise_application_error(-20001, 'Unsupported content type: ' || l_content_prompt.get_string('type'));
+
           end if;
         end loop tool_use_loop;
+
+        g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+        g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
+
 
         pio_result.put('tool_calls_count', g_tool_calls);
 
@@ -221,13 +297,8 @@ create or replace package body uc_ai_anthropic as
     else
       -- Normal completion - add AI's message to conversation
       logger.log('Normal completion received', l_scope);
-      declare
-        l_resp_message json_object_t := json_object_t();
-      begin
-        l_resp_message.put('role', 'assistant');
-        l_resp_message.put('content', l_content);
-        l_messages.append(l_resp_message);
-      end;
+      l_messages.append(l_content_prompt);
+      process_text_message(l_content_prompt);
     end if;
 
     logger.log('End internal_generate_text - final messages count: ' || l_messages.get_size, l_scope);
@@ -270,26 +341,30 @@ create or replace package body uc_ai_anthropic as
   as
     l_input_obj          json_object_t := json_object_t();
     l_messages           json_array_t := json_array_t();
-    l_end_messages       json_array_t := json_array_t();
     l_message            json_object_t;
     l_tools              json_array_t;
     l_result             json_object_t := json_object_t();
-    l_final_content      json_array_t;
-    l_content_block      json_object_t;
-    l_final_text         clob;
   begin
     -- Reset global call counter
     g_tool_calls := 0;
+    g_normalized_messages := json_array_t();
     
     -- Initialize result object with default values
     l_result.put('tool_calls_count', 0);
     l_result.put('finish_reason', 'unknown');
     
+    l_message := json_object_t();
+    l_message := uc_ai_message_api.create_system_message(p_system_prompt);
+    g_normalized_messages.append(l_message);
+
     -- Initialize messages array (no system message in messages for Anthropic)
     l_message := json_object_t();
     l_message.put('role', 'user');
     l_message.put('content', p_user_prompt);
     l_messages.append(l_message);
+
+    l_message := uc_ai_message_api.create_simple_user_message(p_user_prompt);
+    g_normalized_messages.append(l_message);
 
     l_input_obj.put('model', p_model);
     l_input_obj.put('max_tokens', 8192); -- Anthropic requires max_tokens
@@ -310,52 +385,12 @@ create or replace package body uc_ai_anthropic as
     );
 
     -- Add final messages to result
-    l_result.put('messages', l_messages);
-    
-    -- Extract final message text content (Anthropic format is different from OpenAI)
-    if l_messages.get_size > 0 then
-      l_message := treat(l_messages.get(l_messages.get_size - 1) as json_object_t);
-      if l_message.has('content') then
-        l_final_content := l_message.get_array('content');
-        l_final_text := null;
-        -- Concatenate all text blocks
-        <<final_content_loop>>
-        for i in 0 .. l_final_content.get_size - 1
-        loop
-          l_content_block := treat(l_final_content.get(i) as json_object_t);
-          if l_content_block.get_string('type') = 'text' then
-            if l_final_text is null then
-              l_final_text := l_content_block.get_clob('text');
-            else
-              l_final_text := l_final_text || l_content_block.get_clob('text');
-            end if;
-          end if;
-        end loop final_content_loop;
-        l_result.put('final_message', l_final_text);
-      end if;
-    end if;
+    l_result.put('messages', g_normalized_messages);
+    l_result.put('final_message', g_final_message);
     
     -- Add provider info to the result
     l_result.put('provider', 'anthropic');
 
-    -- add system prompt as first mesage (consistent with OpenAI)
-    if p_system_prompt is not null then
-      l_message := json_object_t();
-      l_message.put('role', 'system');
-      l_message.put('content', p_system_prompt);
-
-      l_end_messages.append(l_message);
-
-      <<add_other_messages>>
-      for i in 0 .. l_messages.get_size - 1
-      loop
-        l_message := treat(l_messages.get(i) as json_object_t);
-        l_end_messages.append(l_message);
-      end loop add_other_messages;
-
-      l_result.put('messages', l_end_messages);
-    end if;
-    
     return l_result;
   end generate_text;
 
