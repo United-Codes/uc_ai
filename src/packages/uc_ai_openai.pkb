@@ -4,8 +4,10 @@ create or replace package body uc_ai_openai as
   c_api_url constant varchar2(255 char) := 'https://api.openai.com/v1/chat/completions';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
-  g_messages json_array_t;  -- Global messages array to keep conversation history
+  g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
   g_final_message clob;
+
+  -- Chat API reference: https://platform.openai.com/docs/api-reference/chat/create
 
   procedure process_text_message(
     p_message in json_object_t
@@ -34,7 +36,7 @@ create or replace package body uc_ai_openai as
     );
 
     g_final_message := l_content;
-    g_messages.append(l_assistant_message);
+    g_normalized_messages.append(l_assistant_message);
   end process_text_message;
 
 
@@ -203,8 +205,8 @@ create or replace package body uc_ai_openai as
             );
           end loop tool_call_loop;
 
-          g_messages.append(uc_ai_message_api.create_assistant_message(l_lm_tool_calls));
-          g_messages.append(uc_ai_message_api.create_tool_message(l_lm_tool_results));
+          g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_lm_tool_calls));
+          g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_lm_tool_results));
 
 
           pio_result.put('tool_calls_count', g_tool_calls);
@@ -291,7 +293,7 @@ create or replace package body uc_ai_openai as
   begin
     -- Reset global call counter
     g_tool_calls := 0;
-    g_messages := json_array_t();
+    g_normalized_messages := json_array_t();
     
     -- Initialize result object with default values
     l_result.put('tool_calls_count', 0);
@@ -306,7 +308,7 @@ create or replace package body uc_ai_openai as
       l_messages.append(l_message);
 
       l_message := uc_ai_message_api.create_system_message(p_system_prompt);
-      g_messages.append(l_message);
+      g_normalized_messages.append(l_message);
     end if;
 
     -- user prompt
@@ -316,7 +318,7 @@ create or replace package body uc_ai_openai as
     l_messages.append(l_message);
 
     l_message := uc_ai_message_api.create_simple_user_message(p_user_prompt);
-    g_messages.append(l_message);
+    g_normalized_messages.append(l_message);
 
     l_input_obj.put('model', p_model);
     --l_input_obj.put('transfer_timeout', '60');
@@ -333,7 +335,7 @@ create or replace package body uc_ai_openai as
     );
 
     -- Add final messages to result
-    l_result.put('messages', g_messages);
+    l_result.put('messages', g_normalized_messages);
     
     -- Add final message (only the text)
     l_result.put('final_message', g_final_message);
