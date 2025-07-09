@@ -120,5 +120,40 @@ create or replace package body test_uc_ai_anthropic as
 
   end tool_clock_in_user;
 
+
+  procedure convert_messages
+  as
+    l_messages json_array_t;
+    l_result json_object_t;
+    l_final_message clob;
+    l_message_count pls_integer;
+  begin
+    l_messages := uc_ai_test_utils.get_tool_user_messages;
+
+    -- Validate message array structure against spec
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Convert Messages Test before');
+
+    l_result := uc_ai_anthropic.generate_text(
+      p_messages => l_messages,
+      p_model => uc_ai_anthropic.c_model_claude_3_5_haiku,
+      p_max_tool_calls => 3
+    );
+
+    sys.dbms_output.put_line('Result: ' || l_result.to_string);
+    
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(lower(l_final_message)).to_be_like('%jim.halpert@dundermifflin.com%');
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    l_message_count := l_messages.get_size;
+    -- system proppt, user, tool call, tool_response, + new: assistant
+    ut.expect(l_message_count).to_equal(5);
+
+    -- Validate message array structure against spec
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Convert Messages Test response');
+  end convert_messages;
+
 end test_uc_ai_anthropic;
 /

@@ -3,6 +3,7 @@ create or replace package body uc_ai_anthropic as
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_api_url constant varchar2(255 char) := 'https://api.anthropic.com/v1/messages';
   c_anthropic_version constant varchar2(32 char) := '2023-06-01';
+  c_default_max_tokens constant pls_integer := 8192;  -- Default max tokens for Anthropic
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
@@ -51,6 +52,171 @@ create or replace package body uc_ai_anthropic as
 
     g_normalized_messages.append(l_assistant_message);
   end process_text_message;
+
+
+  /*
+   * Convert standardized Language Model messages to Anthropic format
+   * Returns Anthropic-compatible messages array that can be sent directly to Anthropic API
+   * Also extracts system prompt separately since Anthropic uses a separate system field
+   */
+  procedure convert_lm_messages_to_anthropic(
+    p_lm_messages in json_array_t,
+    po_system_prompt out clob,
+    po_anthropic_messages out json_array_t
+  )
+  as
+    l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_anthropic';
+    l_lm_message json_object_t;
+    l_anthropic_message json_object_t;
+    l_role varchar2(255 char);
+    l_content json_array_t;
+    l_content_item json_object_t;
+    l_content_type varchar2(255 char);
+    l_anthropic_content json_array_t;
+    l_text_content clob;
+    l_tool_use json_object_t;
+    l_tool_result json_object_t;
+  begin
+    logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to Anthropic format', l_scope);
+    
+    po_system_prompt := null;
+    po_anthropic_messages := json_array_t();
+
+    <<message_loop>>
+    for i in 0 .. p_lm_messages.get_size - 1
+    loop
+      l_lm_message := treat(p_lm_messages.get(i) as json_object_t);
+      l_role := l_lm_message.get_string('role');
+
+      case l_role
+        when 'system' then
+          -- System message: extract content for separate system field
+          po_system_prompt := l_lm_message.get_clob('content');
+
+        when 'user' then
+          -- User message: extract text from content array
+          l_content := l_lm_message.get_array('content');
+          l_text_content := null;
+          
+          <<user_content_loop>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            l_content_item := treat(l_content.get(j) as json_object_t);
+            l_content_type := l_content_item.get_string('type');
+            
+            case l_content_type
+              when 'text' then
+                if l_text_content is null then
+                  l_text_content := l_content_item.get_clob('text');
+                else
+                  l_text_content := l_text_content || l_content_item.get_clob('text');
+                end if;
+              when 'file' then
+                null;
+                -- TODO: implement file handling if needed
+            end case;
+          end loop user_content_loop;
+          
+          if l_text_content is not null then
+            l_anthropic_message := json_object_t();
+            l_anthropic_message.put('role', 'user');
+            l_anthropic_message.put('content', l_text_content);
+            po_anthropic_messages.append(l_anthropic_message);
+          end if;
+
+        when 'assistant' then
+          -- Assistant message: can have text content and/or tool calls
+          l_content := l_lm_message.get_array('content');
+          l_anthropic_content := json_array_t();
+          
+          <<assistant_content_loop>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            l_content_item := treat(l_content.get(j) as json_object_t);
+            l_content_type := l_content_item.get_string('type');
+            
+            case l_content_type
+              when 'text' then
+                -- Add text content block
+                declare
+                  l_text_block json_object_t := json_object_t();
+                begin
+                  l_text_block.put('type', 'text');
+                  l_text_block.put('text', l_content_item.get_clob('text'));
+                  l_anthropic_content.append(l_text_block);
+                end;
+              when 'tool_call' then
+                -- Convert tool call to Anthropic tool_use format
+                l_tool_use := json_object_t();
+                l_tool_use.put('type', 'tool_use');
+                l_tool_use.put('id', l_content_item.get_string('toolCallId'));
+                l_tool_use.put('name', l_content_item.get_string('toolName'));
+                
+                -- Parse arguments JSON string to object
+                declare
+                  l_args_obj json_object_t;
+                begin
+                  l_args_obj := json_object_t.parse(l_content_item.get_clob('args'));
+                  l_tool_use.put('input', l_args_obj);
+                exception
+                  when others then
+                    -- If parsing fails, create empty input object
+                    l_tool_use.put('input', json_object_t());
+                end;
+                
+                l_anthropic_content.append(l_tool_use);
+              else
+                null; -- Skip unknown content types
+            end case;
+          end loop assistant_content_loop;
+          
+          if l_anthropic_content.get_size > 0 then
+            l_anthropic_message := json_object_t();
+            l_anthropic_message.put('role', 'assistant');
+            l_anthropic_message.put('content', l_anthropic_content);
+            po_anthropic_messages.append(l_anthropic_message);
+          end if;
+
+        when 'tool' then
+          -- Tool message: convert tool results to Anthropic user message with tool_result content
+          l_content := l_lm_message.get_array('content');
+          l_anthropic_content := json_array_t();
+          
+          <<tool_content_loop>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            l_content_item := treat(l_content.get(j) as json_object_t);
+            l_content_type := l_content_item.get_string('type');
+            
+            if l_content_type = 'tool_result' then
+              -- Create tool_result content block
+              l_tool_result := json_object_t();
+              l_tool_result.put('type', 'tool_result');
+              l_tool_result.put('tool_use_id', l_content_item.get_string('toolCallId'));
+              l_tool_result.put('content', l_content_item.get_clob('result'));
+              
+              l_anthropic_content.append(l_tool_result);
+            end if;
+          end loop tool_content_loop;
+          
+          if l_anthropic_content.get_size > 0 then
+            l_anthropic_message := json_object_t();
+            l_anthropic_message.put('role', 'user');
+            l_anthropic_message.put('content', l_anthropic_content);
+            po_anthropic_messages.append(l_anthropic_message);
+          end if;
+
+        else
+          logger.log_warn('Unknown message role: ' || l_role, l_scope);
+      end case;
+    end loop message_loop;
+
+    logger.log('Converted to ' || po_anthropic_messages.get_size || ' Anthropic messages', l_scope);
+    if po_system_prompt is not null then
+      logger.log('Extracted system prompt', l_scope, po_system_prompt);
+    end if;
+  end convert_lm_messages_to_anthropic;
+
 
 
   function internal_generate_text (
@@ -369,7 +535,7 @@ create or replace package body uc_ai_anthropic as
     g_normalized_messages.append(l_message);
 
     l_input_obj.put('model', p_model);
-    l_input_obj.put('max_tokens', 8192); -- Anthropic requires max_tokens
+    l_input_obj.put('max_tokens', c_default_max_tokens); -- Anthropic requires max_tokens
 
     -- Get all available tools formatted for Anthropic (not OpenAI format)
     l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_anthropic);
@@ -393,6 +559,80 @@ create or replace package body uc_ai_anthropic as
     -- Add provider info to the result
     l_result.put('provider', 'anthropic');
 
+    return l_result;
+  end generate_text;
+
+  function generate_text (
+    p_messages       in json_array_t
+  , p_model          in uc_ai.model_type
+  , p_max_tool_calls in pls_integer
+  ) return json_object_t
+  as
+    l_scope logger_logs.scope%type := c_scope_prefix || 'generate_text_with_messages';
+    l_input_obj          json_object_t := json_object_t();
+    l_anthropic_messages json_array_t;
+    l_system_prompt      clob;
+    l_tools              json_array_t;
+    l_result             json_object_t;
+    l_message            json_object_t;
+  begin
+    l_result := json_object_t();
+    logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
+    
+    -- Reset global call counter
+    g_tool_calls := 0;
+    
+    -- Initialize normalized messages with input messages
+    g_normalized_messages := json_array_t();
+    
+    -- Copy input messages to global normalized messages array
+    <<copy_messages_loop>>
+    for i in 0 .. p_messages.get_size - 1
+    loop
+      l_message := treat(p_messages.get(i) as json_object_t);
+      g_normalized_messages.append(l_message);
+    end loop copy_messages_loop;
+    
+    -- Initialize result object with default values
+    l_result.put('tool_calls_count', 0);
+    l_result.put('finish_reason', 'unknown');
+    
+    -- Convert standardized messages to Anthropic format
+    convert_lm_messages_to_anthropic(
+      p_lm_messages => p_messages,
+      po_anthropic_messages => l_anthropic_messages,
+      po_system_prompt => l_system_prompt
+    );
+
+    l_input_obj.put('model', p_model);
+    l_input_obj.put('max_tokens', c_default_max_tokens); -- Anthropic requires max_tokens
+
+    -- Get all available tools formatted for Anthropic
+    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_anthropic);
+
+    if l_tools.get_size > 0 then
+      l_input_obj.put('tools', l_tools);
+    end if;
+
+    l_anthropic_messages := internal_generate_text(
+      p_messages           => l_anthropic_messages
+    , p_system_prompt      => l_system_prompt
+    , p_max_tool_calls     => p_max_tool_calls
+    , p_input_obj          => l_input_obj
+    , pio_result           => l_result
+    );
+
+    -- Add final messages to result (already in standardized format from global variable)
+    l_result.put('messages', g_normalized_messages);
+    
+    -- Add final message (only the text)
+    l_result.put('final_message', g_final_message);
+ 
+    -- Add provider info to the result
+    l_result.put('provider', uc_ai.c_provider_anthropic);
+    
+    logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
+    
     return l_result;
   end generate_text;
 
