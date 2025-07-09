@@ -11,5 +11,9 @@ create or replace package test_uc_ai_google as
   --%test(Tool usage - clock in user)
   procedure tool_clock_in_user;
 
+  --%test(Convert messages)
+  procedure convert_messages;
+
+
 end test_uc_ai_google;
 /

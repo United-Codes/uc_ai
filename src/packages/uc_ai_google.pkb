@@ -32,6 +32,174 @@ create or replace package body uc_ai_google as
   end get_text_content;
 
 
+/*
+   * Convert standardized Language Model messages to Google Gemini format
+   * Returns Google-compatible messages array that can be sent directly to Gemini API
+   * Also extracts system prompt separately since Google uses a separate systemInstruction field
+   */
+  procedure convert_lm_messages_to_google(
+    p_lm_messages in json_array_t,
+    po_system_prompt out clob,
+    po_google_messages out json_array_t
+  )
+  as
+    l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_google';
+    l_lm_message json_object_t;
+    l_google_message json_object_t;
+    l_role varchar2(255 char);
+    l_content json_array_t;
+    l_content_item json_object_t;
+    l_content_type varchar2(255 char);
+    l_parts json_array_t;
+    l_part json_object_t;
+    l_function_call json_object_t;
+    l_function_response json_object_t;
+  begin
+    logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to Google format', l_scope);
+    
+    po_system_prompt := null;
+    po_google_messages := json_array_t();
+
+    <<message_loop>>
+    for i in 0 .. p_lm_messages.get_size - 1
+    loop
+      l_lm_message := treat(p_lm_messages.get(i) as json_object_t);
+      l_role := l_lm_message.get_string('role');
+
+      case l_role
+        when 'system' then
+          -- System message: extract content for separate systemInstruction field
+          po_system_prompt := l_lm_message.get_clob('content');
+
+        when 'user' then
+          -- User message: extract text from content array
+          l_content := l_lm_message.get_array('content');
+          l_parts := json_array_t();
+          
+          <<user_content_loop>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            l_content_item := treat(l_content.get(j) as json_object_t);
+            l_content_type := l_content_item.get_string('type');
+            
+            case l_content_type
+              when 'text' then
+                -- Add text part
+                l_part := json_object_t();
+                l_part.put('text', l_content_item.get_clob('text'));
+                l_parts.append(l_part);
+              when 'file' then
+                null;
+                -- TODO: implement file handling if needed
+            end case;
+          end loop user_content_loop;
+          
+          if l_parts.get_size > 0 then
+            l_google_message := json_object_t();
+            l_google_message.put('role', 'user');
+            l_google_message.put('parts', l_parts);
+            po_google_messages.append(l_google_message);
+          end if;
+
+        when 'assistant' then
+          -- Assistant message: can have text content and/or tool calls
+          l_content := l_lm_message.get_array('content');
+          l_parts := json_array_t();
+          
+          <<assistant_content_loop>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            l_content_item := treat(l_content.get(j) as json_object_t);
+            l_content_type := l_content_item.get_string('type');
+            
+            case l_content_type
+              when 'text' then
+                -- Add text part
+                l_part := json_object_t();
+                l_part.put('text', l_content_item.get_clob('text'));
+                l_parts.append(l_part);
+              when 'tool_call' then
+                -- Convert tool call to Google functionCall format
+                l_function_call := json_object_t();
+                l_function_call.put('name', l_content_item.get_string('toolName'));
+                
+                -- Parse arguments JSON string to object
+                declare
+                  l_args_obj json_object_t;
+                begin
+                  if l_content_item.get_clob('args') is not null then
+                    l_args_obj := json_object_t.parse(l_content_item.get_clob('args'));
+                    l_function_call.put('args', l_args_obj);
+                  end if;
+                exception
+                  when others then
+                    -- If parsing fails, don't add args
+                    null;
+                end;
+                
+                l_part := json_object_t();
+                l_part.put('functionCall', l_function_call);
+                l_parts.append(l_part);
+              else
+                null; -- Skip unknown content types
+            end case;
+          end loop assistant_content_loop;
+          
+          if l_parts.get_size > 0 then
+            l_google_message := json_object_t();
+            l_google_message.put('role', 'model');
+            l_google_message.put('parts', l_parts);
+            po_google_messages.append(l_google_message);
+          end if;
+
+        when 'tool' then
+          -- Tool message: convert tool results to Google user message with functionResponse parts
+          l_content := l_lm_message.get_array('content');
+          l_parts := json_array_t();
+          
+          <<tool_content_loop>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            l_content_item := treat(l_content.get(j) as json_object_t);
+            l_content_type := l_content_item.get_string('type');
+            
+            if l_content_type = 'tool_result' then
+              -- Create functionResponse part
+              l_function_response := json_object_t();
+              l_function_response.put('name', l_content_item.get_string('toolName'));
+              
+              declare
+                l_response_content json_object_t := json_object_t();
+              begin
+                l_response_content.put('result', l_content_item.get_clob('result'));
+                l_function_response.put('response', l_response_content);
+              end;
+              
+              l_part := json_object_t();
+              l_part.put('functionResponse', l_function_response);
+              l_parts.append(l_part);
+            end if;
+          end loop tool_content_loop;
+          
+          if l_parts.get_size > 0 then
+            l_google_message := json_object_t();
+            l_google_message.put('role', 'user');
+            l_google_message.put('parts', l_parts);
+            po_google_messages.append(l_google_message);
+          end if;
+
+        else
+          logger.log_warn('Unknown message role: ' || l_role, l_scope);
+      end case;
+    end loop message_loop;
+
+    logger.log('Converted to ' || po_google_messages.get_size || ' Google messages', l_scope);
+    if po_system_prompt is not null then
+      logger.log('Extracted system prompt', l_scope, po_system_prompt);
+    end if;
+  end convert_lm_messages_to_google;
+
+
   function internal_generate_text (
     p_messages           in json_array_t
   , p_system_prompt      in clob
@@ -395,6 +563,104 @@ create or replace package body uc_ai_google as
     -- Use the standard messages array instead of converting
     l_result.put('messages', g_normalized_messages);
     l_result.put('final_message', g_final_message);
+    
+    return l_result;
+  end generate_text;
+
+
+  function generate_text (
+    p_messages       in json_array_t
+  , p_model          in uc_ai.model_type
+  , p_max_tool_calls in pls_integer
+  ) return json_object_t
+  as
+    l_scope logger_logs.scope%type := c_scope_prefix || 'generate_text_with_messages';
+    l_input_obj          json_object_t := json_object_t();
+    l_google_messages    json_array_t;
+    l_system_prompt      clob;
+    l_tools              json_array_t;
+    l_result             json_object_t;
+    l_message            json_object_t;
+    l_parts              json_array_t;
+    l_part               json_object_t;
+  begin
+    l_result := json_object_t();
+    logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
+    
+    -- Reset global call counter
+    g_tool_calls := 0;
+    
+    -- Initialize normalized messages with input messages
+    g_normalized_messages := json_array_t();
+    
+    -- Copy input messages to global normalized messages array
+    <<copy_messages_loop>>
+    for i in 0 .. p_messages.get_size - 1
+    loop
+      l_message := treat(p_messages.get(i) as json_object_t);
+      g_normalized_messages.append(l_message);
+    end loop copy_messages_loop;
+    
+    -- Initialize result object with default values
+    l_result.put('tool_calls_count', 0);
+    l_result.put('finish_reason', 'unknown');
+    l_result.put('model', p_model);
+    l_input_obj.put('model', p_model);
+    
+    -- Convert standardized messages to Google format
+    convert_lm_messages_to_google(
+      p_lm_messages => p_messages,
+      po_system_prompt => l_system_prompt,
+      po_google_messages => l_google_messages
+    );
+
+    -- Add system prompt as systemInstruction if extracted
+    if l_system_prompt is not null then
+      l_parts := json_array_t();
+      l_part := json_object_t();
+      l_part.put('text', l_system_prompt);
+      l_parts.append(l_part);
+
+      l_message := json_object_t();
+      l_message.put('role', 'user');
+      l_message.put('parts', l_parts);
+      l_input_obj.put('systemInstruction', l_message);
+    end if;
+    
+    -- Get all available tools formatted for Google (function declarations)
+    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_google);
+
+    if l_tools.get_size > 0 then
+      -- Google expects tools in this format: {"tools": [{"functionDeclarations": [...]}]}
+      declare
+        l_tools_wrapper json_object_t := json_object_t();
+        l_tools_array json_array_t := json_array_t();
+      begin
+        l_tools_wrapper.put('functionDeclarations', l_tools);
+        l_tools_array.append(l_tools_wrapper);
+        l_input_obj.put('tools', l_tools_array);
+        logger.log('Tools configured', l_scope, 'Tool count: ' || l_tools.get_size);
+      end;
+    end if;
+
+    l_google_messages := internal_generate_text(
+      p_messages           => l_google_messages
+    , p_system_prompt      => l_system_prompt
+    , p_max_tool_calls     => p_max_tool_calls
+    , p_input_obj          => l_input_obj
+    , pio_result           => l_result
+    );
+
+    -- Add final messages to result (already in standardized format from global variable)
+    l_result.put('messages', g_normalized_messages);
+    
+    -- Add final message (only the text)
+    l_result.put('final_message', g_final_message);
+ 
+    -- Add provider info to the result
+    l_result.put('provider', uc_ai.c_provider_google);
+    
+    logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
     
     return l_result;
   end generate_text;
