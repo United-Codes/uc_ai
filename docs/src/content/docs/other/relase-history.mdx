@@ -1,0 +1,61 @@
+---
+title: Release History
+description: A comprehensive list of all releases of UC AI
+sidebar:
+  order: 3
+---
+
+## v25.2
+
+**Continue conversations with different providers and models**
+
+We added a [second signature](https://www.united-codes.com/products/uc-ai/docs/api/generate_text/#signature-2-message-array) to the `generate_text` function that allows you to pass an array of messages instead of a single user prompt and system prompt. This enables you to continue conversations.
+
+Because of the standardized message format, you can switch between different AI providers and models in the middle of a conversation, allowing for flexibility in AI interactions:
+
+```sql
+declare
+  l_messages json_array_t;
+  l_result json_object_t;
+  l_response_messages json_array_t;
+begin
+  -- Initial conversation
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is the rarest chemical element?',
+    p_system_prompt => 'You are an assistant for chemical students in school.',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini
+  );
+
+  dbms_output.put_line('Response: ' || l_result.get_string('final_message'));
+
+  -- Get the complete message history from the first call
+  l_messages := l_result.get_array('messages');
+
+  -- Add a follow-up question
+  l_messages.append(
+    uc_ai_message_api.create_simple_user_message(
+      'How is it called in german, japanese and portuguese?'
+    )
+  );
+
+  -- Continue the conversation with full context
+  l_result := uc_ai.generate_text(
+    p_messages => l_messages,
+    p_provider => uc_ai.c_provider_google,
+    p_model => uc_ai_google.c_model_gemini_2_5_flash
+  );
+
+  dbms_output.put_line('Follow-up response: ' || l_result.get_string('final_message'));
+end;
+```
+
+**Documented the message array signature**
+
+You can find the [message array type definition](https://www.united-codes.com/products/uc-ai/docs/api/types/) here.
+
+I also added tests to make sure the responses comply with the format.
+
+## v25.1
+
+Initial release of UC AI.
