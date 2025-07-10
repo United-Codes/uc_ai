@@ -7,9 +7,11 @@ sidebar:
 
 ## Parameters
 
-The `uc_ai.generate_text()` function accepts the following parameters:
+The `uc_ai.generate_text()` function has two overloaded signatures:
 
-### Function Signature
+### Function Signatures
+
+#### Signature 1: Individual Prompts
 
 ```sql
 FUNCTION generate_text (
@@ -21,7 +23,20 @@ FUNCTION generate_text (
 ) RETURN JSON_OBJECT_T;
 ```
 
+#### Signature 2: Message Array
+
+```sql
+FUNCTION generate_text (
+  p_messages       IN JSON_ARRAY_T,
+  p_provider       IN provider_type,
+  p_model          IN model_type,
+  p_max_tool_calls IN PLS_INTEGER DEFAULT NULL
+) RETURN JSON_OBJECT_T;
+```
+
 ### Parameter Reference
+
+#### For Signature 1 (Individual Prompts)
 
 | Parameter          | Type            | Required | Description                                                                    |
 | ------------------ | --------------- | -------- | ------------------------------------------------------------------------------ |
@@ -31,9 +46,18 @@ FUNCTION generate_text (
 | `p_model`          | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants. |
 | `p_max_tool_calls` | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).        |
 
+#### For Signature 2 (Message Array)
+
+| Parameter          | Type            | Required | Description                                                                          |
+| ------------------ | --------------- | -------- | ------------------------------------------------------------------------------------ |
+| `p_messages`       | `JSON_ARRAY_T`  | Yes      | Array of conversation messages in the standard format (see Message Structure below). |
+| `p_provider`       | `provider_type` | Yes      | AI provider to use. See `uc_ai` spec for constants.                                  |
+| `p_model`          | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants.       |
+| `p_max_tool_calls` | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).              |
+
 ### Parameter Details
 
-#### p_user_prompt (Required)
+#### p_user_prompt (Required - Signature 1)
 
 The main user input that you want the AI to respond to. This can be a question, instruction, or any text you want the AI to process.
 
@@ -45,7 +69,7 @@ l_result := uc_ai.generate_text(
 );
 ```
 
-#### p_system_prompt (Optional)
+#### p_system_prompt (Optional - Signature 1)
 
 System-level instructions that define the AI's role, behavior, and response style. This helps shape how the AI interprets and responds to user prompts.
 
@@ -67,7 +91,147 @@ l_result := uc_ai.generate_text(
 );
 ```
 
-#### p_provider (Required)
+#### p_messages (Required - Signature 2)
+
+A pre-constructed conversation in the form of a `JSON_ARRAY_T` containing message objects. This allows you to provide a complete conversation history or continue from a previous conversation. Each message must follow the standard message format with `role` and `content` properties.
+
+```sql
+DECLARE
+  l_messages JSON_ARRAY_T;
+  l_result JSON_OBJECT_T;
+BEGIN
+  -- Build conversation messages
+  l_messages := JSON_ARRAY_T();
+
+  -- Add system message
+  l_messages.append(JSON_OBJECT_T('{
+    "role": "system",
+    "content": "You are a helpful SQL expert."
+  }'));
+
+  -- Add user messages
+  l_messages.append(JSON_OBJECT_T('{
+    "role": "user",
+    "content": "How do I create a table in Oracle?"
+  }'));
+
+  l_messages.append(JSON_OBJECT_T('{
+    "role": "assistant",
+    "content": "You can create a table using the CREATE TABLE statement..."
+  }'));
+
+  l_messages.append(JSON_OBJECT_T('{
+    "role": "user",
+    "content": "Now show me how to add a foreign key constraint"
+  }'));
+
+  -- Continue the conversation
+  l_result := uc_ai.generate_text(
+    p_messages => l_messages,
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini
+  );
+END;
+/
+```
+
+**Message Structure:**
+Each message in the array should have this structure:
+
+- `role`: One of `"system"`, `"user"`, `"assistant"`, or `"tool"`
+- `content`: The message content (can be `null` for assistant messages with tool calls)
+- `tool_calls`: (Optional) Array of tool calls for assistant messages
+- `tool_call_id`: (Required for tool messages) ID of the tool call being responded to
+
+**Use Cases for Message Array:**
+
+- Continue previous conversations
+- Implement conversation memory/history
+- Fine-tune conversation context
+- Handle complex multi-turn interactions
+- Process conversation logs or transcripts
+
+## Usage Examples
+
+### Choosing Between Signatures
+
+**Use Signature 1 (Individual Prompts)** when:
+
+- Starting a new conversation
+- Making simple, single-turn requests
+- You want the function to handle message array construction
+
+**Use Signature 2 (Message Array)** when:
+
+- Continuing an existing conversation
+- You need fine control over the conversation structure
+- Implementing conversation memory across multiple calls
+- Processing pre-existing conversation logs
+
+### Simple Example: Question with System Prompt
+
+**Using Signature 1:**
+
+```sql
+DECLARE
+  l_result JSON_OBJECT_T;
+BEGIN
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What are the benefits of using Oracle APEX?',
+    p_system_prompt => 'You are an Oracle APEX expert consultant.',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini
+  );
+END;
+/
+```
+
+### Advanced: Conversation Continuation
+
+This example shows how to continue a conversation using the message array signature.
+
+ecause UC AI does two-way conversions between the provider-specific message formats and the standard format we can actually change the provider and model in the middle of a conversation, allowing for flexibility in AI interactions.
+
+```sql
+declare
+  l_messages json_array_t;
+  l_result json_object_t;
+  l_response_messages json_array_t;
+begin
+  -- Initial conversation
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is the rarest chemical element?',
+    p_system_prompt => 'You are an assistant for chemical students in school.',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini
+  );
+
+  dbms_output.put_line('Response: ' || l_result.get_string('final_message'));
+
+  -- Get the complete message history from the first call
+  l_messages := l_result.get_array('messages');
+
+  -- Add a follow-up question
+  l_messages.append(
+    uc_ai_message_api.create_simple_user_message(
+      'How is it called in german, japanese and portuguese?'
+    )
+  );
+
+  -- Continue the conversation with full context
+  l_result := uc_ai.generate_text(
+    p_messages => l_messages,
+    p_provider => uc_ai.c_provider_google,
+    p_model => uc_ai_google.c_model_gemini_2_5_flash
+  );
+
+  dbms_output.put_line('Follow-up response: ' || l_result.get_string('final_message'));
+END;
+```
+
+### Additional Parameter Details
+
+#### p_provider (Required - Both Signatures)
 
 Specifies which AI provider to use. Available providers:
 
@@ -86,7 +250,7 @@ l_result := uc_ai.generate_text(
 );
 ```
 
-#### p_model (Required)
+#### p_model (Required - Both Signatures)
 
 The specific AI model to use. See the package headers for available models under each provider:
 
@@ -116,7 +280,7 @@ END;
 /
 ```
 
-#### p_max_tool_calls (Optional)
+#### p_max_tool_calls (Optional - Both Signatures)
 
 Limits the maximum number of tool calls the AI can make during the conversation. This prevents infinite loops and controls costs.
 
