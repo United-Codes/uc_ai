@@ -70,5 +70,51 @@ Example parameters: {"user_email": "user@example.com","project_name": "TV Market
     values ('4',-874,'notes','Optional description of what the user is working on','0','string', 1);
 
   end add_clock_tools;
+
+
+  function get_tool_user_messages 
+    return json_array_t
+  as
+  begin
+    return json_array_t(
+      '[
+      {
+        "role": "system",
+        "content": "You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short."
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "What is the email address of Jim?"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "toolCallId": "tool_call_1",
+            "toolName": "TT_GET_USERS",
+            "args": "{}"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          {
+            "type": "tool_result",
+            "toolCallId": "tool_call_1",
+            "toolName": "TT_GET_USERS",
+            "result": "[{\"user_id\":2,\"first_name\":\"Pam\",\"last_name\":\"Beesly\",\"email\":\"pam.beesly@dundermifflin.com\",\"hire_date\":\"2024-11-01\",\"is_active\":\"Y\"},{\"user_id\":4,\"first_name\":\"Jim\",\"last_name\":\"Halpert\",\"email\":\"jim.halpert@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":6,\"first_name\":\"Kevin\",\"last_name\":\"Malone\",\"email\":\"kevin.malone@dundermifflin.com\",\"hire_date\":\"2024-10-01\",\"is_active\":\"N\"},{\"user_id\":5,\"first_name\":\"Angela\",\"last_name\":\"Martin\",\"email\":\"angela.martin@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"},{\"user_id\":3,\"first_name\":\"Dwight\",\"last_name\":\"Schrute\",\"email\":\"dwight.schrute@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":1,\"first_name\":\"Michael\",\"last_name\":\"Scott\",\"email\":\"michael.scott@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"}]"
+          }
+        ]
+      }
+      ]'
+    );
+  end get_tool_user_messages;
+
 end uc_ai_test_utils;
-/

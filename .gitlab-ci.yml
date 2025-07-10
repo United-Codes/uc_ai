@@ -7,6 +7,8 @@ stages:
 
 build:
   stage: build
+  only:
+    - main
   script:
     - echo "Building the app"
     - sh ./docs/build-static-website.sh
@@ -20,14 +22,16 @@ build:
 package:
   stage: package
   image: debian:bullseye
+  only:
+    - main
   before_script:
     - apt-get update && apt-get install -y zip
   script:
-  - cd public
-  - zip -r ../uc-ai.zip ./*
-  - cd ..
-  - mkdir -p deploy
-  - mv uc-ai.zip deploy/
+    - cd public
+    - zip -r ../uc-ai.zip ./*
+    - cd ..
+    - mkdir -p deploy
+    - mv uc-ai.zip deploy/
   artifacts:
     paths:
       - deploy/uc-ai.zip
@@ -39,6 +43,8 @@ deploy_to_production:
   stage: deploy
   tags:
     - prod_web
+  only:
+    - main
   script:
     - echo "Deploying on webserver"
     - unzip -o deploy/uc-ai.zip -d /var/www/united-codes/products/uc-ai/docs/
@@ -50,4 +56,3 @@ deploy_to_production:
     url: https://www.united-codes.com/products/uc-ai/docs
   needs:
     - package
-

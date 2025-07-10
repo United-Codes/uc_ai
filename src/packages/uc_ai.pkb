@@ -4,36 +4,32 @@ create or replace package body uc_ai as
   c_default_max_tool_calls constant pls_integer := 10;
 
   function generate_text (
-    p_user_prompt    in clob
-  , p_system_prompt  in clob default null
+    p_messages       in json_array_t
   , p_provider       in provider_type
   , p_model          in model_type
   , p_max_tool_calls in pls_integer default null
   ) return json_object_t
   as
     e_unknown_provider exception;
-
+    
     l_result json_object_t;
   begin
     case p_provider
       when c_provider_openai then
         l_result := uc_ai_openai.generate_text(
-          p_user_prompt    => p_user_prompt
-        , p_system_prompt  => p_system_prompt
+          p_messages       => p_messages
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
         );
       when c_provider_anthropic then
         l_result := uc_ai_anthropic.generate_text(
-          p_user_prompt    => p_user_prompt
-        , p_system_prompt  => p_system_prompt
+          p_messages       => p_messages
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
         );
       when c_provider_google then
         l_result := uc_ai_google.generate_text(
-          p_user_prompt    => p_user_prompt
-        , p_system_prompt  => p_system_prompt
+          p_messages       => p_messages
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
         );
@@ -52,6 +48,37 @@ create or replace package body uc_ai as
       raise_application_error(-20302, 'Error response from AI provider. Check logs for details');
     when others then
       raise;
+
+  end generate_text;
+
+  function generate_text (
+    p_user_prompt    in clob
+  , p_system_prompt  in clob default null
+  , p_provider       in provider_type
+  , p_model          in model_type
+  , p_max_tool_calls in pls_integer default null
+  ) return json_object_t
+  as
+    l_messages json_array_t;
+  begin
+    -- Build message array
+    l_messages := json_array_t();
+    
+    -- Add system message if provided
+    if p_system_prompt is not null then
+      l_messages.append(uc_ai_message_api.create_system_message(p_system_prompt));
+    end if;
+    
+    -- Add user message
+    l_messages.append(uc_ai_message_api.create_simple_user_message(p_user_prompt));
+    
+    -- Call the main generate_text function with the message array
+    return generate_text(
+      p_messages       => l_messages
+    , p_provider       => p_provider
+    , p_model          => p_model
+    , p_max_tool_calls => p_max_tool_calls
+    );
   end generate_text;
 
 end uc_ai;

@@ -1,0 +1,101 @@
+---
+title: Type definitions
+description: Type definitions used in UC AI
+sidebar:
+  order: 999
+---
+
+## Language Model Type Definitions
+
+Inspired by [Vercels AI SDK](https://v5.ai-sdk.dev/providers/community-providers/custom-providers#languagemodelv2).
+
+### Language Model Prompt
+
+Conversations with LLMs consist of a series of propmpts/messages. Each prompt can be of four types:
+
+- **system**: Provides context or instructions to the model.
+- **user**: Represents the user's input or question.
+- **assistant**: Represents the model's response.
+- **tool**: Represents a tool call made by the model.
+
+Check the next section for the structure of each type.
+
+```json
+// system
+{
+  "role": "system",
+  "content": string
+}
+// user
+{
+  "role": "user",
+  "content": [LanguageModelText | LanguageModelFile]
+}
+// assistant
+{
+  "role": "assistant",
+  "content": [LanguageModelText | LanguageModelFile | LanguageModelReasoning | LanguageModelToolCall]
+}
+// tool
+{
+  "role": "tool",
+  "content": [LanguageModelToolResult]
+}
+```
+
+### Language Model Content
+
+#### Language Model Text
+
+```json
+{
+  "type": "text",
+  "text": string,
+  "providerOptions": object // Optional provider-specific options
+}
+```
+
+#### Language Model File
+
+```json
+{
+  "type": "file",
+  "mediaType": string, // IANA media type (e.g., 'image/png', 'audio/mp3')
+  "data": string, // file content encoded in base64
+  "providerOptions": object // Optional provider-specific options
+}
+```
+
+#### Language Model Reasoning
+
+```json
+{
+  "type": "reasoning",
+  "text": string,
+  "providerOptions": object // Optional provider-specific options
+}
+```
+
+#### Language Model Tool Call
+
+```json
+{
+  "type": "tool_call",
+  "toolCallId": string,
+  "toolName": string,
+  "args": string, // JSON string of arguments passed to the tool
+  "providerOptions" object // Optional provider-specific options
+}
+```
+
+#### Language Model Tool Result
+
+```json
+{
+  "type": "tool_result",
+  "toolCallId": string,
+  "toolName": string,
+  "result": string, // JSON string of the tool result
+  "providerOptions" object // Optional provider-specific options
+}
+```

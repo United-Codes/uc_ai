@@ -42,5 +42,12 @@ create or replace package uc_ai as
   , p_max_tool_calls in pls_integer default null
   ) return json_object_t;
 
+  function generate_text (
+    p_messages       in json_array_t
+  , p_provider       in provider_type
+  , p_model          in model_type
+  , p_max_tool_calls in pls_integer default null
+  ) return json_object_t;
+
 end uc_ai;
 /
