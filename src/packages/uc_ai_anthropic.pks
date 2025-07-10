@@ -23,16 +23,6 @@ create or replace package uc_ai_anthropic as
    * Anthropic implementation for text generation
    */
   function generate_text (
-    p_user_prompt    in clob
-  , p_system_prompt  in clob default null
-  , p_model          in uc_ai.model_type
-  , p_max_tool_calls in pls_integer
-  ) return json_object_t;
-
-  /*
-   * Anthropic implementation for text generation with message array
-   */
-  function generate_text (
     p_messages       in json_array_t
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
