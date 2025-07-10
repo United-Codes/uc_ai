@@ -291,3 +291,13 @@ values (
 ## Easier tool management
 
 I am working on an APEX app that would make managing tools easier. So keep an eye for new releases.
+
+## Tools vs. MCP
+
+MCP and tools are very similar. The main benefit is that you can tell the AI what it can do with the tools and the AI decides based on the conversation if it needs to call a tool or not.
+
+The main difference between tools and MCPs is their architectural focus: MCPs are specifically designed for distributed systems. Meaning that you have an AI chat on your system but need to access context from another system. A nice example is your email provider that gives you access to an MCP server for your emails. On your system you can interact with the emails that are stored on the server of the mail provider.
+
+As this package is designed to call AI from within the database (next to your data) there is no need to run an MCP server. You can directly access it via SQL and PL/SQL and make it available to the AI via the tool definitions.
+
+One potential improvement is allowing UC AI to call foreign MCPs. So that your users can access for example their emails from the MCP of the email provider. This is not yet implemented but could be a future feature.
