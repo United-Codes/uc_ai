@@ -13,7 +13,7 @@ create or replace package uc_ai_openai as
   c_model_gpt_4_5 constant uc_ai.model_type := 'gpt-4.5-preview';
   c_model_gpt_4_1 constant uc_ai.model_type := 'gpt-4.1';
   c_model_gpt_4_1_mini constant uc_ai.model_type := 'gpt-4.1-mini';
-  c_model_gpt_4_1_mini constant uc_ai.model_type := 'gpt-4.1-nano';
+  c_model_gpt_4_1_nano constant uc_ai.model_type := 'gpt-4.1-nano';
   c_model_gpt_4o constant uc_ai.model_type := 'gpt-4o';
   c_model_gpt_4o_mini constant uc_ai.model_type := 'gpt-4o-mini';
 
