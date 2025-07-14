@@ -64,7 +64,6 @@ create or replace package body uc_ai_openai as
     l_tool_call json_object_t;
     l_function json_object_t;
     l_text_content clob;
-    l_has_file boolean;
   begin
     logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to OpenAI format', l_scope);
 
@@ -86,112 +85,51 @@ create or replace package body uc_ai_openai as
           l_content := l_lm_message.get_array('content');
           l_text_content := null;
 
-          l_has_file := false;
-          -- <<has_file_loop>>
-          -- for j in 0 .. l_content.get_size - 1
-          -- loop
-          --   l_content_item := treat(l_content.get(j) as json_object_t);
-          --   l_content_type := l_content_item.get_string('type');
-            
-          --   if l_content_type = 'file' then
-          --     l_has_file := true;
-          --     exit has_file_loop;
-          --   end if;
-          -- end loop has_file_loop;
-
           l_new_content := json_array_t();
 
-          if not l_has_file then
-            <<user_content_loop>>
-            for j in 0 .. l_content.get_size - 1
-            loop
-              l_content_item := treat(l_content.get(j) as json_object_t);
-              l_content_type := l_content_item.get_string('type');
-              
-              case l_content_type
-                when 'text' then
-                  if l_text_content is null then
-                    l_text_content := l_content_item.get_clob('text');
-                  else
-                    l_text_content := l_text_content || l_content_item.get_clob('text');
-                  end if;
+          <<user_content_loop>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            l_content_item := treat(l_content.get(j) as json_object_t);
+            l_content_type := l_content_item.get_string('type');
+            
+            case l_content_type
+              when 'text' then
+                if l_text_content is null then
+                  l_text_content := l_content_item.get_clob('text');
+                else
+                  l_text_content := l_text_content || l_content_item.get_clob('text');
+                end if;
+
+                l_new_content_item := json_object_t();
+                l_new_content_item.put('type', 'text');
+                l_new_content_item.put('text', l_content_item.get_clob('text'));
+                l_new_content.append(l_new_content_item);
+              when 'file' then
+                 declare
+                  l_data     clob;
+                  l_filename varchar2(4000 char);
+                begin
+                  l_data := l_content_item.get_clob('data');
+                  l_filename := l_content_item.get_string('filename');
 
                   l_new_content_item := json_object_t();
-                  l_new_content_item.put('type', 'text');
-                  l_new_content_item.put('text', l_content_item.get_clob('text'));
+                  l_new_content_item.put('type', 'file');
+
+                  l_temp_obj := json_object_t();
+                  l_temp_obj.put('filename', l_filename);
+                  l_temp_obj.put('file_data', 'data:application/pdf;base64,' ||  l_data);
+                  l_new_content_item.put('file', l_temp_obj);
+
                   l_new_content.append(l_new_content_item);
-                when 'file' then
-                   declare
-                    l_data     clob;
-                    l_filename varchar2(4000 char);
-                  begin
-                    l_data := l_content_item.get_clob('data');
-                    l_filename := l_content_item.get_string('filename');
-
-                    l_new_content_item := json_object_t();
-                    l_new_content_item.put('type', 'file');
-
-                    l_temp_obj := json_object_t();
-                    l_temp_obj.put('filename', l_filename);
-                    l_temp_obj.put('file_data', 'data:application/pdf;base64,' ||  l_data);
-                    l_new_content_item.put('file', l_temp_obj);
-
-                    l_new_content.append(l_new_content_item);
-                  end;
-                else
-                  logger.log_error('Unknown content type in user message: ' || l_content_type, l_scope, l_content_item.stringify);
-                  raise uc_ai.e_unhandled_format;
-              end case;
-            end loop user_content_loop;
-            
-            l_openai_message.put('content', l_new_content);
-        
-          -- handle file input
-          -- ref: https://platform.openai.com/docs/guides/pdf-files?api-mode=responses#base64-encoded-files
-          else
-            declare
-              l_data     clob;
-              l_filename varchar2(4000 char);
-
-              l_content_array json_array_t;
-              l_obj           json_object_t;
-            begin
-              <<user_content_loop>>
-              for j in 0 .. l_content.get_size - 1
-              loop
-                l_content_item := treat(l_content.get(j) as json_object_t);
-                l_content_type := l_content_item.get_string('type');
-                
-                case l_content_type
-                  when 'text' then
-                    l_text_content := l_content_item.get_clob('text');
-                  when 'file' then
-                    l_data := l_content_item.get_clob('data');
-                    l_filename := l_content_item.get_string('filename');
-                  else
-                  logger.log_error('Unknown content type in user message: ' || l_content_type, l_scope, l_content_item.stringify);
-                  raise uc_ai.e_unhandled_format;
-                end case;
-              end loop user_content_loop;
-
-              l_obj := json_object_t();
-              l_obj.put('type', 'input_file');
-              l_obj.put('filename', l_filename);
-              l_obj.put('file_data', l_data);
-
-              l_content_array := json_array_t();
-              l_content_array.append(l_obj);
-
-              l_obj := json_object_t();
-              l_obj.put('type', 'input_text');
-              l_obj.put('text', l_text_content);
-              l_content_array.append(l_obj);
-
-              -- Add the content array to the OpenAI message
-              l_openai_message.put('content', l_content_array);
-            end;
-
-          end if;
+                end;
+              else
+                logger.log_error('Unknown content type in user message: ' || l_content_type, l_scope, l_content_item.stringify);
+                raise uc_ai.e_unhandled_format;
+            end case;
+          end loop user_content_loop;
+          
+          l_openai_message.put('content', l_new_content);
 
         when 'assistant' then
           -- Assistant message: can have text content and/or tool calls
