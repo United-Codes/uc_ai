@@ -16,9 +16,18 @@ create or replace package uc_ai_message_api as
 
   function create_file_content(
     p_media_type in varchar2,
-    p_data in clob,
+    p_data_base64 in clob,
+    p_filename in varchar2 default null,
     p_provider_options in json_object_t default null
   ) return json_object_t;
+
+  function create_file_content(
+    p_media_type in varchar2,
+    p_data_blob in blob,
+    p_filename in varchar2 default null,
+    p_provider_options in json_object_t default null
+  ) return json_object_t;
+
 
   function create_reasoning_content(
     p_text in clob,

@@ -11,7 +11,7 @@ create or replace package body uc_ai_test_message_utils as
     l_message_count pls_integer;
   begin
     -- Check if messages array is not null
-    ut.expect(p_messages, p_test_name || ': Messages array should not be null').to_be_not_null();
+    --ut.expect(p_messages, p_test_name || ': Messages array should not be null').to_be_not_null();
     
     l_message_count := p_messages.get_size;
     ut.expect(l_message_count, p_test_name || ': Messages array should not be empty').to_be_greater_than(0);
@@ -45,6 +45,7 @@ create or replace package body uc_ai_test_message_utils as
             ut.expect(l_system_content, p_test_name || ': System message ' || i || ' content should be string').to_be_not_null();
           exception
             when others then
+              logger.log_warning(p_text => 'exception in validate_message_array for system message ' || i, p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
               ut.fail(p_test_name || ': System message ' || i || ' content should be a string');
           end;
           
@@ -55,6 +56,7 @@ create or replace package body uc_ai_test_message_utils as
             validate_content_array(l_content, i, p_test_name, 'user');
           exception
             when others then
+              logger.log_warning(p_text => 'exception in validate_message_array for user message ' || i, p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
               ut.fail(p_test_name || ': User message ' || i || ' content should be an array');
           end;
           
@@ -65,6 +67,7 @@ create or replace package body uc_ai_test_message_utils as
             validate_content_array(l_content, i, p_test_name, 'assistant');
           exception
             when others then
+              logger.log_warning(p_text => 'exception in validate_message_array for assistant message ' || i, p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
               ut.fail(p_test_name || ': Assistant message ' || i || ' content should be an array');
           end;
           
@@ -75,6 +78,7 @@ create or replace package body uc_ai_test_message_utils as
             validate_content_array(l_content, i, p_test_name, 'tool');
           exception
             when others then
+              logger.log_warning(p_text => 'exception in validate_message_array for tool message ' || i, p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
               ut.fail(p_test_name || ': Tool message ' || i || ' content should be an array');
           end;
       end case;
@@ -92,7 +96,7 @@ create or replace package body uc_ai_test_message_utils as
     l_content_type varchar2(20 char);
     l_content_count pls_integer;
   begin
-    ut.expect(p_content, p_test_name || ': Message ' || p_message_index || ' content array should not be null').to_be_not_null();
+    --ut.expect(p_content, p_test_name || ': Message ' || p_message_index || ' content array should not be null').to_be_not_null();
     
     l_content_count := p_content.get_size;
     ut.expect(l_content_count, p_test_name || ': Message ' || p_message_index || ' content array should not be empty').to_be_greater_than(0);

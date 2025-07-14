@@ -46,6 +46,9 @@ create or replace package body uc_ai as
       raise_application_error(-20301, 'Maximum tool calls exceeded');
     when e_error_response then
       raise_application_error(-20302, 'Error response from AI provider. Check logs for details');
+    when e_unhandled_format then
+      raise_application_error(-20303, 'Unhandled message format encountered. Please check the message structure and logs.');
+
     when others then
       raise;
 
