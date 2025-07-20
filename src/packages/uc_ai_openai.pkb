@@ -107,19 +107,32 @@ create or replace package body uc_ai_openai as
                 l_new_content.append(l_new_content_item);
               when 'file' then
                  declare
-                  l_data     clob;
-                  l_filename varchar2(4000 char);
+                  l_data      clob;
+                  l_mime_type varchar2(4000 char);
+                  l_filename  varchar2(4000 char);
                 begin
                   l_data := l_content_item.get_clob('data');
+                  l_mime_type := l_content_item.get_string('mediaType');
                   l_filename := l_content_item.get_string('filename');
-
                   l_new_content_item := json_object_t();
-                  l_new_content_item.put('type', 'file');
 
-                  l_temp_obj := json_object_t();
-                  l_temp_obj.put('filename', l_filename);
-                  l_temp_obj.put('file_data', 'data:application/pdf;base64,' ||  l_data);
-                  l_new_content_item.put('file', l_temp_obj);
+                  -- PDF doc: https://platform.openai.com/docs/guides/pdf-files?api-mode=responses#base64-encoded-files
+                  if l_mime_type = 'application/pdf' then
+                    l_new_content_item.put('type', 'file');
+
+                    l_temp_obj := json_object_t();
+                    l_temp_obj.put('filename', l_filename);
+                    l_temp_obj.put('file_data', 'data:application/pdf;base64,' ||  l_data);
+                    l_new_content_item.put('file', l_temp_obj);
+
+                  -- img doc: https://platform.openai.com/docs/guides/images-vision?api-mode=responses&format=base64-encoded#analyze-images
+                  elsif l_mime_type in ('image/jpeg', 'image/png', 'image/gif', 'image/webp') then
+                    l_new_content_item.put('type', 'input_image');
+                    l_new_content_item.put('image_url', 'data:' || l_mime_type || ';base64,' || l_data);
+                  else
+                    logger.log_error('Unsupported file type: ' || l_mime_type, l_scope, l_content_item.stringify);
+                    raise uc_ai.e_unhandled_format;
+                  end if;
 
                   l_new_content.append(l_new_content_item);
                 end;
