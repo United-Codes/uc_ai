@@ -300,7 +300,7 @@ Example parameters: {"user_email": "user@example.com","project_name": "TV Market
   end get_emp_pdf;
 
 
-  function get_apple_jpeg return blob
+  function get_apple_webp return blob
   as
     l_blob blob;
   begin
@@ -319,7 +319,7 @@ Example parameters: {"user_email": "user@example.com","project_name": "TV Market
 
     l_blob := wwv_flow_api.varchar2_to_blob(wwv_flow_api.g_varchar2_table);
     return l_blob;
-  end get_apple_jpeg;
+  end get_apple_webp;
 
 
 end uc_ai_test_utils;

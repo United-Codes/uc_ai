@@ -216,9 +216,9 @@ create or replace package body test_uc_ai_google as
       'You are an image analysis assistant.'));
 
     l_content.append(uc_ai_message_api.create_file_content(
-      p_media_type => 'image/jpeg',
-      p_data_blob => uc_ai_test_utils.get_apple_jpeg,
-      p_filename => 'data.jpg'
+      p_media_type => 'image/webp',
+      p_data_blob => uc_ai_test_utils.get_apple_webp,
+      p_filename => 'data.webp'
     ));
 
     l_content.append(uc_ai_message_api.create_text_content(
