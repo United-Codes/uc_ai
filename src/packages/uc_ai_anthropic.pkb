@@ -114,16 +114,29 @@ create or replace package body uc_ai_anthropic as
                   l_anthropic_content.append(l_text_block);
                 end;
               when 'file' then
-                -- PDF doc: https://docs.anthropic.com/en/docs/build-with-claude/pdf-support#option-2%3A-base64-encoded-pdf-document
                 declare
                   l_data       clob;
+                  l_mime_type  varchar2(4000 char);
                   l_file_block json_object_t;
                 begin
                   l_data := l_content_item.get_clob('data');
-
+                  l_mime_type := l_content_item.get_string('mediaType');
                   l_file_block := json_object_t();
-                  l_file_block.put('type', 'document');
-                  l_file_block.put('source', json_object_t('{"type": "base64", "media_type": "application/pdf", "data": "' || l_data || '"}'));
+
+                  -- PDF doc: https://docs.anthropic.com/en/docs/build-with-claude/pdf-support#option-2%3A-base64-encoded-pdf-document
+                  if l_mime_type = 'application/pdf' then
+                    l_file_block.put('type', 'document');
+                    l_file_block.put('source', json_object_t('{"type": "base64", "media_type": "application/pdf", "data": "' || l_data || '"}'));
+
+                  -- image doc: https://docs.anthropic.com/en/docs/build-with-claude/vision#base64-encoded-image-example
+                  elsif l_mime_type in ('image/jpeg', 'image/png', 'image/gif', 'image/webp') then
+                    l_file_block.put('type', 'image');
+                    l_file_block.put('source', json_object_t('{"type": "base64", "media_type": "' || l_mime_type || '", "data": "' || l_data || '"}'));
+
+                  else
+                    logger.log_error('Unsupported file type: ' || l_mime_type, l_scope, l_content_item.stringify);
+                    raise uc_ai.e_unhandled_format;
+                  end if;
                   
                   l_anthropic_content.append(l_file_block);
                 end;
