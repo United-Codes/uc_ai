@@ -14,6 +14,9 @@ create or replace package test_uc_ai_google as
   --%test(Convert messages)
   procedure convert_messages;
 
+  --%test(PDF file input)
+  procedure pdf_file_input;
+
 
 end test_uc_ai_google;
 /
