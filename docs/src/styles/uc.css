@@ -55,3 +55,11 @@ html[data-theme="dark"] {
 	display: flex;
 	padding: 2rem 0;
 }
+
+sup {
+	font-family: var(--__sl-font-mono);
+
+	& a {
+		text-underline-offset: 2.1px;
+	}
+}
