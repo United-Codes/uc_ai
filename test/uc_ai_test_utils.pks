@@ -10,5 +10,7 @@ create or replace package uc_ai_test_utils as
 
   function get_emp_pdf return blob;
 
+  function get_apple_jpeg return blob;
+
 end uc_ai_test_utils;
 /
