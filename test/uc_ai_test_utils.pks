@@ -8,5 +8,9 @@ create or replace package uc_ai_test_utils as
 
   function get_tool_user_messages return json_array_t;
 
+  function get_emp_pdf return blob;
+
+  function get_apple_webp return blob;
+
 end uc_ai_test_utils;
 /

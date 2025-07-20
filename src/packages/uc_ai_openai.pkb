@@ -55,7 +55,10 @@ create or replace package body uc_ai_openai as
     l_openai_message json_object_t;
     l_role varchar2(255 char);
     l_content json_array_t;
+    l_new_content json_array_t;
     l_content_item json_object_t;
+    l_new_content_item json_object_t;
+    l_temp_obj json_object_t;
     l_content_type varchar2(255 char);
     l_tool_calls json_array_t;
     l_tool_call json_object_t;
@@ -81,7 +84,9 @@ create or replace package body uc_ai_openai as
           -- User message: extract text from content array
           l_content := l_lm_message.get_array('content');
           l_text_content := null;
-          
+
+          l_new_content := json_array_t();
+
           <<user_content_loop>>
           for j in 0 .. l_content.get_size - 1
           loop
@@ -95,16 +100,49 @@ create or replace package body uc_ai_openai as
                 else
                   l_text_content := l_text_content || l_content_item.get_clob('text');
                 end if;
+
+                l_new_content_item := json_object_t();
+                l_new_content_item.put('type', 'text');
+                l_new_content_item.put('text', l_content_item.get_clob('text'));
+                l_new_content.append(l_new_content_item);
               when 'file' then
-                null;
-                -- TODO: implement file handling if needed
-                --l_openai_message.put('content', json_array_t('[{"type": "text", "text": "[File content]"}]'));
+                 declare
+                  l_data      clob;
+                  l_mime_type varchar2(4000 char);
+                  l_filename  varchar2(4000 char);
+                begin
+                  l_data := l_content_item.get_clob('data');
+                  l_mime_type := l_content_item.get_string('mediaType');
+                  l_filename := l_content_item.get_string('filename');
+                  l_new_content_item := json_object_t();
+
+                  -- PDF doc: https://platform.openai.com/docs/guides/pdf-files?api-mode=responses#base64-encoded-files
+                  if l_mime_type = 'application/pdf' then
+                    l_new_content_item.put('type', 'file');
+
+                    l_temp_obj := json_object_t();
+                    l_temp_obj.put('filename', l_filename);
+                    l_temp_obj.put('file_data', 'data:application/pdf;base64,' ||  l_data);
+                    l_new_content_item.put('file', l_temp_obj);
+
+                  -- img doc: https://platform.openai.com/docs/guides/images-vision?api-mode=responses&format=base64-encoded#analyze-images
+                  elsif l_mime_type in ('image/jpeg', 'image/png', 'image/gif', 'image/webp') then
+                    l_new_content_item.put('type', 'input_image');
+                    l_new_content_item.put('image_url', 'data:' || l_mime_type || ';base64,' || l_data);
+                  else
+                    logger.log_error('Unsupported file type: ' || l_mime_type, l_scope, l_content_item.stringify);
+                    raise uc_ai.e_unhandled_format;
+                  end if;
+
+                  l_new_content.append(l_new_content_item);
+                end;
+              else
+                logger.log_error('Unknown content type in user message: ' || l_content_type, l_scope, l_content_item.stringify);
+                raise uc_ai.e_unhandled_format;
             end case;
           end loop user_content_loop;
           
-          if l_text_content is not null then
-            l_openai_message.put('content', l_text_content);
-          end if;
+          l_openai_message.put('content', l_new_content);
 
         when 'assistant' then
           -- Assistant message: can have text content and/or tool calls
@@ -189,6 +227,10 @@ create or replace package body uc_ai_openai as
     logger.log('Converted to ' || l_openai_messages.get_size || ' OpenAI messages', l_scope);
     return l_openai_messages;
 
+  exception
+    when others then
+      logger.log_error('Error converting LM messages to OpenAI format', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+      raise;
   end convert_lm_messages_to_openai;
 
 

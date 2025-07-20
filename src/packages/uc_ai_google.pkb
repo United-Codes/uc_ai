@@ -89,8 +89,20 @@ create or replace package body uc_ai_google as
                 l_part.put('text', l_content_item.get_clob('text'));
                 l_parts.append(l_part);
               when 'file' then
-                null;
-                -- TODO: implement file handling if needed
+                -- document understanding API: https://ai.google.dev/gemini-api/docs/document-processing#rest
+                l_part := json_object_t();
+
+                declare
+                  l_data clob;
+                  l_inline_data json_object_t := json_object_t();
+                begin
+                  l_data := l_content_item.get_clob('data');
+                  l_inline_data.put('mime_type', l_content_item.get_string('mediaType'));
+                  l_inline_data.put('data', l_data);
+
+                  l_part.put('inline_data', l_inline_data);
+                  l_parts.append(l_part);
+                end;
             end case;
           end loop user_content_loop;
           

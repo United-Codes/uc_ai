@@ -1,0 +1,114 @@
+---
+title: File analysis with UC AI
+description: You can use UC AI to analyze files like PDFs or images. This guide shows you how to send files with UC AI and get the analysis results.
+sidebar:
+  order: 40
+---
+
+UC AI supports multimodal capabilities, allowing you to analyze various file types including PDFs, images, and other documents directly within your Oracle database. This powerful feature enables you to extract insights, answer questions, and perform analysis on file content using AI models.
+
+The file analysis functionality works by converting files into base64-encoded content and sending them as part of your message array to AI providers. You can combine file content with text prompts to create rich, context-aware interactions.
+
+**Supported file types include:**
+
+- **PDFs** - Extract text, analyze tables, answer questions about document content
+- **Images** (JPEG, PNG, WebP, etc.) - Describe images, identify objects, read text from images
+- **Other document formats** - Depending on the AI provider's capabilities
+
+This guide demonstrates how to implement file analysis workflows using the UC AI message API, showing practical examples for both PDF and image analysis scenarios.
+
+## Example 1: Analyze a PDF file
+
+In this example we are using a simple PDF that contains a table of characters for the TV show "The Office". It contaims this data:
+
+| First Name | Last Name | Email                            |
+| ---------- | --------- | -------------------------------- |
+| Michael    | Scott     | michael.scott@dundermifflin.com  |
+| Pam        | Beesly    | pam.beesly@dundermifflin.com     |
+| Jim        | Halpert   | jim.halpert@dundermifflin.com    |
+| Angela     | Martin    | angela.martin@dundermifflin.com  |
+| Dwight     | Schrute   | dwight.schrute@dundermifflin.com |
+| Kevin      | Malone    | kevin.malone@dundermifflin.com   |
+
+As we have to attach the file itself we will manually creat a message array with a system message, a user message and the file content.
+
+```sql
+declare
+  l_messages json_array_t := json_array_t();
+  l_content json_array_t := json_array_t();
+  l_result json_object_t;
+  l_final_message clob;
+begin
+  -- Create a system message to set the context for the AI
+  l_messages.append(uc_ai_message_api.create_system_message(
+    'You are an assistant answering trivia questions about TV Shows. Please answeer in super short sentences.'));
+
+  -- The user message consists of two parts: the file content and a text content
+
+  -- Add the file content to the user message
+  l_content.append(uc_ai_message_api.create_file_content(
+    p_media_type => 'application/pdf',
+    p_data_blob => (select blob_content from your_table where id = 1),
+    p_filename => 'change_me.pdf'
+  ));
+
+  -- Add text content to the user message
+  l_content.append(uc_ai_message_api.create_text_content(
+    'What is the TV show called of the characters that are inside the attached PDF?'
+  ));
+  -- Add the user message with the file content and text content to the messages array
+  l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+  -- Call the AI service to generate a response based on the messages
+  l_result := uc_ai_google.generate_text(
+    p_messages => l_messages,
+    p_model => uc_ai_google.c_model_gemini_2_5_flash,
+    p_max_tool_calls => 3
+  );
+
+  l_final_message := l_result.get_clob('final_message');
+  sys.dbms_output.put_line('Last message: ' || l_final_message);
+  -- > The AI should respond with "The Office" or similar
+end;
+```
+
+## Example 2: Analyze an image file
+
+In this example we are using a simple image that contains a picture of an apple. We will send the image to the AI service and ask it to describe the image.
+
+```sql
+declare
+  l_messages json_array_t := json_array_t();
+  l_content json_array_t := json_array_t();
+  l_result json_object_t;
+  l_res_clob clob;
+  l_final_message clob;
+begin
+  -- Create a system message to set the context for the AI
+  l_messages.append(uc_ai_message_api.create_system_message(
+    'You are an image analysis assistant.'));
+
+  -- The user message consists of two parts: the file content and a text content
+  -- Add the file content to the user message
+  l_content.append(uc_ai_message_api.create_file_content(
+    p_media_type => 'image/webp',
+    p_data_blob => uc_ai_test_utils.get_apple_webp,
+    p_filename => 'data.webp'
+  ));
+  -- Add text content to the user message
+  l_content.append(uc_ai_message_api.create_text_content(
+    'What is the fruit depicted in the attached image?'
+  ));
+  -- Add the user message with the file content and text content to the messages array
+  l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+  l_result := uc_ai_anthropic.generate_text(
+    p_messages => l_messages,
+    p_model => uc_ai_anthropic.c_model_claude_3_5_haiku,
+    p_max_tool_calls => 3
+  );
+
+  l_final_message := l_result.get_clob('final_message');
+  sys.dbms_output.put_line('Last message: ' || l_final_message);
+  -- > The AI should respond with "Apple"
+```

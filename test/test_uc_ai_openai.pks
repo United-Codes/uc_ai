@@ -14,5 +14,11 @@ create or replace package test_uc_ai_openai as
   --%test(Convert messages)
   procedure convert_messages;
 
+  --%test(PDF file input)
+  procedure pdf_file_input;
+
+  --%test(image file input)
+  procedure image_file_input;
+
 end test_uc_ai_openai;
 /

@@ -27,6 +27,8 @@ create or replace package uc_ai as
   pragma exception_init(e_max_calls_exceeded, -20301);
   e_error_response exception;
   pragma exception_init(e_error_response, -20302);
+  e_unhandled_format exception;
+  pragma exception_init(e_unhandled_format, -20303);
 
   /*
    * Main interface for AI text generation

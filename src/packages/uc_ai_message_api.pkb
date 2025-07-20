@@ -27,7 +27,8 @@ create or replace package body uc_ai_message_api as
 
   function create_file_content(
     p_media_type in varchar2,
-    p_data in clob,
+    p_data_base64 in clob,
+    p_filename in varchar2 default null,
     p_provider_options in json_object_t default null
   ) return json_object_t is
     l_content json_object_t;
@@ -35,13 +36,38 @@ create or replace package body uc_ai_message_api as
     l_content := json_object_t();
     l_content.put('type', 'file');
     l_content.put('mediaType', p_media_type);
-    l_content.put('data', p_data);
+    l_content.put('data', p_data_base64);
+
+    if p_filename is not null then
+      l_content.put('filename', p_filename);
+    end if;
     
     if p_provider_options is not null then
       l_content.put('providerOptions', p_provider_options);
     end if;
     
     return l_content;
+  end create_file_content;
+
+
+  function create_file_content(
+    p_media_type in varchar2,
+    p_data_blob in blob,
+    p_filename in varchar2 default null,
+    p_provider_options in json_object_t default null
+  ) return json_object_t
+  as
+    l_b64 clob;
+  begin
+    -- Convert BLOB to Base64 CLOB
+    l_b64 := apex_web_service.blob2clobbase64(
+      p_blob => p_data_blob,
+      p_newlines => 'N',
+      p_padding => 'Y'
+    );
+
+    return create_file_content(p_media_type, l_b64, p_filename, p_provider_options);  
+
   end create_file_content;
 
   function create_reasoning_content(
