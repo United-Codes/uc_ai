@@ -279,9 +279,9 @@ create or replace package body test_uc_ai_openai as
 
     uc_ai.g_enable_tools := false; -- disable tools for this test
 
-    l_result := uc_ai_anthropic.generate_text(
+    l_result := uc_ai_openai.generate_text(
       p_messages => l_messages,
-      p_model => uc_ai_anthropic.c_model_claude_3_5_haiku,
+      p_model => uc_ai_openai.c_model_gpt_4_1,
       p_max_tool_calls => 3
     );
 

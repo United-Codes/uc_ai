@@ -110,6 +110,7 @@ create or replace package body uc_ai_openai as
                   l_data      clob;
                   l_mime_type varchar2(4000 char);
                   l_filename  varchar2(4000 char);
+                  l_image_url json_object_t;
                 begin
                   l_data := l_content_item.get_clob('data');
                   l_mime_type := l_content_item.get_string('mediaType');
@@ -127,8 +128,10 @@ create or replace package body uc_ai_openai as
 
                   -- img doc: https://platform.openai.com/docs/guides/images-vision?api-mode=responses&format=base64-encoded#analyze-images
                   elsif l_mime_type in ('image/jpeg', 'image/png', 'image/gif', 'image/webp') then
-                    l_new_content_item.put('type', 'input_image');
-                    l_new_content_item.put('image_url', 'data:' || l_mime_type || ';base64,' || l_data);
+                    l_new_content_item.put('type', 'image_url');
+                    l_image_url := json_object_t();
+                    l_image_url.put('url', 'data:' || l_mime_type || ';base64,' || l_data);
+                    l_new_content_item.put('image_url', l_image_url);
                   else
                     logger.log_error('Unsupported file type: ' || l_mime_type, l_scope, l_content_item.stringify);
                     raise uc_ai.e_unhandled_format;
