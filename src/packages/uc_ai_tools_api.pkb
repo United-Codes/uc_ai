@@ -289,6 +289,10 @@ create or replace package body uc_ai_tools_api as
     l_tool_obj     json_object_t;
     l_tool_cpy_obj json_object_t;
   begin
+    if not uc_ai.g_enable_tools then
+      return l_tools_array;
+    end if;
+
     <<fetch_tools>>
     for rec in (
       select id

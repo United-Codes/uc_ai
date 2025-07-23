@@ -23,6 +23,8 @@ create or replace package uc_ai as
   c_finish_reason_content_filter constant finish_reason_type := 'content_filter';
 
 
+  g_enable_tools boolean := true;
+
   e_max_calls_exceeded exception;
   pragma exception_init(e_max_calls_exceeded, -20301);
   e_error_response exception;
