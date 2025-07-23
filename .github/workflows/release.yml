@@ -1,0 +1,49 @@
+name: Build and Attach Release Assets
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build-and-attach:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: |
+          chmod +x scripts/generate_install_script_complete.sh
+          chmod +x scripts/generate_upgrade_script.sh
+
+      - name: Generate installation scripts
+        run: |
+          cd scripts
+          ./generate_install_script_complete.sh
+
+      - name: Generate upgrade script
+        run: |
+          cd scripts
+          ./generate_upgrade_script.sh
+
+      - name: Verify generated files
+        run: |
+          echo "Checking generated files..."
+          ls -la install_uc_ai_complete.sql
+          ls -la install_uc_ai_complete_with_logger.sql
+          ls -la upgrade_packages.sql
+          echo "File sizes:"
+          wc -l install_uc_ai_complete.sql
+          wc -l install_uc_ai_complete_with_logger.sql
+          wc -l upgrade_packages.sql
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            install_uc_ai_complete.sql
+            install_uc_ai_complete_with_logger.sql
+            upgrade_packages.sql
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
