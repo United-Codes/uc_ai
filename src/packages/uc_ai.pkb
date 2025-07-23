@@ -50,9 +50,9 @@ create or replace package body uc_ai as
       raise_application_error(-20303, 'Unhandled message format encountered. Please check the message structure and logs.');
     when others then
       logger.log_error(
-        p_message => 'Unhandled exception in uc_ai.generate_text',
-        p_scope   => c_scope_prefix || 'generate_text',
-        p_error   => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+        'Unhandled exception in uc_ai.generate_text',
+        c_scope_prefix || 'generate_text',
+        sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
       );
 
       raise;
