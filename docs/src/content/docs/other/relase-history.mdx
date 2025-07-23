@@ -5,6 +5,54 @@ sidebar:
   order: 3
 ---
 
+## v25.3
+
+**Attach files to conversations and let AIs analyze them**
+
+Attach files to your AI conversations and let the AI analyze them. This is useful for scenarios where you want the AI to answer questions based on the content of a file, such as a PDF or an image.
+
+Watch [this YouTube video](https://youtu.be/Hpe2RRf6usY) to see how it works or check out [the documentation](https://www.united-codes.com/products/uc-ai/docs/guides/file_analysis/) for detail.
+
+```sql
+declare
+  l_messages json_array_t := json_array_t();
+  l_content json_array_t := json_array_t();
+  l_result json_object_t;
+  l_final_message clob;
+begin
+  -- Create a system message to set the context for the AI
+  l_messages.append(uc_ai_message_api.create_system_message(
+    'You are an assistant answering trivia questions about TV Shows. Please answeer in super short sentences.'));
+
+  -- The user message consists of two parts: the file content and a text content
+
+  -- Add the file content to the user message
+  l_content.append(uc_ai_message_api.create_file_content(
+    p_media_type => 'application/pdf',
+    p_data_blob => (select blob_content from your_table where id = 1),
+    p_filename => 'change_me.pdf'
+  ));
+
+  -- Add text content to the user message
+  l_content.append(uc_ai_message_api.create_text_content(
+    'What is the TV show called of the characters that are inside the attached PDF?'
+  ));
+  -- Add the user message with the file content and text content to the messages array
+  l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+  -- Call the AI service to generate a response based on the messages
+  l_result := uc_ai_google.generate_text(
+    p_messages => l_messages,
+    p_model => uc_ai_google.c_model_gemini_2_5_flash,
+    p_max_tool_calls => 3
+  );
+
+  l_final_message := l_result.get_clob('final_message');
+  sys.dbms_output.put_line('Last message: ' || l_final_message);
+  -- > The AI should respond with "The Office" or similar
+end;
+```
+
 ## v25.2
 
 **Continue conversations with different providers and models**
