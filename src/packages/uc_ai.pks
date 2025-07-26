@@ -12,6 +12,7 @@ create or replace package uc_ai as
   c_provider_openai    constant provider_type := 'openai';
   c_provider_anthropic constant provider_type := 'anthropic';
   c_provider_google    constant provider_type := 'google';
+  c_provider_ollama    constant provider_type := 'ollama';
 
   subtype model_type is varchar2(128 char);
 
@@ -22,8 +23,12 @@ create or replace package uc_ai as
   c_finish_reason_length         constant finish_reason_type := 'length';
   c_finish_reason_content_filter constant finish_reason_type := 'content_filter';
 
+  -- general global settings
+  g_base_url varchar2(4000 char);
 
+  -- tools relevant global settings
   g_enable_tools boolean := true;
+
 
   e_max_calls_exceeded exception;
   pragma exception_init(e_max_calls_exceeded, -20301);

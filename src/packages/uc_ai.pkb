@@ -33,6 +33,12 @@ create or replace package body uc_ai as
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
         );
+      when c_provider_ollama then
+        l_result := uc_ai_ollama.generate_text(
+          p_messages       => p_messages
+        , p_model          => p_model
+        , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        );
       else
         raise e_unknown_provider;
     end case;
