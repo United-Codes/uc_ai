@@ -29,9 +29,16 @@ create or replace package body uc_ai_ollama as
     l_lm_text_content  json_object_t;
   begin
     l_content := p_message.get_clob('content');
-    l_provider_options := p_message;
+    -- for example when only reasoning is present
+    if l_content is null or length(trim(l_content)) = 0 then
+      return null; -- No content to process
+    end if;
+
+    l_provider_options := p_message.clone();
     l_provider_options.remove('role');
     l_provider_options.remove('content');
+    l_provider_options.remove('thinking');
+    l_provider_options.remove('tool_calls');
 
     l_lm_text_content := uc_ai_message_api.create_text_content(
       p_text             => l_content
@@ -43,24 +50,60 @@ create or replace package body uc_ai_ollama as
     return l_lm_text_content;
   end get_text_content;
 
-  procedure process_text_message(
+  function get_reasoning_content (
     p_message in json_object_t
-  )
+  ) return json_object_t
+  as
+    l_thinking clob;
+    l_provider_options json_object_t;
+  begin
+    l_thinking := p_message.get_clob('thinking');
+    if l_thinking is null or length(trim(l_thinking)) = 0 then
+      return null; -- No reasoning to process
+    end if;
+
+    l_provider_options := p_message.clone();
+    l_provider_options.remove('role');
+    l_provider_options.remove('thinking');
+    l_provider_options.remove('content');
+    l_provider_options.remove('tool_calls');
+
+    return uc_ai_message_api.create_reasoning_content(
+      p_text => l_thinking,
+      p_provider_options => l_provider_options
+    );
+  end get_reasoning_content;
+
+  function process_llm_response(
+    p_message in json_object_t
+  ) return json_array_t
   as
     l_lm_text_content  json_object_t;
-    l_assistant_message json_object_t;
+    l_lm_reasoning_content json_object_t;
     l_arr json_array_t;
   begin
     l_lm_text_content := get_text_content(p_message);
+    l_lm_reasoning_content := get_reasoning_content(p_message);
+
+    if l_lm_reasoning_content is null and l_lm_text_content is null then
+      logger.LOG_ERROR(
+        'No content to process response',
+        c_scope_prefix || 'process_llm_response',
+        p_message.to_clob
+      );
+      raise uc_ai.e_format_processing_error;
+    end if;
 
     l_arr := json_array_t();
-    l_arr.append(l_lm_text_content);
-    l_assistant_message := uc_ai_message_api.create_assistant_message(
-      p_content => l_arr
-    );
+    if l_lm_reasoning_content is not null then
+      l_arr.append(l_lm_reasoning_content);
+    end if;
+    if l_lm_text_content is not null then
+      l_arr.append(l_lm_text_content);
+    end if;
 
-    g_normalized_messages.append(l_assistant_message);
-  end process_text_message;
+    return l_arr;
+  end process_llm_response;
 
 
   /*
@@ -215,17 +258,19 @@ create or replace package body uc_ai_ollama as
     l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
     l_messages     json_array_t := json_array_t();
     l_input_obj    json_object_t;
-    l_url          varchar2(32676 char);
 
-    l_resp      clob;
-    l_resp_json json_object_t;
-    l_temp_obj  json_object_t;
-    l_message   json_object_t;
-    l_tool_calls json_array_t;
+    l_resp          clob;
+    l_resp_json     json_object_t;
+    l_temp_obj      json_object_t;
+    l_message       json_object_t;
+    l_tool_calls    json_array_t;
     l_finish_reason varchar2(255 char);
     l_usage     json_object_t;
     l_model     varchar2(255 char);
-    
+
+    l_assistant_content json_array_t;
+    l_assistant_message json_object_t;
+
     l_has_tool_calls boolean := false;
   begin
     if g_tool_calls >= p_max_tool_calls then
@@ -237,6 +282,7 @@ create or replace package body uc_ai_ollama as
     l_messages := p_messages;
     l_input_obj := p_input_obj;
     l_input_obj.put('messages', l_messages);
+    l_input_obj.put('think', uc_ai.g_reasoning_enabled);
 
     logger.log('Request body', l_scope, l_input_obj.to_clob);
 
@@ -297,32 +343,14 @@ create or replace package body uc_ai_ollama as
     -- Extract message from response
     l_message := l_resp_json.get_object('message');
     
-    -- Extract finish reason (if available)
-    if l_resp_json.has('done_reason') then
-      l_finish_reason := l_resp_json.get_string('done_reason');
-    elsif l_message.has('finish_reason') then
-      l_finish_reason := l_message.get_string('finish_reason');
-    else
-      l_finish_reason := 'stop'; -- Default
-    end if;
-    
-    -- Map finish reasons to standard format
-    case l_finish_reason
-      when 'tool_calls' then
-        pio_result.put('finish_reason', uc_ai.c_finish_reason_tool_calls);
-      when 'length' then
-        pio_result.put('finish_reason', uc_ai.c_finish_reason_length);
-      when 'content_filter' then
-        pio_result.put('finish_reason', uc_ai.c_finish_reason_content_filter);
-      else
-        pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
-    end case;
-
     -- Check if response contains tool calls
     if l_message.has('tool_calls') then
       l_tool_calls := l_message.get_array('tool_calls');
       l_has_tool_calls := l_tool_calls.get_size > 0;
     end if;
+
+    -- add response text to global messages
+    l_assistant_content := process_llm_response(l_message);
 
     if l_has_tool_calls then
       -- AI wants to call tools - extract calls, execute them, add results to conversation
@@ -336,7 +364,6 @@ create or replace package body uc_ai_ollama as
         l_new_msg             json_object_t;
         l_function            json_object_t;
 
-        l_normalized_messages     json_array_t := json_array_t();
         l_normalized_tool_results json_array_t := json_array_t();
       begin
         -- Add AI's message with tool calls to conversation history
@@ -370,7 +397,7 @@ create or replace package body uc_ai_ollama as
           , p_tool_name    => l_tool_name
           , p_args         => l_tool_input.to_clob
           );
-          l_normalized_messages.append(l_new_msg);
+          l_assistant_content.append(l_new_msg);
 
           logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name || ', Tool ID: ' || l_tool_call_id);
           logger.log('Tool input', l_scope, 'Input: ' || l_tool_input.to_clob);
@@ -395,7 +422,12 @@ create or replace package body uc_ai_ollama as
           ));
         end loop tool_calls_loop;
 
-        g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+
+        l_assistant_message := uc_ai_message_api.create_assistant_message(
+          p_content => l_assistant_content
+        );
+        g_normalized_messages.append(l_assistant_message);
+
         g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
 
         pio_result.put('tool_calls_count', g_tool_calls);
@@ -412,7 +444,34 @@ create or replace package body uc_ai_ollama as
       -- Normal completion - add AI's message to conversation
       logger.log('Normal completion received', l_scope);
       l_messages.append(l_message);
-      process_text_message(l_message);
+
+      l_assistant_message := uc_ai_message_api.create_assistant_message(
+        p_content => l_assistant_content
+      );
+      g_normalized_messages.append(l_assistant_message);
+    end if;
+
+
+    -- Extract finish reason (if available)
+    if l_resp_json.has('done_reason') then
+      l_finish_reason := l_resp_json.get_string('done_reason');
+    end if;
+    
+    -- Map finish reasons to standard format
+    if l_has_tool_calls then
+      -- ollama uses stop even for tool calls
+      l_finish_reason := uc_ai.c_finish_reason_tool_calls;
+    else
+      case l_finish_reason
+        when 'stop' then
+          pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
+        when 'length' then
+          pio_result.put('finish_reason', uc_ai.c_finish_reason_length);
+        when 'content_filter' then
+          pio_result.put('finish_reason', uc_ai.c_finish_reason_content_filter);
+        else
+          pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
+      end case;
     end if;
 
     logger.log('End internal_generate_text - final messages count: ' || l_messages.get_size, l_scope);
@@ -462,10 +521,9 @@ create or replace package body uc_ai_ollama as
     l_result := json_object_t();
     logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
     
-    -- Reset global call counter
+    -- Reset global variables
     g_tool_calls := 0;
-    
-    -- Initialize normalized messages with input messages
+    g_final_message := null;
     g_normalized_messages := json_array_t();
     
     -- Copy input messages to global normalized messages array
@@ -489,8 +547,8 @@ create or replace package body uc_ai_ollama as
     l_input_obj.put('model', p_model);
     l_input_obj.put('stream', false); -- We want the complete response, not streaming
 
-    -- Get all available tools formatted for Ollama (OpenAI format)
-    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_openai); -- Ollama uses OpenAI-compatible tool format
+    -- Get all available tools formatted for Ollama
+    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_ollama);
 
     if l_tools.get_size > 0 then
       l_input_obj.put('tools', l_tools);
