@@ -27,7 +27,7 @@ create or replace package uc_ai as
   g_base_url varchar2(4000 char);
 
   -- reasoning global settings
-  g_reasoning_enabled boolean := false;
+  g_enable_reasoning boolean := false;
 
   -- tools relevant global settings
   g_enable_tools boolean := true;
