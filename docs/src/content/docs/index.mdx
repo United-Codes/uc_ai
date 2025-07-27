@@ -5,7 +5,7 @@ sidebar:
   order: 10
 template: doc
 hero:
-  tagline: A comprehensive Oracle PL/SQL framework for integrating AI models (OpenAI GPT, Anthropic Claude, Google Gemini) with function calling capabilities directly in your database.
+  tagline: A comprehensive Oracle PL/SQL framework for integrating AI models (OpenAI GPT, Anthropic Claude, Google Gemini, Ollama) with function calling capabilities directly in your database.
   actions:
     - text: Installation
       link: /products/uc-ai/docs/guides/installation/
@@ -87,11 +87,14 @@ END;
 
 ## Feature Matrix
 
-| Feature                                                                                                             | OpenAI GPT                                                                                                    | Anthropic Claude                                                                            | Google Gemini                                                                   |
-| ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| [Text generation](/products/uc-ai/docs/api/generate_text/)                                                          | Yes <sup>[(i)](https://platform.openai.com/docs/guides/text?api-mode=responses)</sup>                         | Yes                                                                                         | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/text-generation)</sup>     |
-| • [Tools/Function calling](/products/uc-ai/docs/guides/tools/)                                                      | Yes <sup>[(i)](https://platform.openai.com/docs/guides/function-calling?api-mode=responses)</sup>             | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview)</sup> | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/function-calling)</sup>    |
-| • [PDF analysis](http://localhost:4321/products/uc-ai/docs/guides/file_analysis/#example-1-analyze-a-pdf-file)      | Yes <sup>[(i)](https://platform.openai.com/docs/guides/pdf-files?api-mode=responses)</sup>                    | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/build-with-claude/pdf-support)</sup>      | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/document-processing)</sup> |
-| • [Image analysis](http://localhost:4321/products/uc-ai/docs/guides/file_analysis/#example-2-analyze-an-image-file) | Yes <sup>[(i)](https://platform.openai.com/docs/guides/images-vision?api-mode=responses#analyze-images)</sup> | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/build-with-claude/vision)</sup>           | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/image-understanding)</sup> |
+| Feature                                                      | OpenAI GPT                                                   | Anthropic Claude                                             | Google Gemini                                                | Ollama                                                     |
+| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ---------------------------------------------------------- |
+| [Text generation](/products/uc-ai/docs/api/generate_text/)   | Yes <sup>[(i)](https://platform.openai.com/docs/guides/text?api-mode=responses)</sup> | Yes                                                          | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/text-generation)</sup> | Yes                                                        |
+| • [Tools/Function calling](/products/uc-ai/docs/guides/tools/) | Yes <sup>[(i)](https://platform.openai.com/docs/guides/function-calling?api-mode=responses)</sup> | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview)</sup> | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/function-calling)</sup> | Yes <sup>[(i)](https://ollama.com/blog/tool-support)</sup> |
+| • [PDF analysis](http://localhost:4321/products/uc-ai/docs/guides/file_analysis/#example-1-analyze-a-pdf-file) | Yes <sup>[(i)](https://platform.openai.com/docs/guides/pdf-files?api-mode=responses)</sup> | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/build-with-claude/pdf-support)</sup> | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/document-processing)</sup> | No <sup>[(i)](https://ollama.com/blog/vision-models)</sup> |
+| • [Image analysis](http://localhost:4321/products/uc-ai/docs/guides/file_analysis/#example-2-analyze-an-image-file) | Yes <sup>[(i)](https://platform.openai.com/docs/guides/images-vision?api-mode=responses#analyze-images)</sup> | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/build-with-claude/vision)</sup> | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/image-understanding)</sup> | Yes                                                        |
+| • Reasoning                                                  |                                                              |                                                              |                                                              | Yes <sup>[(i)](https://ollama.com/blog/thinking)</sup>     |
 
 \* The `(i)` links to the provider documentation for the feature.
+
+** Some features only work with specific models. Research the documentation of the provider about this.
