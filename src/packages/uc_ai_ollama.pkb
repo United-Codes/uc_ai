@@ -124,6 +124,7 @@ create or replace package body uc_ai_ollama as
     l_content_item json_object_t;
     l_content_type varchar2(255 char);
     l_ollama_content varchar2(32767 char);
+    l_images json_array_t;
     l_tool_calls json_array_t;
     l_tool_call json_object_t;
     l_function json_object_t;
@@ -150,7 +151,8 @@ create or replace package body uc_ai_ollama as
           -- User message: extract content from content array
           l_content := l_lm_message.get_array('content');
           l_ollama_content := null;
-          
+          l_images := json_array_t();
+
           <<user_content_loop>>
           for j in 0 .. l_content.get_size - 1
           loop
@@ -161,8 +163,7 @@ create or replace package body uc_ai_ollama as
               when 'text' then
                 l_ollama_content := l_ollama_content || l_content_item.get_clob('text');
               when 'file' then
-                -- For now, just include file name/description
-                l_ollama_content := l_ollama_content || ' [File: ' || nvl(l_content_item.get_string('filename'), 'attachment') || ']';
+                l_images.append(l_content_item.get_clob('data'));
               else
                 logger.log_warn('Unsupported user content type for Ollama: ' || l_content_type, l_scope);
             end case;
@@ -172,6 +173,9 @@ create or replace package body uc_ai_ollama as
             l_ollama_message := json_object_t();
             l_ollama_message.put('role', 'user');
             l_ollama_message.put('content', l_ollama_content);
+            if l_images.get_size > 0 then
+              l_ollama_message.put('images', l_images);
+            end if;
             po_ollama_messages.append(l_ollama_message);
           end if;
 
@@ -282,7 +286,7 @@ create or replace package body uc_ai_ollama as
     l_messages := p_messages;
     l_input_obj := p_input_obj;
     l_input_obj.put('messages', l_messages);
-    l_input_obj.put('think', uc_ai.g_reasoning_enabled);
+    l_input_obj.put('think', uc_ai.g_enable_reasoning);
 
     logger.log('Request body', l_scope, l_input_obj.to_clob);
 
@@ -302,9 +306,8 @@ create or replace package body uc_ai_ollama as
     l_resp_json := json_object_t.parse(l_resp);
 
     if l_resp_json.has('error') then
-      l_temp_obj := l_resp_json.get_object('error');
-      logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-      logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
+      l_resp := l_resp_json.get_clob('error');
+      logger.log_error('Error in response', l_scope, l_resp);
       raise uc_ai.e_error_response;
     end if;
 
