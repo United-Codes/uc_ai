@@ -263,7 +263,7 @@ create or replace package body uc_ai_tools_api as
       end if;
     end if;
 
-    if p_provider = uc_ai.c_provider_google then
+    if p_provider in (uc_ai.c_provider_google, uc_ai.c_provider_ollama) then
       l_input_schema_name := 'parameters';
     else
       l_input_schema_name := 'input_schema';
@@ -304,7 +304,7 @@ create or replace package body uc_ai_tools_api as
       -- openai has an additional object wrapper for function calls
       -- {type: "function", function: {...}}
       -- where others like anthropic/claude use the function object directly
-      if p_provider = uc_ai.c_provider_openai then
+      if p_provider in (uc_ai.c_provider_openai, uc_ai.c_provider_ollama) then
         l_tool_cpy_obj := l_tool_obj;
 
         l_tool_obj := json_object_t();
@@ -468,10 +468,9 @@ create or replace package body uc_ai_tools_api as
         logger.log_error('Error in execute_tool: %s', 'Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
         raise_application_error(-20001, 'You are only allowed to set one parameter bind. Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
       end if;
-
-      return l_return;
-
     end if;
+
+    return l_return;
   exception
     when others then
       logger.log_error('Error in execute_tool: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);

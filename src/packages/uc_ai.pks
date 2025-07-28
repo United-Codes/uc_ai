@@ -12,6 +12,7 @@ create or replace package uc_ai as
   c_provider_openai    constant provider_type := 'openai';
   c_provider_anthropic constant provider_type := 'anthropic';
   c_provider_google    constant provider_type := 'google';
+  c_provider_ollama    constant provider_type := 'ollama';
 
   subtype model_type is varchar2(128 char);
 
@@ -22,8 +23,15 @@ create or replace package uc_ai as
   c_finish_reason_length         constant finish_reason_type := 'length';
   c_finish_reason_content_filter constant finish_reason_type := 'content_filter';
 
+  -- general global settings
+  g_base_url varchar2(4000 char);
 
+  -- reasoning global settings
+  g_enable_reasoning boolean := false;
+
+  -- tools relevant global settings
   g_enable_tools boolean := true;
+
 
   e_max_calls_exceeded exception;
   pragma exception_init(e_max_calls_exceeded, -20301);
@@ -31,6 +39,8 @@ create or replace package uc_ai as
   pragma exception_init(e_error_response, -20302);
   e_unhandled_format exception;
   pragma exception_init(e_unhandled_format, -20303);
+  e_format_processing_error exception;
+  pragma exception_init(e_format_processing_error, -20304);
 
   /*
    * Main interface for AI text generation

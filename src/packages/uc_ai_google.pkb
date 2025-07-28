@@ -509,10 +509,9 @@ create or replace package body uc_ai_google as
     l_result := json_object_t();
     logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
     
-    -- Reset global call counter
+    -- Reset global variables
     g_tool_calls := 0;
-    
-    -- Initialize normalized messages with input messages
+    g_final_message := null;
     g_normalized_messages := json_array_t();
     
     -- Copy input messages to global normalized messages array

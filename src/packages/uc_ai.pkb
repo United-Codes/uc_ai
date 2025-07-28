@@ -33,6 +33,12 @@ create or replace package body uc_ai as
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
         );
+      when c_provider_ollama then
+        l_result := uc_ai_ollama.generate_text(
+          p_messages       => p_messages
+        , p_model          => p_model
+        , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        );
       else
         raise e_unknown_provider;
     end case;
@@ -48,6 +54,8 @@ create or replace package body uc_ai as
       raise_application_error(-20302, 'Error response from AI provider. Check logs for details');
     when e_unhandled_format then
       raise_application_error(-20303, 'Unhandled message format encountered. Please check the message structure and logs.');
+    when e_format_processing_error then
+      raise_application_error(-20304, 'Error processing message format. Please check the logs for details.');
     when others then
       logger.log_error(
         'Unhandled exception in uc_ai.generate_text',
