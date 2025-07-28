@@ -44,6 +44,7 @@ jobs:
           files: |
             install_uc_ai_complete.sql
             install_uc_ai_complete_with_logger.sql
+            install_uc_ai_complete_with_logger_noop.sql
             upgrade_packages.sql
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
