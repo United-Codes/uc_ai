@@ -265,7 +265,6 @@ create or replace package body uc_ai_ollama as
 
     l_resp          clob;
     l_resp_json     json_object_t;
-    l_temp_obj      json_object_t;
     l_message       json_object_t;
     l_tool_calls    json_array_t;
     l_finish_reason varchar2(255 char);

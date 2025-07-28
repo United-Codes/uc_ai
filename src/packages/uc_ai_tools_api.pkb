@@ -468,10 +468,9 @@ create or replace package body uc_ai_tools_api as
         logger.log_error('Error in execute_tool: %s', 'Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
         raise_application_error(-20001, 'You are only allowed to set one parameter bind. Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
       end if;
-
-      return l_return;
-
     end if;
+
+    return l_return;
   exception
     when others then
       logger.log_error('Error in execute_tool: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
