@@ -150,15 +150,8 @@ add_file_content "$SRC_DIR/packages/uc_ai.pkb" "Core UC AI Package Body - Main I
 cat >> "$OUTPUT_FILE" << 'EOF'
 
 PROMPT ===================================================
-PROMPT UC AI Framework package upgrade complete!
-PROMPT
-PROMPT Upgraded components:
-PROMPT - All AI provider packages (OpenAI, Anthropic, Google)
-PROMPT - API packages (tools and message APIs)
-PROMPT - Core UC AI package
-PROMPT - Utility functions
-PROMPT
-PROMPT Your existing data and configuration remain unchanged.
+PROMPT UC AI package upgrade complete!
+PROMPT Refer to the documentation for usage instructions: https://www.united-codes.com/products/uc-ai/docs/
 PROMPT ===================================================
 EOF
 

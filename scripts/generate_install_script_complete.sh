@@ -40,20 +40,18 @@ add_file_content() {
 
 # Start writing the install script
 cat > "$OUTPUT_FILE" << 'EOF'
--- UC AI Framework Complete Installation Script
--- This is a self-contained script with all file contents inlined
--- Run this script to install the complete framework with OpenAI, Anthropic, and Google support
+-- UC AI Installation Script
 
 PROMPT ===================================================
-PROMPT UC AI Framework Installation Starting...
+PROMPT UC AI Installation Starting...
 PROMPT ===================================================
 
 EOF
 
 # Install tables first
-echo "PROMPT Installing UC AI Framework Tables..." >> "$OUTPUT_FILE"
+echo "PROMPT Installing UC AI Tables..." >> "$OUTPUT_FILE"
 echo "PROMPT This creates the core database tables for message storage and configuration" >> "$OUTPUT_FILE"
-add_file_content "$SRC_DIR/tables/install.sql" "UC AI Framework Tables"
+add_file_content "$SRC_DIR/tables/install.sql" "UC AI Tables"
 
 # Install triggers if they exist
 if [ -f "$SRC_DIR/triggers/triggers.sql" ]; then
@@ -71,7 +69,7 @@ echo "PROMPT Installing package specifications (headers)..." >> "$OUTPUT_FILE"
 
 # 1. Core types package first (uc_ai.pks contains the main types)
 echo "PROMPT - Installing core types and constants..." >> "$OUTPUT_FILE"
-add_file_content "$SRC_DIR/packages/uc_ai.pks" "Core UC AI Package Specification - Types and Constants"
+add_file_content "$SRC_DIR/packages/uc_ai.pks" "Core UC AI Package Specification - uc_ai.pks"
 
 # 2. Dependencies
 echo "PROMPT - Installing utility functions..." >> "$OUTPUT_FILE"
@@ -79,35 +77,20 @@ add_file_content "$SRC_DIR/dependencies/key_function.sql" "Utility Functions"
 
 # 3. API packages (tools and message APIs)
 echo "PROMPT - Installing API package specifications..." >> "$OUTPUT_FILE"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    if [ -f "$SRC_DIR/packages/${api_pkg}.pks" ]; then
-        case "$api_pkg" in
-            "uc_ai_tools_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pks" "Tools API Package Specification"
-                ;;
-            "uc_ai_message_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pks" "Message API Package Specification"
-                ;;
-        esac
+for pks_file in "$SRC_DIR/packages/"*_api.pks; do
+    if [ -f "$pks_file" ]; then
+        filename=$(basename "$pks_file")
+        add_file_content "$pks_file" "API Package Specification - $filename"
     fi
 done
 
-# 4. Provider packages (alphabetical order)
+# 4. Provider packages (all other .pks files except uc_ai.pks and API packages)
 echo "PROMPT - Installing AI provider package specifications..." >> "$OUTPUT_FILE"
-for provider_pks in "$SRC_DIR/packages/"*anthropic*.pks "$SRC_DIR/packages/"*google*.pks "$SRC_DIR/packages/"*openai*.pks; do
-    if [ -f "$provider_pks" ]; then
-        provider_file=$(basename "$provider_pks")
-        case "$provider_file" in
-            *anthropic*)
-                add_file_content "$provider_pks" "Anthropic AI Provider Package Specification"
-                ;;
-            *google*)
-                add_file_content "$provider_pks" "Google Gemini AI Provider Package Specification"
-                ;;
-            *openai*)
-                add_file_content "$provider_pks" "OpenAI Provider Package Specification"
-                ;;
-        esac
+for pks_file in "$SRC_DIR/packages/"*.pks; do
+    filename=$(basename "$pks_file")
+    # Skip uc_ai.pks (already installed) and API packages (already installed)
+    if [[ "$filename" != "uc_ai.pks" && "$filename" != *"_api.pks" ]]; then
+        add_file_content "$pks_file" "Provider Package Specification - $filename"
     fi
 done
 
@@ -116,54 +99,33 @@ echo "PROMPT Installing package bodies (implementations)..." >> "$OUTPUT_FILE"
 
 # API packages first
 echo "PROMPT - Installing API package bodies..." >> "$OUTPUT_FILE"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    if [ -f "$SRC_DIR/packages/${api_pkg}.pkb" ]; then
-        case "$api_pkg" in
-            "uc_ai_tools_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pkb" "Tools API Package Body - Implementation"
-                ;;
-            "uc_ai_message_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pkb" "Message API Package Body - Implementation"
-                ;;
-        esac
+for pkb_file in "$SRC_DIR/packages/"*_api.pkb; do
+    if [ -f "$pkb_file" ]; then
+        filename=$(basename "$pkb_file")
+        add_file_content "$pkb_file" "API Package Body - $filename"
     fi
 done
 
 # Provider packages
 echo "PROMPT - Installing AI provider package bodies..." >> "$OUTPUT_FILE"
-for provider_pkb in "$SRC_DIR/packages/"*anthropic*.pkb "$SRC_DIR/packages/"*google*.pkb "$SRC_DIR/packages/"*openai*.pkb; do
-    if [ -f "$provider_pkb" ]; then
-        provider_file=$(basename "$provider_pkb")
-        case "$provider_file" in
-            *anthropic*)
-                add_file_content "$provider_pkb" "Anthropic AI Provider Package Body - Implementation"
-                ;;
-            *google*)
-                add_file_content "$provider_pkb" "Google Gemini AI Provider Package Body - Implementation"
-                ;;
-            *openai*)
-                add_file_content "$provider_pkb" "OpenAI Provider Package Body - Implementation"
-                ;;
-        esac
+for pkb_file in "$SRC_DIR/packages/"*.pkb; do
+    filename=$(basename "$pkb_file")
+    # Skip uc_ai.pkb (installed last) and API packages (already installed)
+    if [[ "$filename" != "uc_ai.pkb" && "$filename" != *"_api.pkb" ]]; then
+        add_file_content "$pkb_file" "Provider Package Body - $filename"
     fi
 done
 
 # Core package body last (depends on others)
 echo "PROMPT - Installing core UC AI package body..." >> "$OUTPUT_FILE"
-add_file_content "$SRC_DIR/packages/uc_ai.pkb" "Core UC AI Package Body - Main Implementation"
+add_file_content "$SRC_DIR/packages/uc_ai.pkb" "Core UC AI Package Body - uc_ai.pkb"
 
 # Final completion message
 cat >> "$OUTPUT_FILE" << 'EOF'
 
 PROMPT ===================================================
-PROMPT UC AI Framework installation complete!
-PROMPT
-PROMPT Available AI providers:
-PROMPT - OpenAI GPT models
-PROMPT - Anthropic Claude models  
-PROMPT - Google Gemini models
-PROMPT
-PROMPT Use uc_ai.generate_text() to start generating AI responses
+PROMPT UC AI installation complete!
+PROMPT Refer to the documentation for usage instructions: https://www.united-codes.com/products/uc-ai/docs/
 PROMPT ===================================================
 EOF
 
@@ -183,22 +145,28 @@ echo "Dependencies:"
 
 echo "Package specifications:"
 [ -f "$SRC_DIR/packages/uc_ai.pks" ] && echo "  ✓ src/packages/uc_ai.pks"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    [ -f "$SRC_DIR/packages/${api_pkg}.pks" ] && echo "  ✓ src/packages/${api_pkg}.pks"
+for pks_file in "$SRC_DIR/packages/"*_api.pks; do
+    if [ -f "$pks_file" ]; then
+        echo "  ✓ src/packages/$(basename "$pks_file")"
+    fi
 done
-for provider_pks in "$SRC_DIR/packages/"*anthropic*.pks "$SRC_DIR/packages/"*google*.pks "$SRC_DIR/packages/"*openai*.pks; do
-    if [ -f "$provider_pks" ]; then
-        echo "  ✓ src/packages/$(basename "$provider_pks")"
+for pks_file in "$SRC_DIR/packages/"*.pks; do
+    filename=$(basename "$pks_file")
+    if [[ "$filename" != "uc_ai.pks" && "$filename" != *"_api.pks" ]]; then
+        echo "  ✓ src/packages/$filename"
     fi
 done
 
 echo "Package bodies:"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    [ -f "$SRC_DIR/packages/${api_pkg}.pkb" ] && echo "  ✓ src/packages/${api_pkg}.pkb"
+for pkb_file in "$SRC_DIR/packages/"*_api.pkb; do
+    if [ -f "$pkb_file" ]; then
+        echo "  ✓ src/packages/$(basename "$pkb_file")"
+    fi
 done
-for provider_pkb in "$SRC_DIR/packages/"*anthropic*.pkb "$SRC_DIR/packages/"*google*.pkb "$SRC_DIR/packages/"*openai*.pkb; do
-    if [ -f "$provider_pkb" ]; then
-        echo "  ✓ src/packages/$(basename "$provider_pkb")"
+for pkb_file in "$SRC_DIR/packages/"*.pkb; do
+    filename=$(basename "$pkb_file")
+    if [[ "$filename" != "uc_ai.pkb" && "$filename" != *"_api.pkb" ]]; then
+        echo "  ✓ src/packages/$filename"
     fi
 done
 [ -f "$SRC_DIR/packages/uc_ai.pkb" ] && echo "  ✓ src/packages/uc_ai.pkb"
@@ -215,25 +183,23 @@ OUTPUT_FILE_WITH_LOGGER="${ROOT_DIR}/install_uc_ai_complete_with_logger.sql"
 
 # Start writing the install script with logger
 cat > "$OUTPUT_FILE_WITH_LOGGER" << 'EOF'
--- UC AI Framework Complete Installation Script with Logger
--- This is a self-contained script with all file contents inlined including the logger
--- Run this script to install the complete framework with OpenAI, Anthropic, Google support and Logger
+-- UC AI Installation Script with Logger
 
 PROMPT ===================================================
-PROMPT UC AI Framework with Logger Installation Starting...
+PROMPT UC AI Installation with Logger Starting...
 PROMPT ===================================================
 
 EOF
 
 # First install the logger
-echo "PROMPT Installing Logger Framework..." >> "$OUTPUT_FILE_WITH_LOGGER"
+echo "PROMPT Installing Logger..." >> "$OUTPUT_FILE_WITH_LOGGER"
 echo "PROMPT This installs the Oracle Logger framework for debugging and monitoring" >> "$OUTPUT_FILE_WITH_LOGGER"
-add_file_content "$SRC_DIR/dependencies/logger_3.1.1/logger_install.sql" "Oracle Logger Framework Installation" "$OUTPUT_FILE_WITH_LOGGER"
+add_file_content "$SRC_DIR/dependencies/logger_3.1.1/logger_install.sql" "Oracle Logger Installation" "$OUTPUT_FILE_WITH_LOGGER"
 
 # Then add all the UC AI content
-echo "PROMPT Installing UC AI Framework Tables..." >> "$OUTPUT_FILE_WITH_LOGGER"
+echo "PROMPT Installing UC AI Tables..." >> "$OUTPUT_FILE_WITH_LOGGER"
 echo "PROMPT This creates the core database tables for message storage and configuration" >> "$OUTPUT_FILE_WITH_LOGGER"
-add_file_content "$SRC_DIR/tables/install.sql" "UC AI Framework Tables" "$OUTPUT_FILE_WITH_LOGGER"
+add_file_content "$SRC_DIR/tables/install.sql" "UC AI Tables" "$OUTPUT_FILE_WITH_LOGGER"
 
 # Install triggers if they exist
 if [ -f "$SRC_DIR/triggers/triggers.sql" ]; then
@@ -251,7 +217,7 @@ echo "PROMPT Installing package specifications (headers)..." >> "$OUTPUT_FILE_WI
 
 # 1. Core types package first (uc_ai.pks contains the main types)
 echo "PROMPT - Installing core types and constants..." >> "$OUTPUT_FILE_WITH_LOGGER"
-add_file_content "$SRC_DIR/packages/uc_ai.pks" "Core UC AI Package Specification - Types and Constants" "$OUTPUT_FILE_WITH_LOGGER"
+add_file_content "$SRC_DIR/packages/uc_ai.pks" "Core UC AI Package Specification - uc_ai.pks" "$OUTPUT_FILE_WITH_LOGGER"
 
 # 2. Dependencies
 echo "PROMPT - Installing utility functions..." >> "$OUTPUT_FILE_WITH_LOGGER"
@@ -259,35 +225,20 @@ add_file_content "$SRC_DIR/dependencies/key_function.sql" "Utility Functions" "$
 
 # 3. API packages (tools and message APIs)
 echo "PROMPT - Installing API package specifications..." >> "$OUTPUT_FILE_WITH_LOGGER"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    if [ -f "$SRC_DIR/packages/${api_pkg}.pks" ]; then
-        case "$api_pkg" in
-            "uc_ai_tools_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pks" "Tools API Package Specification" "$OUTPUT_FILE_WITH_LOGGER"
-                ;;
-            "uc_ai_message_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pks" "Message API Package Specification" "$OUTPUT_FILE_WITH_LOGGER"
-                ;;
-        esac
+for pks_file in "$SRC_DIR/packages/"*_api.pks; do
+    if [ -f "$pks_file" ]; then
+        filename=$(basename "$pks_file")
+        add_file_content "$pks_file" "API Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER"
     fi
 done
 
-# 4. Provider packages (alphabetical order)
+# 4. Provider packages (all other .pks files except uc_ai.pks and API packages)
 echo "PROMPT - Installing AI provider package specifications..." >> "$OUTPUT_FILE_WITH_LOGGER"
-for provider_pks in "$SRC_DIR/packages/"*anthropic*.pks "$SRC_DIR/packages/"*google*.pks "$SRC_DIR/packages/"*openai*.pks; do
-    if [ -f "$provider_pks" ]; then
-        provider_file=$(basename "$provider_pks")
-        case "$provider_file" in
-            *anthropic*)
-                add_file_content "$provider_pks" "Anthropic AI Provider Package Specification" "$OUTPUT_FILE_WITH_LOGGER"
-                ;;
-            *google*)
-                add_file_content "$provider_pks" "Google Gemini AI Provider Package Specification" "$OUTPUT_FILE_WITH_LOGGER"
-                ;;
-            *openai*)
-                add_file_content "$provider_pks" "OpenAI Provider Package Specification" "$OUTPUT_FILE_WITH_LOGGER"
-                ;;
-        esac
+for pks_file in "$SRC_DIR/packages/"*.pks; do
+    filename=$(basename "$pks_file")
+    # Skip uc_ai.pks (already installed) and API packages (already installed)
+    if [[ "$filename" != "uc_ai.pks" && "$filename" != *"_api.pks" ]]; then
+        add_file_content "$pks_file" "Provider Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER"
     fi
 done
 
@@ -296,61 +247,146 @@ echo "PROMPT Installing package bodies (implementations)..." >> "$OUTPUT_FILE_WI
 
 # API packages first
 echo "PROMPT - Installing API package bodies..." >> "$OUTPUT_FILE_WITH_LOGGER"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    if [ -f "$SRC_DIR/packages/${api_pkg}.pkb" ]; then
-        case "$api_pkg" in
-            "uc_ai_tools_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pkb" "Tools API Package Body - Implementation" "$OUTPUT_FILE_WITH_LOGGER"
-                ;;
-            "uc_ai_message_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pkb" "Message API Package Body - Implementation" "$OUTPUT_FILE_WITH_LOGGER"
-                ;;
-        esac
+for pkb_file in "$SRC_DIR/packages/"*_api.pkb; do
+    if [ -f "$pkb_file" ]; then
+        filename=$(basename "$pkb_file")
+        add_file_content "$pkb_file" "API Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER"
     fi
 done
 
 # Provider packages
 echo "PROMPT - Installing AI provider package bodies..." >> "$OUTPUT_FILE_WITH_LOGGER"
-for provider_pkb in "$SRC_DIR/packages/"*anthropic*.pkb "$SRC_DIR/packages/"*google*.pkb "$SRC_DIR/packages/"*openai*.pkb; do
-    if [ -f "$provider_pkb" ]; then
-        provider_file=$(basename "$provider_pkb")
-        case "$provider_file" in
-            *anthropic*)
-                add_file_content "$provider_pkb" "Anthropic AI Provider Package Body - Implementation" "$OUTPUT_FILE_WITH_LOGGER"
-                ;;
-            *google*)
-                add_file_content "$provider_pkb" "Google Gemini AI Provider Package Body - Implementation" "$OUTPUT_FILE_WITH_LOGGER"
-                ;;
-            *openai*)
-                add_file_content "$provider_pkb" "OpenAI Provider Package Body - Implementation" "$OUTPUT_FILE_WITH_LOGGER"
-                ;;
-        esac
+for pkb_file in "$SRC_DIR/packages/"*.pkb; do
+    filename=$(basename "$pkb_file")
+    # Skip uc_ai.pkb (installed last) and API packages (already installed)
+    if [[ "$filename" != "uc_ai.pkb" && "$filename" != *"_api.pkb" ]]; then
+        add_file_content "$pkb_file" "Provider Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER"
     fi
 done
 
 # Core package body last (depends on others)
 echo "PROMPT - Installing core UC AI package body..." >> "$OUTPUT_FILE_WITH_LOGGER"
-add_file_content "$SRC_DIR/packages/uc_ai.pkb" "Core UC AI Package Body - Main Implementation" "$OUTPUT_FILE_WITH_LOGGER"
+add_file_content "$SRC_DIR/packages/uc_ai.pkb" "Core UC AI Package Body - uc_ai.pkb" "$OUTPUT_FILE_WITH_LOGGER"
 
 # Final completion message for logger version
 cat >> "$OUTPUT_FILE_WITH_LOGGER" << 'EOF'
 
 PROMPT ===================================================
-PROMPT UC AI Framework with Logger installation complete!
-PROMPT
-PROMPT Installed components:
-PROMPT - Oracle Logger Framework (for debugging and monitoring)
-PROMPT - UC AI Framework with all providers
-PROMPT
-PROMPT Available AI providers:
-PROMPT - OpenAI GPT models
-PROMPT - Anthropic Claude models  
-PROMPT - Google Gemini models
-PROMPT
-PROMPT Use uc_ai.generate_text() to start generating AI responses
-PROMPT Use logger.log() for debugging and monitoring
+PROMPT UC AI with Logger installation complete!
+PROMPT Refer to the documentation for usage instructions: https://www.united-codes.com/products/uc-ai/docs/
 PROMPT ===================================================
 EOF
 
 echo "Generated install_uc_ai_complete_with_logger.sql successfully!"
 echo "Logger version output file: $OUTPUT_FILE_WITH_LOGGER"
+
+echo ""
+echo "Generating install_uc_ai_complete_with_logger_noop.sql with no-op logger..."
+
+# Generate the complete script with no-op logger
+OUTPUT_FILE_WITH_LOGGER_NOOP="${ROOT_DIR}/install_uc_ai_complete_with_logger_noop.sql"
+
+# Start writing the install script with no-op logger
+cat > "$OUTPUT_FILE_WITH_LOGGER_NOOP" << 'EOF'
+-- UC AI Installation Script with No-Op Logger Framework
+
+PROMPT ===================================================
+PROMPT UC AI with No-Op Logger Installation Starting...
+PROMPT ===================================================
+
+EOF
+
+# First install the no-op logger
+echo "PROMPT Installing No-Op Logger Framework..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+echo "PROMPT This installs the Oracle Logger no-op version (same API, no actual logging)" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+add_file_content "$SRC_DIR/dependencies/logger_3.1.1/logger_no_op.sql" "Oracle Logger No-Op Framework Installation" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+
+# Then add all the UC AI content
+echo "PROMPT Installing UC AI Tables..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+echo "PROMPT This creates the core database tables for message storage and configuration" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+add_file_content "$SRC_DIR/tables/install.sql" "UC AI Tables" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+
+# Install triggers if they exist
+if [ -f "$SRC_DIR/triggers/triggers.sql" ]; then
+    echo "PROMPT Installing database triggers..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+    echo "PROMPT This sets up automatic data validation and logging triggers" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+    add_file_content "$SRC_DIR/triggers/triggers.sql" "Database Triggers" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+fi
+
+echo "PROMPT Installing PL/SQL packages..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+echo "PROMPT This includes all AI provider packages and utility functions" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+
+# Install package specifications first (in dependency order)
+echo "" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+echo "PROMPT Installing package specifications (headers)..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+
+# 1. Core types package first (uc_ai.pks contains the main types)
+echo "PROMPT - Installing core types and constants..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+add_file_content "$SRC_DIR/packages/uc_ai.pks" "Core UC AI Package Specification - uc_ai.pks" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+
+# 2. Dependencies
+echo "PROMPT - Installing utility functions..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+add_file_content "$SRC_DIR/dependencies/key_function.sql" "Utility Functions" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+
+# 3. API packages (tools and message APIs)
+echo "PROMPT - Installing API package specifications..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+for pks_file in "$SRC_DIR/packages/"*_api.pks; do
+    if [ -f "$pks_file" ]; then
+        filename=$(basename "$pks_file")
+        add_file_content "$pks_file" "API Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+    fi
+done
+
+# 4. Provider packages (all other .pks files except uc_ai.pks and API packages)
+echo "PROMPT - Installing AI provider package specifications..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+for pks_file in "$SRC_DIR/packages/"*.pks; do
+    filename=$(basename "$pks_file")
+    # Skip uc_ai.pks (already installed) and API packages (already installed)
+    if [[ "$filename" != "uc_ai.pks" && "$filename" != *"_api.pks" ]]; then
+        add_file_content "$pks_file" "Provider Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+    fi
+done
+
+# Install package bodies (same order as specifications)
+echo "PROMPT Installing package bodies (implementations)..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+
+# API packages first
+echo "PROMPT - Installing API package bodies..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+for pkb_file in "$SRC_DIR/packages/"*_api.pkb; do
+    if [ -f "$pkb_file" ]; then
+        filename=$(basename "$pkb_file")
+        add_file_content "$pkb_file" "API Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+    fi
+done
+
+# Provider packages
+echo "PROMPT - Installing AI provider package bodies..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+for pkb_file in "$SRC_DIR/packages/"*.pkb; do
+    filename=$(basename "$pkb_file")
+    # Skip uc_ai.pkb (installed last) and API packages (already installed)
+    if [[ "$filename" != "uc_ai.pkb" && "$filename" != *"_api.pkb" ]]; then
+        add_file_content "$pkb_file" "Provider Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+    fi
+done
+
+# Core package body last (depends on others)
+echo "PROMPT - Installing core UC AI package body..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+add_file_content "$SRC_DIR/packages/uc_ai.pkb" "Core UC AI Package Body - uc_ai.pkb" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+
+# Final completion message for no-op logger version
+cat >> "$OUTPUT_FILE_WITH_LOGGER_NOOP" << 'EOF'
+
+PROMPT ===================================================
+PROMPT UC AI with No-Op Logger installation complete!
+PROMPT 
+PROMPT The no-op logger provides the same API as the full logger
+PROMPT but does not actually write to any tables or create dependencies.
+PROMPT This is useful for environments where logging is not needed
+PROMPT or where you want to minimize database overhead.
+PROMPT
+PROMPT Refer to the documentation for usage instructions: https://www.united-codes.com/products/uc-ai/docs/
+PROMPT ===================================================
+EOF
+
+echo "Generated install_uc_ai_complete_with_logger_noop.sql successfully!"
+echo "No-op Logger version output file: $OUTPUT_FILE_WITH_LOGGER_NOOP"

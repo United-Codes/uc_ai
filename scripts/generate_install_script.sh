@@ -111,14 +111,8 @@ fi
 
 echo "" >> "$OUTPUT_FILE"
 echo "PROMPT ===================================================" >> "$OUTPUT_FILE"
-echo "PROMPT UC AI Framework installation complete!" >> "$OUTPUT_FILE"
-echo "PROMPT" >> "$OUTPUT_FILE"
-echo "PROMPT Available AI providers:" >> "$OUTPUT_FILE"
-echo "PROMPT - OpenAI GPT models" >> "$OUTPUT_FILE"
-echo "PROMPT - Anthropic Claude models" >> "$OUTPUT_FILE"
-echo "PROMPT - Google Gemini models" >> "$OUTPUT_FILE"
-echo "PROMPT" >> "$OUTPUT_FILE"
-echo "PROMPT Use uc_ai.generate_text() to start generating AI responses" >> "$OUTPUT_FILE"
+echo "PROMPT UC AI installation complete!" >> "$OUTPUT_FILE"
+echo "PROMPT Refer to the documentation for usage instructions: https://www.united-codes.com/products/uc-ai/docs/" >> "$OUTPUT_FILE"
 echo "PROMPT ===================================================" >> "$OUTPUT_FILE"
 
 echo "Generated install_uc_ai.sql successfully!"
