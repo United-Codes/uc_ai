@@ -20,5 +20,8 @@ create or replace package test_uc_ai_openai as
   --%test(image file input)
   procedure image_file_input;
 
+  --%test(reasoning)
+  procedure reasoning;
+
 end test_uc_ai_openai;
 /
