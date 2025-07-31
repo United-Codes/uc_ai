@@ -322,7 +322,7 @@ create or replace package body test_uc_ai_openai as
     ut.expect(lower(l_final_message)).to_be_like('%filter%');
 
     l_messages := treat(l_result.get('messages') as json_array_t);
-    uc_ai_test_message_utils.validate_message_array(l_messages, 'Image file input before');
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Reasoning Response');
     l_message_count := l_messages.get_size;
     -- One user message and one assistant message are expected
     -- OpenAI adds no reasoning messages
