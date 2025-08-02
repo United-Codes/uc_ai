@@ -8,8 +8,7 @@ create or replace package body uc_ai_google as
   g_final_message clob;
 
   -- Chat API reference: https://ai.google.dev/api/generate-content
-
-  function get_text_content (
+  function get_thought_content (
     p_message in json_object_t
   ) return json_object_t
   as
@@ -17,6 +16,39 @@ create or replace package body uc_ai_google as
     l_provider_options json_object_t;
     l_lm_text_content  json_object_t;
   begin
+    l_content := p_message.get_clob('text');
+    l_provider_options := p_message;
+    l_provider_options.remove('text');
+
+    l_lm_text_content := uc_ai_message_api.create_reasoning_content(
+      p_text             => l_content
+    , p_provider_options => l_provider_options
+    );
+
+    g_final_message := l_content;
+
+    return l_lm_text_content;
+  end get_thought_content;
+
+  function get_text_content (
+    p_message in json_object_t
+  ) return json_object_t
+  as
+    l_thought boolean;
+    l_content clob;
+    l_provider_options json_object_t;
+    l_lm_text_content  json_object_t;
+  begin
+    if p_message.has('thought') then
+      l_thought := p_message.get_boolean('thought');
+    else
+      l_thought := false;
+    end if;
+
+    if l_thought then
+      return get_thought_content(p_message);
+    end if;
+
     l_content := p_message.get_clob('text');
     l_provider_options := p_message;
     l_provider_options.remove('text');
@@ -31,8 +63,7 @@ create or replace package body uc_ai_google as
     return l_lm_text_content;
   end get_text_content;
 
-
-/*
+  /*
    * Convert standardized Language Model messages to Google Gemini format
    * Returns Google-compatible messages array that can be sent directly to Gemini API
    * Also extracts system prompt separately since Google uses a separate systemInstruction field
@@ -561,6 +592,20 @@ create or replace package body uc_ai_google as
         l_tools_array.append(l_tools_wrapper);
         l_input_obj.put('tools', l_tools_array);
         logger.log('Tools configured', l_scope, 'Tool count: ' || l_tools.get_size);
+      end;
+    end if;
+
+    if uc_ai.g_enable_reasoning then
+      declare
+        l_generation_config json_object_t := json_object_t(); 
+        l_thinking_config json_object_t := json_object_t();
+      begin
+        l_thinking_config.put('includeThoughts', true);
+        if g_reasoning_budget is not null then
+          l_thinking_config.put('thinkingBudget', g_reasoning_budget);
+        end if;
+        l_generation_config.put('thinkingConfig', l_thinking_config);
+        l_input_obj.put('generationConfig', l_generation_config);
       end;
     end if;
 
