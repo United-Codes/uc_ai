@@ -1,0 +1,159 @@
+---
+title: Reasoning / Thinking
+description: Overview of how to use reasoning capabilities in UC AI
+sidebar:
+  order: 40
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+AI reasoning means an AI system can **think through problems in a step-by-step way**, analyzing information logically and reaching conclusions through deliberate thought, rather than just matching patterns. This allows AI to handle complex problems more effectively, provide better explanations for its decisions, and tackle new situations not directly seen in its training data.
+
+Reasoning consumes an additional amount of tokens, making it substantially more expensive than standard text generation.
+
+## Provider Support
+
+Different providers implement reasoning in various ways. Thats why UC AI provides provider specific settings to control reasoning behavior. See the provider pages for more details on how to configure reasoning for each provider:
+
+- [Anthropic Claude](/products/uc-ai/docs/providers/anthropic/#reasoning--extended-thinking)
+- [Google Gemini](/products/uc-ai/docs/providers/google/#reasoning--thinking)
+- [Ollama](/products/uc-ai/docs/providers/ollama/#reasoning--thinking)
+- [OpenAI GPT](/products/uc-ai/docs/providers/openai/#reasoning--thinking)
+
+## Basic Usage
+
+To enable reasoning, you need to set the global flag `uc_ai.g_enable_reasoning := true;`. This allows the AI to use reasoning capabilities when generating responses.
+
+Additionally, you can configure how much reasoning the AI should do by setting provider-specific parameters. More effort will result in more detailed thought processes, but will also increase response time and token usage. This also highly depends on the task complexity and the model used.
+
+### Example1: Reasoning with Google Gemini
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_final_message clob;
+  l_messages json_array_t;
+BEGIN
+  -- Enable reasoning
+  uc_ai.g_enable_reasoning := true;
+
+  -- For Google models, set reasoning budget
+  uc_ai_google.g_reasoning_budget := 512;
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why?',
+    p_provider => uc_ai.c_provider_google,
+    p_model => uc_ai_google.c_model_gemini_2_5_flash
+  );
+
+  l_final_message := l_result.get_clob('final_message');
+  dbms_output.put_line('Final Answer: ' || l_final_message);
+END;
+/
+```
+
+### Example2: Reasoning with OpenAI
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_final_message clob;
+  l_messages json_array_t;
+BEGIN
+  -- Enable reasoning
+  uc_ai.g_enable_reasoning := true;
+  -- Set reasoning effort
+  uc_ai_openai.g_reasoning_effort := 'low'; -- low, medium, high
+
+  l_result := uc_ai.GENERATE_TEXT(
+    p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_o4_mini
+  );
+
+  l_final_message := l_result.get_clob('final_message');
+  dbms_output.put_line('Final Answer: ' || l_final_message);
+END;
+/
+```
+
+## Processing Reasoning Content
+
+### Message Structure with Reasoning
+
+When reasoning is enabled, the assistant message will contain multiple content items:
+
+```json
+{
+  "role": "assistant",
+  "content": [
+    {
+      "type": "reasoning",
+      "text": "Let me think about this step by step. The Great Filter hypothesis suggests there's a barrier that prevents life from developing into advanced civilizations..."
+    },
+    {
+      "type": "text",
+      "text": "Based on current evidence, we are likely before the Great Filter, as we haven't yet achieved interstellar civilization or solved existential risks."
+    }
+  ]
+}
+```
+
+Only OpenAI does not return reasoning content.
+
+### Extracting Reasoning Content
+
+Here is how you can extract reasoning content from the response:
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_messages json_array_t;
+  l_assistant_message json_object_t;
+  l_content_array json_array_t;
+  l_content_item json_object_t;
+  l_reasoning_found boolean := false;
+BEGIN
+  uc_ai.g_enable_reasoning := true;et
+  uc_ai_google.g_reasoning_budget := 512;
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why?',
+    p_provider => uc_ai.c_provider_google,
+    p_model => uc_ai_google.c_model_gemini_2_5_flash
+  );
+
+  l_messages := treat(l_result.get('messages') as json_array_t);
+
+  -- Get the assistant message (the last one)
+  l_assistant_message := treat(l_messages.get(l_messages.get_size - 1) as json_object_t);
+
+  IF l_assistant_message.get_string('role') = 'assistant' THEN
+    l_content_array := l_assistant_message.get_array('content');
+
+    -- Loop through content items
+    FOR i IN 0 .. l_content_array.get_size - 1 LOOP
+      l_content_item := treat(l_content_array.get(i) as json_object_t);
+
+      IF l_content_item.get_string('type') = 'reasoning' THEN
+        dbms_output.put_line('Reasoning: ' || l_content_item.get_clob('text'));
+      END IF;
+    END LOOP;
+
+    IF NOT l_reasoning_found THEN
+      dbms_output.put_line('No reasoning content found (may not be supported by this provider/model)');
+    END IF;
+  ELSE
+    raise_application_error(-20001, 'Did not find expected assistant message structure');
+  END IF;
+END;
+/
+```
+
+## Best Practices
+
+Refer to these provider-specific guides for best practices on using reasoning effectively:
+
+- [Anthropic Reasoning Best Practices](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#best-practices-and-considerations-for-extended-thinking)
+- [Google Reasoning Best Practices](https://ai.google.dev/gemini-api/docs/thinking#best-practices)
+- [OpenAI Reasoning Best Practices](https://platform.openai.com/docs/guides/reasoning-best-practices#page-top)

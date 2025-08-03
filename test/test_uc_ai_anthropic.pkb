@@ -247,5 +247,66 @@ create or replace package body test_uc_ai_anthropic as
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
   end image_file_input;
 
+
+  procedure reasoning
+  as
+    l_messages json_array_t := json_array_t();
+    l_result json_object_t;
+    l_message_count pls_integer;
+    l_final_message clob;
+    l_second_message json_object_t;
+    l_second_message_content json_array_t;
+    l_content json_object_t;
+    l_reasoning_message_found boolean := false;
+  begin
+    uc_ai.g_enable_tools := false; -- disable tools for this test
+    uc_ai.g_enable_reasoning := true; -- enable reasoning for this test
+    uc_ai_anthropic.g_reasoning_budget_tokens := 1024;
+
+    l_result := uc_ai.GENERATE_TEXT(
+      p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
+      p_provider => uc_ai.c_provider_anthropic,
+      p_model => uc_ai_anthropic.c_model_claude_4_sonnet
+    );
+
+    sys.dbms_output.put_line('Result: ' || l_result.to_string);
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(lower(l_final_message)).to_be_like('%filter%');
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Reasoning response');
+    l_message_count := l_messages.get_size;
+    -- One user message and one assistant message are expected
+    ut.expect(l_message_count).to_equal(2);
+
+    l_second_message := treat(l_messages.get(1) as json_object_t);
+    ut.expect(l_second_message.get_string('role')).to_equal('assistant');
+
+    l_second_message_content := l_second_message.get_array('content');
+    ut.expect(l_second_message_content.get_size).to_equal(2);
+
+    <<assistant_content_loop>>
+    for i in 0 .. l_second_message_content.get_size - 1 
+    loop
+      l_content := treat(l_second_message_content.get(i) as json_object_t);
+      if l_content.get_string('type') = 'reasoning' then
+        sys.dbms_output.put_line('Reasoning content: ' || l_content.get_clob('text'));
+        l_reasoning_message_found := true;
+      elsif l_content.get_string('type') = 'text' then
+        null;
+      else
+        sys.dbms_output.put_line('Unknown content type: ' || l_content.get_string('type'));
+        ut.expect(false, 'Unknown content type in reasoning response: ' || l_content.get_string('type')).to_equal(true);
+      end if;
+    end loop assistant_content_loop;
+
+    ut.expect(l_reasoning_message_found, 'No reasoning message found in response').to_equal(true);
+
+    ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
+
+  end reasoning;
+
 end test_uc_ai_anthropic;
 /

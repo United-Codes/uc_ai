@@ -1,0 +1,113 @@
+---
+title: Ollama
+description: UC AI provider documentation for Ollama
+---
+
+The UC AI Ollama package provides integration with locally-running Ollama instances, allowing you to use open-source language models within your Oracle database applications.
+
+## Features
+
+- Support for popular open-source models (Llama, Mistral, Qwen, DeepSeek, Gemma, Phi, CodeLlama)
+- Full function calling (tools) support
+- Reasoning capabilities with models that support it
+- Multi-modal support (text, images, PDFs) with models that support it
+- No API keys required (runs locally)
+
+## Prerequisites
+
+1. Install and run Ollama on your local machine or server
+2. Download the models you want to use
+3. Ensure Oracle database can access the Ollama API endpoint
+
+You can follow the [Ollama installation guide](https://github.com/ollama/ollama) for detailed instructions on setting up Ollama. You can run it containerized or directly on your machine, or install the MacOS/Windows GUI application.
+
+## Configuration
+
+By default, the package connects to `http://localhost:11434/api/chat`. If your Ollama instance is running on a different host or port, you'll need to modify the `c_api_url` constant in the package body.
+
+```sql
+-- In my case the database is running in a Docker container, so I use the host's internal address
+uc_ai.g_base_url := 'host.containers.internal:11434/api';
+
+-- instead you can use any ip or hostname
+uc_ai.g_base_url := 'example-ollama-server.com:11434/api';
+```
+
+## Models
+
+Ollama support a wide range of open-source models, you can browse them [on the Ollama website](https://ollama.com/search). The UC AI Ollama package does not come with pre-defined model constants as you can only use models that you have downloaded and installed locally. So instead create or own constants like `qwen3:8b` for the 8 billion parameter Qwen 3 model.
+
+## Usage Examples
+
+### Basic Text Generation
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai.g_base_url := 'host.containers.internal:11434/api';
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is Oracle APEX?',
+    p_provider => uc_ai.c_provider_ollama,
+    p_model => 'qwen3:8b'
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### With System Prompt
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Write a SQL query to find all employees hired this year',
+    p_system_prompt => 'You are a helpful SQL expert. Write clean, efficient queries.',
+    p_provider => uc_ai.c_provider_ollama,
+    p_model => 'codellama:70b'
+  );
+
+  dbms_output.put_line('SQL Query: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### Using Tools/Function Calling
+
+Refer to the [list of models that support tools](https://ollama.com/search?c=tools) to find models that can use function calling. Note that small models might support it but are not very capable to do complex tasks with it. I noticed that enabling reasoning can help the LLM to call the tools more effectively.
+
+See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to set up and use tools.
+
+### Multi-modal Analysis
+
+Refer to the [list of models that support vision](https://ollama.com/search?c=vision) to find models that can use to analyze images.
+
+Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for examples on how to analyze images.
+
+### Reasoning / Thinking
+
+Make sure that you use a model that supports reasoning, such as `qwen3:8b` or `deepseek-r1:8b`. [Here is a list of models that support reasoning](https://ollama.com/search?c=thinking).
+
+Make sure to set the `uc_ai.g_enable_reasoning` variable to `true` in the package specification.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai.g_base_url := 'host.containers.internal:11434/api';
+  uc_ai.g_enable_reasoning := true;
+
+  l_result := uc_ai.GENERATE_TEXT(
+    p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
+    p_provider => uc_ai.c_provider_ollama,
+    p_model => c_model_qwen_4b
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```

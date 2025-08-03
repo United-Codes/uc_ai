@@ -20,7 +20,7 @@ create or replace package body uc_ai_anthropic as
     l_lm_text_content  json_object_t;
   begin
     l_content := p_message.get_clob('text');
-    l_provider_options := p_message;
+    l_provider_options := p_message.clone();
     l_provider_options.remove('type');
     l_provider_options.remove('text');
 
@@ -34,25 +34,27 @@ create or replace package body uc_ai_anthropic as
     return l_lm_text_content;
   end get_text_content;
 
-  procedure process_text_message(
-    p_message in json_object_t
-  )
-  as
-    l_lm_text_content  json_object_t;
-    l_assistant_message json_object_t;
-    l_arr json_array_t;
-  begin
-    l_lm_text_content := get_text_content(p_message);
 
-    l_arr := json_array_t();
-    l_arr.append(l_lm_text_content);
-    l_assistant_message := uc_ai_message_api.create_assistant_message(
-      p_content => l_arr
+  function get_reasoning_content(
+    p_message in json_object_t
+  ) return json_object_t
+  as
+    l_reasoning_content clob;
+    l_provider_options json_object_t;
+    l_lm_reasoning_content json_object_t;
+  begin
+    l_reasoning_content := p_message.get_clob('thinking');
+    l_provider_options := p_message.clone();
+    l_provider_options.remove('type');
+    l_provider_options.remove('thinking');
+
+    l_lm_reasoning_content := uc_ai_message_api.create_reasoning_content(
+      p_text             => l_reasoning_content
+    , p_provider_options => l_provider_options
     );
 
-    g_normalized_messages.append(l_assistant_message);
-  end process_text_message;
-
+    return l_lm_reasoning_content;
+  end get_reasoning_content;
 
   /*
    * Convert standardized Language Model messages to Anthropic format
@@ -407,65 +409,65 @@ create or replace package body uc_ai_anthropic as
         loop
           l_content_prompt := treat(l_content.get(j) as json_object_t);
           
-          if l_content_prompt.get_string('type') = 'tool_use' then
-            logger.log('Executing tool use', l_scope, l_content_prompt.to_clob);
+          case l_content_prompt.get_string('type')
+            when 'tool_use' then
+              logger.log('Executing tool use', l_scope, l_content_prompt.to_clob);
 
-            g_tool_calls := g_tool_calls + 1;
-
-            l_tool_call_id := l_content_prompt.get_string('id');
-            l_tool_name := l_content_prompt.get_string('name');
-            l_tool_input := l_content_prompt.get_object('input');
-            if l_tool_input is not null then
-              l_param_name := uc_ai_tools_api.get_tools_object_param_name(l_tool_name);
-              if l_param_name is not null then
-                l_tool_input := l_tool_input.get_object(l_param_name);
+              g_tool_calls := g_tool_calls + 1;
+   
+              l_tool_call_id := l_content_prompt.get_string('id');
+              l_tool_name := l_content_prompt.get_string('name');
+              l_tool_input := l_content_prompt.get_object('input');
+              if l_tool_input is not null then
+                l_param_name := uc_ai_tools_api.get_tools_object_param_name(l_tool_name);
+                if l_param_name is not null then
+                  l_tool_input := l_tool_input.get_object(l_param_name);
+                end if;
               end if;
-            end if;
-
-            l_new_msg := uc_ai_message_api.create_tool_call_content(
-              p_tool_call_id => l_tool_call_id
-            , p_tool_name    => l_tool_name
-            , p_args         => l_tool_input.to_clob
-            );
-            l_normalized_messages.append(l_new_msg);
-
-            logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name || ', Tool ID: ' || l_tool_call_id);
-            if l_tool_input is not null then
-              logger.log('Tool input', l_scope, 'Input: ' || l_tool_input.to_clob);
+   
+              l_new_msg := uc_ai_message_api.create_tool_call_content(
+                p_tool_call_id => l_tool_call_id
+              , p_tool_name    => l_tool_name
+              , p_args         => l_tool_input.to_clob
+              );
+              l_normalized_messages.append(l_new_msg);
+   
+              logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name || ', Tool ID: ' || l_tool_call_id);
+              if l_tool_input is not null then
+                logger.log('Tool input', l_scope, 'Input: ' || l_tool_input.to_clob);
+              else
+                logger.log('Tool input', l_scope, 'No input provided');
+                l_tool_input := json_object_t();
+              end if;
+   
+              -- Execute the tool and get result
+              l_tool_result := uc_ai_tools_api.execute_tool(
+                p_tool_code          => l_tool_name
+              , p_arguments          => l_tool_input
+              );
+   
+              -- Create tool result object for the content array
+              l_tool_result_obj := json_object_t();
+              l_tool_result_obj.put('type', 'tool_result');
+              l_tool_result_obj.put('tool_use_id', l_tool_call_id);
+              l_tool_result_obj.put('content', l_tool_result);
+              l_tool_results.append(l_tool_result_obj);
+             
+              l_new_msg := uc_ai_message_api.create_tool_result_content(
+                p_tool_call_id => l_tool_call_id,
+                p_tool_name    => l_tool_name,
+                p_result       => l_tool_result
+              );
+              l_normalized_tool_results.append(l_new_msg);
+            when 'text' then
+              logger.log('Text content block found', l_scope, l_content_prompt.to_clob);
+   
+              l_new_msg := get_text_content(l_content_prompt);
+              l_normalized_messages.append(l_new_msg);
             else
-              logger.log('Tool input', l_scope, 'No input provided');
-              l_tool_input := json_object_t();
-            end if;
-
-            -- Execute the tool and get result
-            l_tool_result := uc_ai_tools_api.execute_tool(
-              p_tool_code          => l_tool_name
-            , p_arguments          => l_tool_input
-            );
-
-            -- Create tool result object for the content array
-            l_tool_result_obj := json_object_t();
-            l_tool_result_obj.put('type', 'tool_result');
-            l_tool_result_obj.put('tool_use_id', l_tool_call_id);
-            l_tool_result_obj.put('content', l_tool_result);
-            l_tool_results.append(l_tool_result_obj);
-           
-            l_new_msg := uc_ai_message_api.create_tool_result_content(
-              p_tool_call_id => l_tool_call_id,
-              p_tool_name    => l_tool_name,
-              p_result       => l_tool_result
-            );
-            l_normalized_tool_results.append(l_new_msg);
-          elsif l_content_prompt.get_string('type') = 'text' then
-            -- Handle text content blocks (if any)
-            logger.log('Text content block found', l_scope, l_content_prompt.to_clob);
-
-            l_new_msg := get_text_content(l_content_prompt);
-            l_normalized_messages.append(l_new_msg);
-          else
-            raise_application_error(-20001, 'Unsupported content type: ' || l_content_prompt.get_string('type'));
-
-          end if;
+              logger.log_error('Unsupported content type in tool use: ' || l_content_prompt.get_string('type'), l_scope, l_content_prompt.to_clob);
+              raise_application_error(-20001, 'Unsupported content type: ' || l_content_prompt.get_string('type'));
+          end case;
         end loop tool_use_loop;
 
         g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
@@ -491,9 +493,40 @@ create or replace package body uc_ai_anthropic as
       end;
     else
       -- Normal completion - add AI's message to conversation
-      logger.log('Normal completion received', l_scope);
+
+      declare
+        l_content_msg       json_object_t;
+        l_content_array     json_array_t := json_array_t();
+        l_assistant_message json_object_t;
+      begin
+        <<content_loop>>
+        for i in 0 .. l_content.get_size - 1
+        loop
+          l_content_prompt := treat(l_content.get(i) as json_object_t);
+          l_content_type := l_content_prompt.get_string('type');
+      
+          case l_content_type
+            when 'text' then
+              l_content_msg := get_text_content(l_content_prompt);
+              l_content_array.append(l_content_msg);
+            when 'thinking' then
+              l_content_msg := get_reasoning_content(l_content_prompt);
+              l_content_array.append(l_content_msg);
+            else
+              logger.log_error('Unknown content type: ' || l_content_type, l_scope, l_content_prompt.to_clob);
+              raise_application_error(-20001, 'Unsupported content type: ' || l_content_type);
+          end case; 
+
+          l_messages.append(l_content_prompt);
+        end loop content_loop;
+
+        l_assistant_message := uc_ai_message_api.create_assistant_message(
+          p_content => l_content_array
+        );
+        g_normalized_messages.append(l_assistant_message);
+      end;
+
       l_messages.append(l_content_prompt);
-      process_text_message(l_content_prompt);
     end if;
 
     logger.log('End internal_generate_text - final messages count: ' || l_messages.get_size, l_scope);
@@ -538,6 +571,7 @@ create or replace package body uc_ai_anthropic as
     l_anthropic_messages json_array_t;
     l_system_prompt      clob;
     l_tools              json_array_t;
+    l_reasoning          json_object_t;
     l_result             json_object_t;
     l_message            json_object_t;
   begin
@@ -576,6 +610,13 @@ create or replace package body uc_ai_anthropic as
 
     if l_tools.get_size > 0 then
       l_input_obj.put('tools', l_tools);
+    end if;
+
+   if uc_ai.g_enable_reasoning then
+      l_reasoning := json_object_t();
+      l_reasoning.put('type', 'enabled');
+      l_reasoning.put('budget_tokens', g_reasoning_budget_tokens);
+      l_input_obj.put('thinking', l_reasoning);
     end if;
 
     l_anthropic_messages := internal_generate_text(

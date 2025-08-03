@@ -1,0 +1,116 @@
+---
+title: Anthropic
+description: UC AI provider documentation for Anthropic/Claude
+---
+
+The UC AI Anthropic package provides integration with Anthropic's Claude models, allowing you to use state-of-the-art language models within your Oracle database applications.
+
+## Features
+
+- Support for latest Claude models (Opus, Sonnet, Haiku)
+- Full function calling (tools) support
+- Advanced reasoning capabilities with Extended Thinking
+- Multi-modal support (text, images, PDFs)
+- Streaming responses
+
+## Prerequisites
+
+1. Anthropic API key
+2. Oracle database with internet access to Anthropic's API endpoints
+3. UC AI package installed
+4. Set up API key ([guide](/products/uc-ai/docs/guides/installation/#set-up-api-keys))
+
+You can get an API key by signing up at [Anthropic Console](https://console.anthropic.com/).ä
+
+## Models
+
+Anthropic builds a range of models called Claude. The Haiku models are optimized for speed and cost, Sonnet models balance performance and speed, while Opus models are the most capable but also the most expensive. See [this model reference](https://docs.anthropic.com/en/docs/about-claude/models/overview) for details on each model. Refer to [Artifical Analysis](https://artificialanalysis.ai/providers/anthropic) for a comparison of intelligence, speed, and price.
+
+The UC AI Anthropic package provides constants for these Claude models:
+
+### Claude 4 Models (Latest)
+
+- `uc_ai_anthropic.c_model_claude_4_opus` - Most capable model
+- `uc_ai_anthropic.c_model_claude_4_sonnet` - Balanced performance and speed
+
+### Claude 3.x Models
+
+- `uc_ai_anthropic.c_model_claude_3_7_sonnet`
+- `uc_ai_anthropic.c_model_claude_3_5_sonnet`
+- `uc_ai_anthropic.c_model_claude_3_5_haiku`
+- `uc_ai_anthropic.c_model_claude_3_opus`
+
+## Usage Examples
+
+### Basic Text Generation
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is Oracle APEX?',
+    p_provider => uc_ai.c_provider_anthropic,
+    p_model => uc_ai_anthropic.c_model_claude_4_sonnet
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### With System Prompt
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
+    p_system_prompt => 'You are an assistant helping users to get recipes. Please just list 3 possible dish names without instructions.',
+    p_provider => uc_ai.c_provider_anthropic,
+    p_model => uc_ai_anthropic.c_model_claude_3_5_haiku
+  );
+
+  dbms_output.put_line('Recipe suggestions: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### Tools
+
+All Claude models support tools/function calling. You can define tools in your application and Claude will call them as needed.
+
+See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to set up and use tools.
+
+### Multi-modal Analysis
+
+Claude models have vision capabilities for Image and PDF Analysis.
+
+Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for examples on how to analyze images and PDFs.
+
+### Reasoning / Extended Thinking
+
+Claude models support advanced reasoning capabilities. When enabled, Claude uses an internal reasoning process before providing its final answer. Refer to Anthropics [Extended Thinking guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for model support and best practices.
+
+Make sure to set the `uc_ai.g_enable_reasoning` variable to `true`. Additionally you can configure the reasoning budget to limit the number of tokens used for reasoning:
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai.g_enable_reasoning := true;
+  uc_ai_anthropic.g_reasoning_budget_tokens := 2048; -- Optional: set reasoning token budget
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Why have relational databases been so successful?',
+    p_provider => uc_ai.c_provider_anthropic,
+    p_model => uc_ai_anthropic.c_model_claude_4_sonnet
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+The reasoning process will be included in the response messages array as content with type `reasoning`, allowing you to inspect Claude's thought process.

@@ -38,5 +38,8 @@ create or replace package test_uc_ai_ollama as
   --%test(image file input)
   procedure image_file_input_gemma_4b;
 
+  --%test(reasoning)
+  procedure reasoning;
+
 end test_uc_ai_ollama;
 /

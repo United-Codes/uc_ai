@@ -22,6 +22,12 @@ create or replace package uc_ai_google as
   c_model_gemini_1_5_flash_8b         constant uc_ai.model_type := 'gemini-1.5-flash-8b';
   c_model_gemini_1_5_pro              constant uc_ai.model_type := 'gemini-1.5-pro';
 
+
+  -- Guide the model on the number of thinking tokens to use when generating a response
+  -- Min and max values are model-dependent, reasoning can't be disabled with 2.5 Pro
+  -- More info at https://ai.google.dev/gemini-api/docs/thinking#set-budget
+  g_reasoning_budget pls_integer; -- -1 → dynamic, 0 → no reasoning budget
+
   /*
    * Google Gemini implementation for text generation 
    */

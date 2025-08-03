@@ -266,7 +266,7 @@ create or replace package body uc_ai_openai as
     end if;
 
     l_messages := p_messages;
-    l_input_obj := p_input_obj;
+    l_input_obj := p_input_obj.clone();
     l_input_obj.put('messages', l_messages);
 
     logger.log('Request body', l_scope, l_input_obj.to_clob);
@@ -483,11 +483,11 @@ create or replace package body uc_ai_openai as
   ) return json_object_t
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'generate_text_with_messages';
-    l_input_obj    json_object_t := json_object_t();
-    l_openai_messages json_array_t;
-    l_tools        json_array_t;
-    l_result       json_object_t;
-    l_message      json_object_t;
+    l_input_obj        json_object_t := json_object_t();
+    l_openai_messages  json_array_t;
+    l_tools            json_array_t;
+    l_result           json_object_t;
+    l_message          json_object_t;
   begin
     l_result := json_object_t();
     logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
@@ -519,6 +519,10 @@ create or replace package body uc_ai_openai as
     -- Get all available tools formatted for OpenAI
     l_tools := uc_ai_tools_api.get_tools_array('openai');
     l_input_obj.put('tools', l_tools);
+
+    if uc_ai.g_enable_reasoning then
+      l_input_obj.put('reasoning_effort', uc_ai_openai.g_reasoning_effort);
+    end if;
 
     l_openai_messages := internal_generate_text(
       p_messages       => l_openai_messages

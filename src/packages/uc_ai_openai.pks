@@ -33,6 +33,10 @@ create or replace package uc_ai_openai as
   c_model_gpt_4_32k constant uc_ai.model_type := 'gpt-4-32k';
   c_model_gpt_3_5_turbo constant uc_ai.model_type := 'gpt-3.5-turbo';
 
+  -- How many reasoning tokens to generate before creating a response
+  -- More info at https://platform.openai.com/docs/guides/reasoning?api-mode=responses
+  g_reasoning_effort varchar2(32 char) := 'low'; -- 'low', 'medium', 'high'
+
   /*
    * OpenAI implementation for text generation
    */

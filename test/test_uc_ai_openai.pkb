@@ -298,5 +298,39 @@ create or replace package body test_uc_ai_openai as
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
   end image_file_input;
 
+
+  procedure reasoning
+  as
+    l_messages json_array_t := json_array_t();
+    l_result json_object_t;
+    l_message_count pls_integer;
+    l_final_message clob;
+  begin
+    uc_ai.g_enable_reasoning := true; -- enable reasoning for this test
+    uc_ai_openai.g_reasoning_effort := 'low'; -- set reasoning effort
+
+    l_result := uc_ai.GENERATE_TEXT(
+      p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_o4_mini
+    );
+
+    sys.dbms_output.put_line('Result: ' || l_result.to_string);
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(lower(l_final_message)).to_be_like('%filter%');
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Reasoning Response');
+    l_message_count := l_messages.get_size;
+    -- One user message and one assistant message are expected
+    -- OpenAI adds no reasoning messages
+    ut.expect(l_message_count).to_equal(2);
+
+    ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
+
+  end reasoning;
+
 end test_uc_ai_openai;
 /
