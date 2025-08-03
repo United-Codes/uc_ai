@@ -1,0 +1,130 @@
+---
+title: Google
+description: UC AI provider documentation for Google Gemini models
+---
+
+The UC AI Google package provides integration with Google's Gemini models, allowing you to use Google's advanced language models within your Oracle database applications.
+
+## Features
+
+- Support for latest Gemini models (Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.0 Flash, Gemini 1.5 series)
+- Full function calling (tools) support
+- Advanced reasoning capabilities with reasoning budget control
+- Multi-modal support (text, images, PDFs)
+
+## Prerequisites
+
+1. Google AI API key
+2. Oracle database with internet access to Google AI API endpoints
+3. UC AI package installed
+4. Set up API key ([guide](/products/uc-ai/docs/guides/installation/#set-up-api-keys))
+
+You can get an API key by signing up at [Google AI Studio](https://aistudio.google.com/).
+
+## Models
+
+Google offers the Gemini family of models with different capabilities and performance characteristics. The UC AI Google package provides constants for all current models:
+
+### Gemini 2.5 Series (Latest)
+
+The latest generation of Gemini models with enhanced capabilities:
+
+- `uc_ai_google.c_model_gemini_2_5_pro` - Most capable model for complex tasks
+- `uc_ai_google.c_model_gemini_2_5_flash` - Fast and efficient for most tasks
+- `uc_ai_google.c_model_gemini_2_5_flash_lite` - Lightweight version for simple tasks
+
+### Gemini 2.0 Series
+
+Second generation Gemini models:
+
+- `uc_ai_google.c_model_gemini_2_0_flash`
+- `uc_ai_google.c_model_gemini_2_0_flash_lite`
+
+### Gemini 1.5 Series
+
+- `uc_ai_google.c_model_gemini_1_5_pro`
+- `uc_ai_google.c_model_gemini_1_5_flash`
+- `uc_ai_google.c_model_gemini_1_5_flash_8b`
+
+See [Google's model documentation](https://ai.google.dev/gemini-api/docs/models/gemini) for detailed model information and [Artificial Analysis](https://artificialanalysis.ai/providers/google) for a comparison of intelligence, speed, and price.
+
+## Usage Examples
+
+### Basic Text Generation
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is Oracle APEX?',
+    p_provider => uc_ai.c_provider_google,
+    p_model => uc_ai_google.c_model_gemini_2_5_flash
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### With System Prompt
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Write a SQL query to find all employees hired this year',
+    p_system_prompt => 'You are a helpful SQL expert. Write clean, efficient queries.',
+    p_provider => uc_ai.c_provider_google,
+    p_model => uc_ai_google.c_model_gemini_2_5_pro
+  );
+
+  dbms_output.put_line('SQL Query: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### Using Tools/Function Calling
+
+[All Gemini 2.5 models](https://ai.google.dev/gemini-api/docs/function-calling?example=meeting#supported-models) support tools/function calling. You can define tools in your application and Gemini will call them as needed.
+
+See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to set up and use tools. Also see Googles [best practices for function calling](https://ai.google.dev/gemini-api/docs/function-calling?example=meeting#best-practices).
+
+### Multi-modal Analysis
+
+All latest Gemini models have vision capabilities for Image and PDF Analysis.
+
+Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for examples on how to analyze images and PDFs.
+
+### Reasoning / Thinking
+
+Google's Gemini models support native reasoning capabilities. You can control the reasoning budget to balance thoroughness with speed and cost:
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai.g_enable_reasoning := true;
+  uc_ai_google.g_reasoning_budget := 512; -- Number of thinking tokens
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
+    p_provider => uc_ai.c_provider_google,
+    p_model => uc_ai_google.c_model_gemini_2_5_flash
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+The reasoning budget parameter controls how many thinking tokens the model uses:
+
+- `-1` - Dynamic budget (model decides)
+- `0` - No reasoning budget
+- Positive number - Fixed token budget
+
+Note that reasoning cannot be disabled with Gemini 2.5 Pro models as they always use some level of reasoning.
+
+Refer to Google's [thinking documentation](https://ai.google.dev/gemini-api/docs/thinking#set-budget) for more details on reasoning capabilities.

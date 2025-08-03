@@ -18,23 +18,9 @@ The UC AI Anthropic package provides integration with Anthropic's Claude models,
 1. Anthropic API key
 2. Oracle database with internet access to Anthropic's API endpoints
 3. UC AI package installed
+4. Set up API key ([guide](/products/uc-ai/docs/guides/installation/#set-up-api-keys))
 
-You can get an API key by signing up at [Anthropic Console](https://console.anthropic.com/).
-
-## Configuration
-
-Set your Anthropic API key using the UC AI key management system:
-
-```sql
--- Set your Anthropic API key
-begin
-  uc_ai_set_key(
-    p_provider => uc_ai.c_provider_anthropic,
-    p_key => 'your-anthropic-api-key-here'
-  );
-end;
-/
-```
+You can get an API key by signing up at [Anthropic Console](https://console.anthropic.com/).ä
 
 ## Models
 
@@ -99,7 +85,7 @@ See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to 
 
 ### Multi-modal Analysis
 
-Claude model have vision capabilities for Image and PDF Analysis.
+Claude models have vision capabilities for Image and PDF Analysis.
 
 Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for examples on how to analyze images and PDFs.
 

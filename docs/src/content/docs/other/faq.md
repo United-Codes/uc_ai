@@ -7,7 +7,7 @@ sidebar:
 
 ## What is UC AI?
 
-UC AI is a comprehensive Oracle PL/SQL framework that enables direct integration with AI models (OpenAI GPT, Anthropic Claude, Google Gemini) from within your Oracle database. It allows AI models to execute database functions through a structured tool system, bringing AI capabilities directly to where your data lives.
+UC AI is a comprehensive Oracle PL/SQL framework that enables direct integration with AI models (OpenAI GPT, Anthropic Claude, Google Gemini, Ollama) from within your Oracle database. It allows AI models to execute database functions through a structured tool system, bringing AI capabilities directly to where your data lives.
 
 ## Which Oracle Database versions are supported?
 
@@ -15,10 +15,11 @@ UC AI supports Oracle Database 12.2 or later. You don't need Oracle 23ai - the f
 
 ## Which AI providers are supported?
 
-Currently, UC AI supports three major AI providers:
+Currently, UC AI supports four major AI providers:
 - **OpenAI** (GPT models)
 - **Anthropic** (Claude models) 
 - **Google** (Gemini models)
+- **Ollama** (Open source models like Llama, Mistral, Qwen, etc.)
 
 The framework is designed to make it easy to switch between providers without changing your code.
 

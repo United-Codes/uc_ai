@@ -9,6 +9,8 @@ The UC AI Ollama package provides integration with locally-running Ollama instan
 
 - Support for popular open-source models (Llama, Mistral, Qwen, DeepSeek, Gemma, Phi, CodeLlama)
 - Full function calling (tools) support
+- Reasoning capabilities with models that support it
+- Multi-modal support (text, images, PDFs) with models that support it
 - No API keys required (runs locally)
 
 ## Prerequisites
@@ -74,7 +76,19 @@ end;
 /
 ```
 
-## Reasoning / Thinking
+### Using Tools/Function Calling
+
+Refer to the [list of models that support tools](https://ollama.com/search?c=tools) to find models that can use function calling. Note that small models might support it but are not very capable to do complex tasks with it. I noticed that enabling reasoning can help the LLM to call the tools more effectively.
+
+See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to set up and use tools.
+
+### Multi-modal Analysis
+
+Refer to the [list of models that support vision](https://ollama.com/search?c=vision) to find models that can use to analyze images.
+
+Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for examples on how to analyze images.
+
+### Reasoning / Thinking
 
 Make sure that you use a model that supports reasoning, such as `qwen3:8b` or `deepseek-r1:8b`. [Here is a list of models that support reasoning](https://ollama.com/search?c=thinking).
 

@@ -51,6 +51,10 @@ export default defineConfig({
 					autogenerate: { directory: "guides" },
 				},
 				{
+					label: "Providers",
+					autogenerate: { directory: "providers" },
+				},
+				{
 					label: "API Reference",
 					autogenerate: { directory: "api" },
 				},

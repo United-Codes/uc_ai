@@ -1,0 +1,144 @@
+---
+title: OpenAI
+description: UC AI provider documentation for OpenAI GPT models
+---
+
+The UC AI OpenAI package provides integration with OpenAI's GPT models, allowing you to use state-of-the-art language models within your Oracle database applications.
+
+## Features
+
+- Support for latest GPT models (GPT-4.5, GPT-4.1, GPT-4o, o1 series, o3 series, o4 series)
+- Full function calling (tools) support
+- Advanced reasoning capabilities with reasoning effort control
+- Multi-modal support (text, images, PDFs)
+
+## Prerequisites
+
+1. OpenAI API key
+2. Oracle database with internet access to OpenAI's API endpoints
+3. UC AI package installed
+4. Set up API key ([guide](/products/uc-ai/docs/guides/installation/#set-up-api-keys))
+
+You can get an API key by signing up at [OpenAI Platform](https://platform.openai.com/).
+
+## Models
+
+OpenAI offers a wide range of models optimized for different use cases. The UC AI OpenAI package provides constants for all current models:
+
+### Core GPT Models
+
+Standard GPT (Generative Pre-trained Transformer) models are designed for general-purpose text generation tasks. The latest models include:
+
+- `uc_ai_openai.c_model_gpt_4_5`
+- `uc_ai_openai.c_model_gpt_4_1`
+
+Mini and Nano versions of these models are optimized for speed and cost:
+
+- `uc_ai_openai.c_model_gpt_4_1_mini`
+- `uc_ai_openai.c_model_gpt_4_1_nano`
+
+The `o` suffix stands for "omni", indicating these models can handle both text and images:
+
+- `uc_ai_openai.c_model_gpt_4o`
+- `uc_ai_openai.c_model_gpt_4o_mini`
+- `uc_ai_openai.c_model_chatgpt_4o`
+
+### Reasoning Models
+
+Reasoning models have the prefix `o` and are designed to think longer and harder about complex tasks. They are more expensive and slower, but provide better results for complex tasks:
+
+- `uc_ai_openai.c_model_gpt_o1`
+- `uc_ai_openai.c_model_gpt_o1_pro`
+- `uc_ai_openai.c_model_gpt_o1_mini`
+- `uc_ai_openai.c_model_gpt_o3`
+- `uc_ai_openai.c_model_gpt_o3_pro`
+- `uc_ai_openai.c_model_gpt_o3_deep_research`
+- `uc_ai_openai.c_model_gpt_o3_mini`
+- `uc_ai_openai.c_model_gpt_o4_mini`
+- `uc_ai_openai.c_model_gpt_o4_mini_deep_research`
+
+### Legacy Models
+
+- `uc_ai_openai.c_model_gpt_4_turbo` - GPT-4 Turbo
+- `uc_ai_openai.c_model_gpt_4` - GPT-4
+- `uc_ai_openai.c_model_gpt_4_32k` - GPT-4 32k context
+- `uc_ai_openai.c_model_gpt_3_5_turbo` - GPT-3.5 Turbo
+
+See [OpenAI's pricing page](https://platform.openai.com/docs/pricing) for the latest model information and costs. Also see [Artificial Analysis](https://artificialanalysis.ai/providers/openai) for a comparison of intelligence, speed, and price.
+
+## Usage Examples
+
+### Basic Text Generation
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is Oracle APEX?',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### With System Prompt
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Write a SQL query to find all employees hired this year',
+    p_system_prompt => 'You are a helpful SQL expert. Write clean, efficient queries.',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4_1
+  );
+
+  dbms_output.put_line('SQL Query: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### Using Tools/Function Calling
+
+All OpenAI models support tools/function calling. You can define tools in your application and GPT will call them as needed.
+
+See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to set up and use tools.
+
+### Multi-modal Analysis
+
+The GPT models with the `o` suffix (`GPT-4o`, `GPT-4o-mini`, etc.) have vision capabilities for Image and PDF Analysis.
+
+Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for examples on how to analyze images and PDFs.
+
+### Reasoning / Thinking
+
+OpenAI's reasoning models (o1, o3, o4 series) support enhanced reasoning capabilities. You can control the reasoning effort level to balance speed and cost:
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai.g_enable_reasoning := true;
+  uc_ai_openai.g_reasoning_effort := 'medium'; -- 'low', 'medium', 'high'
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_o4_mini
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+The reasoning effort parameter controls how many reasoning tokens are generated before creating a response. Higher effort levels result in more thorough reasoning but take longer and cost more.
+
+Refer to OpenAI's [reasoning best practices guide](https://platform.openai.com/docs/guides/reasoning-best-practices#page-top) for advanced usage and best practices.
+
+OpenAI does not return reasoning summary messages like some other providers. It only returns the final message after reasoning is complete.
