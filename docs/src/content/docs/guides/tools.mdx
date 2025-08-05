@@ -99,6 +99,8 @@ declare
   l_result JSON_OBJECT_T;
   l_final_message CLOB;
 begin
+  uc_ai.g_enable_tools := true; -- enable tools usage
+
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is the email address of Jim?',
     p_system_prompt => 'You are an assistant to a time tracking system.

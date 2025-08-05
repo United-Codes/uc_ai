@@ -30,7 +30,7 @@ create or replace package uc_ai as
   g_enable_reasoning boolean := false;
 
   -- tools relevant global settings
-  g_enable_tools boolean := true;
+  g_enable_tools boolean := false;
 
 
   e_max_calls_exceeded exception;
