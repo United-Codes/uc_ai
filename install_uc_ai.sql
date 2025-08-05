@@ -25,32 +25,28 @@ PROMPT - Installing utility functions...
 @@src/dependencies/key_function.sql
 
 PROMPT - Installing API package specifications...
-@@src/packages/uc_ai_tools_api.pks
 @@src/packages/uc_ai_message_api.pks
+@@src/packages/uc_ai_tools_api.pks
 
 PROMPT - Installing AI provider package specifications...
 @@src/packages/uc_ai_anthropic.pks
 @@src/packages/uc_ai_google.pks
+@@src/packages/uc_ai_ollama.pks
 @@src/packages/uc_ai_openai.pks
 
 PROMPT Installing package bodies (implementations)...
 PROMPT - Installing API package bodies...
-@@src/packages/uc_ai_tools_api.pkb
 @@src/packages/uc_ai_message_api.pkb
+@@src/packages/uc_ai_tools_api.pkb
 PROMPT - Installing AI provider package bodies...
 @@src/packages/uc_ai_anthropic.pkb
 @@src/packages/uc_ai_google.pkb
+@@src/packages/uc_ai_ollama.pkb
 @@src/packages/uc_ai_openai.pkb
 PROMPT - Installing core UC AI package body...
 @@src/packages/uc_ai.pkb
 
 PROMPT ===================================================
-PROMPT UC AI Framework installation complete!
-PROMPT
-PROMPT Available AI providers:
-PROMPT - OpenAI GPT models
-PROMPT - Anthropic Claude models
-PROMPT - Google Gemini models
-PROMPT
-PROMPT Use uc_ai.generate_text() to start generating AI responses
+PROMPT UC AI installation complete!
+PROMPT Refer to the documentation for usage instructions: https://www.united-codes.com/products/uc-ai/docs/
 PROMPT ===================================================
