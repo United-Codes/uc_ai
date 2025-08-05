@@ -44,6 +44,8 @@ create or replace package body test_uc_ai_openai as
     delete from UC_AI_TOOLS where 1 = 1;
     uc_ai_test_utils.add_get_users_tool;
 
+    uc_ai.g_enable_tools := true; -- enable tools usage
+
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'What is the email address of Jim?',
       p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.',
@@ -94,6 +96,8 @@ create or replace package body test_uc_ai_openai as
     -- delete all time entries for Michael Scott (to avouid error "aleady clocked in")
     select user_id into l_user_id from TT_USERS where email = 'michael.scott@dundermifflin.com';
     delete from TT_TIME_ENTRIES where user_id = l_user_id;
+
+    uc_ai.g_enable_tools := true; -- enable tools usage
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'Please clock me in to the marketing project with the note "meeting".',
