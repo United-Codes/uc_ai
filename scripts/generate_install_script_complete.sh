@@ -24,10 +24,10 @@ add_file_content() {
     
     if [ -f "$file_path" ]; then
         echo "" >> "$output_file"
-        echo "-- ====================================================" >> "$output_file"
-        echo "-- $description" >> "$output_file"
-        echo "-- File: $(basename "$file_path")" >> "$output_file"
-        echo "-- ====================================================" >> "$output_file"
+        echo "/* ====================================================" >> "$output_file"
+        echo "   $description" >> "$output_file"
+        echo "   File: $(basename "$file_path")" >> "$output_file"
+        echo "==================================================== */" >> "$output_file"
         echo "" >> "$output_file"
         cat "$file_path" >> "$output_file"
         echo "" >> "$output_file"
@@ -283,110 +283,110 @@ echo "Logger version output file: $OUTPUT_FILE_WITH_LOGGER"
 echo ""
 echo "Generating install_uc_ai_complete_with_logger_noop.sql with no-op logger..."
 
-# Generate the complete script with no-op logger
-OUTPUT_FILE_WITH_LOGGER_NOOP="${ROOT_DIR}/install_uc_ai_complete_with_logger_noop.sql"
+# # Generate the complete script with no-op logger
+# OUTPUT_FILE_WITH_LOGGER_NOOP="${ROOT_DIR}/install_uc_ai_complete_with_logger_noop.sql"
 
-# Start writing the install script with no-op logger
-cat > "$OUTPUT_FILE_WITH_LOGGER_NOOP" << 'EOF'
--- UC AI Installation Script with No-Op Logger Framework
+# # Start writing the install script with no-op logger
+# cat > "$OUTPUT_FILE_WITH_LOGGER_NOOP" << 'EOF'
+# -- UC AI Installation Script with No-Op Logger Framework
 
-PROMPT ===================================================
-PROMPT UC AI with No-Op Logger Installation Starting...
-PROMPT ===================================================
+# PROMPT ===================================================
+# PROMPT UC AI with No-Op Logger Installation Starting...
+# PROMPT ===================================================
 
-EOF
+# EOF
 
-# First install the no-op logger
-echo "PROMPT Installing No-Op Logger Framework..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-echo "PROMPT This installs the Oracle Logger no-op version (same API, no actual logging)" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-add_file_content "$SRC_DIR/dependencies/logger_3.1.1/logger_no_op.sql" "Oracle Logger No-Op Framework Installation" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# # First install the no-op logger
+# echo "PROMPT Installing No-Op Logger Framework..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# echo "PROMPT This installs the Oracle Logger no-op version (same API, no actual logging)" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# add_file_content "$SRC_DIR/dependencies/logger_3.1.1/logger_no_op.sql" "Oracle Logger No-Op Framework Installation" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
 
-# Then add all the UC AI content
-echo "PROMPT Installing UC AI Tables..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-echo "PROMPT This creates the core database tables for message storage and configuration" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-add_file_content "$SRC_DIR/tables/install.sql" "UC AI Tables" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# # Then add all the UC AI content
+# echo "PROMPT Installing UC AI Tables..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# echo "PROMPT This creates the core database tables for message storage and configuration" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# add_file_content "$SRC_DIR/tables/install.sql" "UC AI Tables" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
 
-# Install triggers if they exist
-if [ -f "$SRC_DIR/triggers/triggers.sql" ]; then
-    echo "PROMPT Installing database triggers..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-    echo "PROMPT This sets up automatic data validation and logging triggers" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-    add_file_content "$SRC_DIR/triggers/triggers.sql" "Database Triggers" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-fi
+# # Install triggers if they exist
+# if [ -f "$SRC_DIR/triggers/triggers.sql" ]; then
+#     echo "PROMPT Installing database triggers..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+#     echo "PROMPT This sets up automatic data validation and logging triggers" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+#     add_file_content "$SRC_DIR/triggers/triggers.sql" "Database Triggers" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# fi
 
-echo "PROMPT Installing PL/SQL packages..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-echo "PROMPT This includes all AI provider packages and utility functions" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# echo "PROMPT Installing PL/SQL packages..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# echo "PROMPT This includes all AI provider packages and utility functions" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
 
-# Install package specifications first (in dependency order)
-echo "" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-echo "PROMPT Installing package specifications (headers)..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# # Install package specifications first (in dependency order)
+# echo "" >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# echo "PROMPT Installing package specifications (headers)..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
 
-# 1. Core types package first (uc_ai.pks contains the main types)
-echo "PROMPT - Installing core types and constants..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-add_file_content "$SRC_DIR/packages/uc_ai.pks" "Core UC AI Package Specification - uc_ai.pks" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# # 1. Core types package first (uc_ai.pks contains the main types)
+# echo "PROMPT - Installing core types and constants..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# add_file_content "$SRC_DIR/packages/uc_ai.pks" "Core UC AI Package Specification - uc_ai.pks" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
 
-# 2. Dependencies
-echo "PROMPT - Installing utility functions..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-add_file_content "$SRC_DIR/dependencies/key_function.sql" "Utility Functions" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# # 2. Dependencies
+# echo "PROMPT - Installing utility functions..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# add_file_content "$SRC_DIR/dependencies/key_function.sql" "Utility Functions" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
 
-# 3. API packages (tools and message APIs)
-echo "PROMPT - Installing API package specifications..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-for pks_file in "$SRC_DIR/packages/"*_api.pks; do
-    if [ -f "$pks_file" ]; then
-        filename=$(basename "$pks_file")
-        add_file_content "$pks_file" "API Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-    fi
-done
+# # 3. API packages (tools and message APIs)
+# echo "PROMPT - Installing API package specifications..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# for pks_file in "$SRC_DIR/packages/"*_api.pks; do
+#     if [ -f "$pks_file" ]; then
+#         filename=$(basename "$pks_file")
+#         add_file_content "$pks_file" "API Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+#     fi
+# done
 
-# 4. Provider packages (all other .pks files except uc_ai.pks and API packages)
-echo "PROMPT - Installing AI provider package specifications..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-for pks_file in "$SRC_DIR/packages/"*.pks; do
-    filename=$(basename "$pks_file")
-    # Skip uc_ai.pks (already installed) and API packages (already installed)
-    if [[ "$filename" != "uc_ai.pks" && "$filename" != *"_api.pks" ]]; then
-        add_file_content "$pks_file" "Provider Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-    fi
-done
+# # 4. Provider packages (all other .pks files except uc_ai.pks and API packages)
+# echo "PROMPT - Installing AI provider package specifications..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# for pks_file in "$SRC_DIR/packages/"*.pks; do
+#     filename=$(basename "$pks_file")
+#     # Skip uc_ai.pks (already installed) and API packages (already installed)
+#     if [[ "$filename" != "uc_ai.pks" && "$filename" != *"_api.pks" ]]; then
+#         add_file_content "$pks_file" "Provider Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+#     fi
+# done
 
-# Install package bodies (same order as specifications)
-echo "PROMPT Installing package bodies (implementations)..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# # Install package bodies (same order as specifications)
+# echo "PROMPT Installing package bodies (implementations)..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
 
-# API packages first
-echo "PROMPT - Installing API package bodies..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-for pkb_file in "$SRC_DIR/packages/"*_api.pkb; do
-    if [ -f "$pkb_file" ]; then
-        filename=$(basename "$pkb_file")
-        add_file_content "$pkb_file" "API Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-    fi
-done
+# # API packages first
+# echo "PROMPT - Installing API package bodies..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# for pkb_file in "$SRC_DIR/packages/"*_api.pkb; do
+#     if [ -f "$pkb_file" ]; then
+#         filename=$(basename "$pkb_file")
+#         add_file_content "$pkb_file" "API Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+#     fi
+# done
 
-# Provider packages
-echo "PROMPT - Installing AI provider package bodies..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-for pkb_file in "$SRC_DIR/packages/"*.pkb; do
-    filename=$(basename "$pkb_file")
-    # Skip uc_ai.pkb (installed last) and API packages (already installed)
-    if [[ "$filename" != "uc_ai.pkb" && "$filename" != *"_api.pkb" ]]; then
-        add_file_content "$pkb_file" "Provider Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-    fi
-done
+# # Provider packages
+# echo "PROMPT - Installing AI provider package bodies..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# for pkb_file in "$SRC_DIR/packages/"*.pkb; do
+#     filename=$(basename "$pkb_file")
+#     # Skip uc_ai.pkb (installed last) and API packages (already installed)
+#     if [[ "$filename" != "uc_ai.pkb" && "$filename" != *"_api.pkb" ]]; then
+#         add_file_content "$pkb_file" "Provider Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+#     fi
+# done
 
-# Core package body last (depends on others)
-echo "PROMPT - Installing core UC AI package body..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
-add_file_content "$SRC_DIR/packages/uc_ai.pkb" "Core UC AI Package Body - uc_ai.pkb" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# # Core package body last (depends on others)
+# echo "PROMPT - Installing core UC AI package body..." >> "$OUTPUT_FILE_WITH_LOGGER_NOOP"
+# add_file_content "$SRC_DIR/packages/uc_ai.pkb" "Core UC AI Package Body - uc_ai.pkb" "$OUTPUT_FILE_WITH_LOGGER_NOOP"
 
-# Final completion message for no-op logger version
-cat >> "$OUTPUT_FILE_WITH_LOGGER_NOOP" << 'EOF'
+# # Final completion message for no-op logger version
+# cat >> "$OUTPUT_FILE_WITH_LOGGER_NOOP" << 'EOF'
 
-PROMPT ===================================================
-PROMPT UC AI with No-Op Logger installation complete!
-PROMPT 
-PROMPT The no-op logger provides the same API as the full logger
-PROMPT but does not actually write to any tables or create dependencies.
-PROMPT This is useful for environments where logging is not needed
-PROMPT or where you want to minimize database overhead.
-PROMPT
-PROMPT Refer to the documentation for usage instructions: https://www.united-codes.com/products/uc-ai/docs/
-PROMPT ===================================================
-EOF
+# PROMPT ===================================================
+# PROMPT UC AI with No-Op Logger installation complete!
+# PROMPT 
+# PROMPT The no-op logger provides the same API as the full logger
+# PROMPT but does not actually write to any tables or create dependencies.
+# PROMPT This is useful for environments where logging is not needed
+# PROMPT or where you want to minimize database overhead.
+# PROMPT
+# PROMPT Refer to the documentation for usage instructions: https://www.united-codes.com/products/uc-ai/docs/
+# PROMPT ===================================================
+# EOF
 
-echo "Generated install_uc_ai_complete_with_logger_noop.sql successfully!"
-echo "No-op Logger version output file: $OUTPUT_FILE_WITH_LOGGER_NOOP"
+# echo "Generated install_uc_ai_complete_with_logger_noop.sql successfully!"
+# echo "No-op Logger version output file: $OUTPUT_FILE_WITH_LOGGER_NOOP"

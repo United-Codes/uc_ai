@@ -4,8 +4,8 @@
 # This ensures all files are included in the correct installation order
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-OUTPUT_FILE="${SCRIPT_DIR}/install_uc_ai.sql"
-SRC_DIR="${SCRIPT_DIR}/src"
+OUTPUT_FILE="${SCRIPT_DIR}/../install_uc_ai.sql"
+SRC_DIR="${SCRIPT_DIR}/../src"
 
 # Check if src directory exists
 if [ ! -d "$SRC_DIR" ]; then
@@ -66,19 +66,21 @@ fi
 
 # 3. API packages (tools and message APIs)
 echo "PROMPT - Installing API package specifications..." >> "$OUTPUT_FILE"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    if [ -f "$SRC_DIR/packages/${api_pkg}.pks" ]; then
-        echo "@@src/packages/${api_pkg}.pks" >> "$OUTPUT_FILE"
+for pks_file in "$SRC_DIR/packages/"*_api.pks; do
+    if [ -f "$pks_file" ]; then
+        pks_filename=$(basename "$pks_file")
+        echo "@@src/packages/${pks_filename}" >> "$OUTPUT_FILE"
     fi
 done
 echo "" >> "$OUTPUT_FILE"
 
-# 4. Provider packages (alphabetical order)
+# 4. Provider packages (all other .pks files except uc_ai.pks and API packages)
 echo "PROMPT - Installing AI provider package specifications..." >> "$OUTPUT_FILE"
-for provider_pks in "$SRC_DIR/packages/"*anthropic*.pks "$SRC_DIR/packages/"*google*.pks "$SRC_DIR/packages/"*openai*.pks; do
-    if [ -f "$provider_pks" ]; then
-        provider_file=$(basename "$provider_pks")
-        echo "@@src/packages/${provider_file}" >> "$OUTPUT_FILE"
+for pks_file in "$SRC_DIR/packages/"*.pks; do
+    pks_filename=$(basename "$pks_file")
+    # Skip uc_ai.pks (already installed) and API packages (already installed)
+    if [[ "$pks_filename" != "uc_ai.pks" && "$pks_filename" != *"_api.pks" ]]; then
+        echo "@@src/packages/${pks_filename}" >> "$OUTPUT_FILE"
     fi
 done
 echo "" >> "$OUTPUT_FILE"
@@ -88,18 +90,20 @@ echo "PROMPT Installing package bodies (implementations)..." >> "$OUTPUT_FILE"
 
 # API packages first
 echo "PROMPT - Installing API package bodies..." >> "$OUTPUT_FILE"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    if [ -f "$SRC_DIR/packages/${api_pkg}.pkb" ]; then
-        echo "@@src/packages/${api_pkg}.pkb" >> "$OUTPUT_FILE"
+for pkb_file in "$SRC_DIR/packages/"*_api.pkb; do
+    if [ -f "$pkb_file" ]; then
+        pkb_filename=$(basename "$pkb_file")
+        echo "@@src/packages/${pkb_filename}" >> "$OUTPUT_FILE"
     fi
 done
 
 # Provider packages
 echo "PROMPT - Installing AI provider package bodies..." >> "$OUTPUT_FILE"
-for provider_pkb in "$SRC_DIR/packages/"*anthropic*.pkb "$SRC_DIR/packages/"*google*.pkb "$SRC_DIR/packages/"*openai*.pkb; do
-    if [ -f "$provider_pkb" ]; then
-        provider_file=$(basename "$provider_pkb")
-        echo "@@src/packages/${provider_file}" >> "$OUTPUT_FILE"
+for pkb_file in "$SRC_DIR/packages/"*.pkb; do
+    pkb_filename=$(basename "$pkb_file")
+    # Skip uc_ai.pkb (installed last) and API packages (already installed)
+    if [[ "$pkb_filename" != "uc_ai.pkb" && "$pkb_filename" != *"_api.pkb" ]]; then
+        echo "@@src/packages/${pkb_filename}" >> "$OUTPUT_FILE"
     fi
 done
 
@@ -131,22 +135,28 @@ echo "Dependencies:"
 
 echo "Package specifications:"
 [ -f "$SRC_DIR/packages/uc_ai.pks" ] && echo "  - src/packages/uc_ai.pks"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    [ -f "$SRC_DIR/packages/${api_pkg}.pks" ] && echo "  - src/packages/${api_pkg}.pks"
+for pks_file in "$SRC_DIR/packages/"*_api.pks; do
+    if [ -f "$pks_file" ]; then
+        echo "  - src/packages/$(basename "$pks_file")"
+    fi
 done
-for provider_pks in "$SRC_DIR/packages/"*anthropic*.pks "$SRC_DIR/packages/"*google*.pks "$SRC_DIR/packages/"*openai*.pks; do
-    if [ -f "$provider_pks" ]; then
-        echo "  - src/packages/$(basename "$provider_pks")"
+for pks_file in "$SRC_DIR/packages/"*.pks; do
+    pks_filename=$(basename "$pks_file")
+    if [[ "$pks_filename" != "uc_ai.pks" && "$pks_filename" != *"_api.pks" ]]; then
+        echo "  - src/packages/$pks_filename"
     fi
 done
 
 echo "Package bodies:"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    [ -f "$SRC_DIR/packages/${api_pkg}.pkb" ] && echo "  - src/packages/${api_pkg}.pkb"
+for pkb_file in "$SRC_DIR/packages/"*_api.pkb; do
+    if [ -f "$pkb_file" ]; then
+        echo "  - src/packages/$(basename "$pkb_file")"
+    fi
 done
-for provider_pkb in "$SRC_DIR/packages/"*anthropic*.pkb "$SRC_DIR/packages/"*google*.pkb "$SRC_DIR/packages/"*openai*.pkb; do
-    if [ -f "$provider_pkb" ]; then
-        echo "  - src/packages/$(basename "$provider_pkb")"
+for pkb_file in "$SRC_DIR/packages/"*.pkb; do
+    pkb_filename=$(basename "$pkb_file")
+    if [[ "$pkb_filename" != "uc_ai.pkb" && "$pkb_filename" != *"_api.pkb" ]]; then
+        echo "  - src/packages/$pkb_filename"
     fi
 done
 [ -f "$SRC_DIR/packages/uc_ai.pkb" ] && echo "  - src/packages/uc_ai.pkb"

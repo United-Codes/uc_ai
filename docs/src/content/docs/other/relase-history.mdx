@@ -5,6 +5,41 @@ sidebar:
   order: 3
 ---
 
+## v25.4
+
+To upgrade just run the `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v25.4).
+
+**Breaking Changes**:
+
+You need to manually enable tools usage any time you want to use tools in the AI response:
+
+```sql
+-- ...
+begin
+  uc_ai.g_enable_tools := true; -- enable tools usage
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is the email address of Jim?',
+    p_system_prompt => 'You are an assistant to a time tracking system.
+    Your tools give you access to user, project and timetracking information.
+    Answer concise and short.',
+    p_provider => uc_ai.c_provider_google,
+    p_model => uc_ai_google.c_model_gemini_2_5_flash
+  );
+
+-- ...
+```
+
+Before UC AI sent all tools that were available for the model to the AI provider. This could lead to unexpected behavior or reduced accuracy if the AI tried to use a tool that was not relevant to the conversation.
+
+**New Features**:
+
+- **Reasoning**: Let the LLMs think step by step before answering. This is useful for complex questions where the AI needs to reason about the answer. Read more about it in the [documentation](https://www.united-codes.com/products/uc-ai/docs/guides/reasoning/).
+
+- **New Provider: Ollama**: UC AI now supports the Ollama provider, which allows you to run open models locally on your machine. This is useful for scenarios where you want to run LLMs without relying on an external API. Read more about it in the [documentation](https://www.united-codes.com/products/uc-ai/docs/providers/ollama/).
+
+- **Improved documentation**: The documentation has been improved to provide more examples and explanations of how to use UC AI. For example there is now a seperate page for each provider with in-depth information and best practices.
+
 ## v25.3
 
 To upgrade just run the `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v25.3).
