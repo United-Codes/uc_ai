@@ -3,6 +3,7 @@ create or replace package body test_uc_ai_ollama as
   c_model_qwen_1b constant uc_ai.model_type := 'qwen3:1.7b';
   c_model_qwen_4b constant uc_ai.model_type := 'qwen3:4b';
   c_model_gemma3_4b constant uc_ai.model_type := 'gemma3:4b';
+  c_model_gpt_oss constant uc_ai.model_type := 'gpt-oss:20b';
 
   procedure basic_recipe (
     p_model in uc_ai.model_type,
@@ -175,11 +176,24 @@ create or replace package body test_uc_ai_ollama as
     basic_recipe(p_model => c_model_gemma3_4b, p_reasoning_enabled => false);
   end basic_recipe_gemma_4b;
 
+  procedure basic_recipe_gpt_oss
+  as
+  begin
+    basic_recipe(p_model => c_model_gpt_oss, p_reasoning_enabled => false);
+  end basic_recipe_gpt_oss;
+
+
   procedure tool_user_info_qwen_4b
   as
   begin
     tool_user_info(p_model => c_model_qwen_4b);
   end tool_user_info_qwen_4b;
+
+  procedure tool_user_info_gpt_oss
+  as
+  begin
+    tool_user_info(p_model => c_model_gpt_oss);
+  end tool_user_info_gpt_oss;
 
   procedure tool_clock_in_user_qwen_4b
   as
@@ -187,6 +201,11 @@ create or replace package body test_uc_ai_ollama as
     tool_clock_in_user(p_model => c_model_qwen_4b);
   end tool_clock_in_user_qwen_4b;
 
+  procedure tool_clock_in_user_gpt_oss
+  as
+  begin
+    tool_clock_in_user(p_model => c_model_gpt_oss);
+  end tool_clock_in_user_gpt_oss;
 
   procedure image_file_input_gemma_4b
   as
