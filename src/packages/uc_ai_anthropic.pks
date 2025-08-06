@@ -11,6 +11,7 @@ create or replace package uc_ai_anthropic as
 
   -- Anthropic Claude models
   -- See https://docs.anthropic.com/en/docs/about-claude/models
+  c_model_claude_4_1_opus constant uc_ai.model_type := 'claude-opus-4-1';
   c_model_claude_4_opus constant uc_ai.model_type := 'claude-opus-4-0';
   c_model_claude_4_sonnet constant uc_ai.model_type := 'claude-sonnet-4-0';
 
