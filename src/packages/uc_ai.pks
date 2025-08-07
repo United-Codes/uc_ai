@@ -13,6 +13,7 @@ create or replace package uc_ai as
   c_provider_anthropic constant provider_type := 'anthropic';
   c_provider_google    constant provider_type := 'google';
   c_provider_ollama    constant provider_type := 'ollama';
+  c_provider_oci       constant provider_type := 'oci';
 
   subtype model_type is varchar2(128 char);
 

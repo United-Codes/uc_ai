@@ -305,11 +305,19 @@ create or replace package body uc_ai_tools_api as
       -- {type: "function", function: {...}}
       -- where others like anthropic/claude use the function object directly
       if p_provider in (uc_ai.c_provider_openai, uc_ai.c_provider_ollama) then
-        l_tool_cpy_obj := l_tool_obj;
+        l_tool_cpy_obj := l_tool_obj.clone();
 
         l_tool_obj := json_object_t();
         l_tool_obj.put('type', 'function');
         l_tool_obj.put('function', l_tool_cpy_obj);
+      elsif p_provider = uc_ai.c_provider_oci then
+        l_tool_cpy_obj := l_tool_obj.clone();
+
+        l_tool_obj := json_object_t();
+        l_tool_obj.put('type', 'FUNCTION');
+        l_tool_obj.put('description', l_tool_cpy_obj.get_string('description'));
+        l_tool_obj.put('name', l_tool_cpy_obj.get_string('name'));
+        l_tool_obj.put('parameters', l_tool_cpy_obj.get_array('input_schema'));
       end if;
 
       l_tools_array.append(l_tool_obj);
