@@ -1,0 +1,64 @@
+---
+title: Setup OCI Key
+description: How to create an API Credential key for Oracle Cloud Infrastructure and configure the APEX Web Credential
+---
+
+## Create OCI API Key
+
+After you logged in to the [Oracle Cloud Console](https://cloud.oracle.com/), you can create an API key for the OCI provider in UC AI.
+
+**1. User settings**
+
+Click on `User settings` in the top right corner of the console.
+
+![User settings](../../../assets/oci-key/oci-key-user-settings.png)
+
+**2. Tokens and Keys**
+
+Click on the `Tokens and Keys` tab. Now click on `Add API key`.
+
+![Add API key](../../../assets/oci-key/oci-key-add-key.png)
+
+**3. Download Key**
+
+Keep `Generate API key pair` checked and click on `Download private key`. Afterwards you can click on `Add` in the bottom right corner.
+
+![Download key](../../../assets/oci-key/oci-gen-key.png)
+
+**4. Copy additional information**
+
+Now you see some additional information that you need to keep open or copy to a text file. You will need the `Tenancy`, `User ID`, `Fingerprint` and the `Region` for the next step.
+
+![Additional information](../../../assets/oci-key/oci-config-file-preview.png)
+
+## Create APEX Web Credential
+
+Log-in to the APEX Workspace that is associated with the schema where UC AI is installed.
+
+**1. Open Web Credentials**
+
+From the top navigation menu select `App Builder` > `Workspace Utilities` > `All Workspace Utilities`.
+
+![Open Web Credentials](../../../assets/oci-key/oci-key-apex-ws-utils.png)
+
+Click the `Web Credentials` link.
+
+![Open Web Credentials link](../../../assets/oci-key/oci-key-apex-wc.png)
+
+**2. Create new Web Credential**
+
+Click `Create`.
+
+Select the `Authentication Type`: `OCI Native Authentication`.
+
+Give the Web Credential a `Name` and `Static ID`, I recommend that both match.
+
+Copy the `OCI User ID`, `OCI Tenancy ID`, `OCI Public Key Fingerprint` from the "Configuration file preview" screen in the Oracle Cloud interface in the previous step.
+
+Open your downloaded private key file in a text editor (`*.pem` file). Only copy the secret with the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines.
+
+![Create new Web Credential](../../../assets/oci-key/oci-key-apex-add-ws-details.png)
+
+Click `Create` to save the Web Credential.
+
+You can now reference it via the Static ID you entered.
