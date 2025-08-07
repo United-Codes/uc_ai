@@ -222,6 +222,7 @@ create or replace package body uc_ai_oci as
     l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
     l_messages     json_array_t := json_array_t();
     l_input_obj    json_object_t;
+    l_chat_request json_object_t;
     l_api_url      varchar2(500 char);
 
     l_resp      clob;
@@ -237,6 +238,10 @@ create or replace package body uc_ai_oci as
 
     l_messages := p_messages;
     l_input_obj := p_input_obj;
+    l_chat_request := l_input_obj.get_object('chatRequest');
+
+    l_chat_request.put('messages', l_messages);
+    l_input_obj.put('chatRequest', l_chat_request);
 
     -- Build API URL
     l_api_url := build_api_url();
@@ -285,6 +290,9 @@ create or replace package body uc_ai_oci as
           l_oci_content_item json_object_t;
 
           l_normalized_messages json_array_t := json_array_t();
+          l_normalized_tool_results json_array_t := json_array_t();
+
+          l_used_tool boolean := false;
 
           l_new_msg json_object_t;
           l_content clob;
@@ -300,15 +308,99 @@ create or replace package body uc_ai_oci as
             l_role := l_resp_message.get_string('role');
 
             if l_role = 'ASSISTANT' then
-              l_content_arr := l_resp_message.get_array('content');
+              if l_resp_message.has('content') then
+                l_content_arr := l_resp_message.get_array('content');
 
-              <<content_loop>>
-              for j in 0 .. l_content_arr.get_size - 1 loop
-                l_oci_content_item := treat(l_content_arr.get(j) as json_object_t);
-               
-                l_new_msg := get_text_content(l_oci_content_item);
-                l_normalized_messages.append(l_new_msg);
-              end loop content_loop;
+                <<content_loop>>
+                for j in 0 .. l_content_arr.get_size - 1 loop
+                  l_oci_content_item := treat(l_content_arr.get(j) as json_object_t);
+                
+                  l_new_msg := get_text_content(l_oci_content_item);
+                  l_normalized_messages.append(l_new_msg);
+                end loop content_loop;
+              elsif l_resp_message.has('toolCalls') then
+                declare
+                  l_tool_call_arr  json_array_t;
+                  l_tool_call_item json_object_t;
+                  l_tool_call_id   varchar2(255 char);
+                  l_tool_name      uc_ai_tools.code%type;
+                  l_tool_args_str  varchar2(32767 char);
+                  l_tool_args      json_object_t;
+                  l_tool_result    clob;
+                  l_tool_response  json_object_t;
+                  l_tool_response_content json_object_t;
+                  l_tool_content   json_array_t := json_array_t();
+                begin
+                  l_used_tool := true;
+                  l_tool_call_arr := l_resp_message.get_array('toolCalls');
+
+                  l_tool_response := json_object_t();
+                  l_tool_response.put('role', 'ASSISTANT');
+                  l_tool_response.put('toolCalls', l_tool_call_arr);
+                  l_messages.append(l_tool_response);
+
+                  <<tool_calls>>
+                  for k in 0 .. l_tool_call_arr.get_size - 1 
+                  loop
+                    g_tool_calls := g_tool_calls + 1;
+                    l_tool_call_item := treat(l_tool_call_arr.get(k) as json_object_t);
+
+                    l_tool_call_id := l_tool_call_item.get_string('id');
+                    l_tool_name := l_tool_call_item.get_string('name');
+                    l_tool_args_str := l_tool_call_item.get_string('arguments');
+
+                    logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name);
+
+                    if l_tool_args_str is not null then
+                      -- Parse tool arguments if available
+                      l_tool_args := json_object_t.parse(l_tool_args_str);
+                      logger.log('Tool args', l_scope, 'Args: ' || l_tool_args.to_clob);
+                    else
+                      l_tool_args := json_object_t();
+                      logger.log('Tool args', l_scope, 'No args provided');
+                    end if;
+
+                    l_new_msg := uc_ai_message_api.create_tool_call_content(
+                      p_tool_call_id => l_tool_call_id
+                    , p_tool_name    => l_tool_name
+                    , p_args         => l_tool_args.to_clob
+                    );
+                    l_normalized_messages.append(l_new_msg);
+
+                    -- Execute the tool and get result
+                    begin
+                      l_tool_result := uc_ai_tools_api.execute_tool(
+                        p_tool_code          => l_tool_name
+                      , p_arguments          => l_tool_args
+                      );
+                    exception
+                      when others then
+                        logger.log_error('Tool execution failed', l_scope, 'Tool: ' || l_tool_name || ', Error: ' || sqlerrm || chr(10) || sys.dbms_utility.format_error_backtrace);
+                        l_tool_result := 'Error executing tool: ' || sqlerrm;
+                    end;
+
+                    logger.log('Tool result', l_scope, l_tool_result);
+
+                    l_tool_response := json_object_t();
+                    l_tool_response.put('role', 'TOOL');
+                    l_tool_response.put('toolCallId', l_tool_call_id);
+                    l_tool_response_content := json_object_t();
+                    l_tool_response_content.put('type', 'TEXT');
+                    l_tool_response_content.put('text', l_tool_result);
+                    l_tool_content.append(l_tool_response_content);
+                    l_tool_response.put('content', l_tool_content);
+                    l_messages.append(l_tool_response);
+
+                    l_new_msg := uc_ai_message_api.create_tool_result_content(
+                      p_tool_call_id => l_tool_call_id,
+                      p_tool_name    => l_tool_name,
+                      p_result       => l_tool_result
+                    );
+                    l_normalized_tool_results.append(l_new_msg);
+
+                  end loop tool_calls;
+                end;
+              end if;
 
             else
               logger.log_error('Unknown role in OCI response: ' || l_role, l_scope);
@@ -317,6 +409,20 @@ create or replace package body uc_ai_oci as
           
           g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
           
+
+          if l_used_tool then
+            g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
+            pio_result.put('tool_calls_count', g_tool_calls);
+
+            -- Continue conversation with tool results - recursive call
+            l_messages := internal_generate_text(
+              p_messages           => l_messages
+            , p_max_tool_calls     => p_max_tool_calls
+            , p_input_obj          => p_input_obj
+            , pio_result           => pio_result
+            );
+          end if;
+
           -- Set finish reason to stop for successful completion
           pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
         end;
@@ -397,7 +503,6 @@ create or replace package body uc_ai_oci as
     
     -- Set chat request
     l_chat_request := json_object_t();
-    l_chat_request.put('messages', l_oci_messages);
     l_chat_request.put('apiFormat', 'GENERIC');
     l_chat_request.put('maxTokens', 600);
     l_chat_request.put('isStream', false);
