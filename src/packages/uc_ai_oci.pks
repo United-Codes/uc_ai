@@ -12,17 +12,28 @@ create or replace package uc_ai_oci as
   -- See https://docs.oracle.com/en-us/iaas/Content/generative-ai/overview.htm
   
   -- Meta Llama models
-  c_model_llama_3_3_70b_instruct    constant uc_ai.model_type := 'meta.llama-3.3-70b-instruct';
-  c_model_llama_3_1_405b_instruct   constant uc_ai.model_type := 'meta.llama-3.1-405b-instruct';
-  c_model_llama_3_1_70b_instruct    constant uc_ai.model_type := 'meta.llama-3.1-70b-instruct';
-  c_model_llama_3_1_8b_instruct     constant uc_ai.model_type := 'meta.llama-3.1-8b-instruct';
-  c_model_llama_3_70b_instruct      constant uc_ai.model_type := 'meta.llama-3-70b-instruct';
+  c_model_llama_4_maverick          constant uc_ai.model_type := 'meta.llama-4-maverick-17b-128e-instruct-fp8';
+  c_model_llama_4_scout             constant uc_ai.model_type := 'meta.llama-4-scout-17b-16e-instruct';
+
+  c_model_llama_3_3_70b             constant uc_ai.model_type := 'meta.llama-3.3-70b-instruct';
+  c_model_llama_3_2_90b_vision      constant uc_ai.model_type := 'meta.llama-3.2-90b-vision-instruct';
+  c_model_llama_3_2_11b_vision      constant uc_ai.model_type := 'meta.llama-3.2-11b-vision-instruct';
+  c_model_llama_3_1_405b            constant uc_ai.model_type := 'meta.llama-3.1-405b-instruct';
+  c_model_llama_3_1_70b             constant uc_ai.model_type := 'meta.llama-3.1-70b-instruct';
+  c_model_llama_3_70b               constant uc_ai.model_type := 'meta.llama-3-70b-instruct';
   
   -- Cohere Command models
   c_model_cohere_command_a_03_2025  constant uc_ai.model_type := 'cohere.command-a-03-2025';
   c_model_cohere_command_r_plus     constant uc_ai.model_type := 'cohere.command-r-plus';
   c_model_cohere_command_r          constant uc_ai.model_type := 'cohere.command-r';
-  
+
+  -- xAI Grok models
+  c_model_grok_4                    constant uc_ai.model_type := 'xai.grok-4';
+  c_model_grok_3                    constant uc_ai.model_type := 'xai.grok-3';
+  c_model_grok_3_mini               constant uc_ai.model_type := 'xai.grok-3-mini';
+  c_model_grok_3_fast               constant uc_ai.model_type := 'xai.grok-3-fast';
+  c_model_grok_3_mini_fast          constant uc_ai.model_type := 'xai.grok-3-mini-fast';
+
   -- Oracle proprietary models (if available)
   c_model_oracle_genai              constant uc_ai.model_type := 'oracle.genai';
 

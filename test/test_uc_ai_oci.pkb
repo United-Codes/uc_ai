@@ -16,7 +16,7 @@ create or replace package body test_uc_ai_oci as
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
       p_system_prompt => 'You are an assistant helping users to get recipes. Please answer in short sentences.',
       p_provider => uc_ai.c_provider_oci,
-      p_model => uc_ai_oci.c_model_llama_3_3_70b_instruct
+      p_model => uc_ai_oci.c_model_llama_3_3_70b
     );
 
     l_final_message := l_result.get_clob('final_message');
@@ -52,7 +52,7 @@ create or replace package body test_uc_ai_oci as
       p_system_prompt => 'Let''s count up',
       p_user_prompt => '1',
       p_provider => uc_ai.c_provider_oci,
-      p_model => uc_ai_oci.c_model_llama_3_3_70b_instruct
+      p_model => uc_ai_oci.c_model_llama_3_3_70b
     );
 
     l_final_message := l_result.get_clob('final_message');
@@ -81,7 +81,7 @@ create or replace package body test_uc_ai_oci as
     l_result := uc_ai.GENERATE_TEXT(
       p_messages => l_messages,
       p_provider => uc_ai.c_provider_oci,
-      p_model => uc_ai_oci.c_model_llama_3_3_70b_instruct
+      p_model => uc_ai_oci.c_model_llama_3_3_70b
     );
 
     l_final_message := l_result.get_clob('final_message');
@@ -122,7 +122,7 @@ create or replace package body test_uc_ai_oci as
       p_user_prompt => 'What is the email address of Jim?',
       p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.',
       p_provider => uc_ai.c_provider_oci,
-      p_model => uc_ai_oci.c_model_llama_3_3_70b_instruct
+      p_model => uc_ai_oci.c_model_llama_3_3_70b
     );
 
     l_final_message := l_result.get_clob('final_message');
@@ -179,7 +179,7 @@ create or replace package body test_uc_ai_oci as
 
         If you clock somebody in, answer with: "You are now clocked in to the project "{{project_name}}" with the note "{{notes| - }}".',
       p_provider => uc_ai.c_provider_oci,
-      p_model => uc_ai_oci.c_model_llama_3_3_70b_instruct
+      p_model => uc_ai_oci.c_model_llama_3_3_70b
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
