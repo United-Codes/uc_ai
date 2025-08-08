@@ -11,5 +11,8 @@ create or replace package test_uc_ai_oci as
   --%test(Tool usage - get user info in Generic Mode)
   procedure tool_user_info_generic;
 
+  --%test(Tool usage - clock in user in Generic Mode)
+  procedure tool_clock_in_user_generic;
+
 end test_uc_ai_oci;
 /
