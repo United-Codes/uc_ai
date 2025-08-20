@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+
 jobs:
   build-and-attach:
     runs-on: ubuntu-latest
@@ -44,7 +47,7 @@ jobs:
           files: |
             install_uc_ai_complete.sql
             install_uc_ai_complete_with_logger.sql
-            install_uc_ai_complete_with_logger_noop.sql
+            ./src/dependencies/logger_3.1.1/logger_no_op.sql
             upgrade_packages.sql
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

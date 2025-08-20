@@ -66,11 +66,7 @@ echo "" >> "$OUTPUT_FILE"
 echo "PROMPT - Upgrading core types and constants..." >> "$OUTPUT_FILE"
 add_file_content "$SRC_DIR/packages/uc_ai.pks" "Core UC AI Package Specification - Types and Constants"
 
-# 2. Dependencies (utility functions)
-echo "PROMPT - Upgrading utility functions..." >> "$OUTPUT_FILE"
-add_file_content "$SRC_DIR/dependencies/key_function.sql" "Utility Functions"
-
-# 3. API packages (tools and message APIs)
+# 2. API packages (tools and message APIs)
 echo "PROMPT - Upgrading API package specifications..." >> "$OUTPUT_FILE"
 for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
     if [ -f "$SRC_DIR/packages/${api_pkg}.pks" ]; then
@@ -85,7 +81,7 @@ for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
     fi
 done
 
-# 4. Provider packages (alphabetical order)
+# 3. Provider packages (alphabetical order)
 echo "PROMPT - Upgrading AI provider package specifications..." >> "$OUTPUT_FILE"
 for provider_pks in "$SRC_DIR/packages/"*anthropic*.pks "$SRC_DIR/packages/"*google*.pks "$SRC_DIR/packages/"*openai*.pks; do
     if [ -f "$provider_pks" ]; then

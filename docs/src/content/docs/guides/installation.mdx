@@ -10,36 +10,32 @@ sidebar:
 - Oracle Database 12.2 or later
 - Oracle APEX (older versions are fine, this project uses some of the APIs)
 
-## Download the Project
-
-Either download the source code of the latest release from the [GitHub releases page](https://github.com/United-Codes/uc_ai/releases/) or clone the [GitHub repository](https://github.com/United-Codes/uc_ai):
-
-```bash
-git clone https://github.com/United-Codes/uc_ai.git
-cd uc_ai
-```
-
 ## Logger
 
-The project uses the [Logger](https://github.com/OraOpenSource/Logger) package for logging. If something goes wrong all the trace is logged to help debugging.
+The project uses the [Logger](https://github.com/OraOpenSource/Logger) package to log trace information like the requests and responses from the AI providers.
 
-To install the Logger pacakge run the following script
+I do recommend installing the Logger package aswell as it helps debugging issues and keeping track of how the AI gets used.
 
-```bash
-# inside the uc_ai directory
-cd ./src/dependencies/logger_3.1.1
-sql ./logger_install.sql
-```
+However you have the option to install a "no op" (no operation) version of the Logger package which installs the necessary objects so that the packages compile but does not log anything.
 
-Alternatively if you don't want the logger installed you can install it's "no op" (no operation) version which installs the necessary objects so that the packages compile but does not log anything.
-
-```bash
-# inside the uc_ai directory
-cd ./src/dependencies/logger_3.1.1
-sql ./logger_install_no_op.sql
-```
+If you want to use your own logging solution you can modify the no op version to insert the log messages into your own logging tables.
 
 ## Installing UC AI
+
+### Option 1: GitHub release scripts
+
+For each new release of UC AI the release page in GitHub will contain scripts to install the UC AI package and its dependencies.
+
+- `install_uc_ai_complete.sql` installs all UC AI objects
+- `install_uc_ai_complete_with_logger.sql` installs all UC AI objects and the Logger package
+- `logger_no_op.sql` installs Logger in "no op" mode, meaning it will not log anything but the objects will compile. You can run `install_uc_ai_complete.sql` afterwards.
+- `upgrade_packages.sql` upgrades the UC AI packages.Most of the time only packages get modified. So for most releases you just need to run this script to upgrade to a newer version. Please still keep an eye ont the [release notes](https://github.com/United-Codes/uc_ai/releases) to see if there are any changes that require you to run the complete installation script.
+
+Just run the necessary script in your SQL client to install the UC AI package and its dependencies.
+
+### Option 2: Install GitHub repository
+
+Either download the source code of the latest release from the [GitHub releases page](https://github.com/United-Codes/uc_ai/releases/) or clone the [GitHub repository](https://github.com/United-Codes/uc_ai):
 
 Run this script to install the UC AI with any SQL client:
 
@@ -53,6 +49,14 @@ There is also a `install_with_logger.sql` script that installs the UC AI with th
 ```bash
 # inside the uc_ai directory
 sql ./install_with_logger.sql
+```
+
+Alternatively if you don't want the logger installed you can install it's "no op" (no operation) version which installs the necessary objects so that the packages compile but does not log anything.
+
+```bash
+# inside the uc_ai directory
+cd ./src/dependencies/logger_3.1.1
+sql ./logger_install_no_op.sql
 ```
 
 ## Set up API Keys
@@ -104,3 +108,9 @@ BEGIN
 END;
 /
 ```
+
+## Upgrades
+
+Most of the time you just need to run the `upgrade_packages.sql` script to upgrade to a newer version of UC AI. This script will only upgrade the packages that have changed since the last version.
+
+Please still keep an eye on the [release notes](https://github.com/United-Codes/uc_ai/releases) to see if there are any changes that require you to run the complete installation script.
