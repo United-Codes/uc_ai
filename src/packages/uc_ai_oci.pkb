@@ -8,6 +8,11 @@ create or replace package body uc_ai_oci as
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
   g_final_message clob;
 
+  gc_mode_generic constant varchar2(255 char) := 'generic';
+  gc_mode_cohere  constant varchar2(255 char) := 'cohere';
+
+  g_mode varchar2(255 char) := gc_mode_generic;
+
   -- OCI Generative AI reference: https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/
   function get_text_content (
     p_message in json_object_t
@@ -229,6 +234,7 @@ create or replace package body uc_ai_oci as
     l_resp_json json_object_t;
     l_temp_obj  json_object_t;
     l_chat_response json_object_t;
+    l_code varchar2(255 char);
   begin
     if g_tool_calls >= p_max_tool_calls then
       logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
@@ -236,11 +242,51 @@ create or replace package body uc_ai_oci as
       raise uc_ai.e_max_calls_exceeded;
     end if;
 
-    l_messages := p_messages;
+    l_messages := p_messages.clone();
     l_input_obj := p_input_obj;
     l_chat_request := l_input_obj.get_object('chatRequest');
 
-    l_chat_request.put('messages', l_messages);
+    if g_mode = gc_mode_generic then
+      l_chat_request.put('messages', l_messages);
+    else
+      -- cohere is fun...
+      declare
+        l_messages_copy json_array_t;
+        l_system_prompt clob;
+        l_last_message json_object_t;
+        l_last_message_content json_array_t;
+        l_last_message_part json_object_t;
+        l_user_message clob;
+        l_role varchar2(255 char);
+      begin
+        l_messages_copy := g_normalized_messages.clone();
+
+        <<find_system_prompt>>
+        for i in 0..l_messages_copy.get_size - 1
+        loop
+          l_role := treat(l_messages_copy.get(i) as json_object_t).get_string('role');
+          if l_role = 'system' then
+            l_system_prompt := treat(l_messages_copy.get(i) as json_object_t).get_clob('content');
+            l_messages_copy.remove(i);
+            exit find_system_prompt;
+          end if;
+        end loop find_system_prompt;
+
+        if l_system_prompt is not null then
+          l_chat_request.put('preambleOverride', l_system_prompt);
+        end if;
+
+        l_last_message := treat(l_messages_copy.get(l_messages_copy.get_size - 1) as json_object_t);
+        l_last_message_content := treat(l_last_message.get('content') as json_array_t);
+        l_last_message_part := treat(l_last_message_content.get(l_last_message_content.get_size - 1) as json_object_t);
+        l_user_message := l_last_message_part.get_clob('text');
+        -- remove last message from array
+        l_messages_copy.remove(l_messages_copy.get_size - 1);
+
+        l_chat_request.put('chatHistory', l_messages_copy);
+        l_chat_request.put('message', l_user_message);
+      end;
+    end if;
     l_input_obj.put('chatRequest', l_chat_request);
 
     -- Build API URL
@@ -267,6 +313,17 @@ create or replace package body uc_ai_oci as
       l_temp_obj := l_resp_json.get_object('error');
       logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
       raise uc_ai.e_error_response;
+    elsif l_resp_json.has('code') then
+      l_code := l_resp_json.get_string('code');
+      logger.log('API returned code: ' || l_code, l_scope);
+      case l_code 
+        when '400' then
+          logger.log_error('Bad request', l_scope);
+          raise uc_ai.e_error_response;
+        when '404' then
+          logger.log_error('Model not found', l_scope);
+          raise uc_ai.e_model_not_found_error;
+      end case;
     end if;
 
     -- Extract model information
@@ -278,157 +335,174 @@ create or replace package body uc_ai_oci as
     if l_resp_json.has('chatResponse') then
       l_chat_response := l_resp_json.get_object('chatResponse');
 
-      -- OCI response structure is different from OpenAI/Google
-      -- It has a direct text response in chatResponse
-      if l_chat_response.has('choices') then
-        declare
-          l_choices json_array_t;
-          l_choice json_object_t;
-          l_resp_message json_object_t;
-          l_role varchar2(255 char);
-          l_content_arr json_array_t;
-          l_oci_content_item json_object_t;
 
-          l_normalized_messages json_array_t := json_array_t();
-          l_normalized_tool_results json_array_t := json_array_t();
+      if g_mode = gc_mode_generic then
+        -- OCI response structure is different from OpenAI/Google
+        -- It has a direct text response in chatResponse
+        if l_chat_response.has('choices') then
+          declare
+            l_choices json_array_t;
+            l_choice json_object_t;
+            l_resp_message json_object_t;
+            l_role varchar2(255 char);
+            l_content_arr json_array_t;
+            l_oci_content_item json_object_t;
 
-          l_used_tool boolean := false;
+            l_normalized_messages json_array_t := json_array_t();
+            l_normalized_tool_results json_array_t := json_array_t();
 
-          l_new_msg json_object_t;
-          l_content clob;
-          l_oci_content json_array_t;
-        begin
-          l_choices := l_chat_response.get_array('choices');
+            l_used_tool boolean := false;
 
-          <<choices_loop>>
-          for i in 0 .. l_choices.get_size - 1 loop
-            l_choice := treat(l_choices.get(i) as json_object_t);
-            l_resp_message :=  l_choice.get_object('message');
+            l_new_msg json_object_t;
+            l_content clob;
+            l_oci_content json_array_t;
+          begin
+            l_choices := l_chat_response.get_array('choices');
 
-            l_role := l_resp_message.get_string('role');
+            <<choices_loop>>
+            for i in 0 .. l_choices.get_size - 1 loop
+              l_choice := treat(l_choices.get(i) as json_object_t);
+              l_resp_message :=  l_choice.get_object('message');
 
-            if l_role = 'ASSISTANT' then
-              if l_resp_message.has('content') then
-                l_content_arr := l_resp_message.get_array('content');
+              l_role := l_resp_message.get_string('role');
 
-                <<content_loop>>
-                for j in 0 .. l_content_arr.get_size - 1 loop
-                  l_oci_content_item := treat(l_content_arr.get(j) as json_object_t);
-                
-                  l_new_msg := get_text_content(l_oci_content_item);
-                  l_normalized_messages.append(l_new_msg);
-                end loop content_loop;
-              elsif l_resp_message.has('toolCalls') then
-                declare
-                  l_tool_call_arr  json_array_t;
-                  l_tool_call_item json_object_t;
-                  l_tool_call_id   varchar2(255 char);
-                  l_tool_name      uc_ai_tools.code%type;
-                  l_tool_args_str  varchar2(32767 char);
-                  l_tool_args      json_object_t;
-                  l_tool_result    clob;
-                  l_tool_response  json_object_t;
-                  l_tool_response_content json_object_t;
-                  l_tool_content   json_array_t := json_array_t();
-                begin
-                  l_used_tool := true;
-                  l_tool_call_arr := l_resp_message.get_array('toolCalls');
+              if l_role = 'ASSISTANT' then
+                if l_resp_message.has('content') then
+                  l_content_arr := l_resp_message.get_array('content');
 
-                  l_tool_response := json_object_t();
-                  l_tool_response.put('role', 'ASSISTANT');
-                  l_tool_response.put('toolCalls', l_tool_call_arr);
-                  l_messages.append(l_tool_response);
-
-                  <<tool_calls>>
-                  for k in 0 .. l_tool_call_arr.get_size - 1 
-                  loop
-                    g_tool_calls := g_tool_calls + 1;
-                    l_tool_call_item := treat(l_tool_call_arr.get(k) as json_object_t);
-
-                    l_tool_call_id := l_tool_call_item.get_string('id');
-                    l_tool_name := l_tool_call_item.get_string('name');
-                    l_tool_args_str := l_tool_call_item.get_string('arguments');
-
-                    logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name);
-
-                    if l_tool_args_str is not null then
-                      -- Parse tool arguments if available
-                      l_tool_args := json_object_t.parse(l_tool_args_str);
-                      logger.log('Tool args', l_scope, 'Args: ' || l_tool_args.to_clob);
-                    else
-                      l_tool_args := json_object_t();
-                      logger.log('Tool args', l_scope, 'No args provided');
-                    end if;
-
-                    l_new_msg := uc_ai_message_api.create_tool_call_content(
-                      p_tool_call_id => l_tool_call_id
-                    , p_tool_name    => l_tool_name
-                    , p_args         => l_tool_args.to_clob
-                    );
+                  <<content_loop>>
+                  for j in 0 .. l_content_arr.get_size - 1 loop
+                    l_oci_content_item := treat(l_content_arr.get(j) as json_object_t);
+                  
+                    l_new_msg := get_text_content(l_oci_content_item);
                     l_normalized_messages.append(l_new_msg);
-
-                    -- Execute the tool and get result
-                    begin
-                      l_tool_result := uc_ai_tools_api.execute_tool(
-                        p_tool_code          => l_tool_name
-                      , p_arguments          => l_tool_args
-                      );
-                    exception
-                      when others then
-                        logger.log_error('Tool execution failed', l_scope, 'Tool: ' || l_tool_name || ', Error: ' || sqlerrm || chr(10) || sys.dbms_utility.format_error_backtrace);
-                        l_tool_result := 'Error executing tool: ' || sqlerrm;
-                    end;
-
-                    logger.log('Tool result', l_scope, l_tool_result);
+                  end loop content_loop;
+                elsif l_resp_message.has('toolCalls') then
+                  declare
+                    l_tool_call_arr  json_array_t;
+                    l_tool_call_item json_object_t;
+                    l_tool_call_id   varchar2(255 char);
+                    l_tool_name      uc_ai_tools.code%type;
+                    l_tool_args_str  varchar2(32767 char);
+                    l_tool_args      json_object_t;
+                    l_tool_result    clob;
+                    l_tool_response  json_object_t;
+                    l_tool_response_content json_object_t;
+                    l_tool_content   json_array_t := json_array_t();
+                  begin
+                    l_used_tool := true;
+                    l_tool_call_arr := l_resp_message.get_array('toolCalls');
 
                     l_tool_response := json_object_t();
-                    l_tool_response.put('role', 'TOOL');
-                    l_tool_response.put('toolCallId', l_tool_call_id);
-                    l_tool_response_content := json_object_t();
-                    l_tool_response_content.put('type', 'TEXT');
-                    l_tool_response_content.put('text', l_tool_result);
-                    l_tool_content.append(l_tool_response_content);
-                    l_tool_response.put('content', l_tool_content);
+                    l_tool_response.put('role', 'ASSISTANT');
+                    l_tool_response.put('toolCalls', l_tool_call_arr);
                     l_messages.append(l_tool_response);
 
-                    l_new_msg := uc_ai_message_api.create_tool_result_content(
-                      p_tool_call_id => l_tool_call_id,
-                      p_tool_name    => l_tool_name,
-                      p_result       => l_tool_result
-                    );
-                    l_normalized_tool_results.append(l_new_msg);
+                    <<tool_calls>>
+                    for k in 0 .. l_tool_call_arr.get_size - 1 
+                    loop
+                      g_tool_calls := g_tool_calls + 1;
+                      l_tool_call_item := treat(l_tool_call_arr.get(k) as json_object_t);
 
-                  end loop tool_calls;
-                end;
+                      l_tool_call_id := l_tool_call_item.get_string('id');
+                      l_tool_name := l_tool_call_item.get_string('name');
+                      l_tool_args_str := l_tool_call_item.get_string('arguments');
+
+                      logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name);
+
+                      if l_tool_args_str is not null then
+                        -- Parse tool arguments if available
+                        l_tool_args := json_object_t.parse(l_tool_args_str);
+                        logger.log('Tool args', l_scope, 'Args: ' || l_tool_args.to_clob);
+                      else
+                        l_tool_args := json_object_t();
+                        logger.log('Tool args', l_scope, 'No args provided');
+                      end if;
+
+                      l_new_msg := uc_ai_message_api.create_tool_call_content(
+                        p_tool_call_id => l_tool_call_id
+                      , p_tool_name    => l_tool_name
+                      , p_args         => l_tool_args.to_clob
+                      );
+                      l_normalized_messages.append(l_new_msg);
+
+                      -- Execute the tool and get result
+                      begin
+                        l_tool_result := uc_ai_tools_api.execute_tool(
+                          p_tool_code          => l_tool_name
+                        , p_arguments          => l_tool_args
+                        );
+                      exception
+                        when others then
+                          logger.log_error('Tool execution failed', l_scope, 'Tool: ' || l_tool_name || ', Error: ' || sqlerrm || chr(10) || sys.dbms_utility.format_error_backtrace);
+                          l_tool_result := 'Error executing tool: ' || sqlerrm;
+                      end;
+
+                      logger.log('Tool result', l_scope, l_tool_result);
+
+                      l_tool_response := json_object_t();
+                      l_tool_response.put('role', 'TOOL');
+                      l_tool_response.put('toolCallId', l_tool_call_id);
+                      l_tool_response_content := json_object_t();
+                      l_tool_response_content.put('type', 'TEXT');
+                      l_tool_response_content.put('text', l_tool_result);
+                      l_tool_content.append(l_tool_response_content);
+                      l_tool_response.put('content', l_tool_content);
+                      l_messages.append(l_tool_response);
+
+                      l_new_msg := uc_ai_message_api.create_tool_result_content(
+                        p_tool_call_id => l_tool_call_id,
+                        p_tool_name    => l_tool_name,
+                        p_result       => l_tool_result
+                      );
+                      l_normalized_tool_results.append(l_new_msg);
+
+                    end loop tool_calls;
+                  end;
+                end if;
+
+              else
+                logger.log_error('Unknown role in OCI response: ' || l_role, l_scope);
               end if;
+            end loop choices_loop;
+            
+            g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+            
 
-            else
-              logger.log_error('Unknown role in OCI response: ' || l_role, l_scope);
+            if l_used_tool then
+              g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
+              pio_result.put('tool_calls_count', g_tool_calls);
+
+              -- Continue conversation with tool results - recursive call
+              l_messages := internal_generate_text(
+                p_messages           => l_messages
+              , p_max_tool_calls     => p_max_tool_calls
+              , p_input_obj          => p_input_obj
+              , pio_result           => pio_result
+              );
             end if;
-          end loop choices_loop;
-          
-          g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
-          
 
-          if l_used_tool then
-            g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
-            pio_result.put('tool_calls_count', g_tool_calls);
-
-            -- Continue conversation with tool results - recursive call
-            l_messages := internal_generate_text(
-              p_messages           => l_messages
-            , p_max_tool_calls     => p_max_tool_calls
-            , p_input_obj          => p_input_obj
-            , pio_result           => pio_result
-            );
-          end if;
-
-          -- Set finish reason to stop for successful completion
-          pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
-        end;
+            -- Set finish reason to stop for successful completion
+            pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
+          end;
+        else
+          logger.log_error('No text in OCI chatResponse', l_scope);
+          pio_result.put('finish_reason', 'error');
+        end if;
       else
-        logger.log_error('No text in OCI chatResponse', l_scope);
-        pio_result.put('finish_reason', 'error');
+        -- cohere
+        if l_chat_response.has('text') then
+          declare
+            l_final_message clob;
+          begin
+            l_final_message := l_chat_response.get_clob('text');
+            g_final_message := l_final_message;
+          end;
+        else
+          logger.log_error('No text in OCI chatResponse', l_scope);
+          pio_result.put('finish_reason', 'error');
+        end if;
+
       end if;
     else
       logger.log_error('No chatResponse in OCI response', l_scope);
@@ -461,7 +535,13 @@ create or replace package body uc_ai_oci as
   begin
     l_result := json_object_t();
     logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
-    
+
+    if p_model like 'cohere.%' then
+      g_mode := gc_mode_cohere;
+    else
+      g_mode := gc_mode_generic;
+    end if;
+
     -- Reset global variables
     g_tool_calls := 0;
     g_final_message := null;
@@ -500,18 +580,32 @@ create or replace package body uc_ai_oci as
     l_serving_mode.put('modelId', p_model);
     l_serving_mode.put('servingType', coalesce(g_serving_type, 'ON_DEMAND'));
     l_input_obj.put('servingMode', l_serving_mode);
-    
-    -- Set chat request
-    l_chat_request := json_object_t();
-    l_chat_request.put('apiFormat', 'GENERIC');
-    l_chat_request.put('maxTokens', 600);
-    l_chat_request.put('isStream', false);
-    l_chat_request.put('numGenerations', 1);
-    l_chat_request.put('frequencyPenalty', 0);
-    l_chat_request.put('presencePenalty', 0);
-    l_chat_request.put('temperature', 1);
-    l_chat_request.put('topP', 1.0);
-    l_chat_request.put('topK', 1);
+
+    if g_mode = gc_mode_generic then
+
+      -- Set chat request
+      l_chat_request := json_object_t();
+      l_chat_request.put('apiFormat', 'GENERIC');
+      l_chat_request.put('maxTokens', 600);
+      l_chat_request.put('isStream', false);
+      l_chat_request.put('numGenerations', 1);
+      --l_chat_request.put('frequencyPenalty', 0);
+      --l_chat_request.put('presencePenalty', 0);
+      --l_chat_request.put('temperature', 1);
+      --l_chat_request.put('topP', 1.0);
+      --l_chat_request.put('topK', 1);
+    else
+      l_chat_request := json_object_t();
+      l_chat_request.put('apiFormat', 'COHERE');
+      l_chat_request.put('isEcho', false);
+      l_chat_request.put('frequencyPenalty', 0);
+      l_chat_request.put('isStream', false);
+      l_chat_request.put('maxTokens', 600);
+      --l_chat_request.put('presencePenalty', 0);
+      --l_chat_request.put('temperature', 1);
+      --l_chat_request.put('topP', 1.0);
+      --l_chat_request.put('topK', 1);
+    end if;
 
     -- Get all available tools formatted for Google (function declarations)
     l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_oci);

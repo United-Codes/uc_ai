@@ -14,5 +14,8 @@ create or replace package test_uc_ai_oci as
   --%test(Tool usage - clock in user in Generic Mode)
   procedure tool_clock_in_user_generic;
 
+  --%test(Basic recipe generation with OCI in Cohere Mode)
+  procedure basic_recipe_cohere;
+
 end test_uc_ai_oci;
 /
