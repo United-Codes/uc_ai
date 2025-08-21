@@ -13,8 +13,11 @@ create or replace package body uc_ai_oci as
 
   g_mode varchar2(255 char) := gc_mode_generic;
 
+  g_cohere_system_prompt clob;
+  g_cohere_user_message clob;
+
   -- OCI Generative AI reference: https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/
-  function get_text_content (
+  function get_text_content_generic (
     p_message in json_object_t
   ) return json_object_t
   as
@@ -26,7 +29,7 @@ create or replace package body uc_ai_oci as
     l_message := p_message.clone();
 
     if l_message.get_string('type') != 'TEXT' then
-      logger.log_error('Message type is not TEXT.', c_scope_prefix || 'get_text_content', l_message.to_clob);
+      logger.log_error('Message type is not TEXT.', c_scope_prefix || 'get_text_content_generic', l_message.to_clob);
       raise uc_ai.e_unhandled_format;
     end if;
 
@@ -43,19 +46,41 @@ create or replace package body uc_ai_oci as
     g_final_message := l_content;
 
     return l_lm_text_content;
-  end get_text_content;
+  end get_text_content_generic;
+
+
+  function get_text_content_cohere (
+    p_chat_response in json_object_t
+  ) return json_object_t
+  as
+    l_text             clob;
+    l_lm_text_content  json_object_t;
+  begin
+    if not p_chat_response.has('text') then
+      logger.log_error('Cohere response does not contain text field', c_scope_prefix || 'get_text_content_cohere');
+      raise uc_ai.e_unhandled_format;
+    end if;
+
+    l_text := p_chat_response.get_clob('text');
+    g_final_message := l_text;
+
+    l_lm_text_content := uc_ai_message_api.create_text_content(
+      p_text => l_text
+    );
+    return l_lm_text_content;
+  end get_text_content_cohere;
 
   /*
-   * Convert standardized Language Model messages to OCI format
-   * Returns OCI-compatible messages array that can be sent directly to OCI Generative AI API
+   * Convert standardized Language Model messages to the generic OCI format
+   * Returns OCI generic compatible messages array that can be sent directly to OCI Generative AI API
    * OCI uses a messages array similar to OpenAI but with specific content structure
    */
-  procedure convert_lm_messages_to_oci(
+  procedure convert_lm_messages_to_generic_oci(
     p_lm_messages in json_array_t,
     po_oci_messages out json_array_t
   )
   as
-    l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_oci';
+    l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_generic_oci';
     l_lm_message json_object_t;
     l_oci_message json_object_t;
     l_role varchar2(255 char);
@@ -65,7 +90,7 @@ create or replace package body uc_ai_oci as
     l_oci_content json_array_t;
     l_oci_content_item json_object_t;
   begin
-    logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to OCI format', l_scope);
+    logger.log('Converting ' || p_lm_messages.get_size || ' LLM messages to OCI generic format', l_scope);
     
     po_oci_messages := json_array_t();
 
@@ -176,6 +201,7 @@ create or replace package body uc_ai_oci as
             
             if l_content_type = 'tool_result' then
               l_oci_content_item := json_object_t();
+              -- TODO: validate if this is correct:
               l_oci_content_item.put('type', 'TEXT');
               l_oci_content_item.put('text', 'Tool result from ' || l_content_item.get_string('toolName') || ': ' || l_content_item.get_clob('result'));
               l_oci_content.append(l_oci_content_item);
@@ -195,7 +221,182 @@ create or replace package body uc_ai_oci as
     end loop message_loop;
 
     logger.log('Converted to ' || po_oci_messages.get_size || ' OCI messages', l_scope);
-  end convert_lm_messages_to_oci;
+  end convert_lm_messages_to_generic_oci;
+
+  /*
+   * Convert standardized Language Model messages to the cohere OCI format
+   * Returns OCI cohere compatible messages array that can be sent directly to OCI Generative AI API
+   * OCI uses a messages array similar to OpenAI but with specific content structure
+   */
+  procedure convert_lm_messages_to_cohere_oci(
+    p_lm_messages in json_array_t,
+    po_oci_messages out json_array_t
+  )
+  as
+    l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_cohere_oci';
+    l_lm_message json_object_t;
+    l_oci_message json_object_t;
+    l_role varchar2(255 char);
+    l_content json_array_t;
+    l_content_item json_object_t;
+    l_content_type varchar2(255 char);
+    l_oci_content json_array_t;
+    l_oci_content_item json_object_t;
+
+    l_has_tool_call boolean := false;
+    l_tool_call json_object_t;
+    l_tool_call_message clob;
+    l_tool_calls json_array_t;
+  begin
+    logger.log('Converting ' || p_lm_messages.get_size || ' LLM messages to OCI cohere format', l_scope, p_lm_messages.to_clob);
+    
+    po_oci_messages := json_array_t();
+
+    <<message_loop>>
+    for i in 0 .. p_lm_messages.get_size - 1
+    loop
+      l_lm_message := treat(p_lm_messages.get(i) as json_object_t);
+      l_role := l_lm_message.get_string('role');
+      logger.log('Processing LLM message', l_scope, l_lm_message.to_clob);
+
+      case l_role
+        when 'system' then
+          g_cohere_system_prompt := l_lm_message.get_clob('content');
+        when 'user' then
+          -- User message: extract content from content array
+          l_content := l_lm_message.get_array('content');
+          logger.log('User message content', l_scope, l_content.to_clob);
+
+          <<user_content_loop>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            l_content_item := treat(l_content.get(j) as json_object_t);
+            l_content_type := l_content_item.get_string('type');
+            
+            case l_content_type
+              when 'text' then
+                -- Add text content
+                l_oci_message := json_object_t();
+                l_oci_message.put('role', 'USER');
+                l_oci_message.put('message', l_content_item.get_clob('text'));
+                logger.log('Append user message', l_scope, l_oci_message.to_clob);
+                po_oci_messages.append(l_oci_message);
+              when 'file' then
+                logger.log_error('Cohere cannot handle files', l_scope);
+                raise uc_ai.e_unhandled_format;
+              else
+                logger.log_error('Unknown content type in user message: ' || l_content_type, l_scope);
+                raise uc_ai.e_unhandled_format;
+            end case;
+          end loop user_content_loop;
+          
+
+        when 'assistant' then
+          -- Assistant message: convert to ASSISTANT role
+          l_content := l_lm_message.get_array('content');
+
+          <<check_if_has_tool_call>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            l_content_item := treat(l_content.get(j) as json_object_t);
+            l_content_type := l_content_item.get_string('type');
+            if l_content_type = 'tool_call' then
+              l_has_tool_call := true;
+              exit check_if_has_tool_call;
+            end if;
+          end loop check_if_has_tool_call;
+          
+          <<assistant_content_loop>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            l_content_item := treat(l_content.get(j) as json_object_t);
+            l_content_type := l_content_item.get_string('type');
+
+            if not l_has_tool_call then
+              l_oci_message := json_object_t();
+              l_oci_message.put('role', 'CHATBOT');
+              l_oci_message.put('message', l_content_item.get_clob('text'));
+              po_oci_messages.append(l_oci_message);
+            else
+              l_tool_calls := json_array_t();
+
+              case l_content_type
+                when 'text' then
+                  l_tool_call_message := l_content_item.get_clob('text');
+                when 'tool_call' then
+                  -- OCI tool calls handling would need to be implemented based on OCI's format
+                  -- For now, we'll convert to text description
+                  l_tool_call := json_object_t();
+                  l_tool_call.put('name', l_content_item.get_string('toolName'));
+                  l_tool_call.put('parameters', l_content_item.get_clob('args'));
+
+                  l_tool_calls.append(l_tool_call);
+                else
+                  logger.log_error('Unknown content type in assistant message: ' || l_content_type, l_scope);
+                  raise uc_ai.e_unhandled_format;
+              end case;
+                l_oci_message := json_object_t();
+                l_oci_message.put('role', 'CHATBOT');
+                l_oci_message.put('message', l_tool_call_message);
+                l_oci_message.put('toolCalls', l_tool_calls);
+                po_oci_messages.append(l_oci_message);
+
+            end if;
+          end loop assistant_content_loop;
+
+        when 'tool' then
+          -- Tool results are typically sent as user messages in OCI
+          l_content := l_lm_message.get_array('content');
+          l_tool_calls := json_array_t();
+          
+          <<tool_content_loop>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            l_content_item := treat(l_content.get(j) as json_object_t);
+            l_content_type := l_content_item.get_string('type');
+            
+            if l_content_type = 'tool_result' then
+              l_oci_content_item := json_object_t();
+              l_oci_content_item.put('outputs', l_content_item.get_clob('result'));
+              l_tool_call := json_object_t();
+              l_tool_call.put('name', l_content_item.get_string('toolName'));
+              l_tool_call.put('parameters', l_content_item.get_clob('args'));
+              l_oci_content_item.put('call', l_tool_call);
+              l_tool_calls.append(l_oci_content_item);
+            end if;
+          end loop tool_content_loop;
+          
+          if l_tool_calls.get_size > 0 then
+            l_oci_message := json_object_t();
+            l_oci_message.put('role', 'TOOL');
+            l_oci_message.put('toolResults', l_tool_calls);
+            po_oci_messages.append(l_oci_message);
+          end if;
+
+        else
+          logger.log_warn('Unknown message role: ' || l_role, l_scope);
+      end case;
+    end loop message_loop;
+
+    logger.log('Cohere messages after conversion: ', l_scope, po_oci_messages.to_clob);
+
+    declare
+      l_last_message json_object_t;
+      l_last_message_role varchar2(255 char);
+    begin
+      l_last_message := treat(po_oci_messages.get(po_oci_messages.get_size - 1) as json_object_t);
+      l_last_message_role := l_last_message.get_string('role');
+
+      if l_last_message_role = 'USER' then
+        g_cohere_user_message := l_last_message.get_clob('message');
+
+        -- remove last message as cohere expects it in the body (message) and not in the chat history
+        po_oci_messages.remove(po_oci_messages.get_size - 1);
+      end if;
+    end;
+
+    logger.log('Converted to ' || po_oci_messages.get_size || ' OCI messages', l_scope);
+  end convert_lm_messages_to_cohere_oci;
 
   /*
    * Get OCI region from global setting or use default
@@ -249,43 +450,12 @@ create or replace package body uc_ai_oci as
     if g_mode = gc_mode_generic then
       l_chat_request.put('messages', l_messages);
     else
-      -- cohere is fun...
-      declare
-        l_messages_copy json_array_t;
-        l_system_prompt clob;
-        l_last_message json_object_t;
-        l_last_message_content json_array_t;
-        l_last_message_part json_object_t;
-        l_user_message clob;
-        l_role varchar2(255 char);
-      begin
-        l_messages_copy := g_normalized_messages.clone();
+      l_chat_request.put('chatHistory', l_messages);
+      l_chat_request.put('message', g_cohere_user_message);
 
-        <<find_system_prompt>>
-        for i in 0..l_messages_copy.get_size - 1
-        loop
-          l_role := treat(l_messages_copy.get(i) as json_object_t).get_string('role');
-          if l_role = 'system' then
-            l_system_prompt := treat(l_messages_copy.get(i) as json_object_t).get_clob('content');
-            l_messages_copy.remove(i);
-            exit find_system_prompt;
-          end if;
-        end loop find_system_prompt;
-
-        if l_system_prompt is not null then
-          l_chat_request.put('preambleOverride', l_system_prompt);
-        end if;
-
-        l_last_message := treat(l_messages_copy.get(l_messages_copy.get_size - 1) as json_object_t);
-        l_last_message_content := treat(l_last_message.get('content') as json_array_t);
-        l_last_message_part := treat(l_last_message_content.get(l_last_message_content.get_size - 1) as json_object_t);
-        l_user_message := l_last_message_part.get_clob('text');
-        -- remove last message from array
-        l_messages_copy.remove(l_messages_copy.get_size - 1);
-
-        l_chat_request.put('chatHistory', l_messages_copy);
-        l_chat_request.put('message', l_user_message);
-      end;
+      if g_cohere_system_prompt is not null then
+        l_chat_request.put('preambleOverride', g_cohere_system_prompt);
+      end if;
     end if;
     l_input_obj.put('chatRequest', l_chat_request);
 
@@ -374,7 +544,7 @@ create or replace package body uc_ai_oci as
                   for j in 0 .. l_content_arr.get_size - 1 loop
                     l_oci_content_item := treat(l_content_arr.get(j) as json_object_t);
                   
-                    l_new_msg := get_text_content(l_oci_content_item);
+                    l_new_msg := get_text_content_generic(l_oci_content_item);
                     l_normalized_messages.append(l_new_msg);
                   end loop content_loop;
                 elsif l_resp_message.has('toolCalls') then
@@ -493,10 +663,13 @@ create or replace package body uc_ai_oci as
         -- cohere
         if l_chat_response.has('text') then
           declare
-            l_final_message clob;
+            l_new_msg json_object_t;
+            l_normalized_messages json_array_t := json_array_t();
           begin
-            l_final_message := l_chat_response.get_clob('text');
-            g_final_message := l_final_message;
+            l_new_msg := get_text_content_cohere(l_chat_response);
+            l_normalized_messages.append(l_new_msg);
+
+            g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
           end;
         else
           logger.log_error('No text in OCI chatResponse', l_scope);
@@ -559,12 +732,6 @@ create or replace package body uc_ai_oci as
     l_result.put('tool_calls_count', 0);
     l_result.put('finish_reason', 'unknown');
     l_result.put('model', p_model);
-    
-    -- Convert standardized messages to OCI format
-    convert_lm_messages_to_oci(
-      p_lm_messages => p_messages,
-      po_oci_messages => l_oci_messages
-    );
 
     -- Build OCI request structure
     -- Set compartment ID (must be configured)
@@ -582,6 +749,11 @@ create or replace package body uc_ai_oci as
     l_input_obj.put('servingMode', l_serving_mode);
 
     if g_mode = gc_mode_generic then
+      -- Convert standardized messages to OCI format
+      convert_lm_messages_to_generic_oci(
+        p_lm_messages => p_messages,
+        po_oci_messages => l_oci_messages
+      );
 
       -- Set chat request
       l_chat_request := json_object_t();
@@ -595,6 +767,12 @@ create or replace package body uc_ai_oci as
       --l_chat_request.put('topP', 1.0);
       --l_chat_request.put('topK', 1);
     else
+      -- Convert standardized messages to OCI format
+      convert_lm_messages_to_cohere_oci(
+        p_lm_messages => p_messages,
+        po_oci_messages => l_oci_messages
+      );
+
       l_chat_request := json_object_t();
       l_chat_request.put('apiFormat', 'COHERE');
       l_chat_request.put('isEcho', false);

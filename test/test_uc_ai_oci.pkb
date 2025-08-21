@@ -239,5 +239,69 @@ create or replace package body test_uc_ai_oci as
   end basic_recipe_cohere;
 
 
+  procedure continue_conversation_cohere
+  as
+    l_result json_object_t;
+    l_final_message clob;
+    l_messages json_array_t;
+    l_message_count pls_integer;
+    l_content json_array_t := json_array_t();
+  begin
+    uc_ai_oci.g_compartment_id := get_oci_compratment_id;
+    uc_ai_oci.g_region := 'eu-frankfurt-1';
+    uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+
+    l_result := uc_ai.GENERATE_TEXT(
+      p_system_prompt => 'Let''s count up. One at a time. Just reply with the next number.',
+      p_user_prompt => '1',
+      p_provider => uc_ai.c_provider_oci,
+      p_model => uc_ai_oci.c_model_cohere_command_a_03_2025
+    );
+
+    l_final_message := l_result.get_clob('final_message');
+    ut.expect(l_final_message).to_be_like('%2%');
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    l_message_count := l_messages.get_size;
+    ut.expect(l_message_count).to_equal(3); -- system message + user message + assistant response
+
+    sys.dbms_output.put_line('Result: ' || l_result.to_string);
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+
+    -- Validate message array structure against spec
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Basic recipe Test');
+
+    ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
+
+    l_content.append(uc_ai_message_api.create_text_content(
+      '3'
+    ));
+
+    l_messages.append(
+      uc_ai_message_api.create_user_message(l_content)
+    );
+
+    l_result := uc_ai.GENERATE_TEXT(
+      p_messages => l_messages,
+      p_provider => uc_ai.c_provider_oci,
+      p_model => uc_ai_oci.c_model_cohere_command_a_03_2025
+    );
+
+    l_final_message := l_result.get_clob('final_message');
+    ut.expect(l_final_message).to_be_like('%4%');
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    l_message_count := l_messages.get_size;
+    ut.expect(l_message_count).to_equal(5); -- system message + (user message + assistant response) * 2
+
+    sys.dbms_output.put_line('Result: ' || l_result.to_string);
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+
+    -- Validate message array structure against spec
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Basic recipe Test');
+
+    ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
+  end continue_conversation_cohere;
+
 end test_uc_ai_oci;
 /

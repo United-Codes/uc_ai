@@ -17,5 +17,8 @@ create or replace package test_uc_ai_oci as
   --%test(Basic recipe generation with OCI in Cohere Mode)
   procedure basic_recipe_cohere;
 
+  --%test(Continue conversations with OCI in Cohere Mode)
+  procedure continue_conversation_cohere;
+
 end test_uc_ai_oci;
 /
