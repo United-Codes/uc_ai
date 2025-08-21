@@ -1,0 +1,32 @@
+{
+  "modelId": "cohere.command-a-03-2025",
+  "modelVersion": "1.0",
+  "chatResponse": {
+    "apiFormat": "COHERE",
+    "text": "4",
+    "chatHistory": [
+      {
+        "role": "USER",
+        "message": "1"
+      },
+      {
+        "role": "CHATBOT",
+        "message": "2"
+      },
+      {
+        "role": "USER",
+        "message": "3"
+      },
+      {
+        "role": "CHATBOT",
+        "message": "4"
+      }
+    ],
+    "finishReason": "COMPLETE",
+    "usage": {
+      "completionTokens": 1,
+      "promptTokens": 22,
+      "totalTokens": 23
+    }
+  }
+}
