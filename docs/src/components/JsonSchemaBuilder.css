@@ -1,9 +1,9 @@
 /* CSS Variables for easy customization */
-:root .json-schema-builder {
+.json-schema-builder {
   /* Control dimensions */
   --jsb-control-height: 34px;
   
-  /* Colors - Border */
+  /* Colors - Border (Light mode) */
   --jsb-border-light: #e5e7eb;
   --jsb-border-medium: #d1d5db;
   --jsb-border-hover: #3b82f6;
@@ -11,7 +11,7 @@
   --jsb-border-dashed: #d1d5db;
   --jsb-border-section: #f3f4f6;
   
-  /* Colors - Background */
+  /* Colors - Background (Light mode) */
   --jsb-bg-primary: white;
   --jsb-bg-secondary: #f9fafb;
   --jsb-bg-tertiary: #fafbfc;
@@ -21,7 +21,7 @@
   --jsb-bg-hover-light: #f8faff;
   --jsb-bg-error-hover: #fef2f2;
   
-  /* Colors - Text */
+  /* Colors - Text (Light mode) */
   --jsb-text-primary: #111827;
   --jsb-text-secondary: #374151;
   --jsb-text-muted: #6b7280;
@@ -70,6 +70,38 @@
   --jsb-transition: all 0.15s ease;
 }
 
+/* Dark mode color overrides */
+html[data-theme="dark"] .json-schema-builder {
+  /* Colors - Border (Dark mode) */
+  --jsb-border-light: #374151;
+  --jsb-border-medium: #4b5563;
+  --jsb-border-hover: #60a5fa;
+  --jsb-border-focus: #60a5fa;
+  --jsb-border-dashed: #4b5563;
+  --jsb-border-section: #374151;
+  
+  /* Colors - Background (Dark mode) */
+  --jsb-bg-primary: #1f2937;
+  --jsb-bg-secondary: #111827;
+  --jsb-bg-tertiary: #0f172a;
+  --jsb-bg-code: #111827;
+  --jsb-bg-enum-tag: #374151;
+  --jsb-bg-hover: #374151;
+  --jsb-bg-hover-light: #1e3a8a;
+  --jsb-bg-error-hover: #450a0a;
+  
+  /* Colors - Text (Dark mode) */
+  --jsb-text-primary: #f9fafb;
+  --jsb-text-secondary: #d1d5db;
+  --jsb-text-muted: #9ca3af;
+  --jsb-text-disabled: #6b7280;
+  --jsb-text-error: #f87171;
+  --jsb-text-white: #1f2937;
+  
+  /* Colors - Accent (Dark mode) */
+  --jsb-accent-primary: #60a5fa;
+  --jsb-accent-primary-hover: #3b82f6;
+}
 
 .json-schema-builder {
   max-width: 1000px;
@@ -137,6 +169,118 @@
   font-size: var(--jsb-font-sm);
   color: var(--jsb-text-muted);
   line-height: 1.3;
+}
+
+.paste-card {
+  border: 2px dashed var(--jsb-border-dashed);
+  position: relative;
+}
+
+.paste-card:hover {
+  border-color: var(--jsb-border-hover);
+  border-style: dashed;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--jsb-spacing-xl);
+}
+
+/* Dark mode modal overlay adjustment */
+html[data-theme="dark"] .modal-overlay {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.modal-content {
+  background: var(--jsb-bg-primary);
+  border-radius: var(--jsb-radius-lg);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--jsb-spacing-xl);
+  border-bottom: 1px solid var(--jsb-border-light);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: var(--jsb-font-2xl);
+  font-weight: var(--jsb-font-semibold);
+  color: var(--jsb-text-primary);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: var(--jsb-font-2xl);
+  color: var(--jsb-text-muted);
+  cursor: pointer;
+  padding: var(--jsb-spacing-xs);
+  border-radius: var(--jsb-radius-sm);
+  transition: var(--jsb-transition);
+}
+
+.modal-close:hover {
+  background: var(--jsb-bg-hover);
+  color: var(--jsb-text-secondary);
+}
+
+.modal-body {
+  padding: var(--jsb-spacing-xl);
+  flex: 1;
+  overflow-y: auto;
+}
+
+.modal-body p {
+  margin: 0 0 var(--jsb-spacing-lg) 0;
+  color: var(--jsb-text-muted);
+  font-size: var(--jsb-font-lg);
+}
+
+.paste-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: var(--jsb-spacing-lg);
+  border: 1px solid var(--jsb-border-medium);
+  border-radius: var(--jsb-radius-md);
+  font-family: 'SF Mono', 'Monaco', 'Cascadia Code', 'Roboto Mono', monospace;
+  font-size: var(--jsb-font-md);
+  line-height: 1.4;
+  resize: vertical;
+  background: var(--jsb-bg-code);
+  box-sizing: border-box;
+}
+
+.paste-textarea:focus {
+  outline: none;
+  border-color: var(--jsb-border-focus);
+  box-shadow: var(--jsb-shadow-focus);
+}
+
+.modal-footer {
+  display: flex;
+  gap: var(--jsb-spacing-md);
+  justify-content: flex-end;
+  padding: var(--jsb-spacing-xl);
+  border-top: 1px solid var(--jsb-border-light);
 }
 
 /* Ensure the card action is aligned consistently at the bottom */

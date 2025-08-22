@@ -56,6 +56,7 @@ interface JsonSchema {
 const JsonSchemaBuilder: React.FC = () => {
   const titleId = useId();
   const descriptionId = useId();
+  const pasteModalTitleId = useId();
 
   const [schema, setSchema] = useState<JsonSchema>({
     $schema: "http://json-schema.org/draft-07/schema#",
@@ -71,6 +72,9 @@ const JsonSchemaBuilder: React.FC = () => {
   const [collapsedStates, setCollapsedStates] = useState<Map<string, boolean>>(
     new Map()
   );
+
+  const [pasteModalOpen, setPasteModalOpen] = useState(false);
+  const [pasteText, setPasteText] = useState("");
 
   const toggleCollapse = useCallback((propertyId: string) => {
     setCollapsedStates((prev) => {
@@ -592,6 +596,86 @@ const JsonSchemaBuilder: React.FC = () => {
     setProperties(convertToSchemaProperties(sampleSchema.properties));
   }, []);
 
+  const parseAndLoadSchema = useCallback((schemaText: string) => {
+    try {
+      const parsedSchema = JSON.parse(schemaText) as JsonSchema;
+
+      // Validate that it's a proper JSON schema
+      if (!parsedSchema.type || !parsedSchema.properties) {
+        throw new Error("Invalid JSON schema format");
+      }
+
+      // Clear existing properties and collapsed states
+      setProperties([]);
+      setCollapsedStates(new Map());
+
+      // Set schema metadata
+      setSchema({
+        $schema:
+          parsedSchema.$schema || "http://json-schema.org/draft-07/schema#",
+        type: parsedSchema.type,
+        title: parsedSchema.title || "",
+        description: parsedSchema.description || "",
+        properties: parsedSchema.properties,
+        required: parsedSchema.required || [],
+      });
+
+      // Convert JSON schema properties to internal format
+      const convertJsonSchemaToProperties = (
+        schemaProps: Record<string, JsonSchemaProperty>,
+        requiredFields: string[] = []
+      ): SchemaProperty[] => {
+        return Object.entries(schemaProps).map(([name, prop], index) => {
+          const id = `imported-${Date.now()}-${index}`;
+          const converted: SchemaProperty = {
+            id,
+            name,
+            type: prop.type,
+            description: prop.description,
+            required: requiredFields.includes(name),
+          };
+
+          if (prop.enum) {
+            converted.enum = prop.enum;
+          }
+
+          if (prop.type === "array" && prop.items) {
+            converted.items = {
+              id: `${id}-item`,
+              name: "item",
+              type: prop.items.type,
+              required: false,
+            };
+          }
+
+          if (prop.type === "object" && prop.properties) {
+            converted.properties = convertJsonSchemaToProperties(
+              prop.properties,
+              prop.required || []
+            );
+          }
+
+          return converted;
+        });
+      };
+
+      const convertedProperties = convertJsonSchemaToProperties(
+        parsedSchema.properties,
+        parsedSchema.required || []
+      );
+
+      setProperties(convertedProperties);
+      setPasteModalOpen(false);
+      setPasteText("");
+    } catch (error) {
+      alert(
+        `Error parsing schema: ${
+          error instanceof Error ? error.message : "Invalid JSON"
+        }`
+      );
+    }
+  }, []);
+
   React.useEffect(() => {
     generateSchema();
   }, [generateSchema]);
@@ -865,8 +949,16 @@ const JsonSchemaBuilder: React.FC = () => {
 
       <div className="samples-section">
         <h3>Sample Schemas</h3>
-        <p>Load pre-built schemas for common AI use cases:</p>
+        <p>Load pre-built schemas for common AI use cases or paste your own:</p>
         <div className="samples-grid">
+          <button
+            type="button"
+            className="sample-card paste-card"
+            onClick={() => setPasteModalOpen(true)}
+          >
+            <h4>📋 Paste Schema</h4>
+            <p>Paste an existing JSON schema to edit it</p>
+          </button>
           {sampleSchemas.map((sample) => (
             <button
               key={sample.name}
@@ -1181,6 +1273,72 @@ const JsonSchemaBuilder: React.FC = () => {
         <h3>Generated JSON Schema</h3>
         <div className="schema-output">{JSON.stringify(schema, null, 2)}</div>
       </div>
+
+      {pasteModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => setPasteModalOpen(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setPasteModalOpen(false);
+            }
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={pasteModalTitleId}
+          tabIndex={-1}
+        >
+          <div
+            className="modal-content"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            role="document"
+          >
+            <div className="modal-header">
+              <h3 id={pasteModalTitleId}>Paste JSON Schema</h3>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setPasteModalOpen(false)}
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>
+                Paste your JSON schema below and click "Load Schema" to import
+                it:
+              </p>
+              <textarea
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+                placeholder="Paste your JSON schema here..."
+                rows={10}
+                className="paste-textarea"
+                aria-label="JSON schema text input"
+              />
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setPasteModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => parseAndLoadSchema(pasteText)}
+                disabled={!pasteText.trim()}
+              >
+                Load Schema
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
