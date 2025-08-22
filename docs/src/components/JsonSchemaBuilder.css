@@ -242,6 +242,39 @@
   border-bottom: 1px solid var(--jsb-border-light);
 }
 
+.property-name-section {
+  display: flex;
+  align-items: center;
+  gap: var(--jsb-spacing-sm);
+}
+
+.tree-toggle {
+  background: none;
+  border: none;
+  color: var(--jsb-text-muted);
+  cursor: pointer;
+  padding: var(--jsb-spacing-xs);
+  font-size: var(--jsb-font-md);
+  line-height: 1;
+  border-radius: var(--jsb-radius-sm);
+  transition: var(--jsb-transition);
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-toggle:hover {
+  background: var(--jsb-bg-hover);
+  color: var(--jsb-text-secondary);
+}
+
+.tree-toggle:focus {
+  outline: none;
+  box-shadow: var(--jsb-shadow-focus);
+}
+
 .property-body {
   padding: var(--jsb-spacing-lg);
 }
@@ -301,10 +334,73 @@
 .nested-properties {
   padding: var(--jsb-spacing-md);
   background: var(--jsb-bg-tertiary);
+  position: relative;
+}
+
+.nested-properties::before {
+  content: '';
+  position: absolute;
+  left: var(--jsb-spacing-lg);
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--jsb-border-light);
+  opacity: 0.5;
 }
 
 .nested-properties .property-item {
   margin-bottom: var(--jsb-spacing-sm);
+  position: relative;
+}
+
+.nested-properties .property-item::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 20px;
+  width: 10px;
+  height: 2px;
+  background: var(--jsb-border-light);
+  opacity: 0.5;
+}
+
+.depth-0 {
+  border-left: 3px solid #3b82f66b;
+}
+
+.depth-1 {
+  border-left: 3px solid #10b9816b;
+}
+
+.depth-2 {
+  border-left: 3px solid #f59e0b6b;
+}
+
+.depth-3 {
+  border-left: 3px solid #ef44446b;
+}
+
+.depth-4 {
+  border-left: 3px solid #8b5cf66b;
+}
+
+.properties-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--jsb-spacing-lg);
+}
+
+.properties-header h3 {
+  margin: 0;
+  font-size: var(--jsb-font-2xl);
+  font-weight: var(--jsb-font-semibold);
+  color: var(--jsb-text-primary);
+}
+
+.tree-controls {
+  display: flex;
+  gap: var(--jsb-spacing-sm);
 }
 
 .nested-properties .property-header {

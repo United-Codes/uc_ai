@@ -10,6 +10,7 @@ interface SchemaProperty {
   enum?: string[];
   items?: SchemaProperty;
   properties?: SchemaProperty[];
+  collapsed?: boolean;
 }
 
 interface JsonSchemaProperty {
@@ -66,6 +67,42 @@ const JsonSchemaBuilder: React.FC = () => {
   });
 
   const [properties, setProperties] = useState<SchemaProperty[]>([]);
+
+  const [collapsedStates, setCollapsedStates] = useState<Map<string, boolean>>(
+    new Map()
+  );
+
+  const toggleCollapse = useCallback((propertyId: string) => {
+    setCollapsedStates((prev) => {
+      const newStates = new Map(prev);
+      newStates.set(propertyId, !newStates.get(propertyId));
+      return newStates;
+    });
+  }, []);
+
+  const expandAll = useCallback(() => {
+    setCollapsedStates(new Map());
+  }, []);
+
+  const collapseAll = useCallback(() => {
+    const getAllPropertyIds = (props: SchemaProperty[]): string[] => {
+      const ids: string[] = [];
+      props.forEach((prop) => {
+        if (prop.type === "object" && prop.properties) {
+          ids.push(prop.id);
+          ids.push(...getAllPropertyIds(prop.properties));
+        }
+      });
+      return ids;
+    };
+
+    const allIds = getAllPropertyIds(properties);
+    const newStates = new Map<string, boolean>();
+    allIds.forEach((id) => {
+      newStates.set(id, true);
+    });
+    setCollapsedStates(newStates);
+  }, [properties]);
 
   const addProperty = useCallback(() => {
     const newProperty: SchemaProperty = {
@@ -507,8 +544,9 @@ const JsonSchemaBuilder: React.FC = () => {
   ];
 
   const loadSample = useCallback((sampleSchema: SampleSchema) => {
-    // Clear existing properties
+    // Clear existing properties and collapsed states
     setProperties([]);
+    setCollapsedStates(new Map());
 
     // Set schema metadata
     setSchema((prev: JsonSchema) => ({
@@ -574,26 +612,52 @@ const JsonSchemaBuilder: React.FC = () => {
           const typeId = `nested-type-${nestedProp.id}`;
           const descId = `nested-desc-${nestedProp.id}`;
           const requiredId = `nested-required-${nestedProp.id}`;
+          const isNestedCollapsed = collapsedStates.get(nestedProp.id) || false;
+          const hasNestedProperties =
+            nestedProp.type === "object" &&
+            nestedProp.properties &&
+            nestedProp.properties.length > 0;
 
           return (
-            <div key={nestedProp.id} className="property-item">
+            <div
+              key={nestedProp.id}
+              className={`property-item depth-${depth}`}
+              style={{ marginLeft: `${depth * 20}px` }}
+            >
               <div className="property-header">
-                <div className="form-group">
-                  <label htmlFor={nameId}>Name</label>
-                  <input
-                    id={nameId}
-                    type="text"
-                    value={nestedProp.name}
-                    onChange={(e) =>
-                      updateNestedProperty(
-                        parentId,
-                        nestedProp.id,
-                        "name",
-                        e.target.value
-                      )
-                    }
-                    placeholder="propertyName"
-                  />
+                <div className="property-name-section">
+                  {hasNestedProperties && (
+                    <button
+                      type="button"
+                      className="tree-toggle"
+                      onClick={() => toggleCollapse(nestedProp.id)}
+                      aria-expanded={!isNestedCollapsed}
+                      title={
+                        isNestedCollapsed
+                          ? "Expand properties"
+                          : "Collapse properties"
+                      }
+                    >
+                      {isNestedCollapsed ? "▶" : "▼"}
+                    </button>
+                  )}
+                  <div className="form-group">
+                    <label htmlFor={nameId}>Name</label>
+                    <input
+                      id={nameId}
+                      type="text"
+                      value={nestedProp.name}
+                      onChange={(e) =>
+                        updateNestedProperty(
+                          parentId,
+                          nestedProp.id,
+                          "name",
+                          e.target.value
+                        )
+                      }
+                      placeholder="propertyName"
+                    />
+                  </div>
                 </div>
                 <div className="form-group">
                   <label htmlFor={typeId}>Type</label>
@@ -651,69 +715,95 @@ const JsonSchemaBuilder: React.FC = () => {
                 </div>
               </div>
 
-              <div className="property-body">
-                <div className="form-group">
-                  <label htmlFor={descId}>Description</label>
-                  <input
-                    id={descId}
-                    type="text"
-                    value={nestedProp.description || ""}
-                    onChange={(e) =>
-                      updateNestedProperty(
-                        parentId,
-                        nestedProp.id,
-                        "description",
-                        e.target.value
-                      )
-                    }
-                    placeholder="Property description"
-                  />
-                </div>
+              {!isNestedCollapsed && (
+                <div className="property-body">
+                  <div className="form-group">
+                    <label htmlFor={descId}>Description</label>
+                    <input
+                      id={descId}
+                      type="text"
+                      value={nestedProp.description || ""}
+                      onChange={(e) =>
+                        updateNestedProperty(
+                          parentId,
+                          nestedProp.id,
+                          "description",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Property description"
+                    />
+                  </div>
 
-                {/* Enum support for nested properties */}
-                {(nestedProp.type === "string" ||
-                  nestedProp.type === "number" ||
-                  nestedProp.type === "integer") && (
-                  <div className="enum-section">
-                    <div className="enum-section-header">
-                      Allowed Values (Optional)
-                    </div>
-                    {nestedProp.enum && nestedProp.enum.length > 0 && (
-                      <div className="enum-values">
-                        {nestedProp.enum.map((value, index) => (
-                          <span
-                            key={`${nestedProp.id}-enum-${value}-${index}`}
-                            className="enum-tag"
-                          >
-                            {value}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const updatedEnum =
-                                  nestedProp.enum?.filter(
-                                    (_, i) => i !== index
-                                  ) || [];
+                  {/* Enum support for nested properties */}
+                  {(nestedProp.type === "string" ||
+                    nestedProp.type === "number" ||
+                    nestedProp.type === "integer") && (
+                    <div className="enum-section">
+                      <div className="enum-section-header">
+                        Allowed Values (Optional)
+                      </div>
+                      {nestedProp.enum && nestedProp.enum.length > 0 && (
+                        <div className="enum-values">
+                          {nestedProp.enum.map((value, index) => (
+                            <span
+                              key={`${nestedProp.id}-enum-${value}-${index}`}
+                              className="enum-tag"
+                            >
+                              {value}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updatedEnum =
+                                    nestedProp.enum?.filter(
+                                      (_, i) => i !== index
+                                    ) || [];
+                                  updateNestedProperty(
+                                    parentId,
+                                    nestedProp.id,
+                                    "enum",
+                                    updatedEnum
+                                  );
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="enum-input">
+                        <input
+                          type={
+                            nestedProp.type === "string" ? "text" : "number"
+                          }
+                          placeholder="Add allowed value"
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter") {
+                              const value = e.currentTarget.value;
+                              if (value.trim()) {
+                                const updatedEnum = [
+                                  ...(nestedProp.enum || []),
+                                  value,
+                                ];
                                 updateNestedProperty(
                                   parentId,
                                   nestedProp.id,
                                   "enum",
                                   updatedEnum
                                 );
-                              }}
-                            >
-                              ✕
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    <div className="enum-input">
-                      <input
-                        type={nestedProp.type === "string" ? "text" : "number"}
-                        placeholder="Add allowed value"
-                        onKeyPress={(e) => {
-                          if (e.key === "Enter") {
-                            const value = e.currentTarget.value;
+                                e.currentTarget.value = "";
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-small"
+                          onClick={(e) => {
+                            const input = e.currentTarget
+                              .previousElementSibling as HTMLInputElement;
+                            const value = input.value;
                             if (value.trim()) {
                               const updatedEnum = [
                                 ...(nestedProp.enum || []),
@@ -725,62 +815,40 @@ const JsonSchemaBuilder: React.FC = () => {
                                 "enum",
                                 updatedEnum
                               );
-                              e.currentTarget.value = "";
+                              input.value = "";
                             }
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-small"
-                        onClick={(e) => {
-                          const input = e.currentTarget
-                            .previousElementSibling as HTMLInputElement;
-                          const value = input.value;
-                          if (value.trim()) {
-                            const updatedEnum = [
-                              ...(nestedProp.enum || []),
-                              value,
-                            ];
-                            updateNestedProperty(
-                              parentId,
-                              nestedProp.id,
-                              "enum",
-                              updatedEnum
-                            );
-                            input.value = "";
-                          }
-                        }}
-                      >
-                        Add
-                      </button>
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Recursively render nested object properties */}
-                {nestedProp.type === "object" && (
-                  <div className="nested-section">
-                    <div className="nested-header">
-                      <span>Object Properties</span>
-                      <button
-                        type="button"
-                        className="btn btn-small btn-primary"
-                        onClick={() => addNestedProperty(nestedProp.id)}
-                      >
-                        + Add Property
-                      </button>
+                  {/* Recursively render nested object properties */}
+                  {nestedProp.type === "object" && (
+                    <div className="nested-section">
+                      <div className="nested-header">
+                        <span>Object Properties</span>
+                        <button
+                          type="button"
+                          className="btn btn-small btn-primary"
+                          onClick={() => addNestedProperty(nestedProp.id)}
+                        >
+                          + Add Property
+                        </button>
+                      </div>
+                      <div className="nested-properties">
+                        {renderNestedProperties(
+                          nestedProp,
+                          nestedProp.id,
+                          depth + 1
+                        )}
+                      </div>
                     </div>
-                    <div className="nested-properties">
-                      {renderNestedProperties(
-                        nestedProp,
-                        nestedProp.id,
-                        depth + 1
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
@@ -849,7 +917,27 @@ const JsonSchemaBuilder: React.FC = () => {
       </div>
 
       <div>
-        <h3>Properties</h3>
+        <div className="properties-header">
+          <h3>Properties</h3>
+          <div className="tree-controls">
+            <button
+              type="button"
+              className="btn btn-small"
+              onClick={expandAll}
+              title="Expand all properties"
+            >
+              Expand All
+            </button>
+            <button
+              type="button"
+              className="btn btn-small"
+              onClick={collapseAll}
+              title="Collapse all properties"
+            >
+              Collapse All
+            </button>
+          </div>
+        </div>
 
         {properties.map((property) => {
           const nameId = `name-${property.id}`;
@@ -857,21 +945,43 @@ const JsonSchemaBuilder: React.FC = () => {
           const descId = `desc-${property.id}`;
           const arrayTypeId = `array-type-${property.id}`;
           const requiredId = `required-${property.id}`;
+          const isCollapsed = collapsedStates.get(property.id) || false;
+          const hasNestedProperties =
+            property.type === "object" &&
+            property.properties &&
+            property.properties.length > 0;
 
           return (
             <div key={property.id} className="property-item">
               <div className="property-header">
-                <div className="form-group">
-                  <label htmlFor={nameId}>Name</label>
-                  <input
-                    id={nameId}
-                    type="text"
-                    value={property.name}
-                    onChange={(e) =>
-                      updateProperty(property.id, "name", e.target.value)
-                    }
-                    placeholder="propertyName"
-                  />
+                <div className="property-name-section">
+                  {hasNestedProperties && (
+                    <button
+                      type="button"
+                      className="tree-toggle"
+                      onClick={() => toggleCollapse(property.id)}
+                      aria-expanded={!isCollapsed}
+                      title={
+                        isCollapsed
+                          ? "Expand properties"
+                          : "Collapse properties"
+                      }
+                    >
+                      {isCollapsed ? "▶" : "▼"}
+                    </button>
+                  )}
+                  <div className="form-group">
+                    <label htmlFor={nameId}>Name</label>
+                    <input
+                      id={nameId}
+                      type="text"
+                      value={property.name}
+                      onChange={(e) =>
+                        updateProperty(property.id, "name", e.target.value)
+                      }
+                      placeholder="propertyName"
+                    />
+                  </div>
                 </div>
 
                 <div className="form-group">
@@ -948,93 +1058,99 @@ const JsonSchemaBuilder: React.FC = () => {
                 </div>
               </div>
 
-              <div className="property-body">
-                <div className="form-group">
-                  <label htmlFor={descId}>Description</label>
-                  <input
-                    id={descId}
-                    type="text"
-                    value={property.description || ""}
-                    onChange={(e) =>
-                      updateProperty(property.id, "description", e.target.value)
-                    }
-                    placeholder="Property description"
-                  />
-                </div>
-
-                {/* Object Properties Section */}
-                {property.type === "object" && (
-                  <div className="nested-section">
-                    <div className="nested-header">
-                      <span>Object Properties</span>
-                      <button
-                        type="button"
-                        className="btn btn-small btn-primary"
-                        onClick={() => addNestedProperty(property.id)}
-                      >
-                        + Add Property
-                      </button>
-                    </div>
-                    <div className="nested-properties">
-                      {renderNestedProperties(property, property.id)}
-                    </div>
+              {!isCollapsed && (
+                <div className="property-body">
+                  <div className="form-group">
+                    <label htmlFor={descId}>Description</label>
+                    <input
+                      id={descId}
+                      type="text"
+                      value={property.description || ""}
+                      onChange={(e) =>
+                        updateProperty(
+                          property.id,
+                          "description",
+                          e.target.value
+                        )
+                      }
+                      placeholder="Property description"
+                    />
                   </div>
-                )}
 
-                {(property.type === "string" ||
-                  property.type === "number" ||
-                  property.type === "integer") && (
-                  <div className="enum-section">
-                    <div className="enum-section-header">
-                      Allowed Values (Optional)
-                    </div>
-                    {property.enum && property.enum.length > 0 && (
-                      <div className="enum-values">
-                        {property.enum.map((value, index) => (
-                          <span
-                            key={`${property.id}-enum-${value}-${index}`}
-                            className="enum-tag"
-                          >
-                            {value}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                removeEnumValue(property.id, index)
-                              }
-                            >
-                              ✕
-                            </button>
-                          </span>
-                        ))}
+                  {/* Object Properties Section */}
+                  {property.type === "object" && (
+                    <div className="nested-section">
+                      <div className="nested-header">
+                        <span>Object Properties</span>
+                        <button
+                          type="button"
+                          className="btn btn-small btn-primary"
+                          onClick={() => addNestedProperty(property.id)}
+                        >
+                          + Add Property
+                        </button>
                       </div>
-                    )}
-                    <div className="enum-input">
-                      <input
-                        type={property.type === "string" ? "text" : "number"}
-                        placeholder="Add allowed value"
-                        onKeyPress={(e) => {
-                          if (e.key === "Enter") {
-                            addEnumValue(property.id, e.currentTarget.value);
-                            e.currentTarget.value = "";
-                          }
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-small"
-                        onClick={(e) => {
-                          const input = e.currentTarget
-                            .previousElementSibling as HTMLInputElement;
-                          addEnumValue(property.id, input.value);
-                          input.value = "";
-                        }}
-                      >
-                        Add
-                      </button>
+                      <div className="nested-properties">
+                        {renderNestedProperties(property, property.id)}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
+                  )}
+
+                  {(property.type === "string" ||
+                    property.type === "number" ||
+                    property.type === "integer") && (
+                    <div className="enum-section">
+                      <div className="enum-section-header">
+                        Allowed Values (Optional)
+                      </div>
+                      {property.enum && property.enum.length > 0 && (
+                        <div className="enum-values">
+                          {property.enum.map((value, index) => (
+                            <span
+                              key={`${property.id}-enum-${value}-${index}`}
+                              className="enum-tag"
+                            >
+                              {value}
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removeEnumValue(property.id, index)
+                                }
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="enum-input">
+                        <input
+                          type={property.type === "string" ? "text" : "number"}
+                          placeholder="Add allowed value"
+                          onKeyPress={(e) => {
+                            if (e.key === "Enter") {
+                              addEnumValue(property.id, e.currentTarget.value);
+                              e.currentTarget.value = "";
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-small"
+                          onClick={(e) => {
+                            const input = e.currentTarget
+                              .previousElementSibling as HTMLInputElement;
+                            addEnumValue(property.id, input.value);
+                            input.value = "";
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
