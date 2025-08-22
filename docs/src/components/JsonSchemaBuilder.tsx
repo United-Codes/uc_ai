@@ -66,7 +66,6 @@ const JsonSchemaBuilder: React.FC = () => {
   });
 
   const [properties, setProperties] = useState<SchemaProperty[]>([]);
-  const [showPreview, setShowPreview] = useState(false);
 
   const addProperty = useCallback(() => {
     const newProperty: SchemaProperty = {
@@ -794,7 +793,27 @@ const JsonSchemaBuilder: React.FC = () => {
       <div className="schema-header">
         <h2>JSON Schema Builder</h2>
         <p>Create JSON schemas with an intuitive visual interface</p>
+      </div>
 
+      <div className="samples-section">
+        <h3>Sample Schemas</h3>
+        <p>Load pre-built schemas for common AI use cases:</p>
+        <div className="samples-grid">
+          {sampleSchemas.map((sample) => (
+            <button
+              key={sample.name}
+              type="button"
+              className="sample-card"
+              onClick={() => loadSample(sample.schema)}
+            >
+              <h4>{sample.name}</h4>
+              <p>{sample.description}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="schema-metadata">
         <div className="form-row">
           <div className="form-group">
             <label htmlFor={titleId}>Schema Title</label>
@@ -826,26 +845,6 @@ const JsonSchemaBuilder: React.FC = () => {
               placeholder="Enter schema description"
             />
           </div>
-        </div>
-      </div>
-
-      <div className="samples-section">
-        <h3>Sample Schemas</h3>
-        <p>Load pre-built schemas for common AI use cases:</p>
-        <div className="samples-grid">
-          {sampleSchemas.map((sample) => (
-            <div key={sample.name} className="sample-card">
-              <h4>{sample.name}</h4>
-              <p>{sample.description}</p>
-              <button
-                type="button"
-                className="btn btn-primary btn-small"
-                onClick={() => loadSample(sample.schema)}
-              >
-                Load Sample
-              </button>
-            </div>
-          ))}
         </div>
       </div>
 
@@ -1053,11 +1052,8 @@ const JsonSchemaBuilder: React.FC = () => {
         <button
           type="button"
           className="btn btn-primary"
-          onClick={() => setShowPreview(!showPreview)}
+          onClick={copyToClipboard}
         >
-          {showPreview ? "Hide Preview" : "Show Preview"}
-        </button>
-        <button type="button" className="btn" onClick={copyToClipboard}>
           Copy Schema
         </button>
         <button type="button" className="btn" onClick={downloadSchema}>
@@ -1065,12 +1061,10 @@ const JsonSchemaBuilder: React.FC = () => {
         </button>
       </div>
 
-      {showPreview && (
-        <div className="preview-section">
-          <h3>Generated JSON Schema</h3>
-          <div className="schema-output">{JSON.stringify(schema, null, 2)}</div>
-        </div>
-      )}
+      <div className="preview-section">
+        <h3>Generated JSON Schema</h3>
+        <div className="schema-output">{JSON.stringify(schema, null, 2)}</div>
+      </div>
     </div>
   );
 };

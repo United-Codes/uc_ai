@@ -87,33 +87,33 @@
 
 .samples-section {
   border-bottom: 1px solid var(--jsb-border-light);
-  padding-bottom: var(--jsb-spacing-2xl);
-  margin-bottom: var(--jsb-spacing-2xl);
+  padding-bottom: var(--jsb-spacing-xl);
+  margin-bottom: var(--jsb-spacing-xl);
 }
 
 .samples-section h3 {
-  margin: 0 0 var(--jsb-spacing-md) 0;
+  margin: 0 0 var(--jsb-spacing-sm) 0;
   font-size: var(--jsb-font-2xl);
   font-weight: var(--jsb-font-semibold);
   color: var(--jsb-text-primary);
 }
 
 .samples-section p {
-  margin: 0 0 var(--jsb-spacing-xl) 0;
-  font-size: var(--jsb-font-xl);
+  margin: 0 0 var(--jsb-spacing-md) 0;
+  font-size: var(--jsb-font-lg);
   color: var(--jsb-text-muted);
 }
 
 .samples-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--jsb-spacing-lg);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--jsb-spacing-md);
 }
 
 .sample-card {
   border: 1px solid var(--jsb-border-light);
-  border-radius: var(--jsb-radius-xl);
-  padding: var(--jsb-spacing-xl);
+  border-radius: var(--jsb-radius-md);
+  padding: var(--jsb-spacing-lg);
   background: var(--jsb-bg-primary);
   transition: var(--jsb-transition);
   display: flex;
@@ -126,17 +126,17 @@
 }
 
 .sample-card h4 {
-  margin: 0 0 var(--jsb-spacing-md) 0;
-  font-size: var(--jsb-font-xl);
+  margin: 0 0 var(--jsb-spacing-xs) 0;
+  font-size: var(--jsb-font-lg);
   font-weight: var(--jsb-font-semibold);
   color: var(--jsb-text-primary);
 }
 
 .sample-card p {
-  margin: 0 0 var(--jsb-spacing-lg) 0;
-  font-size: var(--jsb-font-md);
+  margin: 0 0 var(--jsb-spacing-md) 0;
+  font-size: var(--jsb-font-sm);
   color: var(--jsb-text-muted);
-  line-height: 1.4;
+  line-height: 1.3;
 }
 
 /* Ensure the card action is aligned consistently at the bottom */
@@ -202,7 +202,7 @@
 .form-group input,
 .form-group select {
   height: var(--jsb-control-height);
-  line-height: calc(var(--jsb-control-height) - 2px);
+  line-height: normal;
 }
 
 .form-group select {
@@ -210,9 +210,10 @@
   appearance: none;
   background-image: linear-gradient(45deg, transparent 50%, var(--jsb-text-muted) 50%),
     linear-gradient(135deg, var(--jsb-text-muted) 50%, transparent 50%);
-  background-position: calc(100% - 14px) calc(50% - 3px), calc(100% - 8px) calc(50% - 3px);
+  background-position: calc(100% - 14px) 50%, calc(100% - 8px) 50%;
   background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
+  padding-right: var(--jsb-spacing-3xl);
 }
 
 .form-group textarea {
@@ -233,9 +234,9 @@
 
 .property-header {
   display: grid;
-  grid-template-columns: 1fr auto auto auto auto;
+  grid-template-columns: 2fr 1fr 1fr 1fr auto;
   gap: var(--jsb-spacing-md);
-  align-items: end; /* keep control bottoms aligned */
+  align-items: center; /* center align all items instead of end */
   padding: var(--jsb-spacing-lg) var(--jsb-spacing-lg) var(--jsb-spacing-md) var(--jsb-spacing-lg);
   background: var(--jsb-bg-secondary);
   border-bottom: 1px solid var(--jsb-border-light);
