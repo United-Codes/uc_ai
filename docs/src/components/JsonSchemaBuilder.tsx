@@ -18,7 +18,11 @@ interface JsonSchemaProperty {
   items?: {
     type: string;
     description?: string;
+    properties?: Record<string, JsonSchemaProperty>;
+    required?: string[];
   };
+  properties?: Record<string, JsonSchemaProperty>;
+  required?: string[];
 }
 
 interface JsonSchema {
@@ -97,37 +101,123 @@ const JsonSchemaBuilder: React.FC = () => {
     );
   }, []);
 
+  const addNestedProperty = useCallback((parentId: string) => {
+    const newProperty: SchemaProperty = {
+      id: `${parentId}-${Date.now()}`,
+      name: "",
+      type: "string",
+      description: "",
+      required: false,
+    };
+
+    setProperties((prev) =>
+      prev.map((prop) =>
+        prop.id === parentId
+          ? {
+              ...prop,
+              properties: [...(prop.properties || []), newProperty],
+            }
+          : prop
+      )
+    );
+  }, []);
+
+  const updateNestedProperty = useCallback(
+    (
+      parentId: string,
+      childId: string,
+      field: keyof SchemaProperty,
+      value: string | boolean | SchemaProperty | { type: string } | string[]
+    ) => {
+      setProperties((prev) =>
+        prev.map((prop) =>
+          prop.id === parentId
+            ? {
+                ...prop,
+                properties:
+                  prop.properties?.map((childProp) =>
+                    childProp.id === childId
+                      ? { ...childProp, [field]: value }
+                      : childProp
+                  ) || [],
+              }
+            : prop
+        )
+      );
+    },
+    []
+  );
+
+  const removeNestedProperty = useCallback(
+    (parentId: string, childId: string) => {
+      setProperties((prev) =>
+        prev.map((prop) =>
+          prop.id === parentId
+            ? {
+                ...prop,
+                properties:
+                  prop.properties?.filter(
+                    (childProp) => childProp.id !== childId
+                  ) || [],
+              }
+            : prop
+        )
+      );
+    },
+    []
+  );
+
   const generateSchema = useCallback(() => {
-    const schemaProperties: Record<string, JsonSchemaProperty> = {};
-    const required: string[] = [];
+    const buildSchemaProperties = (
+      props: SchemaProperty[]
+    ): Record<string, JsonSchemaProperty> => {
+      const schemaProperties: Record<string, JsonSchemaProperty> = {};
 
-    properties.forEach((prop) => {
-      if (!prop.name) return;
+      props.forEach((prop) => {
+        if (!prop.name) return;
 
-      const propertySchema: JsonSchemaProperty = {
-        type: prop.type,
-        ...(prop.description && { description: prop.description }),
-      };
-
-      if (prop.type === "array" && prop.items) {
-        propertySchema.items = {
-          type: prop.items.type,
-          ...(prop.items.description && {
-            description: prop.items.description,
-          }),
+        const propertySchema: JsonSchemaProperty = {
+          type: prop.type,
+          ...(prop.description && { description: prop.description }),
         };
-      }
 
-      if (prop.enum && prop.enum.length > 0) {
-        propertySchema.enum = prop.enum;
-      }
+        if (prop.type === "array" && prop.items) {
+          propertySchema.items = {
+            type: prop.items.type,
+            ...(prop.items.description && {
+              description: prop.items.description,
+            }),
+          };
+        }
 
-      schemaProperties[prop.name] = propertySchema;
+        if (
+          prop.type === "object" &&
+          prop.properties &&
+          prop.properties.length > 0
+        ) {
+          propertySchema.properties = buildSchemaProperties(prop.properties);
+          const nestedRequired = prop.properties
+            .filter((child) => child.required && child.name)
+            .map((child) => child.name);
+          if (nestedRequired.length > 0) {
+            propertySchema.required = nestedRequired;
+          }
+        }
 
-      if (prop.required) {
-        required.push(prop.name);
-      }
-    });
+        if (prop.enum && prop.enum.length > 0) {
+          propertySchema.enum = prop.enum;
+        }
+
+        schemaProperties[prop.name] = propertySchema;
+      });
+
+      return schemaProperties;
+    };
+
+    const schemaProperties = buildSchemaProperties(properties);
+    const required: string[] = properties
+      .filter((prop) => prop.required && prop.name)
+      .map((prop) => prop.name);
 
     const generatedSchema: JsonSchema = {
       $schema: schema.$schema,
@@ -167,6 +257,238 @@ const JsonSchemaBuilder: React.FC = () => {
   React.useEffect(() => {
     generateSchema();
   }, [generateSchema]);
+
+  const renderNestedProperties = (
+    parentProperty: SchemaProperty,
+    parentId: string,
+    depth: number = 0
+  ) => {
+    if (parentProperty.type !== "object" || !parentProperty.properties) {
+      return null;
+    }
+
+    return (
+      <div style={{ marginLeft: `${depth * 20}px`, marginTop: "15px" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            marginBottom: "10px",
+          }}
+        >
+          <strong>Object Properties:</strong>
+          <button
+            type="button"
+            className="btn btn-small btn-primary"
+            onClick={() => addNestedProperty(parentId)}
+          >
+            + Add Property
+          </button>
+        </div>
+
+        {parentProperty.properties.map((nestedProp) => {
+          const nameId = `nested-name-${nestedProp.id}`;
+          const typeId = `nested-type-${nestedProp.id}`;
+          const descId = `nested-desc-${nestedProp.id}`;
+          const requiredId = `nested-required-${nestedProp.id}`;
+
+          return (
+            <div
+              key={nestedProp.id}
+              className="property-item"
+              style={{ backgroundColor: "#f8f9fa", marginBottom: "10px" }}
+            >
+              <button
+                type="button"
+                className="btn btn-small btn-danger remove-btn"
+                onClick={() => removeNestedProperty(parentId, nestedProp.id)}
+              >
+                ✕
+              </button>
+
+              <div className="property-header">
+                <div className="form-group">
+                  <label htmlFor={nameId}>Property Name *</label>
+                  <input
+                    id={nameId}
+                    type="text"
+                    value={nestedProp.name}
+                    onChange={(e) =>
+                      updateNestedProperty(
+                        parentId,
+                        nestedProp.id,
+                        "name",
+                        e.target.value
+                      )
+                    }
+                    placeholder="propertyName"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor={typeId}>Type</label>
+                  <select
+                    id={typeId}
+                    value={nestedProp.type}
+                    onChange={(e) =>
+                      updateNestedProperty(
+                        parentId,
+                        nestedProp.id,
+                        "type",
+                        e.target.value
+                      )
+                    }
+                  >
+                    <option value="string">String</option>
+                    <option value="number">Number</option>
+                    <option value="integer">Integer</option>
+                    <option value="boolean">Boolean</option>
+                    <option value="array">Array</option>
+                    <option value="object">Object</option>
+                    <option value="null">Null</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor={descId}>Description</label>
+                <input
+                  id={descId}
+                  type="text"
+                  value={nestedProp.description || ""}
+                  onChange={(e) =>
+                    updateNestedProperty(
+                      parentId,
+                      nestedProp.id,
+                      "description",
+                      e.target.value
+                    )
+                  }
+                  placeholder="Property description"
+                />
+              </div>
+
+              <div className="checkbox-group">
+                <input
+                  type="checkbox"
+                  id={requiredId}
+                  checked={nestedProp.required}
+                  onChange={(e) =>
+                    updateNestedProperty(
+                      parentId,
+                      nestedProp.id,
+                      "required",
+                      e.target.checked
+                    )
+                  }
+                />
+                <label htmlFor={requiredId}>Required</label>
+              </div>
+
+              {/* Enum support for nested properties */}
+              {(nestedProp.type === "string" ||
+                nestedProp.type === "number" ||
+                nestedProp.type === "integer") && (
+                <div className="enum-section">
+                  <div>
+                    <strong>Allowed Values (Optional)</strong>
+                  </div>
+                  {nestedProp.enum && nestedProp.enum.length > 0 && (
+                    <div className="enum-values">
+                      {nestedProp.enum.map((value, index) => (
+                        <span
+                          key={`${nestedProp.id}-enum-${value}-${index}`}
+                          className="enum-tag"
+                        >
+                          {value}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Remove enum value for nested property
+                              const updatedEnum =
+                                nestedProp.enum?.filter(
+                                  (_, i) => i !== index
+                                ) || [];
+                              updateNestedProperty(
+                                parentId,
+                                nestedProp.id,
+                                "enum",
+                                updatedEnum
+                              );
+                            }}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              color: "#dc2626",
+                              cursor: "pointer",
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="enum-input">
+                    <input
+                      type={nestedProp.type === "string" ? "text" : "number"}
+                      placeholder="Add allowed value"
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter") {
+                          const value = e.currentTarget.value;
+                          if (value.trim()) {
+                            const updatedEnum = [
+                              ...(nestedProp.enum || []),
+                              value,
+                            ];
+                            updateNestedProperty(
+                              parentId,
+                              nestedProp.id,
+                              "enum",
+                              updatedEnum
+                            );
+                            e.currentTarget.value = "";
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-small btn-secondary"
+                      onClick={(e) => {
+                        const input = e.currentTarget
+                          .previousElementSibling as HTMLInputElement;
+                        const value = input.value;
+                        if (value.trim()) {
+                          const updatedEnum = [
+                            ...(nestedProp.enum || []),
+                            value,
+                          ];
+                          updateNestedProperty(
+                            parentId,
+                            nestedProp.id,
+                            "enum",
+                            updatedEnum
+                          );
+                          input.value = "";
+                        }
+                      }}
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Recursively render nested object properties */}
+              {renderNestedProperties(nestedProp, nestedProp.id, depth + 1)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="json-schema-builder">
@@ -216,6 +538,28 @@ const JsonSchemaBuilder: React.FC = () => {
           padding: 20px;
           margin-bottom: 15px;
           position: relative;
+        }
+        
+        .nested-property {
+          background: #f8f9fa;
+          border: 1px solid #e9ecef;
+          margin-left: 20px;
+          margin-top: 10px;
+        }
+        
+        .nested-section {
+          margin-top: 15px;
+          padding-top: 15px;
+          border-top: 1px solid #eee;
+        }
+        
+        .nested-header {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 10px;
+          font-weight: 600;
+          color: #495057;
         }
         
         .property-header {
@@ -506,6 +850,23 @@ const JsonSchemaBuilder: React.FC = () => {
                     <option value="boolean">Boolean</option>
                     <option value="object">Object</option>
                   </select>
+                </div>
+              )}
+
+              {/* Object Properties Section */}
+              {property.type === "object" && (
+                <div className="nested-section">
+                  <div className="nested-header">
+                    <span>Object Properties:</span>
+                    <button
+                      type="button"
+                      className="btn btn-small btn-primary"
+                      onClick={() => addNestedProperty(property.id)}
+                    >
+                      + Add Property
+                    </button>
+                  </div>
+                  {renderNestedProperties(property, property.id)}
                 </div>
               )}
 
