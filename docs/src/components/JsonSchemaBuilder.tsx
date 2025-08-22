@@ -620,6 +620,7 @@ const JsonSchemaBuilder: React.FC = () => {
                   </select>
                 </div>
                 <div></div> {/* Spacer for grid alignment */}
+                <div aria-hidden="true" />
                 <div className="property-controls">
                   <div className="checkbox-wrapper">
                     <input
@@ -789,7 +790,7 @@ const JsonSchemaBuilder: React.FC = () => {
   };
 
   return (
-    <div className="json-schema-builder">
+    <div className="json-schema-builder not-content">
       <div className="schema-header">
         <h2>JSON Schema Builder</h2>
         <p>Create JSON schemas with an intuitive visual interface</p>
@@ -893,7 +894,7 @@ const JsonSchemaBuilder: React.FC = () => {
                   </select>
                 </div>
 
-                {property.type === "array" && (
+                {property.type === "array" ? (
                   <div className="form-group">
                     <label htmlFor={arrayTypeId}>Item Type</label>
                     <select
@@ -912,7 +913,13 @@ const JsonSchemaBuilder: React.FC = () => {
                       <option value="object">Object</option>
                     </select>
                   </div>
+                ) : (
+                  // Placeholder to keep the "Item Type" column occupied
+                  <div aria-hidden="true" />
                 )}
+
+                {/* Spacer to push controls to the final grid column for consistent alignment */}
+                <div aria-hidden="true" />
 
                 <div className="property-controls">
                   <div className="checkbox-wrapper">
