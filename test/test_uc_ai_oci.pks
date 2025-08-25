@@ -20,5 +20,9 @@ create or replace package test_uc_ai_oci as
   --%test(Continue conversations with OCI in Cohere Mode)
   procedure continue_conversation_cohere;
 
+  --%test(Tool usage - get user info in Cohere Mode)
+  procedure tool_user_info_cohere;
+
+
 end test_uc_ai_oci;
 /

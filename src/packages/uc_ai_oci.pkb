@@ -665,8 +665,110 @@ create or replace package body uc_ai_oci as
           pio_result.put('finish_reason', 'error');
         end if;
       else
+        l_messages := l_chat_response.get_array('chatHistory');
+
         -- cohere
-        if l_chat_response.has('text') then
+        if l_chat_response.has('toolCalls') then
+          declare
+            l_tool_calls json_array_t := json_array_t();
+            l_tool_call_item json_object_t;
+            l_tool_call_id   varchar2(255 char);
+            l_tool_name      varchar2(255 char);
+            l_tool_args      json_object_t;
+            l_tool_result    clob;
+
+            l_normalized_messages json_array_t := json_array_t();
+            l_normalized_tool_results json_array_t := json_array_t();
+            l_oci_tool_results json_array_t := json_array_t();
+            l_new_msg json_object_t;
+            l_tool_response json_object_t;
+            l_tool_response_call json_object_t;
+            l_tool_outputs json_array_t := json_array_t();
+
+            l_tmp_obj json_object_t;
+          begin
+            l_tool_calls := l_chat_response.get_array('toolCalls');
+            <<tool_calls_loop>>
+            for i in 0 .. l_tool_calls.get_size - 1 loop
+              g_tool_calls := g_tool_calls + 1;
+
+              l_tool_call_item := treat(l_tool_calls.get(i) as json_object_t);
+
+              l_tool_call_id := 'tool_call_' || i;
+              l_tool_name := l_tool_call_item.get_string('name');
+              logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name);
+
+              l_tool_args := treat(l_tool_call_item.get('parameters') as json_object_t);
+              logger.log('Tool call', l_scope, 'Tool Args: ' || l_tool_args.to_clob);
+
+              l_new_msg := uc_ai_message_api.create_tool_call_content(
+                p_tool_call_id => l_tool_call_id
+              , p_tool_name    => l_tool_name
+              , p_args         => l_tool_args.to_clob
+              );
+              l_normalized_messages.append(l_new_msg);
+
+              -- Execute the tool and get result
+              begin
+                l_tool_result := uc_ai_tools_api.execute_tool(
+                  p_tool_code          => l_tool_name
+                , p_arguments          => l_tool_args
+                );
+              exception
+                when others then
+                  logger.log_error('Tool execution failed', l_scope, 'Tool: ' || l_tool_name || ', Error: ' || sqlerrm || chr(10) || sys.dbms_utility.format_error_backtrace);
+                  l_tool_result := 'Error executing tool: ' || sqlerrm;
+              end;
+
+              logger.log('Tool result', l_scope, l_tool_result);
+
+              l_tool_response := json_object_t();
+
+              l_tool_response_call := json_object_t();
+              l_tool_response_call.put('name', l_tool_name);
+              l_tool_response_call.put('parameters', l_tool_args);
+              l_tool_response.put('call', l_tool_response_call);
+
+              -- Cohere wants an array of objects for some reason
+              -- so just return [ { result: <value> } ]
+              l_tmp_obj := json_object_t();
+              l_tmp_obj.put('result', l_tool_result);
+              l_tool_outputs.append(l_tmp_obj);
+              l_tool_response.put('outputs', l_tool_outputs);
+
+              l_oci_tool_results.append(l_tool_response);
+
+              l_new_msg := uc_ai_message_api.create_tool_result_content(
+                p_tool_call_id => l_tool_call_id,
+                p_tool_name    => l_tool_name,
+                p_result       => l_tool_result
+              );
+              l_normalized_tool_results.append(l_new_msg);
+            end loop tool_calls_loop;
+
+            l_tool_response := json_object_t();
+            l_tool_response.put('role', 'TOOL');
+            l_tool_response.put('toolResults', l_oci_tool_results);
+            --l_messages.append(l_tool_response);
+
+            g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+
+            g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
+            pio_result.put('tool_calls_count', g_tool_calls);
+
+            -- clear user message for subsequent calls
+            --g_cohere_user_message := null;
+            l_chat_request.put('toolResults', l_oci_tool_results);
+            l_input_obj.put('chatRequest', l_chat_request);
+
+            l_messages := internal_generate_text(
+              p_messages           => l_messages
+            , p_max_tool_calls     => p_max_tool_calls
+            , p_input_obj          => l_input_obj
+            , pio_result           => pio_result
+              );
+          end;
+        elsif l_chat_response.has('text') then
           declare
             l_new_msg json_object_t;
             l_normalized_messages json_array_t := json_array_t();
@@ -784,6 +886,7 @@ create or replace package body uc_ai_oci as
       l_chat_request.put('frequencyPenalty', 0);
       l_chat_request.put('isStream', false);
       l_chat_request.put('maxTokens', 600);
+      l_chat_request.put('isForceSingleStep', true);
       --l_chat_request.put('presencePenalty', 0);
       --l_chat_request.put('temperature', 1);
       --l_chat_request.put('topP', 1.0);
