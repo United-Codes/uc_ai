@@ -757,7 +757,7 @@ create or replace package body uc_ai_oci as
             pio_result.put('tool_calls_count', g_tool_calls);
 
             -- clear user message for subsequent calls
-            --g_cohere_user_message := null;
+            g_cohere_user_message := 'Continue processing the user prompt with the provided tool results.';
             l_chat_request.put('toolResults', l_oci_tool_results);
             l_input_obj.put('chatRequest', l_chat_request);
 

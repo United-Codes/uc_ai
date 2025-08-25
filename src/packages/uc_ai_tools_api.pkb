@@ -2,6 +2,144 @@ create or replace package body uc_ai_tools_api as
 
   gc_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
 
+
+  /*
+   * Converts an input schema to Cohere format
+   * 
+   * Takes a JSON schema with nested parameters object and extracts the properties
+   * from within the outer object, adding isRequired attributes based on the required array.
+   * 
+   * Input example:
+   * {
+   *   "type": "object",
+   *   "properties": {
+   *     "parameters": {
+   *       "type": "object",
+   *       "description": "JSON object containing parameters",
+   *       "properties": {
+   *         "user_email": {"type": "string", "description": "Email of the user"},
+   *         "project_name": {"type": "string", "description": "Name of the project"},
+   *         "notes": {"type": "string", "description": "Optional description"}
+   *       },
+   *       "required": ["user_email", "project_name"]
+   *     }
+   *   },
+   *   "required": ["parameters"]
+   * }
+   * 
+   * Output example:
+   * {
+   *   "user_email": {"type": "string", "description": "Email of the user", "isRequired": true},
+   *   "project_name": {"type": "string", "description": "Name of the project", "isRequired": true},
+   *   "notes": {"type": "string", "description": "Optional description", "isRequired": false}
+   * }
+   */
+  function convert_input_schema_to_cohere (
+    p_input_schema in json_object_t
+  ) return json_object_t
+  as
+    l_scope logger_logs.scope%type := gc_scope_prefix || 'convert_input_schema_to_cohere';
+    
+    l_result_obj     json_object_t := json_object_t();
+    l_properties     json_object_t;
+    l_parameters_obj json_object_t;
+    l_param_props    json_object_t;
+    l_required_arr   json_array_t;
+    l_param_obj      json_object_t;
+    l_keys           json_key_list;
+    l_required_keys  json_key_list;
+    l_prop_name      varchar2(255 char);
+    l_is_required    boolean;
+    
+  begin
+    -- Get the properties object from the input schema
+    l_properties := treat(p_input_schema.get('properties') as json_object_t);
+    
+    if l_properties is null then
+      logger.log_error('No properties found in input schema', l_scope);
+      return l_result_obj;
+    end if;
+    
+    -- Look for the parameters object within properties
+    -- In most cases this will be the first (and likely only) property
+    l_keys := l_properties.get_keys;
+    
+    if l_keys is null or l_keys.count = 0 then
+      logger.log_error('No properties keys found in input schema', l_scope);
+      return l_result_obj;
+    end if;
+    
+    -- Get the first property (assumed to be the parameters object)
+    l_parameters_obj := treat(l_properties.get(l_keys(1)) as json_object_t);
+    
+    if l_parameters_obj is null then
+      logger.log_error('Parameters object is null for key: %s', l_scope, l_keys(1));
+      return l_result_obj;
+    end if;
+    
+    -- Get the properties within the parameters object
+    l_param_props := treat(l_parameters_obj.get('properties') as json_object_t);
+    
+    if l_param_props is null then
+      logger.log_error('No properties found in parameters object', l_scope);
+      return l_result_obj;
+    end if;
+    
+    -- Get the required array from the parameters object
+    l_required_arr := treat(l_parameters_obj.get('required') as json_array_t);
+    
+    -- Convert required array to a list for easier lookup
+    l_required_keys := json_key_list();
+    if l_required_arr is not null then
+      <<required_loop>>
+      for i in 0 .. l_required_arr.get_size - 1 loop
+        l_required_keys.extend;
+        l_required_keys(l_required_keys.count) := l_required_arr.get_string(i);
+      end loop required_loop;
+    end if;
+    
+    -- Process each property in the parameters
+    l_keys := l_param_props.get_keys;
+    
+    <<property_loop>>
+    for i in 1 .. l_keys.count loop
+      l_prop_name := l_keys(i);
+      l_param_obj := treat(l_param_props.get(l_prop_name) as json_object_t);
+      
+      if l_param_obj is not null then
+        -- Clone the parameter object to avoid modifying the original
+        l_param_obj := l_param_obj.clone();
+        
+        -- Check if this property is required
+        l_is_required := false;
+        if l_required_keys is not null then
+          <<check_required>>
+          for j in 1 .. l_required_keys.count loop
+            if l_required_keys(j) = l_prop_name then
+              l_is_required := true;
+              exit;
+            end if;
+          end loop check_required;
+        end if;
+        
+        -- Add the isRequired attribute
+        l_param_obj.put('isRequired', l_is_required);
+        
+        -- Add the modified parameter to the result
+        l_result_obj.put(l_prop_name, l_param_obj);
+      end if;
+    end loop property_loop;
+    
+    logger.log('Converted schema to Cohere format', l_scope, l_result_obj.to_clob());
+    
+    return l_result_obj;
+    
+  exception
+    when others then
+      logger.log_error('Error in convert_input_schema_to_cohere: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      raise;
+  end convert_input_schema_to_cohere;
+
   /*
    * Wraps a parameter definition as an array type
    * Used when is_array=1 in tool parameter definition
@@ -202,6 +340,8 @@ create or replace package body uc_ai_tools_api as
   ) 
     return json_object_t 
   as
+    l_scope logger_logs.scope%type := gc_scope_prefix || 'get_tool_schema';
+
     l_tool_code        uc_ai_tools.code%type;
     l_tool_description uc_ai_tools.description%type;
 
@@ -286,6 +426,8 @@ create or replace package body uc_ai_tools_api as
   , p_additional_info in varchar2 default null
   ) return json_array_t
   as
+    l_scope logger_logs.scope%type := gc_scope_prefix || 'get_tools_array';
+
     l_tools_array  json_array_t := json_array_t();
     l_tool_obj     json_object_t;
     l_tool_cpy_obj json_object_t;
@@ -313,6 +455,7 @@ create or replace package body uc_ai_tools_api as
         l_tool_obj.put('function', l_tool_cpy_obj);
       elsif p_provider = uc_ai.c_provider_oci then
         l_tool_cpy_obj := l_tool_obj.clone();
+        logger.log('Creating tool schema for OCI provider', l_scope, l_tool_cpy_obj.to_clob());
 
         l_tool_obj := json_object_t();
         if p_additional_info != gc_cohere then
@@ -325,7 +468,7 @@ create or replace package body uc_ai_tools_api as
         if p_additional_info != gc_cohere then
           l_tool_obj.put('parameters', l_tool_cpy_obj.get_array('input_schema'));
         else
-          l_tool_obj.put('parameterDefinitions',  l_tool_cpy_obj.get_array('input_schema'));
+          l_tool_obj.put('parameterDefinitions',  convert_input_schema_to_cohere(l_tool_cpy_obj.get_object('input_schema')));
         end if;
       end if;
 
