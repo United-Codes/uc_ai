@@ -5,19 +5,7 @@ description: Interactive tool for creating JSON schemas with an easy-to-use inte
 
 import JsonSchemaBuilder from "../../../components/JsonSchemaBuilder.tsx";
 
-# JSON Schema Builder
-
 This interactive tool helps you create JSON schemas without writing JSON by hand. Simply define your properties using the visual interface below, and the tool will generate a valid JSON schema for you.
-
-## Features
-
-- **Visual Interface**: Build schemas using forms instead of writing JSON
-- **Real-time Preview**: See your schema generated as you build it
-- **Property Types**: Support for strings, numbers, booleans, arrays, objects, and more
-- **Validation**: Mark properties as required or optional
-- **Enum Values**: Define allowed values for properties
-- **Array Support**: Specify types for array items
-- **Export Options**: Copy to clipboard or download as a JSON file
 
 ## How to Use
 
@@ -35,72 +23,6 @@ This interactive tool helps you create JSON schemas without writing JSON by hand
 ## Interactive Builder
 
 <JsonSchemaBuilder client:load />
-
-## What is JSON Schema?
-
-JSON Schema is a vocabulary that allows you to annotate and validate JSON documents. It's commonly used for:
-
-- **API Documentation**: Describing request/response formats
-- **Data Validation**: Ensuring data conforms to expected structure
-- **Code Generation**: Automatically generating types and classes
-- **Configuration Files**: Validating application settings
-
-## Example Use Cases
-
-### API Request Schema
-
-```json
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "title": "User Registration",
-  "description": "Schema for user registration data",
-  "properties": {
-    "username": {
-      "type": "string",
-      "description": "Unique username"
-    },
-    "email": {
-      "type": "string",
-      "description": "User email address"
-    },
-    "age": {
-      "type": "integer",
-      "description": "User age"
-    },
-    "preferences": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      }
-    }
-  },
-  "required": ["username", "email"]
-}
-```
-
-### Configuration Schema
-
-```json
-{
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "type": "object",
-  "title": "App Configuration",
-  "properties": {
-    "environment": {
-      "type": "string",
-      "enum": ["development", "staging", "production"]
-    },
-    "port": {
-      "type": "integer"
-    },
-    "debug": {
-      "type": "boolean"
-    }
-  },
-  "required": ["environment", "port"]
-}
-```
 
 ## Tips for Better Schemas
 

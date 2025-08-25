@@ -73,8 +73,16 @@ const JsonSchemaBuilder: React.FC = () => {
     new Map()
   );
 
-  const [pasteModalOpen, setPasteModalOpen] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  const dialogRef = React.useRef<HTMLDialogElement>(null);
+
+  const openPasteModal = useCallback(() => {
+    dialogRef.current?.showModal();
+  }, []);
+
+  const closePasteModal = useCallback(() => {
+    dialogRef.current?.close();
+  }, []);
 
   const toggleCollapse = useCallback((propertyId: string) => {
     setCollapsedStates((prev) => {
@@ -665,7 +673,7 @@ const JsonSchemaBuilder: React.FC = () => {
       );
 
       setProperties(convertedProperties);
-      setPasteModalOpen(false);
+      closePasteModal();
       setPasteText("");
     } catch (error) {
       alert(
@@ -862,7 +870,7 @@ const JsonSchemaBuilder: React.FC = () => {
                             nestedProp.type === "string" ? "text" : "number"
                           }
                           placeholder="Add allowed value"
-                          onKeyPress={(e) => {
+                          onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               const value = e.currentTarget.value;
                               if (value.trim()) {
@@ -954,7 +962,7 @@ const JsonSchemaBuilder: React.FC = () => {
           <button
             type="button"
             className="sample-card paste-card"
-            onClick={() => setPasteModalOpen(true)}
+            onClick={openPasteModal}
           >
             <h4>📋 Paste Schema</h4>
             <p>Paste an existing JSON schema to edit it</p>
@@ -1274,71 +1282,52 @@ const JsonSchemaBuilder: React.FC = () => {
         <div className="schema-output">{JSON.stringify(schema, null, 2)}</div>
       </div>
 
-      {pasteModalOpen && (
-        <div
-          className="modal-overlay"
-          onClick={() => setPasteModalOpen(false)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              setPasteModalOpen(false);
-            }
-          }}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby={pasteModalTitleId}
-          tabIndex={-1}
-        >
-          <div
-            className="modal-content"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            role="document"
-          >
-            <div className="modal-header">
-              <h3 id={pasteModalTitleId}>Paste JSON Schema</h3>
-              <button
-                type="button"
-                className="modal-close"
-                onClick={() => setPasteModalOpen(false)}
-                aria-label="Close modal"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              <p>
-                Paste your JSON schema below and click "Load Schema" to import
-                it:
-              </p>
-              <textarea
-                value={pasteText}
-                onChange={(e) => setPasteText(e.target.value)}
-                placeholder="Paste your JSON schema here..."
-                rows={10}
-                className="paste-textarea"
-                aria-label="JSON schema text input"
-              />
-            </div>
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setPasteModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => parseAndLoadSchema(pasteText)}
-                disabled={!pasteText.trim()}
-              >
-                Load Schema
-              </button>
-            </div>
+      <dialog
+        ref={dialogRef}
+        onClose={closePasteModal}
+        aria-labelledby={pasteModalTitleId}
+        className="paste-modal"
+      >
+        <div className="modal-content">
+          <div className="modal-header">
+            <h3 id={pasteModalTitleId}>Paste JSON Schema</h3>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={closePasteModal}
+              aria-label="Close modal"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="modal-body">
+            <p>
+              Paste your JSON schema below and click "Load Schema" to import it:
+            </p>
+            <textarea
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder="Paste your JSON schema here..."
+              rows={10}
+              className="paste-textarea"
+              aria-label="JSON schema text input"
+            />
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn" onClick={closePasteModal}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => parseAndLoadSchema(pasteText)}
+              disabled={!pasteText.trim()}
+            >
+              Load Schema
+            </button>
           </div>
         </div>
-      )}
+      </dialog>
     </div>
   );
 };

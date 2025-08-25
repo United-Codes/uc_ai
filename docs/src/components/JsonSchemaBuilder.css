@@ -2,12 +2,16 @@
 .json-schema-builder {
   /* Control dimensions */
   --jsb-control-height: 34px;
+
+  /* Colors - Accent */
+  --jsb-accent-primary: var(--sl-color-accent);
+  --jsb-accent-primary-hover: var(--sl-color-accent-high);
   
   /* Colors - Border (Light mode) */
   --jsb-border-light: #e5e7eb;
   --jsb-border-medium: #d1d5db;
-  --jsb-border-hover: #3b82f6;
-  --jsb-border-focus: #3b82f6;
+  --jsb-border-hover: var(--jsb-accent-primary);
+  --jsb-border-focus: var(--jsb-accent-primary);
   --jsb-border-dashed: #d1d5db;
   --jsb-border-section: #f3f4f6;
   
@@ -28,10 +32,6 @@
   --jsb-text-disabled: #9ca3af;
   --jsb-text-error: #dc2626;
   --jsb-text-white: white;
-  
-  /* Colors - Accent */
-  --jsb-accent-primary: #3b82f6;
-  --jsb-accent-primary-hover: #2563eb;
   
   /* Spacing */
   --jsb-spacing-xs: 4px;
@@ -72,11 +72,15 @@
 
 /* Dark mode color overrides */
 html[data-theme="dark"] .json-schema-builder {
+  /* Colors - Accent (Dark mode) */
+  --jsb-accent-primary: #60a5fa;
+  --jsb-accent-primary-hover: #3b82f6;
+
   /* Colors - Border (Dark mode) */
   --jsb-border-light: #374151;
   --jsb-border-medium: #4b5563;
-  --jsb-border-hover: #60a5fa;
-  --jsb-border-focus: #60a5fa;
+  --jsb-border-hover: var(--jsb-accent-primary);
+  --jsb-border-focus: var(--jsb-accent-primary);
   --jsb-border-dashed: #4b5563;
   --jsb-border-section: #374151;
   
@@ -97,10 +101,6 @@ html[data-theme="dark"] .json-schema-builder {
   --jsb-text-disabled: #6b7280;
   --jsb-text-error: #f87171;
   --jsb-text-white: #1f2937;
-  
-  /* Colors - Accent (Dark mode) */
-  --jsb-accent-primary: #60a5fa;
-  --jsb-accent-primary-hover: #3b82f6;
 }
 
 .json-schema-builder {
@@ -179,6 +179,28 @@ html[data-theme="dark"] .json-schema-builder {
 .paste-card:hover {
   border-color: var(--jsb-border-hover);
   border-style: dashed;
+}
+
+/* Dialog styles for native HTML dialog element */
+.paste-modal {
+  margin: auto;
+  padding: 0;
+  border: none;
+  border-radius: var(--jsb-radius-lg);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 600px;
+  max-height: 80vh;
+  background: var(--jsb-bg-primary);
+}
+
+.paste-modal::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Dark mode dialog backdrop adjustment */
+html[data-theme="dark"] .paste-modal::backdrop {
+  background: rgba(0, 0, 0, 0.8);
 }
 
 /* Modal styles */
@@ -322,6 +344,7 @@ html[data-theme="dark"] .modal-overlay {
 }
 
 .form-group input,
+.enum-input input,
 .form-group textarea,
 .form-group select {
   width: 100%;
