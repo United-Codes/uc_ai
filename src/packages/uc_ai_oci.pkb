@@ -490,9 +490,14 @@ create or replace package body uc_ai_oci as
         when '400' then
           logger.log_error('Bad request', l_scope);
           raise uc_ai.e_error_response;
+        when '401' then
+          logger.log_error('Authentication error', l_scope);
+          raise uc_ai.e_error_response;
         when '404' then
           logger.log_error('Model not found', l_scope);
           raise uc_ai.e_model_not_found_error;
+        else
+          null;
       end case;
     end if;
 
@@ -786,7 +791,10 @@ create or replace package body uc_ai_oci as
     end if;
 
     -- Get all available tools formatted for Google (function declarations)
-    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_oci);
+    l_tools := uc_ai_tools_api.get_tools_array(
+      uc_ai.c_provider_oci
+    , case when g_mode = gc_mode_cohere then uc_ai_tools_api.gc_cohere else null end
+    );
 
     if l_tools.get_size > 0 then
       l_chat_request.put('tools', l_tools);

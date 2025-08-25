@@ -196,8 +196,9 @@ create or replace package body uc_ai_tools_api as
    * 5. Returns format: {name, description, input_schema: {type: "object", properties: {...}}}
    */
   function get_tool_schema(
-    p_tool_id  in uc_ai_tools.id%type
-  , p_provider in uc_ai.provider_type
+    p_tool_id         in uc_ai_tools.id%type
+  , p_provider        in uc_ai.provider_type
+  , p_additional_info in varchar2 default null
   ) 
     return json_object_t 
   as
@@ -231,7 +232,6 @@ create or replace package body uc_ai_tools_api as
        and parent_param_id is null;
 
     if l_param_count = 1 then
-      
       SELECT *
         INTO l_param_rec
         FROM uc_ai_tool_parameters
@@ -282,7 +282,8 @@ create or replace package body uc_ai_tools_api as
 
 
   function get_tools_array (
-    p_provider in uc_ai.provider_type
+    p_provider        in uc_ai.provider_type
+  , p_additional_info in varchar2 default null
   ) return json_array_t
   as
     l_tools_array  json_array_t := json_array_t();
@@ -299,7 +300,7 @@ create or replace package body uc_ai_tools_api as
         from uc_ai_tools
     )
     loop
-      l_tool_obj := get_tool_schema(rec.id, p_provider);
+      l_tool_obj := get_tool_schema(rec.id, p_provider, p_additional_info);
 
       -- openai has an additional object wrapper for function calls
       -- {type: "function", function: {...}}
@@ -314,10 +315,18 @@ create or replace package body uc_ai_tools_api as
         l_tool_cpy_obj := l_tool_obj.clone();
 
         l_tool_obj := json_object_t();
-        l_tool_obj.put('type', 'FUNCTION');
+        if p_additional_info != gc_cohere then
+          l_tool_obj.put('type', 'FUNCTION');
+        end if;
+
         l_tool_obj.put('description', l_tool_cpy_obj.get_string('description'));
         l_tool_obj.put('name', l_tool_cpy_obj.get_string('name'));
-        l_tool_obj.put('parameters', l_tool_cpy_obj.get_array('input_schema'));
+
+        if p_additional_info != gc_cohere then
+          l_tool_obj.put('parameters', l_tool_cpy_obj.get_array('input_schema'));
+        else
+          l_tool_obj.put('parameterDefinitions',  l_tool_cpy_obj.get_array('input_schema'));
+        end if;
       end if;
 
       l_tools_array.append(l_tool_obj);
