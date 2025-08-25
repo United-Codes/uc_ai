@@ -1,0 +1,44 @@
+{
+  "modelId": "cohere.command-a-03-2025",
+  "modelVersion": "1.0",
+  "chatResponse": {
+    "apiFormat": "COHERE",
+    "text": "I will use one or more of the available tools to find the answer",
+    "chatHistory": [
+      {
+        "role": "USER",
+        "message": "Please clock me in to the marketing project with the note \"meeting\"."
+      },
+      {
+        "role": "CHATBOT",
+        "message": "I will use one or more of the available tools to find the answer",
+        "toolCalls": [
+          {
+            "name": "TT_GET_USERS",
+            "parameters": {}
+          },
+          {
+            "name": "TT_GET_PROJETS",
+            "parameters": {}
+          }
+        ]
+      }
+    ],
+    "finishReason": "COMPLETE",
+    "toolCalls": [
+      {
+        "name": "TT_GET_USERS",
+        "parameters": {}
+      },
+      {
+        "name": "TT_GET_PROJETS",
+        "parameters": {}
+      }
+    ],
+    "usage": {
+      "completionTokens": 28,
+      "promptTokens": 167,
+      "totalTokens": 195
+    }
+  }
+}
