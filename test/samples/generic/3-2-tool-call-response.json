@@ -1,0 +1,31 @@
+{
+  "modelId": "meta.llama-3.3-70b-instruct",
+  "modelVersion": "1.0.0",
+  "chatResponse": {
+    "apiFormat": "GENERIC",
+    "timeCreated": "2025-08-31T19:31:16.889Z",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "ASSISTANT",
+          "toolCalls": [
+            {
+              "type": "FUNCTION",
+              "id": "chatcmpl-tool-e210fb4e15fd4e4abc948e26ae3de5ea",
+              "name": "TT_CLOCK_IN",
+              "arguments": "{\"user_email\": \"michael.scott@dundermifflin.com\", \"project_name\": \"Marketing Campaign 2025\", \"notes\": \"meeting\"}"
+            }
+          ]
+        },
+        "finishReason": "tool_calls",
+        "logprobs": {}
+      }
+    ],
+    "usage": {
+      "completionTokens": 47,
+      "promptTokens": 1781,
+      "totalTokens": 1828
+    }
+  }
+}

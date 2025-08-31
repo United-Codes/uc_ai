@@ -1,0 +1,30 @@
+{
+  "modelId": "meta.llama-3.3-70b-instruct",
+  "modelVersion": "1.0.0",
+  "chatResponse": {
+    "apiFormat": "GENERIC",
+    "timeCreated": "2025-08-31T19:20:40.776Z",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "ASSISTANT",
+          "content": [
+            {
+              "type": "TEXT",
+              "text": "4"
+            }
+          ],
+          "toolCalls": []
+        },
+        "finishReason": "stop",
+        "logprobs": {}
+      }
+    ],
+    "usage": {
+      "completionTokens": 2,
+      "promptTokens": 52,
+      "totalTokens": 54
+    }
+  }
+}

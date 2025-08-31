@@ -1,0 +1,51 @@
+{
+  "compartmentId": "ocid1.tenancy.oc1..aaaaaaaaXXXX...",
+  "servingMode": {
+    "modelId": "meta.llama-3.3-70b-instruct",
+    "servingType": "ON_DEMAND"
+  },
+  "chatRequest": {
+    "apiFormat": "GENERIC",
+    "maxTokens": 600,
+    "isStream": false,
+    "numGenerations": 1,
+    "messages": [
+      {
+        "role": "SYSTEM",
+        "content": [
+          {
+            "type": "TEXT",
+            "text": "Let's count up"
+          }
+        ]
+      },
+      {
+        "role": "USER",
+        "content": [
+          {
+            "type": "TEXT",
+            "text": "1"
+          }
+        ]
+      },
+      {
+        "role": "ASSISTANT",
+        "content": [
+          {
+            "type": "TEXT",
+            "text": "2"
+          }
+        ]
+      },
+      {
+        "role": "USER",
+        "content": [
+          {
+            "type": "TEXT",
+            "text": "3"
+          }
+        ]
+      }
+    ]
+  }
+}

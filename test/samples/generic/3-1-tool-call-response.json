@@ -1,0 +1,31 @@
+{
+  "modelId": "meta.llama-3.3-70b-instruct",
+  "modelVersion": "1.0.0",
+  "chatResponse": {
+    "apiFormat": "GENERIC",
+    "timeCreated": "2025-08-31T19:31:12.348Z",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "ASSISTANT",
+          "toolCalls": [
+            {
+              "type": "FUNCTION",
+              "id": "chatcmpl-tool-8e83c746e93d49a6a785d557a6a11261",
+              "name": "TT_CLOCK_IN",
+              "arguments": "{\"user_email\": \"michael.scott@example.com\", \"project_name\": \"Marketing Project\", \"notes\": \"meeting\"}"
+            }
+          ]
+        },
+        "finishReason": "tool_calls",
+        "logprobs": {}
+      }
+    ],
+    "usage": {
+      "completionTokens": 44,
+      "promptTokens": 659,
+      "totalTokens": 703
+    }
+  }
+}
