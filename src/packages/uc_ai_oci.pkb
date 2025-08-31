@@ -896,7 +896,7 @@ create or replace package body uc_ai_oci as
     -- Get all available tools formatted for Google (function declarations)
     l_tools := uc_ai_tools_api.get_tools_array(
       uc_ai.c_provider_oci
-    , case when g_mode = gc_mode_cohere then uc_ai_tools_api.gc_cohere else null end
+    , case when g_mode = gc_mode_cohere then uc_ai_tools_api.gc_cohere else 'generic' end
     );
 
     if l_tools.get_size > 0 then

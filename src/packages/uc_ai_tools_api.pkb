@@ -455,7 +455,7 @@ create or replace package body uc_ai_tools_api as
         l_tool_obj.put('function', l_tool_cpy_obj);
       elsif p_provider = uc_ai.c_provider_oci then
         l_tool_cpy_obj := l_tool_obj.clone();
-        logger.log('Creating tool schema for OCI provider', l_scope, l_tool_cpy_obj.to_clob());
+        logger.log('Creating tool schema for OCI provider (' || p_additional_info || ')', l_scope, l_tool_cpy_obj.to_clob());
 
         l_tool_obj := json_object_t();
         if p_additional_info != gc_cohere then
@@ -466,7 +466,7 @@ create or replace package body uc_ai_tools_api as
         l_tool_obj.put('name', l_tool_cpy_obj.get_string('name'));
 
         if p_additional_info != gc_cohere then
-          l_tool_obj.put('parameters', l_tool_cpy_obj.get_array('input_schema'));
+          l_tool_obj.put('parameters', l_tool_cpy_obj.get_object('input_schema'));
         else
           l_tool_obj.put('parameterDefinitions',  convert_input_schema_to_cohere(l_tool_cpy_obj.get_object('input_schema')));
         end if;
