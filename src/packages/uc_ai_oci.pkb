@@ -886,7 +886,9 @@ create or replace package body uc_ai_oci as
       l_chat_request.put('frequencyPenalty', 0);
       l_chat_request.put('isStream', false);
       l_chat_request.put('maxTokens', 600);
-      l_chat_request.put('isForceSingleStep', true);
+      if uc_ai.g_enable_tools then
+        l_chat_request.put('isForceSingleStep', true);
+      end if;
       --l_chat_request.put('presencePenalty', 0);
       --l_chat_request.put('temperature', 1);
       --l_chat_request.put('topP', 1.0);
