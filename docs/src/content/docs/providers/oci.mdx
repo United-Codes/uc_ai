@@ -1,0 +1,92 @@
+---
+title: OCI
+description: UC AI provider documentation for Oracle Cloud Infrastructure
+---
+
+The UC AI OCI package provides integration with Oracle Cloud Infrastructure's Generative AI models, allowing you to use state-of-the-art language models within your Oracle database applications.
+
+## Features
+
+- Support for Cohere, Meta Llama, xAI Grok models, and Google Gemini models
+- Features vary by model
+
+## Prerequisites
+
+1. Create OCI API Key and APEX Web Credential (see [guide](/products/uc-ai/docs/help/create-oci-key/))
+2. Oracle database with internet access to OCI's API endpoints
+3. UC AI package installed
+
+Note that OCI uses a complex credential-based authentication system with a private key and three other components rather than a simple API key. Unfortunately Oracle does not provide a PL/SQL SDK to do the cryptographic operations, so the UC AI package builds on Oracle APEX Web Credentials which can do the work.
+
+If you have a way to do the cryptographic operations in PL/SQL, please contact me or open a pull request to improve allow this to work without having to use APEX. Also if you know a way to get `Auth tokens` (simple API keys) to work with the AI APIs, please let me know.
+
+## Models
+
+Which models are available to you is highly dependant on the region where your OCI tenant is located.
+
+Currently Oracle provides Cohere, Meta Llama, xAI Grok models, and Google Gemini models.
+
+Refer to [this list of available models](https://docs.oracle.com/en-us/iaas/Content/generative-ai/pretrained-models.htm) for more information. Click on a model to see where it is available.
+
+### Meta Llama
+
+- `uc_ai_oci.c_model_llama_4_scout`
+- `uc_ai_oci.c_model_llama_4_maverick`
+- `uc_ai_oci.c_model_llama_3_3_70b`
+
+### Cohere
+
+- `uc_ai_oci.c_model_cohere_command_a_03_2025`
+
+### xAI Grok
+
+- `uc_ai_oci.c_model_grok_4`
+- `uc_ai_oci.c_model_grok_3`
+- `uc_ai_oci.c_model_grok_3_mini`
+- `uc_ai_oci.c_model_grok_3_fast`
+- `uc_ai_oci.c_model_grok_3_mini_fast`
+
+### Google Gemini
+
+Coming soon...
+
+## Usage Examples
+
+### Basic Text Generation
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is Oracle APEX?',
+    p_provider => uc_ai.c_provider_oci,
+    p_model => uc_ai_oci.c_model_cohere_command_a_03_2025
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### With System Prompt
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
+    p_system_prompt => 'You are an assistant helping users to get recipes. Please just list 3 possible dish names without instructions.',
+    p_provider => uc_ai.c_provider_oci,
+    p_model => uc_ai_oci.c_model_cohere_command_a_03_2025
+  );
+
+  dbms_output.put_line('Recipe suggestions: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### Tools
+
+Tools / function calling is suported. Refer to the [model documentation page](https://docs.oracle.com/en-us/iaas/Content/generative-ai/pretrained-models.htm) to see which models support it.

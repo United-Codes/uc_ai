@@ -9,6 +9,8 @@ create or replace package uc_ai_tools_api as
   */
 
 
+  gc_cohere constant varchar2(255 char) := 'cohere';
+
 
   /*
    * Returns array of all active tools formatted for specific AI provider
@@ -16,7 +18,8 @@ create or replace package uc_ai_tools_api as
    * This is what gets sent to AI models so they know what tools are available.
    */
   function get_tools_array (
-    p_provider in uc_ai.provider_type
+    p_provider        in uc_ai.provider_type
+  , p_additional_info in varchar2 default null
   ) return json_array_t;
 
   /*

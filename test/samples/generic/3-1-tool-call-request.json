@@ -1,0 +1,94 @@
+{
+  "compartmentId": "ocid1.tenancy.oc1..aaaaaaaaXXXX...",
+  "servingMode": {
+    "modelId": "meta.llama-3.3-70b-instruct",
+    "servingType": "ON_DEMAND"
+  },
+  "chatRequest": {
+    "apiFormat": "GENERIC",
+    "maxTokens": 600,
+    "isStream": false,
+    "numGenerations": 1,
+    "tools": [
+      {
+        "type": "FUNCTION",
+        "description": "Clock in a user to the time tracking system. This needs a user_email and project_name as parameters. You can get these from other tools. Optionally pass notes if given by the user.\nExample parameters: {\"user_email\": \"user@example.com\",\"project_name\": \"TV Marketing\", \"notes\": \"Look for actors\"} or {\"user_email\": \"john.doe@gmail.com\",\"project_name\": \"Inventing Teleportation\"}",
+        "name": "TT_CLOCK_IN",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "parameters": {
+              "type": "object",
+              "description": "JSON object containing parameters",
+              "properties": {
+                "user_email": {
+                  "type": "string",
+                  "description": "Email of the user"
+                },
+                "project_name": {
+                  "type": "string",
+                  "description": "Name of the project"
+                },
+                "notes": {
+                  "type": "string",
+                  "description": "Optional description of what the user is working on"
+                }
+              },
+              "required": [
+                "user_email",
+                "project_name"
+              ]
+            }
+          },
+          "required": [
+            "parameters"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "type": "FUNCTION",
+        "description": "Get information on all the projects in the system",
+        "name": "TT_GET_PROJETS",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      },
+      {
+        "type": "FUNCTION",
+        "description": "Get information on all the users in the system",
+        "name": "TT_GET_USERS",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "SYSTEM",
+        "content": [
+          {
+            "type": "TEXT",
+            "text": "You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.\n        The current user is Michael Scott. Make sure to double check if inputs like user or project are correct.\n\n        If you clock somebody in, answer with: \"You are now clocked in to the project \"{{project_name}}\" with the note \"{{notes| - }}\"."
+          }
+        ]
+      },
+      {
+        "role": "USER",
+        "content": [
+          {
+            "type": "TEXT",
+            "text": "Please clock me in to the marketing project with the note \"meeting\"."
+          }
+        ]
+      }
+    ]
+  }
+}

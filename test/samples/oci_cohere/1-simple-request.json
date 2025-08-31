@@ -1,0 +1,17 @@
+{
+  "compartmentId": "ocid1.tenancy.oc1..aaaaaaaaXXXX...",
+  "servingMode": {
+    "modelId": "cohere.command-a-03-2025",
+    "servingType": "ON_DEMAND"
+  },
+  "chatRequest": {
+    "apiFormat": "COHERE",
+    "isEcho": false,
+    "frequencyPenalty": 0,
+    "isStream": false,
+    "maxTokens": 600,
+    "preambleOverride": "You are an assistant helping users to get recipes. Please answer in short sentences.",
+    "chatHistory": [],
+    "message": "I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?"
+  }
+}

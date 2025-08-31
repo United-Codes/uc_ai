@@ -1,0 +1,33 @@
+{
+  "compartmentId": "ocid1.tenancy.oc1..aaaaaaaaXXXX...",
+  "servingMode": {
+    "modelId": "meta.llama-3.3-70b-instruct",
+    "servingType": "ON_DEMAND"
+  },
+  "chatRequest": {
+    "apiFormat": "GENERIC",
+    "maxTokens": 600,
+    "isStream": false,
+    "numGenerations": 1,
+    "messages": [
+      {
+        "role": "SYSTEM",
+        "content": [
+          {
+            "type": "TEXT",
+            "text": "You are an assistant helping users to get recipes. Please answer in short sentences."
+          }
+        ]
+      },
+      {
+        "role": "USER",
+        "content": [
+          {
+            "type": "TEXT",
+            "text": "I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?"
+          }
+        ]
+      }
+    ]
+  }
+}

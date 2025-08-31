@@ -13,6 +13,7 @@ create or replace package uc_ai as
   c_provider_anthropic constant provider_type := 'anthropic';
   c_provider_google    constant provider_type := 'google';
   c_provider_ollama    constant provider_type := 'ollama';
+  c_provider_oci       constant provider_type := 'oci';
 
   subtype model_type is varchar2(128 char);
 
@@ -41,6 +42,8 @@ create or replace package uc_ai as
   pragma exception_init(e_unhandled_format, -20303);
   e_format_processing_error exception;
   pragma exception_init(e_format_processing_error, -20304);
+  e_model_not_found_error exception;
+  pragma exception_init(e_model_not_found_error, -20305);
 
   /*
    * Main interface for AI text generation

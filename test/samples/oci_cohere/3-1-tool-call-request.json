@@ -1,0 +1,51 @@
+{
+  "compartmentId": "ocid1.tenancy.oc1..aaaaaaaaXXXX...",
+  "servingMode": {
+    "modelId": "cohere.command-a-03-2025",
+    "servingType": "ON_DEMAND"
+  },
+  "chatRequest": {
+    "apiFormat": "COHERE",
+    "isEcho": false,
+    "frequencyPenalty": 0,
+    "isStream": false,
+    "maxTokens": 600,
+    "isForceSingleStep": true,
+    "tools": [
+      {
+        "description": "Clock in a user to the time tracking system. This needs a user_email and project_name as parameters. You can get these from other tools. Optionally pass notes if given by the user.\nExample parameters: {\"user_email\": \"user@example.com\",\"project_name\": \"TV Marketing\", \"notes\": \"Look for actors\"} or {\"user_email\": \"john.doe@gmail.com\",\"project_name\": \"Inventing Teleportation\"}",
+        "name": "TT_CLOCK_IN",
+        "parameterDefinitions": {
+          "user_email": {
+            "type": "string",
+            "description": "Email of the user",
+            "isRequired": true
+          },
+          "project_name": {
+            "type": "string",
+            "description": "Name of the project",
+            "isRequired": true
+          },
+          "notes": {
+            "type": "string",
+            "description": "Optional description of what the user is working on",
+            "isRequired": false
+          }
+        }
+      },
+      {
+        "description": "Get information on all the projects in the system",
+        "name": "TT_GET_PROJETS",
+        "parameterDefinitions": {}
+      },
+      {
+        "description": "Get information on all the users in the system",
+        "name": "TT_GET_USERS",
+        "parameterDefinitions": {}
+      }
+    ],
+    "chatHistory": [],
+    "message": "Please clock me in to the marketing project with the note \"meeting\".",
+    "preambleOverride": "You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.\n        The current user is Michael Scott. Make sure to double check if inputs like user or project are correct.\n\n        If you clock somebody in, answer with: \"You are now clocked in to the project \"{{project_name}}\" with the note \"{{notes| - }}\"."
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "modelId": "meta.llama-3.3-70b-instruct",
+  "modelVersion": "1.0.0",
+  "chatResponse": {
+    "apiFormat": "GENERIC",
+    "timeCreated": "2025-08-31T19:18:46.201Z",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "ASSISTANT",
+          "content": [
+            {
+              "type": "TEXT",
+              "text": "You can make a salad with tomatoes, olives, and cheese. \nOr, a baked potato with cheese and tomatoes. \nAlso, a simple potato and cheese gratin with tomato on top."
+            }
+          ],
+          "toolCalls": []
+        },
+        "finishReason": "stop",
+        "logprobs": {}
+      }
+    ],
+    "usage": {
+      "completionTokens": 41,
+      "promptTokens": 72,
+      "totalTokens": 113
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "compartmentId": "ocid1.tenancy.oc1..aaaaaaaaXXXX...",
+  "servingMode": {
+    "modelId": "cohere.command-a-03-2025",
+    "servingType": "ON_DEMAND"
+  },
+  "chatRequest": {
+    "apiFormat": "COHERE",
+    "isEcho": false,
+    "frequencyPenalty": 0,
+    "isStream": false,
+    "maxTokens": 600,
+    "chatHistory": [
+      {
+        "role": "USER",
+        "message": "1"
+      },
+      {
+        "role": "CHATBOT",
+        "message": "2"
+      }
+    ],
+    "message": "3",
+    "preambleOverride": "Let's count up. One at a time. Just reply with the next number."
+  }
+}
