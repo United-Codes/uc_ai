@@ -321,5 +321,34 @@ Example parameters: {"user_email": "user@example.com","project_name": "TV Market
     return l_blob;
   end get_apple_webp;
 
+  function get_confidence_json_schema return json_object_t
+  as
+    l_json json_object_t;
+  begin
+    l_json := json_object_t(q'#
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Response with confidence score",
+  "properties": {
+    "response": {
+      "type": "string",
+      "description": "The generated response text"
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Confidence score between 0 and 1",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "required": [
+    "response",
+    "confidence"
+  ]
+}
+    #');
+    return l_json;
+  end get_confidence_json_schema;
 
 end uc_ai_test_utils;
