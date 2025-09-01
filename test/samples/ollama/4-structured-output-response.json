@@ -1,0 +1,16 @@
+{
+  "model": "qwen3:4b",
+  "created_at": "2025-09-01T11:33:54.345528Z",
+  "message": {
+    "role": "assistant",
+    "content": "{\n  \"response\": \"The capital of France is Paris.\"\n  ,\n  \"confidence\": 0.99\n}\n"
+  },
+  "done_reason": "stop",
+  "done": true,
+  "total_duration": 15692415166,
+  "load_duration": 14822425166,
+  "prompt_eval_count": 37,
+  "prompt_eval_duration": 154920042,
+  "eval_count": 28,
+  "eval_duration": 712067542
+}
