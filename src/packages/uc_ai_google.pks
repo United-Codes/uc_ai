@@ -35,6 +35,7 @@ create or replace package uc_ai_google as
     p_messages       in json_array_t
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
+  , p_schema         in json_object_t default null
   ) return json_object_t;
 
 end uc_ai_google;

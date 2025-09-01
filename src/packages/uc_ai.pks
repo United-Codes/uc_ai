@@ -52,18 +52,20 @@ create or replace package uc_ai as
    * See https://www.united-codes.com/products/uc-ai/docs/api/generate_text/ for API documentation
    */
   function generate_text (
-    p_user_prompt    in clob
-  , p_system_prompt  in clob default null
-  , p_provider       in provider_type
-  , p_model          in model_type
-  , p_max_tool_calls in pls_integer default null
+    p_user_prompt           in clob
+  , p_system_prompt         in clob default null
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
   ) return json_object_t;
 
   function generate_text (
-    p_messages       in json_array_t
-  , p_provider       in provider_type
-  , p_model          in model_type
-  , p_max_tool_calls in pls_integer default null
+    p_messages              in json_array_t
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
   ) return json_object_t;
 
 end uc_ai;

@@ -502,6 +502,7 @@ create or replace package body uc_ai_ollama as
    * Returns comprehensive result object with:
    * - messages: full conversation history
    * - final_message: last message content for simple usage
+   * - structured_output: parsed JSON object (when schema provided)
    * - finish_reason: completion reason (stop, tool_calls, length, etc.)
    * - usage: token usage statistics (if provided by Ollama)
    * - tool_calls_count: total number of tool calls executed
@@ -511,6 +512,7 @@ create or replace package body uc_ai_ollama as
     p_messages       in json_array_t
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
+  , p_schema         in json_object_t default null
   ) return json_object_t
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'generate_text_with_messages';
@@ -519,6 +521,7 @@ create or replace package body uc_ai_ollama as
     l_tools              json_array_t;
     l_result             json_object_t;
     l_message            json_object_t;
+    l_format             json_object_t;
   begin
     l_result := json_object_t();
     logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
@@ -549,11 +552,19 @@ create or replace package body uc_ai_ollama as
     l_input_obj.put('model', p_model);
     l_input_obj.put('stream', false); -- We want the complete response, not streaming
 
-    -- Get all available tools formatted for Ollama
-    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_ollama);
+    -- Add structured output format if schema is provided
+    if p_schema is not null then
+      l_format := uc_ai_structured_output.to_ollama_format(p_schema);
+      l_input_obj.put('format', l_format);
+    end if;
 
-    if l_tools.get_size > 0 then
-      l_input_obj.put('tools', l_tools);
+    -- Get all available tools formatted for Ollama (if tools are enabled)
+    if uc_ai.g_enable_tools then
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_ollama);
+
+      if l_tools.get_size > 0 then
+        l_input_obj.put('tools', l_tools);
+      end if;
     end if;
 
     l_ollama_messages := internal_generate_text(
