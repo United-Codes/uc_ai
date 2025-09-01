@@ -8,6 +8,8 @@ interface SchemaProperty {
   description?: string;
   required: boolean;
   enum?: string[];
+  minimum?: number;
+  maximum?: number;
   items?: SchemaProperty;
   properties?: SchemaProperty[];
   collapsed?: boolean;
@@ -17,6 +19,8 @@ interface JsonSchemaProperty {
   type: string;
   description?: string;
   enum?: string[];
+  minimum?: number;
+  maximum?: number;
   items?: {
     type: string;
     description?: string;
@@ -34,6 +38,8 @@ interface SampleProperty {
   description?: string;
   required: boolean;
   enum?: string[];
+  minimum?: number;
+  maximum?: number;
   items?: { type: string };
   properties?: SampleProperty[];
 }
@@ -131,7 +137,13 @@ const JsonSchemaBuilder: React.FC = () => {
     (
       id: string,
       field: keyof SchemaProperty,
-      value: string | boolean | SchemaProperty | { type: string }
+      value:
+        | string
+        | boolean
+        | number
+        | undefined
+        | SchemaProperty
+        | { type: string }
     ) => {
       setProperties((prev) =>
         prev.map((prop) =>
@@ -193,7 +205,14 @@ const JsonSchemaBuilder: React.FC = () => {
       parentId: string,
       childId: string,
       field: keyof SchemaProperty,
-      value: string | boolean | SchemaProperty | { type: string } | string[]
+      value:
+        | string
+        | boolean
+        | number
+        | undefined
+        | SchemaProperty
+        | { type: string }
+        | string[]
     ) => {
       setProperties((prev) =>
         prev.map((prop) =>
@@ -274,6 +293,15 @@ const JsonSchemaBuilder: React.FC = () => {
           propertySchema.enum = prop.enum;
         }
 
+        if (prop.type === "number" || prop.type === "integer") {
+          if (prop.minimum !== undefined) {
+            propertySchema.minimum = prop.minimum;
+          }
+          if (prop.maximum !== undefined) {
+            propertySchema.maximum = prop.maximum;
+          }
+        }
+
         schemaProperties[prop.name] = propertySchema;
       });
 
@@ -342,6 +370,8 @@ const JsonSchemaBuilder: React.FC = () => {
             type: "number",
             description: "Confidence score between 0 and 1",
             required: true,
+            minimum: 0,
+            maximum: 1,
           },
         ],
       },
@@ -584,6 +614,14 @@ const JsonSchemaBuilder: React.FC = () => {
           converted.enum = prop.enum;
         }
 
+        if (prop.minimum !== undefined) {
+          converted.minimum = prop.minimum;
+        }
+
+        if (prop.maximum !== undefined) {
+          converted.maximum = prop.maximum;
+        }
+
         if (prop.items) {
           converted.items = {
             id: `${prop.id}-item`,
@@ -604,85 +642,96 @@ const JsonSchemaBuilder: React.FC = () => {
     setProperties(convertToSchemaProperties(sampleSchema.properties));
   }, []);
 
-  const parseAndLoadSchema = useCallback((schemaText: string) => {
-    try {
-      const parsedSchema = JSON.parse(schemaText) as JsonSchema;
+  const parseAndLoadSchema = useCallback(
+    (schemaText: string) => {
+      try {
+        const parsedSchema = JSON.parse(schemaText) as JsonSchema;
 
-      // Validate that it's a proper JSON schema
-      if (!parsedSchema.type || !parsedSchema.properties) {
-        throw new Error("Invalid JSON schema format");
-      }
+        // Validate that it's a proper JSON schema
+        if (!parsedSchema.type || !parsedSchema.properties) {
+          throw new Error("Invalid JSON schema format");
+        }
 
-      // Clear existing properties and collapsed states
-      setProperties([]);
-      setCollapsedStates(new Map());
+        // Clear existing properties and collapsed states
+        setProperties([]);
+        setCollapsedStates(new Map());
 
-      // Set schema metadata
-      setSchema({
-        $schema:
-          parsedSchema.$schema || "http://json-schema.org/draft-07/schema#",
-        type: parsedSchema.type,
-        title: parsedSchema.title || "",
-        description: parsedSchema.description || "",
-        properties: parsedSchema.properties,
-        required: parsedSchema.required || [],
-      });
-
-      // Convert JSON schema properties to internal format
-      const convertJsonSchemaToProperties = (
-        schemaProps: Record<string, JsonSchemaProperty>,
-        requiredFields: string[] = []
-      ): SchemaProperty[] => {
-        return Object.entries(schemaProps).map(([name, prop], index) => {
-          const id = `imported-${Date.now()}-${index}`;
-          const converted: SchemaProperty = {
-            id,
-            name,
-            type: prop.type,
-            description: prop.description,
-            required: requiredFields.includes(name),
-          };
-
-          if (prop.enum) {
-            converted.enum = prop.enum;
-          }
-
-          if (prop.type === "array" && prop.items) {
-            converted.items = {
-              id: `${id}-item`,
-              name: "item",
-              type: prop.items.type,
-              required: false,
-            };
-          }
-
-          if (prop.type === "object" && prop.properties) {
-            converted.properties = convertJsonSchemaToProperties(
-              prop.properties,
-              prop.required || []
-            );
-          }
-
-          return converted;
+        // Set schema metadata
+        setSchema({
+          $schema:
+            parsedSchema.$schema || "http://json-schema.org/draft-07/schema#",
+          type: parsedSchema.type,
+          title: parsedSchema.title || "",
+          description: parsedSchema.description || "",
+          properties: parsedSchema.properties,
+          required: parsedSchema.required || [],
         });
-      };
 
-      const convertedProperties = convertJsonSchemaToProperties(
-        parsedSchema.properties,
-        parsedSchema.required || []
-      );
+        // Convert JSON schema properties to internal format
+        const convertJsonSchemaToProperties = (
+          schemaProps: Record<string, JsonSchemaProperty>,
+          requiredFields: string[] = []
+        ): SchemaProperty[] => {
+          return Object.entries(schemaProps).map(([name, prop], index) => {
+            const id = `imported-${Date.now()}-${index}`;
+            const converted: SchemaProperty = {
+              id,
+              name,
+              type: prop.type,
+              description: prop.description,
+              required: requiredFields.includes(name),
+            };
 
-      setProperties(convertedProperties);
-      closePasteModal();
-      setPasteText("");
-    } catch (error) {
-      alert(
-        `Error parsing schema: ${
-          error instanceof Error ? error.message : "Invalid JSON"
-        }`
-      );
-    }
-  }, []);
+            if (prop.enum) {
+              converted.enum = prop.enum;
+            }
+
+            if (prop.minimum !== undefined) {
+              converted.minimum = prop.minimum;
+            }
+
+            if (prop.maximum !== undefined) {
+              converted.maximum = prop.maximum;
+            }
+
+            if (prop.type === "array" && prop.items) {
+              converted.items = {
+                id: `${id}-item`,
+                name: "item",
+                type: prop.items.type,
+                required: false,
+              };
+            }
+
+            if (prop.type === "object" && prop.properties) {
+              converted.properties = convertJsonSchemaToProperties(
+                prop.properties,
+                prop.required || []
+              );
+            }
+
+            return converted;
+          });
+        };
+
+        const convertedProperties = convertJsonSchemaToProperties(
+          parsedSchema.properties,
+          parsedSchema.required || []
+        );
+
+        setProperties(convertedProperties);
+        closePasteModal();
+        setPasteText("");
+      } catch (error) {
+        alert(
+          `Error parsing schema: ${
+            error instanceof Error ? error.message : "Invalid JSON"
+          }`
+        );
+      }
+    },
+    [closePasteModal]
+  );
 
   React.useEffect(() => {
     generateSchema();
@@ -831,48 +880,72 @@ const JsonSchemaBuilder: React.FC = () => {
                   {(nestedProp.type === "string" ||
                     nestedProp.type === "number" ||
                     nestedProp.type === "integer") && (
-                    <div className="enum-section">
-                      <div className="enum-section-header">
-                        Allowed Values (Optional)
-                      </div>
-                      {nestedProp.enum && nestedProp.enum.length > 0 && (
-                        <div className="enum-values">
-                          {nestedProp.enum.map((value, index) => (
-                            <span
-                              key={`${nestedProp.id}-enum-${value}-${index}`}
-                              className="enum-tag"
-                            >
-                              {value}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updatedEnum =
-                                    nestedProp.enum?.filter(
-                                      (_, i) => i !== index
-                                    ) || [];
+                    <div className="validation-section">
+                      <div className="enum-section">
+                        <div className="enum-section-header">
+                          Allowed Values (Optional)
+                        </div>
+                        {nestedProp.enum && nestedProp.enum.length > 0 && (
+                          <div className="enum-values">
+                            {nestedProp.enum.map((value, index) => (
+                              <span
+                                key={`${nestedProp.id}-enum-${value}-${index}`}
+                                className="enum-tag"
+                              >
+                                {value}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updatedEnum =
+                                      nestedProp.enum?.filter(
+                                        (_, i) => i !== index
+                                      ) || [];
+                                    updateNestedProperty(
+                                      parentId,
+                                      nestedProp.id,
+                                      "enum",
+                                      updatedEnum
+                                    );
+                                  }}
+                                >
+                                  ✕
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="enum-input">
+                          <input
+                            type={
+                              nestedProp.type === "string" ? "text" : "number"
+                            }
+                            placeholder="Add allowed value"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                const value = e.currentTarget.value;
+                                if (value.trim()) {
+                                  const updatedEnum = [
+                                    ...(nestedProp.enum || []),
+                                    value,
+                                  ];
                                   updateNestedProperty(
                                     parentId,
                                     nestedProp.id,
                                     "enum",
                                     updatedEnum
                                   );
-                                }}
-                              >
-                                ✕
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <div className="enum-input">
-                        <input
-                          type={
-                            nestedProp.type === "string" ? "text" : "number"
-                          }
-                          placeholder="Add allowed value"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              const value = e.currentTarget.value;
+                                  e.currentTarget.value = "";
+                                }
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-small"
+                            onClick={(e) => {
+                              const input = e.currentTarget
+                                .previousElementSibling as HTMLInputElement;
+                              const value = input.value;
                               if (value.trim()) {
                                 const updatedEnum = [
                                   ...(nestedProp.enum || []),
@@ -884,36 +957,73 @@ const JsonSchemaBuilder: React.FC = () => {
                                   "enum",
                                   updatedEnum
                                 );
-                                e.currentTarget.value = "";
+                                input.value = "";
                               }
-                            }
-                          }}
-                        />
-                        <button
-                          type="button"
-                          className="btn btn-small"
-                          onClick={(e) => {
-                            const input = e.currentTarget
-                              .previousElementSibling as HTMLInputElement;
-                            const value = input.value;
-                            if (value.trim()) {
-                              const updatedEnum = [
-                                ...(nestedProp.enum || []),
-                                value,
-                              ];
-                              updateNestedProperty(
-                                parentId,
-                                nestedProp.id,
-                                "enum",
-                                updatedEnum
-                              );
-                              input.value = "";
-                            }
-                          }}
-                        >
-                          Add
-                        </button>
+                            }}
+                          >
+                            Add
+                          </button>
+                        </div>
                       </div>
+
+                      {/* Min/Max values for nested number properties */}
+                      {(nestedProp.type === "number" ||
+                        nestedProp.type === "integer") && (
+                        <div className="minmax-section">
+                          <div className="enum-section-header">
+                            Min/Max Values (Optional - alternative to allowed
+                            values)
+                          </div>
+                          <div className="minmax-inputs">
+                            <div className="form-group">
+                              <label htmlFor={`nested-min-${nestedProp.id}`}>
+                                Minimum
+                              </label>
+                              <input
+                                id={`nested-min-${nestedProp.id}`}
+                                type="number"
+                                value={nestedProp.minimum ?? ""}
+                                onChange={(e) => {
+                                  const value =
+                                    e.target.value === ""
+                                      ? undefined
+                                      : Number(e.target.value);
+                                  updateNestedProperty(
+                                    parentId,
+                                    nestedProp.id,
+                                    "minimum",
+                                    value
+                                  );
+                                }}
+                                placeholder="Min value"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label htmlFor={`nested-max-${nestedProp.id}`}>
+                                Maximum
+                              </label>
+                              <input
+                                id={`nested-max-${nestedProp.id}`}
+                                type="number"
+                                value={nestedProp.maximum ?? ""}
+                                onChange={(e) => {
+                                  const value =
+                                    e.target.value === ""
+                                      ? undefined
+                                      : Number(e.target.value);
+                                  updateNestedProperty(
+                                    parentId,
+                                    nestedProp.id,
+                                    "maximum",
+                                    value
+                                  );
+                                }}
+                                placeholder="Max value"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1199,54 +1309,111 @@ const JsonSchemaBuilder: React.FC = () => {
                   {(property.type === "string" ||
                     property.type === "number" ||
                     property.type === "integer") && (
-                    <div className="enum-section">
-                      <div className="enum-section-header">
-                        Allowed Values (Optional)
-                      </div>
-                      {property.enum && property.enum.length > 0 && (
-                        <div className="enum-values">
-                          {property.enum.map((value, index) => (
-                            <span
-                              key={`${property.id}-enum-${value}-${index}`}
-                              className="enum-tag"
-                            >
-                              {value}
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  removeEnumValue(property.id, index)
-                                }
+                    <div className="validation-section">
+                      {/* String and Number enum values */}
+                      <div className="enum-section">
+                        <div className="enum-section-header">
+                          Allowed Values (Optional)
+                        </div>
+                        {property.enum && property.enum.length > 0 && (
+                          <div className="enum-values">
+                            {property.enum.map((value, index) => (
+                              <span
+                                key={`${property.id}-enum-${value}-${index}`}
+                                className="enum-tag"
                               >
-                                ✕
-                              </button>
-                            </span>
-                          ))}
+                                {value}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    removeEnumValue(property.id, index)
+                                  }
+                                >
+                                  ✕
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="enum-input">
+                          <input
+                            type={
+                              property.type === "string" ? "text" : "number"
+                            }
+                            placeholder="Add allowed value"
+                            onKeyPress={(e) => {
+                              if (e.key === "Enter") {
+                                addEnumValue(
+                                  property.id,
+                                  e.currentTarget.value
+                                );
+                                e.currentTarget.value = "";
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-small"
+                            onClick={(e) => {
+                              const input = e.currentTarget
+                                .previousElementSibling as HTMLInputElement;
+                              addEnumValue(property.id, input.value);
+                              input.value = "";
+                            }}
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Min/Max values for numbers */}
+                      {(property.type === "number" ||
+                        property.type === "integer") && (
+                        <div className="minmax-section">
+                          <div className="enum-section-header">
+                            Min/Max Values (Optional - alternative to allowed
+                            values)
+                          </div>
+                          <div className="minmax-inputs">
+                            <div className="form-group">
+                              <label htmlFor={`min-${property.id}`}>
+                                Minimum
+                              </label>
+                              <input
+                                id={`min-${property.id}`}
+                                type="number"
+                                value={property.minimum ?? ""}
+                                onChange={(e) => {
+                                  const value =
+                                    e.target.value === ""
+                                      ? undefined
+                                      : Number(e.target.value);
+                                  updateProperty(property.id, "minimum", value);
+                                }}
+                                placeholder="Min value"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label htmlFor={`max-${property.id}`}>
+                                Maximum
+                              </label>
+                              <input
+                                id={`max-${property.id}`}
+                                type="number"
+                                value={property.maximum ?? ""}
+                                onChange={(e) => {
+                                  const value =
+                                    e.target.value === ""
+                                      ? undefined
+                                      : Number(e.target.value);
+                                  updateProperty(property.id, "maximum", value);
+                                }}
+                                placeholder="Max value"
+                              />
+                            </div>
+                          </div>
                         </div>
                       )}
-                      <div className="enum-input">
-                        <input
-                          type={property.type === "string" ? "text" : "number"}
-                          placeholder="Add allowed value"
-                          onKeyPress={(e) => {
-                            if (e.key === "Enter") {
-                              addEnumValue(property.id, e.currentTarget.value);
-                              e.currentTarget.value = "";
-                            }
-                          }}
-                        />
-                        <button
-                          type="button"
-                          className="btn btn-small"
-                          onClick={(e) => {
-                            const input = e.currentTarget
-                              .previousElementSibling as HTMLInputElement;
-                            addEnumValue(property.id, input.value);
-                            input.value = "";
-                          }}
-                        >
-                          Add
-                        </button>
-                      </div>
                     </div>
                   )}
                 </div>
