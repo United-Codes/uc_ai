@@ -87,6 +87,69 @@ create or replace package body uc_ai_structured_output as
   end convert_schema_to_google;
 
   /*
+   * Recursively process schema to add additionalProperties: false to all object types
+   */
+  function process_openai_strict_schema(p_schema in json_object_t) return json_object_t
+  as
+    l_result json_object_t := json_object_t(p_schema.to_clob);
+    l_properties json_object_t;
+    l_processed_properties json_object_t := json_object_t();
+    l_items json_object_t;
+    l_property_names json_key_list;
+    l_property_name varchar2(4000 char);
+    l_property_value json_object_t;
+    l_type varchar2(100 char);
+  begin
+    -- Remove unsupported properties for OpenAI strict mode
+    l_result.remove('$schema');
+    l_result.remove('title');
+    l_result.remove('description');
+    
+    -- Add additionalProperties: false for object types
+    if l_result.has('type') then
+      l_type := l_result.get_string('type');
+      if l_type = 'object' then
+        l_result.put('additionalProperties', false);
+      end if;
+    end if;
+
+    -- Process nested properties and ensure all are required
+    if l_result.has('properties') then
+      l_properties := l_result.get_object('properties');
+      l_property_names := l_properties.get_keys();
+      
+      <<property_loop>>
+      for i in 1 .. l_property_names.count loop
+        l_property_name := l_property_names(i);
+        l_property_value := l_properties.get_object(l_property_name);
+        l_processed_properties.put(l_property_name, process_openai_strict_schema(l_property_value));
+      end loop property_loop;
+      
+      l_result.put('properties', l_processed_properties);
+      
+      -- For OpenAI strict mode, all properties must be required
+      declare
+        l_required_array json_array_t := json_array_t();
+      begin
+        <<required_loop>>
+        for i in 1 .. l_property_names.count loop
+          l_required_array.append(l_property_names(i));
+        end loop required_loop;
+        
+        l_result.put('required', l_required_array);
+      end;
+    end if;
+
+    -- Process array items
+    if l_result.has('items') then
+      l_items := l_result.get_object('items');
+      l_result.put('items', process_openai_strict_schema(l_items));
+    end if;
+
+    return l_result;
+  end process_openai_strict_schema;
+
+  /*
    * Convert a standard JSON schema to OpenAI format for structured output
    */
   function to_openai_format(
@@ -102,15 +165,11 @@ create or replace package body uc_ai_structured_output as
   begin
     logger.log('Converting schema to OpenAI format', l_scope, 'Name: ' || p_name || ', Strict: ' || case when p_strict then 'true' else 'false' end);
 
-    -- Create a copy of the input schema
-    l_schema_copy := json_object_t(p_schema.to_clob);
-    
-    -- Remove unsupported properties for OpenAI strict mode
+    -- Create a copy of the input schema and process for strict mode
     if p_strict then
-      l_schema_copy.remove('$schema');
-      l_schema_copy.remove('title');
-      l_schema_copy.remove('description');
-      l_schema_copy.put('additionalProperties', false);
+      l_schema_copy := process_openai_strict_schema(p_schema);
+    else
+      l_schema_copy := json_object_t(p_schema.to_clob);
     end if;
 
     l_response_format.put('type', 'json_schema');
