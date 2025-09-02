@@ -37,7 +37,10 @@ export interface SampleProperty {
   enum?: string[];
   minimum?: number;
   maximum?: number;
-  items?: { type: string };
+  items?: {
+    type: string;
+    properties?: SampleProperty[];
+  };
   properties?: SampleProperty[];
 }
 

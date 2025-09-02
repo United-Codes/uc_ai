@@ -195,7 +195,16 @@ const PropertyItem: React.FC<PropertyItemProps> = ({
             <select
               id={arrayTypeId}
               value={property.items?.type || "string"}
-              onChange={(e) => updateField("items", { type: e.target.value })}
+              onChange={(e) => {
+                const newItems: SchemaProperty = {
+                  id: `${property.id}-items`,
+                  name: "items",
+                  type: e.target.value,
+                  required: false,
+                  ...(e.target.value === "object" && { properties: [] }),
+                };
+                updateField("items", newItems);
+              }}
             >
               <option value="string">String</option>
               <option value="number">Number</option>
@@ -373,6 +382,90 @@ const PropertyItem: React.FC<PropertyItemProps> = ({
               </div>
               <div className="nested-properties">
                 {renderNestedProperties(property, property.id, depth)}
+              </div>
+            </div>
+          )}
+
+          {property.type === "array" && property.items?.type === "object" && (
+            <div className="nested-section">
+              <div className="nested-header">
+                <span>Array Item Object Properties</span>
+                <button
+                  type="button"
+                  className="btn btn-small btn-primary"
+                  onClick={() => {
+                    if (property.items) {
+                      const newProperty: SchemaProperty = {
+                        id: `${property.items.id}-${Date.now()}`,
+                        name: "",
+                        type: "string",
+                        description: "",
+                        required: false,
+                      };
+                      const updatedItems = {
+                        ...property.items,
+                        properties: [
+                          ...(property.items.properties || []),
+                          newProperty,
+                        ],
+                      };
+                      updateField("items", updatedItems);
+                    }
+                  }}
+                >
+                  + Add Property
+                </button>
+              </div>
+              <div className="nested-properties">
+                {property.items?.properties?.map((nestedProp) => (
+                  <PropertyItem
+                    key={nestedProp.id}
+                    property={nestedProp}
+                    collapsedStates={collapsedStates}
+                    onToggleCollapse={onToggleCollapse}
+                    onUpdateProperty={onUpdateProperty}
+                    onRemoveProperty={onRemoveProperty}
+                    onAddEnumValue={onAddEnumValue}
+                    onRemoveEnumValue={onRemoveEnumValue}
+                    onAddNestedProperty={onAddNestedProperty}
+                    onUpdateNestedProperty={(
+                      _parentId,
+                      childId,
+                      field,
+                      value
+                    ) => {
+                      if (property.items?.properties) {
+                        const updatedProperties = property.items.properties.map(
+                          (prop) =>
+                            prop.id === childId
+                              ? { ...prop, [field]: value }
+                              : prop
+                        );
+                        const updatedItems = {
+                          ...property.items,
+                          properties: updatedProperties,
+                        };
+                        updateField("items", updatedItems);
+                      }
+                    }}
+                    onRemoveNestedProperty={(_parentId, childId) => {
+                      if (property.items?.properties) {
+                        const updatedProperties =
+                          property.items.properties.filter(
+                            (prop) => prop.id !== childId
+                          );
+                        const updatedItems = {
+                          ...property.items,
+                          properties: updatedProperties,
+                        };
+                        updateField("items", updatedItems);
+                      }
+                    }}
+                    depth={depth + 1}
+                    isNested={true}
+                    parentId={property.items?.id || ""}
+                  />
+                ))}
               </div>
             </div>
           )}

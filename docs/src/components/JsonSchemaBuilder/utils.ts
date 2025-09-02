@@ -36,6 +36,13 @@ export const convertToSchemaProperties = (
         type: prop.items.type,
         required: false,
       };
+
+      // Handle array items with object type in sample schemas
+      if (prop.items.type === "object" && prop.items.properties) {
+        converted.items.properties = convertToSchemaProperties(
+          prop.items.properties
+        );
+      }
     }
 
     if (prop.properties) {
@@ -79,6 +86,14 @@ export const convertJsonSchemaToProperties = (
         type: prop.items.type,
         required: false,
       };
+
+      // Handle array items with object type
+      if (prop.items.type === "object" && prop.items.properties) {
+        converted.items.properties = convertJsonSchemaToProperties(
+          prop.items.properties,
+          prop.items.required || []
+        );
+      }
     }
 
     if (prop.type === "object" && prop.properties) {
@@ -112,6 +127,23 @@ export const buildSchemaProperties = (
           description: prop.items.description,
         }),
       };
+
+      // Handle array items with object type
+      if (
+        prop.items.type === "object" &&
+        prop.items.properties &&
+        prop.items.properties.length > 0
+      ) {
+        propertySchema.items.properties = buildSchemaProperties(
+          prop.items.properties
+        );
+        const itemRequired = prop.items.properties
+          .filter((child) => child.required && child.name)
+          .map((child) => child.name);
+        if (itemRequired.length > 0) {
+          propertySchema.items.required = itemRequired;
+        }
+      }
     }
 
     if (
