@@ -102,7 +102,7 @@ create table uc_ai_tool_parameters(
 
   -- Ensure array properties are only set when is_array = 1
   constraint uc_ai_tool_parameters_array_props_ck check (
-      (is_array = 1 and (array_min_items is not null or array_max_items is not null)) 
+      (is_array = 1) 
       or 
       (is_array = 0 and array_min_items is null and array_max_items is null)
   ),
