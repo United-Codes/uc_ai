@@ -17,7 +17,9 @@ create or replace package pame_pkg as
   * @param p_settlement_data JSON object containing the settlement information
   * @return CLOB containing success message with settlement ID or error message
   */
-  function create_new_settlement(p_settlement_data in json_object_t) return clob;
+  function create_new_settlement(p_settlement_data in clob) return clob;
+
+  function get_tools_markdown return clob;
 
 end pame_pkg;
 /
