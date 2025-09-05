@@ -452,15 +452,30 @@ create or replace package body uc_ai_tools_api as
     l_tools_array  json_array_t := json_array_t();
     l_tool_obj     json_object_t;
     l_tool_cpy_obj json_object_t;
+    l_enable_tool_filter boolean := false;
   begin
     if not uc_ai.g_enable_tools then
       return l_tools_array;
+    end if;
+
+    if uc_ai.g_tool_tags is not null and uc_ai.g_tool_tags.count > 0 then
+      l_enable_tool_filter := true;
     end if;
 
     <<fetch_tools>>
     for rec in (
       select id
         from uc_ai_tools
+       where (
+              not l_enable_tool_filter
+               or id in (
+                 select tt.tool_id
+                   from uc_ai_tool_tags tt
+                  where tt.tag_name member of uc_ai.g_tool_tags
+                  group by tt.tool_id
+               )
+             )
+         and active = 1
     )
     loop
       l_tool_obj := get_tool_schema(rec.id, p_provider, p_additional_info);
@@ -665,8 +680,21 @@ create or replace package body uc_ai_tools_api as
   ) return uc_ai_tool_parameters.name%type result_cache
   as
     l_scope logger_logs.scope%type := gc_scope_prefix || 'get_tools_object_param_name';
+    l_count pls_integer;
     l_param_name uc_ai_tool_parameters.name%type;
   begin
+    select count(*)
+      into l_count
+      from uc_ai_tool_parameters tp
+      join uc_ai_tools t
+        on tp.tool_id = t.id
+      where t.code = p_tool_code
+        and parent_param_id is null;
+
+    if l_count != 1 then
+      return null; -- Not exactly one top-level parameter, return null
+    end if;
+
     -- Get the parameter name for the tool's input object
     select tp.name
       into l_param_name
@@ -1015,7 +1043,7 @@ create or replace package body uc_ai_tools_api as
           updated_at
         ) values (
           l_tool_id,
-          p_tags(i),
+          lower(p_tags(i)),
           p_created_by,
           systimestamp,
           p_created_by,
