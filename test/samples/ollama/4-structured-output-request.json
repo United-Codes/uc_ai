@@ -1,0 +1,34 @@
+{
+  "model": "qwen3:4b",
+  "stream": false,
+  "format": {
+    "type": "object",
+    "properties": {
+      "response": {
+        "type": "string",
+        "description": "The generated response text"
+      },
+      "confidence": {
+        "type": "number",
+        "description": "Confidence score between 0 and 1",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "required": [
+      "response",
+      "confidence"
+    ]
+  },
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant that provides accurate information."
+    },
+    {
+      "role": "user",
+      "content": "What is the capital of France? Please respond with confidence."
+    }
+  ],
+  "think": true
+}

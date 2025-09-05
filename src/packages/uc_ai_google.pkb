@@ -525,6 +525,7 @@ create or replace package body uc_ai_google as
     p_messages       in json_array_t
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
+  , p_schema         in json_object_t default null
   ) return json_object_t
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'generate_text_with_messages';
@@ -536,6 +537,8 @@ create or replace package body uc_ai_google as
     l_message            json_object_t;
     l_parts              json_array_t;
     l_part               json_object_t;
+    l_generation_config  json_object_t;
+    l_response_schema    json_object_t;
   begin
     l_result := json_object_t();
     logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
@@ -578,26 +581,20 @@ create or replace package body uc_ai_google as
       l_message.put('parts', l_parts);
       l_input_obj.put('systemInstruction', l_message);
     end if;
-    
-    -- Get all available tools formatted for Google (function declarations)
-    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_google);
 
-    if l_tools.get_size > 0 then
-      -- Google expects tools in this format: {"tools": [{"functionDeclarations": [...]}]}
-      declare
-        l_tools_wrapper json_object_t := json_object_t();
-        l_tools_array json_array_t := json_array_t();
-      begin
-        l_tools_wrapper.put('functionDeclarations', l_tools);
-        l_tools_array.append(l_tools_wrapper);
-        l_input_obj.put('tools', l_tools_array);
-        logger.log('Tools configured', l_scope, 'Tool count: ' || l_tools.get_size);
-      end;
+    -- Setup generation config
+    l_generation_config := json_object_t();
+
+    -- Add structured output schema if provided
+    if p_schema is not null then
+      l_response_schema := uc_ai_structured_output.to_google_format(p_schema);
+      l_generation_config.put('responseSchema', l_response_schema);
+      l_generation_config.put('responseMimeType', 'application/json');
     end if;
 
+    -- Add reasoning configuration if enabled
     if uc_ai.g_enable_reasoning then
       declare
-        l_generation_config json_object_t := json_object_t(); 
         l_thinking_config json_object_t := json_object_t();
       begin
         l_thinking_config.put('includeThoughts', true);
@@ -605,8 +602,30 @@ create or replace package body uc_ai_google as
           l_thinking_config.put('thinkingBudget', g_reasoning_budget);
         end if;
         l_generation_config.put('thinkingConfig', l_thinking_config);
-        l_input_obj.put('generationConfig', l_generation_config);
       end;
+    end if;
+    
+    -- Get all available tools formatted for Google (function declarations)
+    if uc_ai.g_enable_tools then
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_google);
+
+      if l_tools.get_size > 0 then
+        -- Google expects tools in this format: {"tools": [{"functionDeclarations": [...]}]}
+        declare
+          l_tools_wrapper json_object_t := json_object_t();
+          l_tools_array json_array_t := json_array_t();
+        begin
+          l_tools_wrapper.put('functionDeclarations', l_tools);
+          l_tools_array.append(l_tools_wrapper);
+          l_input_obj.put('tools', l_tools_array);
+          logger.log('Tools configured', l_scope, 'Tool count: ' || l_tools.get_size);
+        end;
+      end if;
+    end if;
+
+    -- Apply generation config if any settings were added
+    if l_generation_config.get_keys().count > 0 then
+      l_input_obj.put('generationConfig', l_generation_config);
     end if;
 
     l_google_messages := internal_generate_text(
@@ -622,7 +641,7 @@ create or replace package body uc_ai_google as
     
     -- Add final message (only the text)
     l_result.put('final_message', g_final_message);
- 
+
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_google);
     

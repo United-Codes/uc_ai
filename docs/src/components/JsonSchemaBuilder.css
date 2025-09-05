@@ -631,6 +631,44 @@ html[data-theme="dark"] .modal-overlay {
   padding: var(--jsb-spacing-xs) var(--jsb-spacing-sm);
 }
 
+/* Validation section for both enum and min/max */
+.validation-section {
+  margin-top: var(--jsb-spacing-md);
+}
+
+/* Min/Max value inputs */
+.minmax-section {
+  margin-top: var(--jsb-spacing-lg);
+  padding-top: var(--jsb-spacing-md);
+  border-top: 1px solid var(--jsb-border-section);
+}
+
+.minmax-inputs {
+  display: flex;
+  gap: var(--jsb-spacing-lg);
+  align-items: end;
+  margin-top: var(--jsb-spacing-sm);
+}
+
+.minmax-inputs .form-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.minmax-inputs .form-group label {
+  display: block;
+  font-size: var(--jsb-font-sm);
+  font-weight: var(--jsb-font-medium);
+  color: var(--jsb-text-muted);
+  margin-bottom: var(--jsb-spacing-xs);
+}
+
+.minmax-inputs .form-group input {
+  width: 100%;
+  font-size: var(--jsb-font-md);
+  padding: var(--jsb-spacing-xs) var(--jsb-spacing-sm);
+}
+
 .btn {
   padding: var(--jsb-spacing-sm) var(--jsb-spacing-lg);
   border: 1px solid transparent;

@@ -1,0 +1,45 @@
+{
+  "model": "gemini-2.5-flash",
+  "systemInstruction": {
+    "role": "user",
+    "parts": [
+      {
+        "text": "You are a helpful assistant that provides accurate information."
+      }
+    ]
+  },
+  "generationConfig": {
+    "responseSchema": {
+      "type": "OBJECT",
+      "properties": {
+        "response": {
+          "type": "STRING",
+          "description": "The generated response text"
+        },
+        "confidence": {
+          "type": "NUMBER",
+          "description": "Confidence score between 0 and 1"
+        }
+      },
+      "required": [
+        "response",
+        "confidence"
+      ],
+      "propertyOrdering": [
+        "response",
+        "confidence"
+      ]
+    },
+    "responseMimeType": "application/json"
+  },
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "What is the capital of France? Please respond with confidence."
+        }
+      ]
+    }
+  ]
+}

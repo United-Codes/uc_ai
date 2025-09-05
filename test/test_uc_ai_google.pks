@@ -23,5 +23,8 @@ create or replace package test_uc_ai_google as
   --%test(reasoning)
   procedure reasoning;
 
+  --%test(Structured output)
+  procedure structured_output;
+
 end test_uc_ai_google;
 /

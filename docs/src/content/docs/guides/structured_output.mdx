@@ -1,0 +1,130 @@
+---
+title: Structured Output / JSON responses
+description: Overview of how to use structured output and JSON responses in UC AI
+sidebar:
+  order: 50
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**Structured output is your best friend when you need consistent, parseable responses from AI models.**
+
+Instead of getting free-form text, structured output guarantees that AI responses conform to a specific JSON schema. This makes it ideal for applications that need to process AI responses programmatically, extract specific data fields, or integrate AI results into databases and workflows.
+
+## How it works
+
+When you provide a JSON schema to UC AI, the AI model is constrained to respond only in the format you specify. The schema defines the structure, data types, required fields, and validation rules for the response.
+
+UC AI automatically converts your JSON schema to the format required by each AI provider. Currently the following providers are supported:
+
+- OpenAI
+- Google Gemini
+- Ollama
+
+## JSON Schema
+
+JSON schema is a standard that defines the structure and validation rules for JSON data. It allows you to specify the expected format, data types, and required fields for API responses, making it easier to work with structured data. JSON schemas are defined in a JSON format. Read more about it on the [official page](https://json-schema.org/).
+
+<Aside type="tip">
+  Use [our JSON schema
+  builder](/products/uc-ai/docs/other/json-schema/#interactive-builder) to build
+  your own schemas easily.
+</Aside>
+
+This is the schema for a simple that enforces responses to contain a text response and a confidence score between 0 and 1.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Simple AI Response",
+  "description": "A basic response format for AI tools that return text with a confidence score",
+  "properties": {
+    "response": {
+      "type": "string",
+      "description": "The generated response text"
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Confidence score between 0 and 1",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "required": ["response", "confidence"]
+}
+```
+
+An example response might look like this:
+
+```json
+{
+  "response": "The capital of France is Paris.",
+  "confidence": 1
+}
+```
+
+To create your own valid schemas use our [JSON schema builder](/products/uc-ai/docs/other/json-schema/#interactive-builder). The builder has more examples and allows to edit an existing schema interactively.
+
+## Example: Simple confidence scoring
+
+This example shows how to get a response with a confidence score, useful for quality control and decision-making processes.
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_schema json_object_t := json_object_t();
+  l_structured_output json_object_t;
+BEGIN
+  l_schema := q'#
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "Simple AI Response",
+  "description": "A basic response format for AI tools that return text with a confidence score",
+  "properties": {
+    "response": {
+      "type": "string",
+      "description": "The generated response text"
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Confidence score between 0 and 1",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "required": ["response", "confidence"]
+}#';
+
+  -- Generate structured response
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is the capital of France? Please respond with a confidence score.',
+    p_system_prompt => 'You are a helpful assistant that provides accurate information.',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini,
+    p_response_json_schema => l_schema
+  );
+
+  -- Extract structured data from the final message
+  l_structured_output := json_object_t(l_result.get_clob('final_message'));
+
+  dbms_output.put_line('Response: ' || l_structured_output.get_string('response'));
+  dbms_output.put_line('Confidence: ' || l_structured_output.get_number('confidence'));
+  -- Response: The capital of France is Paris.
+  -- Confidence: 1
+END;
+/
+```
+
+<Aside type="note" title="Schema validation">
+  The AI model will only return responses that exactly match your schema.
+  Invalid responses are automatically rejected and regenerated, ensuring data
+  quality.
+</Aside>
+
+## Schema best practices
+
+- Use clear descriptions
+- Set appropriate constraints (enums, min/max values, etc.)
+- Mark required fields

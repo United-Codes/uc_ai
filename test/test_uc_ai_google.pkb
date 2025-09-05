@@ -318,5 +318,70 @@ create or replace package body test_uc_ai_google as
 
   end reasoning;
 
+  procedure structured_output
+  as
+    l_result json_object_t;
+    l_schema json_object_t;
+    l_final_message clob;
+    l_structured_output json_object_t;
+    l_messages json_array_t;
+    l_message_count pls_integer;
+
+    l_response clob;
+    l_confidence number;
+  begin
+    l_schema := uc_ai_test_utils.get_confidence_json_schema();
+
+    l_result := uc_ai.generate_text(
+      p_user_prompt => 'What is the capital of France? Please respond with confidence.',
+      p_system_prompt => 'You are a helpful assistant that provides accurate information.',
+      p_provider => uc_ai.c_provider_google,
+      p_model => uc_ai_google.c_model_gemini_2_5_flash,
+      p_response_json_schema => l_schema
+    );
+
+    -- Test that we received a result
+    ut.expect(l_result).to_be_not_null();
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Response: ' || l_final_message);
+    
+    -- Test that we received a final message
+    ut.expect(l_final_message).to_be_not_null();
+
+    -- Test that the response is valid JSON
+    l_structured_output := json_object_t(l_final_message);
+
+    l_response := l_structured_output.get_string('response');
+    l_confidence := l_structured_output.get_number('confidence');
+
+    -- Test the response content
+    ut.expect(lower(l_response)).to_be_like('%paris%');
+
+    -- Test confidence is a number between 0 and 1
+    ut.expect(l_confidence).to_be_between(0, 1);
+
+    -- Test message structure
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    l_message_count := l_messages.get_size;
+    ut.expect(l_message_count).to_equal(3); -- system, user, assistant
+
+    -- Validate message array structure against spec
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Structured Output Test');
+
+    if l_structured_output is not null then
+      sys.dbms_output.put_line('Structured Response: ' || l_structured_output.get_string('response'));
+      sys.dbms_output.put_line('Confidence: ' || l_structured_output.get_number('confidence'));
+    else
+      sys.dbms_output.put_line('No structured output received');
+    end if;
+    
+  exception
+    when others then
+      sys.dbms_output.put_line('Error testing Google: ' || sqlerrm);
+      raise; -- Re-raise the exception so the test fails
+  end structured_output;
+
+
 end test_uc_ai_google;
 /
