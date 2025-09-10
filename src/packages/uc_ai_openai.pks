@@ -10,6 +10,7 @@ create or replace package uc_ai_openai as
 
 
   -- get from https://platform.openai.com/docs/pricing
+  c_model_gpt_5 constant uc_ai.model_type := 'gpt-5';
   c_model_gpt_4_5 constant uc_ai.model_type := 'gpt-4.5-preview';
   c_model_gpt_4_1 constant uc_ai.model_type := 'gpt-4.1';
   c_model_gpt_4_1_mini constant uc_ai.model_type := 'gpt-4.1-mini';
@@ -44,6 +45,9 @@ create or replace package uc_ai_openai as
     p_messages       in json_array_t
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
+  , p_schema         in json_object_t default null
+  , p_schema_name    in varchar2 default 'structured_output'
+  , p_strict         in boolean default true
   ) return json_object_t;
 
 end uc_ai_openai;

@@ -7,13 +7,125 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-**Tools and functions are magic dust to make your AI assistant truly powerful.**
+**Tools allow AI to interact with your data**
 
-If you want the AI to be able to interact with your database or external APIs, you can teach it some capabilities by registering tools. During the conversation the AI might think that it needs to use one of the tools. UC AI will then call the tool and return the result to the AI, which can then use it in its response.
+If you want the AI to be able to interact with your database or external APIs, you can teach it some capabilities by registering tools. During the conversation the AI decides if it it needs to use one of the tools and requests an execution. UC AI will then call the tool and return the result to the AI, which can then use it in its response.
 
-## Example 1: Look up data
+You can divide tools into two categories:
 
-### Data structure
+- **Additional Context**: you don't want to bloat the context of your conversation with too much information that only might be useful. Too much context results in slower and more expensive responses and reduced accuracy. Instead a tool can provide context and then only be used if the user asks for information about it.
+- **Actions**: Tools can enable the AI to create, update, or delete data in your DB or just trigger some action in another system via a REST call.
+
+## Tools call a PL/SQL function
+
+With UC AI a tool is just a PL/SQL funciton the AI can call. The PL/SQL function should have these attributes:
+
+- The AI can pass 1 parameter: `CLOB`. It will be a JSON so it is still possible to pass multiple arguments. It can also be just an empty object.
+- returns `CLOB` as a result
+
+Similar to [Structured Output](/products/uc-ai/docs/guides/structured_output) tools require you to describe the parameters in a [JSON Schema](/products/uc-ai/docs/guides/structured_output/#json-schema). If you have a tool that is called `GET_WEATHER` which has two parameters: `city` and `unit` (defaults to celsius), the schema could look like this:
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "title": "get weather parameters",
+  "properties": {
+    "city": {
+      "type": "string",
+      "description": "Name of the city to get weather information for"
+    },
+    "unit": {
+      "type": "string",
+      "description": "Temperature unit. Defaults to celsius",
+      "enum": ["celsius", "fahrenheit", "kelvin"]
+    }
+  },
+  "required": ["city"]
+}
+```
+
+The better the schema definition the easier it is for AI to call the tool.
+
+<Aside type="tip">
+  Use [our JSON schema
+  builder](/products/uc-ai/docs/other/json-schema/#interactive-builder) to build
+  your own schemas easily.
+</Aside>
+
+## Best practices
+
+- **Always return feedback**: any information you have is useful can help the AI. If there was an error, return a descriptive error text. The AI can try to call it again with a corrected input next time. Also when an action succeeded, tell the AI. Then it knows that it succeeded.
+- **Validate inputs**: Check that you get all required parameters and that the values follow the constraints (enum, min, max, etc.). If there is a violation return an error text. The AI can respond and call the tool again with fixed parameters.
+- **Thoroughly describe the tool**: The more context about a tool is available the easier it is for the AI to decide when to call it. Take time optimize the descriptions and constraints of your JSON schema. For some providers it can also help to add text to the system prompt to give examples when to call which tools and with example parameters.
+- **There are huge gaps in provider performance**: Picking the correct tools and calling them correctly highly depends on the intelligence of the model. Enabling [Reasoning](/products/uc-ai/docs/guides/reasoning) helps the AI to plan steps and thus to call tools more precisely. Still some providers are just worse at calling tools effectively than others. In my experience [Anthropic](/products/uc-ai/docs/providers/anthropic/) is currently by far outperforming all other providers.
+- **Restrict available tools via tags**: if you have many tools registered it is a lot of context for the AI making decisions when to use which tools harder. If possible give less options by filtering by tags.
+
+## Registering a tool
+
+Use `uc_ai_tools_api.create_tool_from_schema` to register a tool:
+
+```sql
+declare
+  l_schema  json_object_t;
+  l_tool_id uc_ai_tools.id%type;
+begin
+  l_schema := json_object_t.parse('
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  ...
+}');
+
+    -- Create the tool
+  l_tool_id := uc_ai_tools_api.create_tool_from_schema(
+    p_tool_code => 'GET_WEATHER',
+    p_description => 'Get the current weather for a given city',
+    p_function_call => 'return my_pkg.get_weather(:parameters);',
+    p_json_schema => l_schema,
+    p_tags => apex_t_varchar2('weather','weather-api')
+  );
+  commit;
+end;
+
+
+```
+
+Parameters:
+
+- `p_tool_code`: Unique identifier
+- `p_description`: General description of what your tool does. Having a good description can drastically improve performance
+- `p_function_call`: Which PL/SQL function it should call. It needs to return a CLOB and if you have parameters use `:paramaters` to pass them into a CLOB parameter.
+- `p_json_schema`: JSON schema of the parameters
+- `p_tags`: Add tags to the tool. You can enable/disable certain tools for a call via tags.
+
+## Using tools
+
+To allow the AI to use tools you have to manually enable them. By default it will use all tools that are enabled. You can use `uc_ai.g_tool_tags` to just give a subset of available tools to the AI.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai.g_enable_tools := true;
+  -- optionally restrict tools to certain tags
+  uc_ai.g_tool_tags := apex_t_varchar2('weather');
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'How is the weather in Paris?',
+    p_provider => UC_AI.c_provider_openai,
+    p_model => UC_AI_OPENAI.c_model_gpt_5,
+    p_max_tool_calls => 6
+  );
+end;
+```
+
+With `p_max_tool_calls` you can restrict how many tools the AI can call in one interaction.
+
+## Examples
+
+### Look up data
+
+#### Data structure
 
 We have a table with some data about employees:
 
@@ -32,7 +144,7 @@ Kevin         Malone       kevin.malone@dundermifflin.com
 6 rows selected.
 ```
 
-### Function to return data
+#### Function to return data
 
 Now we create a function that will return this data as a single `CLOB` (as JSON):
 
@@ -65,34 +177,31 @@ END get_all_users_json;
   AIs work via text. So you have to transform all your data into a single `CLOB`
   value. The AI will then be able to use it in its response.
 </Aside>
-
-### Tool registration
+#### Tool registration
 
 Now we can register a tool that teaches the AI how to call this function:
 
 ```sql
-insert into UC_AI_TOOLS (
-  CODE,
-  DESCRIPTION,
-  ACTIVE,
-  VERSION,
-  FUNCTION_CALL
-) values (
-  'TT_GET_USERS',
-  'Get information on all the users in the system',
-  1,
-  '1.0'
-  ,'return my_pkg.get_all_users_json();'
-);
-
-commit;
+declare
+  l_tool_id uc_ai_tools.id%type;
+begin
+    -- Create the tool
+  l_tool_id := uc_ai_tools_api.create_tool_from_schema(
+    p_tool_code => 'TT_GET_USERS',
+    p_description => 'Get information on all the users in the system',
+    p_function_call => 'return tt_timetracking_api.get_all_users_json();',
+    p_json_schema => null,
+    p_tags => apex_t_varchar2('users','testing-tools')
+  );
+  commit;
+end;
+/
 ```
 
 <Aside type="note" title="Function call">
   You have to provide a function body that returns a `CLOB` value.
 </Aside>
-
-### Testing
+#### Testing
 
 ```sql
 declare
@@ -111,7 +220,7 @@ begin
   );
 
   l_final_message := l_result.get_clob('final_message');
-  dbms_output.put_line('AI Response: ' || l_final_message);
+  sys.dbms_output.put_line('AI Response: ' || l_final_message);
   -- Jim's email address is jim.halpert@dundermifflin.com.
 end;
 /
@@ -175,7 +284,7 @@ And this is the message array from the return object:
 }
 ```
 
-## Example 2: Using parameters to write data
+### Write data and parameters
 
 This example is more advanced. The system is actually a timetracking system where each employee (from the users table) can clock in on any project (projects table) with a note.
 
@@ -185,7 +294,7 @@ To achieve this we actually will use three tools:
 - `TT_GET_PROJECTS`: to get the projects (works similar to the users example)
 - `TT_CLOCK_IN`: to clock in on a project
 
-### Function definition
+#### Function definition
 
 The clock in tool is more advanced as it needs parameters to work. So let's take a closer look to the `TT_CLOCK_IN` function:
 
@@ -231,68 +340,51 @@ We also return a `CLOB` again. We are talking to an LLM so it expects text respo
 
 Also note that we don't raise errors but instead also return text with the error message. As LLMs understand the message they can actually recover. If you pass them a project with a typo, and the function returns "Error: Project 'ProjecX' not found", the AI can then either ask the user to correct the project name or call the project lookup tool again and try to spot the typos.
 
-### Create tool definition
+#### Create tool definition
 
-Now let's create the tool definition for the clock in function. Note that it is helpful to give and in-depth description even with example parameters. This helps the AI to understand what it can do with the tool:
+Now let's create the tool definition for the clock in function. Note that it is helpful to give and in-depth description even with example parameters. This helps the AI to understand what it can do with the tool.
 
 ```sql
-    insert into UC_AI_TOOLS (
-      CODE,
-      DESCRIPTION,
-      ACTIVE,
-      VERSION,
-      FUNCTION_CALL
-    ) values (
-      'TT_CLOCK_IN',
-      'Clock in a user to the time tracking system. This needs a user_email and project_name as parameters. You can get these from other tools. Optionally pass notes if given by the user.
+declare
+  l_tool_id uc_ai_tools.id%type;
+  l_schema  json_object_t;
+begin
+  l_schema := json_object_t('{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "description": "The email address of the user to clock in"
+    },
+    "project_name": {
+      "type": "string",
+      "description": "The name of the project to clock in to"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional description of what the user is working on"
+    }
+  },
+  "required": [
+    "user_email",
+    "project_name"
+  ]
+}');
+
+    -- Create the tool
+  l_tool_id := uc_ai_tools_api.create_tool_from_schema(
+    p_tool_code => 'TT_CLOCK_IN',
+    p_description => 'Clock in a user to the time tracking system. This needs a user_email and project_name as parameters. You can get these from other tools. Optionally pass notes if given by the user.
 Example parameters: {"user_email": "user@example.com","project_name": "TV Marketing", "notes": "Look for actors"} or {"user_email": "john.doe@gmail.com","project_name": "Inventing Teleportation"}',
-      1,
-      '1.0'
-      ,'return tt_timetracking_api.clock_in_json(:parameters);'
-    );
+    p_function_call => 'return tt_timetracking_api.clock_in_json(:parameters);',
+    p_json_schema => l_schema,
+    p_tags => apex_t_varchar2('time-tracking','users','projects')
+  );
+  commit;
+end;
+/
 ```
-
-### Define parameters
-
-But actually there is a defined way to define parameters for a tool. So we can use the `UC_AI_TOOL_PARAMETERS` table for this.
-
-First we need to insert a parent object parameter. Keep in mind that I used the `:parameters` bind variable in the function call above. We need to give the same name here.
-
-```sql
--- get the tool id first
-Insert into UC_AI_TOOL_PARAMETERS (
-  TOOL_ID,NAME,DESCRIPTION,REQUIRED,DATA_TYPE,PARENT_PARAM_ID)
-values (
-  CHANGE_ME,'parameters','JSON object containing parameters','1','object', null
-);
-```
-
-Under this object we can define the real parameters.
-
-```sql
--- get id form the previous insert first
-Insert into UC_AI_TOOL_PARAMETERS (
-  TOOL_ID,NAME,DESCRIPTION,REQUIRED,DATA_TYPE,PARENT_PARAM_ID)
-values (
-  TOOL_ID,'user_email','Email of the user','1','string', PREV_PARAM_ID
-);
-
-Insert into UC_AI_TOOL_PARAMETERS (
-  TOOL_ID,NAME,DESCRIPTION,REQUIRED,DATA_TYPE,PARENT_PARAM_ID)
-values (
-  TOOL_ID,'project_name','Name of the project','1','string', PREV_PARAM_ID
-);
-
-Insert into UC_AI_TOOL_PARAMETERS (
-  TOOL_ID,NAME,DESCRIPTION,REQUIRED,DATA_TYPE,PARENT_PARAM_ID)
-values (
-  TOOL_ID,'notes','Optional description of what the user is working on','0','string', PREV_PARAM_ID
-);
-```
-
-## Easier tool management
-
-I am working on an APEX app that would make managing tools easier. So keep an eye for new releases.
 
 ## Tools vs. MCP
 

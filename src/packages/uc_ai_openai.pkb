@@ -471,6 +471,7 @@ create or replace package body uc_ai_openai as
    * Returns comprehensive result object with:
    * - messages: full conversation history
    * - final_message: last message in conversation for simple usage
+   * - structured_output: parsed JSON object (when schema provided)
    * - finish_reason: completion reason (stop, tool_calls, length, etc.)
    * - usage: token usage statistics
    * - tool_calls_count: total number of tool calls executed
@@ -480,6 +481,9 @@ create or replace package body uc_ai_openai as
     p_messages       in json_array_t
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
+  , p_schema         in json_object_t default null
+  , p_schema_name    in varchar2 default 'structured_output'
+  , p_strict         in boolean default true
   ) return json_object_t
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'generate_text_with_messages';
@@ -488,6 +492,7 @@ create or replace package body uc_ai_openai as
     l_tools            json_array_t;
     l_result           json_object_t;
     l_message          json_object_t;
+    l_response_format  json_object_t;
   begin
     l_result := json_object_t();
     logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
@@ -516,9 +521,21 @@ create or replace package body uc_ai_openai as
 
     l_input_obj.put('model', p_model);
 
-    -- Get all available tools formatted for OpenAI
-    l_tools := uc_ai_tools_api.get_tools_array('openai');
-    l_input_obj.put('tools', l_tools);
+    -- Add structured output format if schema is provided
+    if p_schema is not null then
+      l_response_format := uc_ai_structured_output.to_openai_format(
+        p_schema => p_schema,
+        p_name => p_schema_name,
+        p_strict => p_strict
+      );
+      l_input_obj.put('response_format', l_response_format);
+    end if;
+
+    -- Get all available tools formatted for OpenAI (if tools are enabled)
+    if uc_ai.g_enable_tools then
+      l_tools := uc_ai_tools_api.get_tools_array('openai');
+      l_input_obj.put('tools', l_tools);
+    end if;
 
     if uc_ai.g_enable_reasoning then
       l_input_obj.put('reasoning_effort', uc_ai_openai.g_reasoning_effort);
@@ -544,5 +561,6 @@ create or replace package body uc_ai_openai as
     
     return l_result;
   end generate_text;
+
 end uc_ai_openai;
 /

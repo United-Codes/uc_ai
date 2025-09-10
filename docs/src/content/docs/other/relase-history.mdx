@@ -5,6 +5,33 @@ sidebar:
   order: 3
 ---
 
+## v25.5
+
+To upgrade first run `v25.4_to_v25.5.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v25.5).
+
+**Features**:
+
+New Provider: Oracle OCI
+
+- Use Cohere, Llama, xAI, and Gemini via the Oracle Cloud
+- See the [OCI provider documentation](/products/uc-ai/docs/providers/oci/) to get started
+
+Strcutured Output
+
+- Force AIs to respond in a specific JSON format to make it easy to extract information
+- See the [structured output documentation](/products/uc-ai/docs/guides/structured_output/) to get started
+
+Tools:
+
+- Supported way to create tools is now `uc_ai_tools_api.create_tool_from_schema`. See the [registering tools docs section](/products/uc-ai/docs/guides/tools/#registering-a-tool) for details. Existing tool definitions should not be impacted.
+- Added global `uc_ai.g_tool_tags` parameter to filter which tools are available for an AI request.See the [using tools docs section](/products/uc-ai/docs/guides/tools/#using-tools) for details
+
+Other:
+
+- [JSON Schema Builder](/products/uc-ai/docs/other/json-schema/) to help structured output and tool definitions
+- Documentation improvements
+- Added new models
+
 ## v25.4
 
 To upgrade just run the `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v25.4).

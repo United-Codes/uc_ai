@@ -1,0 +1,24 @@
+{
+  "modelId": "cohere.command-a-03-2025",
+  "modelVersion": "1.0",
+  "chatResponse": {
+    "apiFormat": "COHERE",
+    "text": "You can make a **Greek salad** with tomatoes, salad, olives, and cheese.\n\nRoast or boil the **potatoes** as a side dish.\n\nAlternatively, make a **caprese salad** with tomatoes, cheese, and salad.\n\nOr, create a **warm potato salad** with potatoes, tomatoes, olives, and cheese.",
+    "chatHistory": [
+      {
+        "role": "USER",
+        "message": "I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?"
+      },
+      {
+        "role": "CHATBOT",
+        "message": "You can make a **Greek salad** with tomatoes, salad, olives, and cheese.\n\nRoast or boil the **potatoes** as a side dish.\n\nAlternatively, make a **caprese salad** with tomatoes, cheese, and salad.\n\nOr, create a **warm potato salad** with potatoes, tomatoes, olives, and cheese."
+      }
+    ],
+    "finishReason": "COMPLETE",
+    "usage": {
+      "completionTokens": 74,
+      "promptTokens": 36,
+      "totalTokens": 110
+    }
+  }
+}

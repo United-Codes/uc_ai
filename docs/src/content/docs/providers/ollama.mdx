@@ -7,7 +7,7 @@ The UC AI Ollama package provides integration with locally-running Ollama instan
 
 ## Features
 
-- Support for popular open-source models (Llama, Mistral, Qwen, DeepSeek, Gemma, Phi, CodeLlama)
+- Support for popular open-source models (OpenAI GPT-OSS, Facebook Llama, Mistral, Alibaba Qwen, DeepSeek, Google Gemma, Microsoft Phi, CodeLlama)
 - Full function calling (tools) support
 - Reasoning capabilities with models that support it
 - Multi-modal support (text, images, PDFs) with models that support it
@@ -68,7 +68,7 @@ begin
     p_user_prompt => 'Write a SQL query to find all employees hired this year',
     p_system_prompt => 'You are a helpful SQL expert. Write clean, efficient queries.',
     p_provider => uc_ai.c_provider_ollama,
-    p_model => 'codellama:70b'
+    p_model => 'gpt-oss:20b'
   );
 
   dbms_output.put_line('SQL Query: ' || l_result.get_string('final_message'));

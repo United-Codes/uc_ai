@@ -13,6 +13,7 @@ create or replace package uc_ai as
   c_provider_anthropic constant provider_type := 'anthropic';
   c_provider_google    constant provider_type := 'google';
   c_provider_ollama    constant provider_type := 'ollama';
+  c_provider_oci       constant provider_type := 'oci';
 
   subtype model_type is varchar2(128 char);
 
@@ -31,6 +32,7 @@ create or replace package uc_ai as
 
   -- tools relevant global settings
   g_enable_tools boolean := false;
+  g_tool_tags apex_t_varchar2;
 
 
   e_max_calls_exceeded exception;
@@ -41,6 +43,8 @@ create or replace package uc_ai as
   pragma exception_init(e_unhandled_format, -20303);
   e_format_processing_error exception;
   pragma exception_init(e_format_processing_error, -20304);
+  e_model_not_found_error exception;
+  pragma exception_init(e_model_not_found_error, -20305);
 
   /*
    * Main interface for AI text generation
@@ -49,18 +53,20 @@ create or replace package uc_ai as
    * See https://www.united-codes.com/products/uc-ai/docs/api/generate_text/ for API documentation
    */
   function generate_text (
-    p_user_prompt    in clob
-  , p_system_prompt  in clob default null
-  , p_provider       in provider_type
-  , p_model          in model_type
-  , p_max_tool_calls in pls_integer default null
+    p_user_prompt           in clob
+  , p_system_prompt         in clob default null
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
   ) return json_object_t;
 
   function generate_text (
-    p_messages       in json_array_t
-  , p_provider       in provider_type
-  , p_model          in model_type
-  , p_max_tool_calls in pls_integer default null
+    p_messages              in json_array_t
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
   ) return json_object_t;
 
 end uc_ai;

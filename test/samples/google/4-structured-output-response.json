@@ -1,0 +1,30 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{\"response\": \"The capital of France is Paris.\",\"confidence\": 1.0}"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 24,
+    "candidatesTokenCount": 19,
+    "totalTokenCount": 110,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 24
+      }
+    ],
+    "thoughtsTokenCount": 67
+  },
+  "modelVersion": "gemini-2.5-flash",
+  "responseId": "hYG1aLX8F536vdIPhraj6Aw"
+}

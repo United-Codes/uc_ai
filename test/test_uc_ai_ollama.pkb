@@ -3,6 +3,7 @@ create or replace package body test_uc_ai_ollama as
   c_model_qwen_1b constant uc_ai.model_type := 'qwen3:1.7b';
   c_model_qwen_4b constant uc_ai.model_type := 'qwen3:4b';
   c_model_gemma3_4b constant uc_ai.model_type := 'gemma3:4b';
+  c_model_gpt_oss constant uc_ai.model_type := 'gpt-oss:20b';
 
   procedure basic_recipe (
     p_model in uc_ai.model_type,
@@ -175,11 +176,24 @@ create or replace package body test_uc_ai_ollama as
     basic_recipe(p_model => c_model_gemma3_4b, p_reasoning_enabled => false);
   end basic_recipe_gemma_4b;
 
+  procedure basic_recipe_gpt_oss
+  as
+  begin
+    basic_recipe(p_model => c_model_gpt_oss, p_reasoning_enabled => false);
+  end basic_recipe_gpt_oss;
+
+
   procedure tool_user_info_qwen_4b
   as
   begin
     tool_user_info(p_model => c_model_qwen_4b);
   end tool_user_info_qwen_4b;
+
+  procedure tool_user_info_gpt_oss
+  as
+  begin
+    tool_user_info(p_model => c_model_gpt_oss);
+  end tool_user_info_gpt_oss;
 
   procedure tool_clock_in_user_qwen_4b
   as
@@ -187,6 +201,11 @@ create or replace package body test_uc_ai_ollama as
     tool_clock_in_user(p_model => c_model_qwen_4b);
   end tool_clock_in_user_qwen_4b;
 
+  procedure tool_clock_in_user_gpt_oss
+  as
+  begin
+    tool_clock_in_user(p_model => c_model_gpt_oss);
+  end tool_clock_in_user_gpt_oss;
 
   procedure image_file_input_gemma_4b
   as
@@ -298,6 +317,75 @@ create or replace package body test_uc_ai_ollama as
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
 
   end reasoning;
+
+
+  procedure structured_output
+  as
+    l_result json_object_t;
+    l_schema json_object_t;
+    l_final_message clob;
+    l_structured_output json_object_t;
+    l_messages json_array_t;
+    l_message_count pls_integer;
+
+    l_response clob;
+    l_confidence number;
+  begin
+    uc_ai.g_base_url := 'host.containers.internal:11434/api';
+    uc_ai.g_enable_tools := false; -- disable tools for this test
+    uc_ai.g_enable_reasoning := true; -- enable reasoning for this test
+
+    l_schema := uc_ai_test_utils.get_confidence_json_schema();
+
+    l_result := uc_ai.generate_text(
+      p_user_prompt => 'What is the capital of France? Please respond with confidence.',
+      p_system_prompt => 'You are a helpful assistant that provides accurate information.',
+      p_provider => uc_ai.c_provider_ollama,
+      p_model => c_model_qwen_4b,
+      p_response_json_schema => l_schema
+    );
+
+    -- Test that we received a result
+    ut.expect(l_result).to_be_not_null();
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Response: ' || l_final_message);
+    
+    -- Test that we received a final message
+    ut.expect(l_final_message).to_be_not_null();
+
+    -- Test that the response is valid JSON
+    l_structured_output := json_object_t(l_final_message);
+
+    l_response := l_structured_output.get_string('response');
+    l_confidence := l_structured_output.get_number('confidence');
+
+    -- Test the response content
+    ut.expect(lower(l_response)).to_be_like('%paris%');
+
+    -- Test confidence is a number between 0 and 1
+    ut.expect(l_confidence).to_be_between(0, 1);
+
+    -- Test message structure
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    l_message_count := l_messages.get_size;
+    ut.expect(l_message_count).to_equal(3); -- system, user, assistant
+
+    -- Validate message array structure against spec
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Structured Output Test');
+
+    if l_structured_output is not null then
+      sys.dbms_output.put_line('Structured Response: ' || l_structured_output.get_string('response'));
+      sys.dbms_output.put_line('Confidence: ' || l_structured_output.get_number('confidence'));
+    else
+      sys.dbms_output.put_line('No structured output received');
+    end if;
+    
+  exception
+    when others then
+      sys.dbms_output.put_line('Error testing Ollama: ' || sqlerrm);
+      raise; -- Re-raise the exception so the test fails
+  end structured_output;
 
 end test_uc_ai_ollama;
 /

@@ -4,10 +4,11 @@ create or replace package body uc_ai as
   c_default_max_tool_calls constant pls_integer := 10;
 
   function generate_text (
-    p_messages       in json_array_t
-  , p_provider       in provider_type
-  , p_model          in model_type
-  , p_max_tool_calls in pls_integer default null
+    p_messages              in json_array_t
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
   ) return json_object_t
   as
     e_unknown_provider exception;
@@ -20,25 +21,44 @@ create or replace package body uc_ai as
           p_messages       => p_messages
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        , p_schema         => p_response_json_schema
+        , p_schema_name    => 'structured_output'
+        , p_strict         => true
         );
       when c_provider_anthropic then
-        l_result := uc_ai_anthropic.generate_text(
-          p_messages       => p_messages
-        , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
-        );
+        if p_response_json_schema is not null then
+          raise_application_error(-20001, 'Provider ' || p_provider || ' does not support structured output');
+        else
+          l_result := uc_ai_anthropic.generate_text(
+            p_messages       => p_messages
+          , p_model          => p_model
+          , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+          );
+        end if;
       when c_provider_google then
         l_result := uc_ai_google.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        , p_schema         => p_response_json_schema
         );
       when c_provider_ollama then
         l_result := uc_ai_ollama.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        , p_schema         => p_response_json_schema
         );
+      when c_provider_oci then
+        if p_response_json_schema is not null then
+          raise_application_error(-20001, 'Provider ' || p_provider || ' does not support structured output');
+        else
+          l_result := uc_ai_oci.generate_text(
+            p_messages       => p_messages
+          , p_model          => p_model
+          , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+          );
+        end if;
       else
         raise e_unknown_provider;
     end case;
@@ -68,11 +88,12 @@ create or replace package body uc_ai as
   end generate_text;
 
   function generate_text (
-    p_user_prompt    in clob
-  , p_system_prompt  in clob default null
-  , p_provider       in provider_type
-  , p_model          in model_type
-  , p_max_tool_calls in pls_integer default null
+    p_user_prompt           in clob
+  , p_system_prompt         in clob default null
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
   ) return json_object_t
   as
     l_messages json_array_t;
@@ -90,10 +111,11 @@ create or replace package body uc_ai as
     
     -- Call the main generate_text function with the message array
     return generate_text(
-      p_messages       => l_messages
-    , p_provider       => p_provider
-    , p_model          => p_model
-    , p_max_tool_calls => p_max_tool_calls
+      p_messages              => l_messages
+    , p_provider              => p_provider
+    , p_model                 => p_model
+    , p_max_tool_calls        => p_max_tool_calls
+    , p_response_json_schema  => p_response_json_schema
     );
   end generate_text;
 

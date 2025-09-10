@@ -1,0 +1,36 @@
+---
+title: JSON Schema Builder
+description: Interactive tool for creating JSON schemas with an easy-to-use interface
+---
+
+import JsonSchemaBuilder from "../../../components/JsonSchemaBuilder.tsx";
+
+This interactive tool helps you create JSON schemas without writing JSON by hand. Simply define your properties using the visual interface below, and the tool will generate a valid JSON schema for you.
+
+## How to Use
+
+1. **Set Schema Info**: Add a title and description for your schema
+2. **Add Properties**: Click "Add Property" to define fields in your schema
+3. **Configure Each Property**:
+   - Set the property name
+   - Choose the data type (string, number, boolean, etc.)
+   - Add a description
+   - Mark as required if needed
+   - For arrays, specify the item type
+   - For enums, add allowed values
+4. **Preview & Export**: Toggle the preview to see your generated schema, then copy or download it
+
+## Interactive Builder
+
+<JsonSchemaBuilder client:load />
+
+## Tips for Better Schemas
+
+- **Use Descriptive Names**: Choose clear, meaningful property names
+- **Add Descriptions**: Help others understand what each property is for
+- **Be Specific with Types**: Use the most appropriate type for each property
+- **Use Enums**: When properties have limited valid values, use enums
+- **Mark Required Fields**: Clearly indicate which properties are mandatory
+- **Consider Arrays**: Think about whether properties should be single values or arrays
+
+The schema builder above makes it easy to create well-structured, valid JSON schemas for any use case!

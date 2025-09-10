@@ -1,17 +1,3 @@
-create sequence uc_ai_categories_seq;
-
-create table uc_ai_categories(
-  id                   number default on null uc_ai_categories_seq.nextval not null,
-  name                 varchar2(255 char)  not null,
-  description          varchar2(4000 char),
-  created_by           varchar2(255 char) not null,
-  created_at           timestamp not null,
-  updated_by           varchar2(255 char) not null,
-  updated_at           timestamp not null,
-  constraint uc_ai_categories_pk primary key (id),
-  constraint uc_ai_categories_uk unique (name)
-);  
-
 create sequence uc_ai_tools_seq;
 
 create table uc_ai_tools(
@@ -102,7 +88,7 @@ create table uc_ai_tool_parameters(
 
   -- Ensure array properties are only set when is_array = 1
   constraint uc_ai_tool_parameters_array_props_ck check (
-      (is_array = 1 and (array_min_items is not null or array_max_items is not null)) 
+      (is_array = 1) 
       or 
       (is_array = 0 and array_min_items is null and array_max_items is null)
   ),
@@ -118,19 +104,18 @@ create table uc_ai_tool_parameters(
 );  
 
 
+create sequence uc_ai_tool_tags_seq;
 
-create sequence uc_ai_tool_categories_seq;
-
-create table uc_ai_tool_categories(
-  id                   number default on null uc_ai_tool_categories_seq.nextval not null,
+create table uc_ai_tool_tags(
+  id                   number default on null uc_ai_tool_tags_seq.nextval not null,
   tool_id              number not null,
-  category_id          number not null,
+  tag_name             varchar2(255 char) not null,
   created_by           varchar2(255 char) not null,
   created_at           timestamp not null,
   updated_by           varchar2(255 char) not null,
   updated_at           timestamp not null,
-  constraint uc_ai_tool_categories_pk primary key (id),
-  constraint uc_ai_tool_categories_uk unique (tool_id, category_id),
-  constraint uc_ai_tool_categories_tool_id_fk foreign key (tool_id) references uc_ai_tools(id) on delete cascade,
-  constraint uc_ai_tool_categories_category_id_fk foreign key (category_id) references uc_ai_categories(id) on delete cascade
+  constraint uc_ai_tool_tags_pk primary key (id),
+  constraint uc_ai_tool_tags_uk unique (tool_id, tag_name),
+  constraint uc_ai_tool_tags_tool_id_fk foreign key (tool_id) references uc_ai_tools(id) on delete cascade,
+  constraint uc_ai_tool_tags_tag_lower_ck check (tag_name = lower(tag_name))
 );  

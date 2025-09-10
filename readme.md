@@ -1,6 +1,6 @@
 # UC AI
 
-A comprehensive Oracle PL/SQL framework for integrating AI models (OpenAI GPT, Anthropic Claude, Google Gemini, etc.) with function calling capabilities. This framework allows AI models to execute database functions through a structured tool system.
+A comprehensive Oracle PL/SQL framework for integrating AI models (OpenAI GPT, Anthropic Claude, Google Gemini, Ollama, etc.) with function calling capabilities. This framework allows AI models to execute database functions through a structured tool system.
 
 Watch the [introduction YouTube video](https://youtu.be/0Pzi994RRtM).
 

@@ -30,6 +30,28 @@ jobs:
           cd scripts
           ./generate_upgrade_script.sh
 
+      - name: Find migration file for release
+        id: find_migration
+        run: |
+          RELEASE_TAG="${{ github.event.release.tag_name }}"
+          echo "Release tag: $RELEASE_TAG"
+
+          # Extract version from tag (remove 'v' prefix if present)
+          VERSION=${RELEASE_TAG#v}
+          echo "Version: $VERSION"
+
+          # Look for migration file ending with this version
+          MIGRATION_FILE=$(find src/migrations -name "*_to_v${VERSION}.sql" | head -1)
+
+          if [ -n "$MIGRATION_FILE" ]; then
+            echo "Found migration file: $MIGRATION_FILE"
+            echo "migration_file=$MIGRATION_FILE" >> $GITHUB_OUTPUT
+            echo "has_migration=true" >> $GITHUB_OUTPUT
+          else
+            echo "No migration file found for version $VERSION"
+            echo "has_migration=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Verify generated files
         run: |
           echo "Checking generated files..."
@@ -41,6 +63,11 @@ jobs:
           wc -l install_uc_ai_complete_with_logger.sql
           wc -l upgrade_packages.sql
 
+          if [ "${{ steps.find_migration.outputs.has_migration }}" = "true" ]; then
+            echo "Migration file: ${{ steps.find_migration.outputs.migration_file }}"
+            ls -la "${{ steps.find_migration.outputs.migration_file }}"
+          fi
+
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
@@ -49,5 +76,6 @@ jobs:
             install_uc_ai_complete_with_logger.sql
             ./src/dependencies/logger_3.1.1/logger_no_op.sql
             upgrade_packages.sql
+            ${{ steps.find_migration.outputs.has_migration == 'true' && steps.find_migration.outputs.migration_file || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

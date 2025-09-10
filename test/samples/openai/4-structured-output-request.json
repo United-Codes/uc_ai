@@ -1,0 +1,45 @@
+{
+  "model": "gpt-4o-mini",
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "structured_output",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "response": {
+            "type": "string",
+            "description": "The generated response text"
+          },
+          "confidence": {
+            "type": "number",
+            "description": "Confidence score between 0 and 1",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "response",
+          "confidence"
+        ],
+        "additionalProperties": false
+      },
+      "strict": true
+    }
+  },
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant that provides accurate information."
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "What is the capital of France? Please respond with confidence."
+        }
+      ]
+    }
+  ]
+}

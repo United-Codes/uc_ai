@@ -15,11 +15,12 @@ The `uc_ai.generate_text()` function has two overloaded signatures:
 
 ```sql
 FUNCTION generate_text (
-  p_user_prompt    IN CLOB,
-  p_system_prompt  IN CLOB DEFAULT NULL,
-  p_provider       IN provider_type,
-  p_model          IN model_type,
-  p_max_tool_calls IN PLS_INTEGER DEFAULT NULL
+  p_user_prompt           IN CLOB,
+  p_system_prompt         IN CLOB DEFAULT NULL,
+  p_provider              IN provider_type,
+  p_model                 IN model_type,
+  p_max_tool_calls        IN PLS_INTEGER DEFAULT NULL,
+  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL
 ) RETURN JSON_OBJECT_T;
 ```
 
@@ -27,10 +28,11 @@ FUNCTION generate_text (
 
 ```sql
 FUNCTION generate_text (
-  p_messages       IN JSON_ARRAY_T,
-  p_provider       IN provider_type,
-  p_model          IN model_type,
-  p_max_tool_calls IN PLS_INTEGER DEFAULT NULL
+  p_messages              IN JSON_ARRAY_T,
+  p_provider              IN provider_type,
+  p_model                 IN model_type,
+  p_max_tool_calls        IN PLS_INTEGER DEFAULT NULL,
+  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL
 ) RETURN JSON_OBJECT_T;
 ```
 
@@ -38,22 +40,24 @@ FUNCTION generate_text (
 
 #### For Signature 1 (Individual Prompts)
 
-| Parameter          | Type            | Required | Description                                                                    |
-| ------------------ | --------------- | -------- | ------------------------------------------------------------------------------ |
-| `p_user_prompt`    | `CLOB`          | Yes      | The main prompt from the user. This is the primary input for the AI model.     |
-| `p_system_prompt`  | `CLOB`          | No       | System-level instructions that guide the AI's behavior and response style.     |
-| `p_provider`       | `provider_type` | Yes      | AI provider to use. See `uc_ai` spec for constants.                            |
-| `p_model`          | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants. |
-| `p_max_tool_calls` | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).        |
+| Parameter                | Type            | Required | Description                                                                      |
+| ------------------------ | --------------- | -------- | -------------------------------------------------------------------------------- |
+| `p_user_prompt`          | `CLOB`          | Yes      | The main prompt from the user. This is the primary input for the AI model.       |
+| `p_system_prompt`        | `CLOB`          | No       | System-level instructions that guide the AI's behavior and response style.       |
+| `p_provider`             | `provider_type` | Yes      | AI provider to use. See `uc_ai` spec for constants.                              |
+| `p_model`                | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants.   |
+| `p_max_tool_calls`       | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).          |
+| `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. If provided, response will conform to schema. |
 
 #### For Signature 2 (Message Array)
 
-| Parameter          | Type            | Required | Description                                                                          |
-| ------------------ | --------------- | -------- | ------------------------------------------------------------------------------------ |
-| `p_messages`       | `JSON_ARRAY_T`  | Yes      | Array of conversation messages in the standard format (see Message Structure below). |
-| `p_provider`       | `provider_type` | Yes      | AI provider to use. See `uc_ai` spec for constants.                                  |
-| `p_model`          | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants.       |
-| `p_max_tool_calls` | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).              |
+| Parameter                | Type            | Required | Description                                                                          |
+| ------------------------ | --------------- | -------- | ------------------------------------------------------------------------------------ |
+| `p_messages`             | `JSON_ARRAY_T`  | Yes      | Array of conversation messages in the standard format (see Message Structure below). |
+| `p_provider`             | `provider_type` | Yes      | AI provider to use. See `uc_ai` spec for constants.                                  |
+| `p_model`                | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants.       |
+| `p_max_tool_calls`       | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).              |
+| `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. If provided, response will conform to schema.     |
 
 ### Parameter Details
 
@@ -302,6 +306,12 @@ IF l_result.get_string('finish_reason') = 'max_tool_calls_exceeded' THEN
 END IF;
 ```
 
+#### p_response_json_schema (Optional - Both Signatures)
+
+You can provide a custom JSON schema and force the AI to answer in this format. This is useful for ensuring consistent and predictable output structures, especially when using that output in automated systems or storing the results.
+
+[See Structured Output](/products/uc-ai/docs/guides/structured_output) for more information and usage examples.
+
 ## Return Object Overview
 
 The `uc_ai.generate_text()` function returns a comprehensive `JSON_OBJECT_T` containing detailed information about the AI interaction, including the conversation history, usage statistics, and metadata about the AI model and provider used.
@@ -314,6 +324,7 @@ The return object contains the following properties:
 {
   "final_message": "The AI's final response text",
   "messages": [...],           -- Complete conversation history (JSON_ARRAY_T)
+  "structured_output": {...},  -- Parsed JSON object (only when p_response_json_schema provided)
   "finish_reason": "stop",     -- How the conversation ended (VARCHAR2)
   "usage": {                   -- Token usage statistics (JSON_OBJECT_T)
     "prompt_tokens": 45,
@@ -328,15 +339,16 @@ The return object contains the following properties:
 
 ### Properties Reference
 
-| Property           | Type            | Description                                                                                    |
-| ------------------ | --------------- | ---------------------------------------------------------------------------------------------- |
-| `final_message`    | `CLOB`          | The final assistant message from the conversation                                              |
-| `messages`         | `JSON_ARRAY_T`  | Complete conversation history including user, system, assistant, and tool messages             |
-| `finish_reason`    | `VARCHAR2`      | Completion reason: `stop`, `tool_calls`, `length`, `content_filter`, `max_tool_calls_exceeded` |
-| `usage`            | `JSON_OBJECT_T` | Token usage statistics with `prompt_tokens`, `completion_tokens`, and `total_tokens`           |
-| `tool_calls_count` | `NUMBER`        | Total number of tool calls executed during the conversation                                    |
-| `model`            | `VARCHAR2`      | The AI model used (e.g., `gpt-4o-mini`, `claude-3-5-haiku`)                                    |
-| `provider`         | `VARCHAR2`      | AI provider identifier (`openai`, `anthropic`, `google`)                                       |
+| Property            | Type            | Description                                                                                          |
+| ------------------- | --------------- | ---------------------------------------------------------------------------------------------------- |
+| `final_message`     | `CLOB`          | The final assistant message from the conversation                                                    |
+| `messages`          | `JSON_ARRAY_T`  | Complete conversation history including user, system, assistant, and tool messages                   |
+| `structured_output` | `JSON_OBJECT_T` | Parsed JSON object that conforms to the schema (only present when `p_response_json_schema` provided) |
+| `finish_reason`     | `VARCHAR2`      | Completion reason: `stop`, `tool_calls`, `length`, `content_filter`, `max_tool_calls_exceeded`       |
+| `usage`             | `JSON_OBJECT_T` | Token usage statistics with `prompt_tokens`, `completion_tokens`, and `total_tokens`                 |
+| `tool_calls_count`  | `NUMBER`        | Total number of tool calls executed during the conversation                                          |
+| `model`             | `VARCHAR2`      | The AI model used (e.g., `gpt-4o-mini`, `claude-3-5-haiku`)                                          |
+| `provider`          | `VARCHAR2`      | AI provider identifier (`openai`, `anthropic`, `google`)                                             |
 
 ### Accessing Return Values
 

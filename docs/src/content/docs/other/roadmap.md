@@ -9,10 +9,8 @@ sidebar:
 
 These are the features that I think would be great to have in the future. Based on my motivation (mainly driven by your feedback) things may get implemented. You are welcome to contribute to the project and implement any of these features.
 
-
 - Temperature settings
 - More providers 
-  - OCI relevant: Cohere, Grok
   - Mistral
   - DeepSeek
 - Stream text
@@ -25,5 +23,8 @@ These are the features that I think would be great to have in the future. Based 
 
 ## Shipped Features
 
-✅️ Reasoning settings
-✅️ Ollama provider support
+- ✅️ Reasoning settings
+- ✅️ Ollama provider support
+- Providers:
+  - ✅️ Oracle OCI (Cohere and Generic API)
+- ✅️ Structured output

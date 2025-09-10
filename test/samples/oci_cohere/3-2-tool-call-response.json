@@ -1,0 +1,88 @@
+{
+  "modelId": "cohere.command-a-03-2025",
+  "modelVersion": "1.0",
+  "chatResponse": {
+    "apiFormat": "COHERE",
+    "text": "I have found a project called 'Marketing Campaign 2025'. Is this the project you would like to clock in to?",
+    "chatHistory": [
+      {
+        "role": "USER",
+        "message": "Please clock me in to the marketing project with the note \"meeting\"."
+      },
+      {
+        "role": "CHATBOT",
+        "message": "I will use one or more of the available tools to find the answer",
+        "toolCalls": [
+          {
+            "name": "TT_GET_USERS",
+            "parameters": {}
+          },
+          {
+            "name": "TT_GET_PROJETS",
+            "parameters": {}
+          }
+        ]
+      },
+      {
+        "role": "USER",
+        "message": "Please clock me in to the marketing project with the note \"meeting\"."
+      },
+      {
+        "role": "TOOL",
+        "toolResults": [
+          {
+            "call": {
+              "name": "TT_GET_USERS",
+              "parameters": {}
+            },
+            "outputs": [
+              {
+                "result": "[{\"user_id\":2,\"first_name\":\"Pam\",\"last_name\":\"Beesly\",\"email\":\"pam.beesly@dundermifflin.com\",\"hire_date\":\"2024-11-01\",\"is_active\":\"Y\"},{\"user_id\":4,\"first_name\":\"Jim\",\"last_name\":\"Halpert\",\"email\":\"jim.halpert@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":6,\"first_name\":\"Kevin\",\"last_name\":\"Malone\",\"email\":\"kevin.malone@dundermifflin.com\",\"hire_date\":\"2024-10-01\",\"is_active\":\"N\"},{\"user_id\":5,\"first_name\":\"Angela\",\"last_name\":\"Martin\",\"email\":\"angela.martin@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"},{\"user_id\":3,\"first_name\":\"Dwight\",\"last_name\":\"Schrute\",\"email\":\"dwight.schrute@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":1,\"first_name\":\"Michael\",\"last_name\":\"Scott\",\"email\":\"michael.scott@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"}]"
+              }
+            ]
+          },
+          {
+            "call": {
+              "name": "TT_GET_PROJETS",
+              "parameters": {}
+            },
+            "outputs": [
+              {
+                "result": "[{\"user_id\":2,\"first_name\":\"Pam\",\"last_name\":\"Beesly\",\"email\":\"pam.beesly@dundermifflin.com\",\"hire_date\":\"2024-11-01\",\"is_active\":\"Y\"},{\"user_id\":4,\"first_name\":\"Jim\",\"last_name\":\"Halpert\",\"email\":\"jim.halpert@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":6,\"first_name\":\"Kevin\",\"last_name\":\"Malone\",\"email\":\"kevin.malone@dundermifflin.com\",\"hire_date\":\"2024-10-01\",\"is_active\":\"N\"},{\"user_id\":5,\"first_name\":\"Angela\",\"last_name\":\"Martin\",\"email\":\"angela.martin@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"},{\"user_id\":3,\"first_name\":\"Dwight\",\"last_name\":\"Schrute\",\"email\":\"dwight.schrute@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":1,\"first_name\":\"Michael\",\"last_name\":\"Scott\",\"email\":\"michael.scott@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"}]"
+              },
+              {
+                "result": "[{\"project_id\":6,\"project_name\":\"Customer Support Automation\",\"project_description\":\"Implementing AI-driven chatbot for support\",\"start_date\":\"2025-06-06\",\"end_date\":null,\"status\":\"Active\"},{\"project_id\":3,\"project_name\":\"Database Migration\",\"project_description\":\"Migrating legacy database to Oracle 23ai\",\"start_date\":\"2024-10-01\",\"end_date\":\"2025-04-16\",\"status\":\"Completed\"},{\"project_id\":7,\"project_name\":\"Infrastructure Upgrade\",\"project_description\":\"Upgrading server hardware and network infrastructure\",\"start_date\":\"2023-12-01\",\"end_date\":\"2024-12-01\",\"status\":\"Archived\"},{\"project_id\":4,\"project_name\":\"Internal HR System\",\"project_description\":\"Development of new internal HR management software\",\"start_date\":\"2025-05-01\",\"end_date\":null,\"status\":\"On Hold\"},{\"project_id\":5,\"project_name\":\"Marketing Campaign 2025\",\"project_description\":\"Planning and execution of 2025 marketing initiatives\",\"start_date\":\"2025-01-01\",\"end_date\":\"2025-12-11\",\"status\":\"Active\"},{\"project_id\":2,\"project_name\":\"Mobile App Development\",\"project_description\":\"Building cross-platform mobile application\",\"start_date\":\"2025-04-01\",\"end_date\":null,\"status\":\"Active\"},{\"project_id\":1,\"project_name\":\"Website Redesign\",\"project_description\":\"Overhaul of corporate website, new UX/UI\",\"start_date\":\"2025-03-01\",\"end_date\":\"2025-06-21\",\"status\":\"Active\"}]"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "CHATBOT",
+        "message": "I have found a project called 'Marketing Campaign 2025'. Is this the project you would like to clock in to?"
+      }
+    ],
+    "citations": [
+      {
+        "start": 30,
+        "end": 55,
+        "text": "'Marketing Campaign 2025'",
+        "documentIds": [
+          "TT_GET_PROJETS:1:1"
+        ]
+      }
+    ],
+    "finishReason": "COMPLETE",
+    "documents": [
+      {
+        "id": "TT_GET_PROJETS:1:1",
+        "result": "[{\"project_id\":6,\"project_name\":\"Customer Support Automation\",\"project_description\":\"Implementing AI-driven chatbot for support\",\"start_date\":\"2025-06-06\",\"end_date\":null,\"status\":\"Active\"},{\"project_id\":3,\"project_name\":\"Database Migration\",\"project_description\":\"Migrating legacy database to Oracle 23ai\",\"start_date\":\"2024-10-01\",\"end_date\":\"2025-04-16\",\"status\":\"Completed\"},{\"project_id\":7,\"project_name\":\"Infrastructure Upgrade\",\"project_description\":\"Upgrading server hardware and network infrastructure\",\"start_date\":\"2023-12-01\",\"end_date\":\"2024-12-01\",\"status\":\"Archived\"},{\"project_id\":4,\"project_name\":\"Internal HR System\",\"project_description\":\"Development of new internal HR management software\",\"start_date\":\"2025-05-01\",\"end_date\":null,\"status\":\"On Hold\"},{\"project_id\":5,\"project_name\":\"Marketing Campaign 2025\",\"project_description\":\"Planning and execution of 2025 marketing initiatives\",\"start_date\":\"2025-01-01\",\"end_date\":\"2025-12-11\",\"status\":\"Active\"},{\"project_id\":2,\"project_name\":\"Mobile App Development\",\"project_description\":\"Building cross-platform mobile application\",\"start_date\":\"2025-04-01\",\"end_date\":null,\"status\":\"Active\"},{\"project_id\":1,\"project_name\":\"Website Redesign\",\"project_description\":\"Overhaul of corporate website, new UX/UI\",\"start_date\":\"2025-03-01\",\"end_date\":\"2025-06-21\",\"status\":\"Active\"}]"
+      }
+    ],
+    "usage": {
+      "completionTokens": 27,
+      "promptTokens": 1217,
+      "totalTokens": 1244
+    }
+  }
+}
