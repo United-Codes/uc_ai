@@ -28,3 +28,18 @@ create table uc_ai_tool_tags(
   constraint uc_ai_tool_tags_tool_id_fk foreign key (tool_id) references uc_ai_tools(id) on delete cascade,
   constraint uc_ai_tool_tags_tag_lower_ck check (tag_name = lower(tag_name))
 );
+
+create or replace trigger uc_ai_tool_tags_biu
+    before insert or update on uc_ai_tool_tags
+    for each row
+begin
+    if inserting
+    then
+        :new.created_at := systimestamp;
+        :new.created_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+    end if;
+
+    :new.updated_at := systimestamp;
+    :new.updated_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+end uc_ai_tool_tags_biu;
+/
