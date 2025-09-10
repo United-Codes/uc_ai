@@ -4,13 +4,16 @@
 # This creates a single self-contained SQL script with all file contents embedded
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source the shared package utilities
+source "$SCRIPT_DIR/package_utils.sh"
+
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 OUTPUT_FILE="${ROOT_DIR}/install_uc_ai_complete.sql"
-SRC_DIR="${ROOT_DIR}/src"
+SRC_DIR=$(get_src_dir "$SCRIPT_DIR")
 
-# Check if src directory exists
-if [ ! -d "$SRC_DIR" ]; then
-    echo "Error: src directory not found at $SRC_DIR"
+# Validate src directory exists
+if ! validate_src_dir "$SRC_DIR"; then
     exit 1
 fi
 
@@ -69,7 +72,12 @@ echo "PROMPT Installing package specifications (headers)..." >> "$OUTPUT_FILE"
 
 # 1. Core types package first (uc_ai.pks contains the main types)
 echo "PROMPT - Installing core types and constants..." >> "$OUTPUT_FILE"
-add_file_content "$SRC_DIR/packages/uc_ai.pks" "Core UC AI Package Specification - uc_ai.pks"
+while IFS= read -r spec_file; do
+    if is_core_package "$(basename "$spec_file")"; then
+        add_file_content "$spec_file" "Core UC AI Package Specification - $(basename "$spec_file")"
+        break
+    fi
+done < <(get_package_specs_ordered "$SRC_DIR")
 
 # 2. Dependencies
 echo "PROMPT - Installing utility functions..." >> "$OUTPUT_FILE"
@@ -77,48 +85,51 @@ add_file_content "$SRC_DIR/dependencies/key_function.sql" "Utility Functions"
 
 # 3. API packages (tools and message APIs)
 echo "PROMPT - Installing API package specifications..." >> "$OUTPUT_FILE"
-for pks_file in "$SRC_DIR/packages/"*_api.pks; do
-    if [ -f "$pks_file" ]; then
-        filename=$(basename "$pks_file")
-        add_file_content "$pks_file" "API Package Specification - $filename"
+while IFS= read -r spec_file; do
+    if is_api_package "$(basename "$spec_file")"; then
+        filename=$(basename "$spec_file")
+        add_file_content "$spec_file" "API Package Specification - $filename"
     fi
-done
+done < <(get_package_specs_ordered "$SRC_DIR")
 
 # 4. Provider packages (all other .pks files except uc_ai.pks and API packages)
 echo "PROMPT - Installing AI provider package specifications..." >> "$OUTPUT_FILE"
-for pks_file in "$SRC_DIR/packages/"*.pks; do
-    filename=$(basename "$pks_file")
-    # Skip uc_ai.pks (already installed) and API packages (already installed)
-    if [[ "$filename" != "uc_ai.pks" && "$filename" != *"_api.pks" ]]; then
-        add_file_content "$pks_file" "Provider Package Specification - $filename"
+while IFS= read -r spec_file; do
+    if is_provider_package "$(basename "$spec_file")"; then
+        filename=$(basename "$spec_file")
+        add_file_content "$spec_file" "Provider Package Specification - $filename"
     fi
-done
+done < <(get_package_specs_ordered "$SRC_DIR")
 
 # Install package bodies (same order as specifications)
 echo "PROMPT Installing package bodies (implementations)..." >> "$OUTPUT_FILE"
 
 # API packages first
 echo "PROMPT - Installing API package bodies..." >> "$OUTPUT_FILE"
-for pkb_file in "$SRC_DIR/packages/"*_api.pkb; do
-    if [ -f "$pkb_file" ]; then
-        filename=$(basename "$pkb_file")
-        add_file_content "$pkb_file" "API Package Body - $filename"
+while IFS= read -r body_file; do
+    if is_api_package "$(basename "$body_file")"; then
+        filename=$(basename "$body_file")
+        add_file_content "$body_file" "API Package Body - $filename"
     fi
-done
+done < <(get_package_bodies_ordered "$SRC_DIR")
 
 # Provider packages
 echo "PROMPT - Installing AI provider package bodies..." >> "$OUTPUT_FILE"
-for pkb_file in "$SRC_DIR/packages/"*.pkb; do
-    filename=$(basename "$pkb_file")
-    # Skip uc_ai.pkb (installed last) and API packages (already installed)
-    if [[ "$filename" != "uc_ai.pkb" && "$filename" != *"_api.pkb" ]]; then
-        add_file_content "$pkb_file" "Provider Package Body - $filename"
+while IFS= read -r body_file; do
+    if is_provider_package "$(basename "$body_file")"; then
+        filename=$(basename "$body_file")
+        add_file_content "$body_file" "Provider Package Body - $filename"
     fi
-done
+done < <(get_package_bodies_ordered "$SRC_DIR")
 
 # Core package body last (depends on others)
 echo "PROMPT - Installing core UC AI package body..." >> "$OUTPUT_FILE"
-add_file_content "$SRC_DIR/packages/uc_ai.pkb" "Core UC AI Package Body - uc_ai.pkb"
+while IFS= read -r body_file; do
+    if is_core_package "$(basename "$body_file")"; then
+        add_file_content "$body_file" "Core UC AI Package Body - $(basename "$body_file")"
+        break
+    fi
+done < <(get_package_bodies_ordered "$SRC_DIR")
 
 # Final completion message
 cat >> "$OUTPUT_FILE" << 'EOF'
@@ -133,7 +144,7 @@ echo "Generated install_uc_ai_complete.sql successfully!"
 echo ""
 echo "Complete installation script created with inlined content from:"
 
-# Show what was included
+# Show what was included using the shared utility
 echo "Tables:"
 [ -f "$SRC_DIR/tables/install.sql" ] && echo "  ✓ src/tables/install.sql"
 
@@ -143,33 +154,7 @@ echo "Triggers:"
 echo "Dependencies:"
 [ -f "$SRC_DIR/dependencies/key_function.sql" ] && echo "  ✓ src/dependencies/key_function.sql"
 
-echo "Package specifications:"
-[ -f "$SRC_DIR/packages/uc_ai.pks" ] && echo "  ✓ src/packages/uc_ai.pks"
-for pks_file in "$SRC_DIR/packages/"*_api.pks; do
-    if [ -f "$pks_file" ]; then
-        echo "  ✓ src/packages/$(basename "$pks_file")"
-    fi
-done
-for pks_file in "$SRC_DIR/packages/"*.pks; do
-    filename=$(basename "$pks_file")
-    if [[ "$filename" != "uc_ai.pks" && "$filename" != *"_api.pks" ]]; then
-        echo "  ✓ src/packages/$filename"
-    fi
-done
-
-echo "Package bodies:"
-for pkb_file in "$SRC_DIR/packages/"*_api.pkb; do
-    if [ -f "$pkb_file" ]; then
-        echo "  ✓ src/packages/$(basename "$pkb_file")"
-    fi
-done
-for pkb_file in "$SRC_DIR/packages/"*.pkb; do
-    filename=$(basename "$pkb_file")
-    if [[ "$filename" != "uc_ai.pkb" && "$filename" != *"_api.pkb" ]]; then
-        echo "  ✓ src/packages/$filename"
-    fi
-done
-[ -f "$SRC_DIR/packages/uc_ai.pkb" ] && echo "  ✓ src/packages/uc_ai.pkb"
+list_installed_packages "$SRC_DIR" false
 
 echo ""
 echo "The complete script is self-contained and ready to run without external file dependencies."
@@ -217,7 +202,12 @@ echo "PROMPT Installing package specifications (headers)..." >> "$OUTPUT_FILE_WI
 
 # 1. Core types package first (uc_ai.pks contains the main types)
 echo "PROMPT - Installing core types and constants..." >> "$OUTPUT_FILE_WITH_LOGGER"
-add_file_content "$SRC_DIR/packages/uc_ai.pks" "Core UC AI Package Specification - uc_ai.pks" "$OUTPUT_FILE_WITH_LOGGER"
+while IFS= read -r spec_file; do
+    if is_core_package "$(basename "$spec_file")"; then
+        add_file_content "$spec_file" "Core UC AI Package Specification - $(basename "$spec_file")" "$OUTPUT_FILE_WITH_LOGGER"
+        break
+    fi
+done < <(get_package_specs_ordered "$SRC_DIR")
 
 # 2. Dependencies
 echo "PROMPT - Installing utility functions..." >> "$OUTPUT_FILE_WITH_LOGGER"
@@ -225,48 +215,51 @@ add_file_content "$SRC_DIR/dependencies/key_function.sql" "Utility Functions" "$
 
 # 3. API packages (tools and message APIs)
 echo "PROMPT - Installing API package specifications..." >> "$OUTPUT_FILE_WITH_LOGGER"
-for pks_file in "$SRC_DIR/packages/"*_api.pks; do
-    if [ -f "$pks_file" ]; then
-        filename=$(basename "$pks_file")
-        add_file_content "$pks_file" "API Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER"
+while IFS= read -r spec_file; do
+    if is_api_package "$(basename "$spec_file")"; then
+        filename=$(basename "$spec_file")
+        add_file_content "$spec_file" "API Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER"
     fi
-done
+done < <(get_package_specs_ordered "$SRC_DIR")
 
 # 4. Provider packages (all other .pks files except uc_ai.pks and API packages)
 echo "PROMPT - Installing AI provider package specifications..." >> "$OUTPUT_FILE_WITH_LOGGER"
-for pks_file in "$SRC_DIR/packages/"*.pks; do
-    filename=$(basename "$pks_file")
-    # Skip uc_ai.pks (already installed) and API packages (already installed)
-    if [[ "$filename" != "uc_ai.pks" && "$filename" != *"_api.pks" ]]; then
-        add_file_content "$pks_file" "Provider Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER"
+while IFS= read -r spec_file; do
+    if is_provider_package "$(basename "$spec_file")"; then
+        filename=$(basename "$spec_file")
+        add_file_content "$spec_file" "Provider Package Specification - $filename" "$OUTPUT_FILE_WITH_LOGGER"
     fi
-done
+done < <(get_package_specs_ordered "$SRC_DIR")
 
 # Install package bodies (same order as specifications)
 echo "PROMPT Installing package bodies (implementations)..." >> "$OUTPUT_FILE_WITH_LOGGER"
 
 # API packages first
 echo "PROMPT - Installing API package bodies..." >> "$OUTPUT_FILE_WITH_LOGGER"
-for pkb_file in "$SRC_DIR/packages/"*_api.pkb; do
-    if [ -f "$pkb_file" ]; then
-        filename=$(basename "$pkb_file")
-        add_file_content "$pkb_file" "API Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER"
+while IFS= read -r body_file; do
+    if is_api_package "$(basename "$body_file")"; then
+        filename=$(basename "$body_file")
+        add_file_content "$body_file" "API Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER"
     fi
-done
+done < <(get_package_bodies_ordered "$SRC_DIR")
 
 # Provider packages
 echo "PROMPT - Installing AI provider package bodies..." >> "$OUTPUT_FILE_WITH_LOGGER"
-for pkb_file in "$SRC_DIR/packages/"*.pkb; do
-    filename=$(basename "$pkb_file")
-    # Skip uc_ai.pkb (installed last) and API packages (already installed)
-    if [[ "$filename" != "uc_ai.pkb" && "$filename" != *"_api.pkb" ]]; then
-        add_file_content "$pkb_file" "Provider Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER"
+while IFS= read -r body_file; do
+    if is_provider_package "$(basename "$body_file")"; then
+        filename=$(basename "$body_file")
+        add_file_content "$body_file" "Provider Package Body - $filename" "$OUTPUT_FILE_WITH_LOGGER"
     fi
-done
+done < <(get_package_bodies_ordered "$SRC_DIR")
 
 # Core package body last (depends on others)
 echo "PROMPT - Installing core UC AI package body..." >> "$OUTPUT_FILE_WITH_LOGGER"
-add_file_content "$SRC_DIR/packages/uc_ai.pkb" "Core UC AI Package Body - uc_ai.pkb" "$OUTPUT_FILE_WITH_LOGGER"
+while IFS= read -r body_file; do
+    if is_core_package "$(basename "$body_file")"; then
+        add_file_content "$body_file" "Core UC AI Package Body - $(basename "$body_file")" "$OUTPUT_FILE_WITH_LOGGER"
+        break
+    fi
+done < <(get_package_bodies_ordered "$SRC_DIR")
 
 # Final completion message for logger version
 cat >> "$OUTPUT_FILE_WITH_LOGGER" << 'EOF'

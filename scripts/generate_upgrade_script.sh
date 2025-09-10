@@ -4,13 +4,16 @@
 # This is useful for upgrading existing installations without recreating tables/triggers
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source the shared package utilities
+source "$SCRIPT_DIR/package_utils.sh"
+
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 OUTPUT_FILE="${ROOT_DIR}/upgrade_packages.sql"
-SRC_DIR="${ROOT_DIR}/src"
+SRC_DIR=$(get_src_dir "$SCRIPT_DIR")
 
-# Check if src directory exists
-if [ ! -d "$SRC_DIR" ]; then
-    echo "Error: src directory not found at $SRC_DIR"
+# Validate src directory exists
+if ! validate_src_dir "$SRC_DIR"; then
     exit 1
 fi
 
@@ -64,41 +67,30 @@ echo "" >> "$OUTPUT_FILE"
 
 # 1. Core types package first (uc_ai.pks contains the main types)
 echo "PROMPT - Upgrading core types and constants..." >> "$OUTPUT_FILE"
-add_file_content "$SRC_DIR/packages/uc_ai.pks" "Core UC AI Package Specification - Types and Constants"
+while IFS= read -r spec_file; do
+    if is_core_package "$(basename "$spec_file")"; then
+        add_file_content "$spec_file" "Core UC AI Package Specification - Types and Constants"
+        break
+    fi
+done < <(get_package_specs_ordered "$SRC_DIR")
 
 # 2. API packages (tools and message APIs)
 echo "PROMPT - Upgrading API package specifications..." >> "$OUTPUT_FILE"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    if [ -f "$SRC_DIR/packages/${api_pkg}.pks" ]; then
-        case "$api_pkg" in
-            "uc_ai_tools_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pks" "Tools API Package Specification"
-                ;;
-            "uc_ai_message_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pks" "Message API Package Specification"
-                ;;
-        esac
+while IFS= read -r spec_file; do
+    if is_api_package "$(basename "$spec_file")"; then
+        desc=$(get_package_description "$(basename "$spec_file")")
+        add_file_content "$spec_file" "$desc Specification"
     fi
-done
+done < <(get_package_specs_ordered "$SRC_DIR")
 
 # 3. Provider packages (alphabetical order)
 echo "PROMPT - Upgrading AI provider package specifications..." >> "$OUTPUT_FILE"
-for provider_pks in "$SRC_DIR/packages/"*anthropic*.pks "$SRC_DIR/packages/"*google*.pks "$SRC_DIR/packages/"*openai*.pks; do
-    if [ -f "$provider_pks" ]; then
-        provider_file=$(basename "$provider_pks")
-        case "$provider_file" in
-            *anthropic*)
-                add_file_content "$provider_pks" "Anthropic AI Provider Package Specification"
-                ;;
-            *google*)
-                add_file_content "$provider_pks" "Google Gemini AI Provider Package Specification"
-                ;;
-            *openai*)
-                add_file_content "$provider_pks" "OpenAI Provider Package Specification"
-                ;;
-        esac
+while IFS= read -r spec_file; do
+    if is_provider_package "$(basename "$spec_file")"; then
+        desc=$(get_package_description "$(basename "$spec_file")")
+        add_file_content "$spec_file" "$desc Specification"
     fi
-done
+done < <(get_package_specs_ordered "$SRC_DIR")
 
 # Install package bodies (same order as specifications)
 echo "PROMPT Installing package bodies (implementations)..." >> "$OUTPUT_FILE"
@@ -106,41 +98,30 @@ echo "" >> "$OUTPUT_FILE"
 
 # API packages first
 echo "PROMPT - Upgrading API package bodies..." >> "$OUTPUT_FILE"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    if [ -f "$SRC_DIR/packages/${api_pkg}.pkb" ]; then
-        case "$api_pkg" in
-            "uc_ai_tools_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pkb" "Tools API Package Body - Implementation"
-                ;;
-            "uc_ai_message_api")
-                add_file_content "$SRC_DIR/packages/${api_pkg}.pkb" "Message API Package Body - Implementation"
-                ;;
-        esac
+while IFS= read -r body_file; do
+    if is_api_package "$(basename "$body_file")"; then
+        desc=$(get_package_description "$(basename "$body_file")")
+        add_file_content "$body_file" "$desc Body - Implementation"
     fi
-done
+done < <(get_package_bodies_ordered "$SRC_DIR")
 
 # Provider packages
 echo "PROMPT - Upgrading AI provider package bodies..." >> "$OUTPUT_FILE"
-for provider_pkb in "$SRC_DIR/packages/"*anthropic*.pkb "$SRC_DIR/packages/"*google*.pkb "$SRC_DIR/packages/"*openai*.pkb; do
-    if [ -f "$provider_pkb" ]; then
-        provider_file=$(basename "$provider_pkb")
-        case "$provider_file" in
-            *anthropic*)
-                add_file_content "$provider_pkb" "Anthropic AI Provider Package Body - Implementation"
-                ;;
-            *google*)
-                add_file_content "$provider_pkb" "Google Gemini AI Provider Package Body - Implementation"
-                ;;
-            *openai*)
-                add_file_content "$provider_pkb" "OpenAI Provider Package Body - Implementation"
-                ;;
-        esac
+while IFS= read -r body_file; do
+    if is_provider_package "$(basename "$body_file")"; then
+        desc=$(get_package_description "$(basename "$body_file")")
+        add_file_content "$body_file" "$desc Body - Implementation"
     fi
-done
+done < <(get_package_bodies_ordered "$SRC_DIR")
 
 # Core package body last (depends on others)
 echo "PROMPT - Upgrading core UC AI package body..." >> "$OUTPUT_FILE"
-add_file_content "$SRC_DIR/packages/uc_ai.pkb" "Core UC AI Package Body - Main Implementation"
+while IFS= read -r body_file; do
+    if is_core_package "$(basename "$body_file")"; then
+        add_file_content "$body_file" "Core UC AI Package Body - Main Implementation"
+        break
+    fi
+done < <(get_package_bodies_ordered "$SRC_DIR")
 
 # Final completion message
 cat >> "$OUTPUT_FILE" << 'EOF'
@@ -155,31 +136,8 @@ echo "Generated upgrade_packages.sql successfully!"
 echo ""
 echo "Package upgrade script created with the following components:"
 
-# Show what was included
-echo "Dependencies:"
-[ -f "$SRC_DIR/dependencies/key_function.sql" ] && echo "  ✓ src/dependencies/key_function.sql"
-
-echo "Package specifications:"
-[ -f "$SRC_DIR/packages/uc_ai.pks" ] && echo "  ✓ src/packages/uc_ai.pks"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    [ -f "$SRC_DIR/packages/${api_pkg}.pks" ] && echo "  ✓ src/packages/${api_pkg}.pks"
-done
-for provider_pks in "$SRC_DIR/packages/"*anthropic*.pks "$SRC_DIR/packages/"*google*.pks "$SRC_DIR/packages/"*openai*.pks; do
-    if [ -f "$provider_pks" ]; then
-        echo "  ✓ src/packages/$(basename "$provider_pks")"
-    fi
-done
-
-echo "Package bodies:"
-for api_pkg in "uc_ai_tools_api" "uc_ai_message_api"; do
-    [ -f "$SRC_DIR/packages/${api_pkg}.pkb" ] && echo "  ✓ src/packages/${api_pkg}.pkb"
-done
-for provider_pkb in "$SRC_DIR/packages/"*anthropic*.pkb "$SRC_DIR/packages/"*google*.pkb "$SRC_DIR/packages/"*openai*.pkb; do
-    if [ -f "$provider_pkb" ]; then
-        echo "  ✓ src/packages/$(basename "$provider_pkb")"
-    fi
-done
-[ -f "$SRC_DIR/packages/uc_ai.pkb" ] && echo "  ✓ src/packages/uc_ai.pkb"
+# Show what was included using the shared utility
+list_installed_packages "$SRC_DIR" true
 
 echo ""
 echo "This script is ideal for:"
