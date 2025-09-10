@@ -16,14 +16,14 @@ You can divide tools into two categories:
 - **Additional Context**: you don't want to bloat the context of your conversation with too much information that only might be useful. Too much context results in slower and more expensive responses and reduced accuracy. Instead a tool can provide context and then only be used if the user asks for information about it.
 - **Actions**: Tools can enable the AI to create, update, or delete data in your DB or just trigger some action in another system via a REST call.
 
-## Tools call a PL/SQL function 
+## Tools call a PL/SQL function
 
 With UC AI a tool is just a PL/SQL funciton the AI can call. The PL/SQL function should have these attributes:
 
 - The AI can pass 1 parameter: `CLOB`. It will be a JSON so it is still possible to pass multiple arguments. It can also be just an empty object.
 - returns `CLOB` as a result
 
-Similar to [Structured Output](/products/uc-ai/docs/guides/structured_output) tools require you to describe the parameters in a [JSON Schema](#json-schema). If you have a tool that is called `GET_WEATHER` which has two parameters: `city` and `unit` (defaults to celsius), the schema could look like this:
+Similar to [Structured Output](/products/uc-ai/docs/guides/structured_output) tools require you to describe the parameters in a [JSON Schema](/products/uc-ai/docs/guides/structured_output/#json-schema). If you have a tool that is called `GET_WEATHER` which has two parameters: `city` and `unit` (defaults to celsius), the schema could look like this:
 
 ```json
 {
@@ -38,16 +38,10 @@ Similar to [Structured Output](/products/uc-ai/docs/guides/structured_output) to
     "unit": {
       "type": "string",
       "description": "Temperature unit. Defaults to celsius",
-      "enum": [
-        "celsius",
-        "fahrenheit",
-        "kelvin"
-      ]
+      "enum": ["celsius", "fahrenheit", "kelvin"]
     }
   },
-  "required": [
-    "city"
-  ]
+  "required": ["city"]
 }
 ```
 
@@ -81,7 +75,7 @@ begin
   "$schema": "http://json-schema.org/draft-07/schema#",
   ...
 }');
- 
+
     -- Create the tool
   l_tool_id := uc_ai_tools_api.create_tool_from_schema(
     p_tool_code => 'GET_WEATHER',
@@ -99,7 +93,7 @@ end;
 Parameters:
 
 - `p_tool_code`: Unique identifier
-- `p_description`: General description of what your tool does. Having a good description can drastically improve performance 
+- `p_description`: General description of what your tool does. Having a good description can drastically improve performance
 - `p_function_call`: Which PL/SQL function it should call. It needs to return a CLOB and if you have parameters use `:paramaters` to pass them into a CLOB parameter.
 - `p_json_schema`: JSON schema of the parameters
 - `p_tags`: Add tags to the tool. You can enable/disable certain tools for a call via tags.
