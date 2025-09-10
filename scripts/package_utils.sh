@@ -211,9 +211,11 @@ list_installed_packages() {
     
     echo "Package specifications:"
     while IFS= read -r spec_file; do
-        local filename=$(basename "$spec_file")
+        local filename
+        filename=$(basename "$spec_file")
         if [[ "$show_descriptions" == "true" ]]; then
-            local desc=$(get_package_description "$filename")
+            local desc
+            desc=$(get_package_description "$filename")
             echo "  ✓ src/packages/$filename ($desc)"
         else
             echo "  ✓ src/packages/$filename"
@@ -222,9 +224,11 @@ list_installed_packages() {
     
     echo "Package bodies:"
     while IFS= read -r body_file; do
-        local filename=$(basename "$body_file")
+        local filename
+        filename=$(basename "$body_file")
         if [[ "$show_descriptions" == "true" ]]; then
-            local desc=$(get_package_description "$filename")
+            local desc
+            desc=$(get_package_description "$filename")
             echo "  ✓ src/packages/$filename ($desc)"
         else
             echo "  ✓ src/packages/$filename"
@@ -304,9 +308,12 @@ validate_package_config() {
     # Check for unknown packages
     for pks_file in "$src_dir/packages/"*.pks; do
         if [ -f "$pks_file" ]; then
-            local filename=$(basename "$pks_file")
-            local package_name=$(basename "$filename" .pks)
-            local type=$(get_package_type "$filename")
+            local filename
+            filename=$(basename "$pks_file")
+            local package_name
+            package_name=$(basename "$filename" .pks)
+            local type
+            type=$(get_package_type "$filename")
             if [[ "$type" == "unknown" ]]; then
                 echo "WARNING: Unknown package found: $filename (not in configuration)"
             fi
