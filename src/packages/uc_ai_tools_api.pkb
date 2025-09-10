@@ -978,7 +978,7 @@ create or replace package body uc_ai_tools_api as
   begin
     logger.log('Creating tool from schema', l_scope, 'Tool: ' || p_tool_code);
 
-    l_schema_clob := p_json_schema.to_clob;
+    l_schema_clob := case when p_json_schema is not null then p_json_schema.to_clob else null end;
 
     -- Create the tool record
     insert into uc_ai_tools (
@@ -1008,6 +1008,10 @@ create or replace package body uc_ai_tools_api as
     ) returning id into l_tool_id;
     
     logger.log('Created tool with ID: ' || l_tool_id, l_scope);
+
+    if l_schema_clob is null then
+      return l_tool_id;
+    end if;
     
     -- Extract properties and required array from schema
     l_properties := treat(p_json_schema.get('properties') as json_object_t);
