@@ -689,7 +689,8 @@ create or replace package body uc_ai_tools_api as
       join uc_ai_tools t
         on tp.tool_id = t.id
       where t.code = p_tool_code
-        and parent_param_id is null;
+        and parent_param_id is null
+        and data_type = 'object';
 
     if l_count != 1 then
       return null; -- Not exactly one top-level parameter, return null

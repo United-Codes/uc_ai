@@ -412,13 +412,16 @@ create or replace package body uc_ai_google as
             
             -- Handle function arguments (can be null for parameterless functions)
             if l_tool_call.has('args') then
+              logger.log('Function call has args', l_scope, l_tool_call.get_object('args').to_clob);
               l_tool_args := l_tool_call.get_object('args');
             else
               l_tool_args := json_object_t(); -- Empty args for parameterless functions
             end if;
             
             if l_tool_args is not null then
+              -- when we have a top-level object parameter, extract it. Google wraps it into a named object
               l_param_name := uc_ai_tools_api.get_tools_object_param_name(l_tool_name);
+              logger.log('Top-level object parameter name', l_scope, 'Tool: ' || l_tool_name || ', Param: ' || nvl(l_param_name, 'null'));
               if l_param_name is not null then
                 l_tool_args := l_tool_args.get_object(l_param_name);
               end if;
