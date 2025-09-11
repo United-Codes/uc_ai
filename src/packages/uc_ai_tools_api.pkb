@@ -452,14 +452,14 @@ create or replace package body uc_ai_tools_api as
     l_tools_array  json_array_t := json_array_t();
     l_tool_obj     json_object_t;
     l_tool_cpy_obj json_object_t;
-    l_enable_tool_filter boolean := false;
+    l_enable_tool_filter number(1) := 0;
   begin
     if not uc_ai.g_enable_tools then
       return l_tools_array;
     end if;
 
     if uc_ai.g_tool_tags is not null and uc_ai.g_tool_tags.count > 0 then
-      l_enable_tool_filter := true;
+      l_enable_tool_filter := 1;
     end if;
 
     <<fetch_tools>>
@@ -467,7 +467,7 @@ create or replace package body uc_ai_tools_api as
       select id
         from uc_ai_tools
        where (
-              not l_enable_tool_filter
+              l_enable_tool_filter = 0
                or id in (
                  select tt.tool_id
                    from uc_ai_tool_tags tt
@@ -740,6 +740,7 @@ create or replace package body uc_ai_tools_api as
     l_enum_values varchar2(4000 char);
     l_default_value varchar2(4000 char);
     l_is_array boolean := false;
+    l_is_array_num number(1);
     l_array_min_items number;
     l_array_max_items number;
     l_pattern varchar2(4000 char);
@@ -873,7 +874,9 @@ create or replace package body uc_ai_tools_api as
             l_default_value := l_prop_obj.get_string('default');
         end case;
       end if;
-      
+
+      l_is_array_num := case when l_is_array then 1 else 0 end;
+
       -- Insert the parameter
       insert into uc_ai_tool_parameters (
         tool_id,
@@ -907,7 +910,7 @@ create or replace package body uc_ai_tools_api as
         l_max_num_val,
         l_enum_values,
         l_default_value,
-        case when l_is_array then 1 else 0 end,
+        l_is_array_num,
         l_array_min_items,
         l_array_max_items,
         l_pattern,
