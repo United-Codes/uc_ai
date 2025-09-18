@@ -58,6 +58,13 @@ Coming soon...
 declare
   l_result json_object_t;
 begin
+  uc_ai_oci.g_compartment_id := 'your_compartment_id_here';
+  uc_ai_oci.g_region := 'eu-frankfurt-1';
+  uc_ai_oci.g_apex_web_credential := 'NAME_OF_YOUR_APEX_WEB_CREDENTIAL';
+
+  -- optional
+  uc_ai_oci.g_serving_type := 'ON_DEMAND'; -- ON_DEMAND or DEDICATED, default is ON_DEMAND
+
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is Oracle APEX?',
     p_provider => uc_ai.c_provider_oci,
@@ -75,6 +82,13 @@ end;
 declare
   l_result json_object_t;
 begin
+  uc_ai_oci.g_compartment_id := 'your_compartment_id_here';
+  uc_ai_oci.g_region := 'eu-frankfurt-1';
+  uc_ai_oci.g_apex_web_credential := 'NAME_OF_YOUR_APEX_WEB_CREDENTIAL';
+
+  -- optional
+  uc_ai_oci.g_serving_type := 'ON_DEMAND'; -- ON_DEMAND or DEDICATED, default is ON_DEMAND
+
   l_result := uc_ai.generate_text(
     p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
     p_system_prompt => 'You are an assistant helping users to get recipes. Please just list 3 possible dish names without instructions.',
