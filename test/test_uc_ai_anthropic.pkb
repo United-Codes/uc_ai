@@ -315,5 +315,37 @@ create or replace package body test_uc_ai_anthropic as
 
   end reasoning;
 
+  procedure basic_web_credential
+  as
+    l_result json_object_t;
+    l_final_message clob;
+    l_messages json_array_t;
+    l_message_count pls_integer;
+  begin
+    uc_ai.g_enable_reasoning := false;
+    uc_ai_anthropic.g_apex_web_credential := 'ANTHROPIC'; -- name of APEX web credential
+
+    l_result := uc_ai.GENERATE_TEXT(
+      p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
+      p_system_prompt => 'Reply in one sentence.',
+      p_provider => uc_ai.c_provider_anthropic,
+      p_model => uc_ai_anthropic.c_model_claude_3_5_haiku
+    );
+
+    sys.dbms_output.put_line('Result: ' || l_result.to_string);
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(l_final_message).to_be_not_null();
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    l_message_count := l_messages.get_size;
+    ut.expect(l_message_count).to_equal(3); -- System, user, assistant message
+
+    -- Validate message array structure against spec
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Basic recipe Test');
+
+    ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
+  end basic_web_credential;
+
 end test_uc_ai_anthropic;
 /
