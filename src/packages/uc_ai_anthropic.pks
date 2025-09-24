@@ -1,4 +1,5 @@
 create or replace package uc_ai_anthropic as
+  -- @dblinter ignore(g-7230): allow use of global variables
 
   /**
   * UC AI
@@ -23,6 +24,8 @@ create or replace package uc_ai_anthropic as
   -- Maximum number of tokens Claude is allowed to use for its internal reasoning process
   -- More info at https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#how-to-use-extended-thinking
   g_reasoning_budget_tokens pls_integer := 10000; -- Minimum is 1024
+
+  g_apex_web_credential varchar2(255 char);
 
   /*
    * Anthropic implementation for text generation

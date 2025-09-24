@@ -1,4 +1,5 @@
 create or replace package uc_ai_google as
+  -- @dblinter ignore(g-7230): allow use of global variables
 
   /**
   * UC AI
