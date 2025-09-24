@@ -1,6 +1,7 @@
 create or replace package body uc_ai_test_message_utils as
+  -- @dblinter ignore(g-5010): allow logger in test packages
 
-    procedure validate_message_array(
+  procedure validate_message_array(
     p_messages in json_array_t,
     p_test_name in varchar2 default 'Message Array Validation'
   )

@@ -1,4 +1,6 @@
 create or replace package body uc_ai_test_utils as
+  -- @dblinter ignore(g-5010): allow logger in test packages
+
 
   procedure add_get_users_tool
   as

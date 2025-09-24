@@ -1,5 +1,5 @@
 create or replace package body test_uc_ai_google as
-
+  -- @dblinter ignore(g-5010): allow logger in test packages
 
   procedure basic_recipe
   as
@@ -375,11 +375,6 @@ create or replace package body test_uc_ai_google as
     else
       sys.dbms_output.put_line('No structured output received');
     end if;
-    
-  exception
-    when others then
-      sys.dbms_output.put_line('Error testing Google: ' || sqlerrm);
-      raise; -- Re-raise the exception so the test fails
   end structured_output;
 
 

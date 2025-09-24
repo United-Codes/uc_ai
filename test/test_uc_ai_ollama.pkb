@@ -1,4 +1,5 @@
 create or replace package body test_uc_ai_ollama as
+  -- @dblinter ignore(g-5010): allow logger in test packages
 
   c_model_qwen_1b constant uc_ai.model_type := 'qwen3:1.7b';
   c_model_qwen_4b constant uc_ai.model_type := 'qwen3:4b';
@@ -301,15 +302,16 @@ create or replace package body test_uc_ai_ollama as
     for i in 0 .. l_second_message_content.get_size - 1 
     loop
       l_content := treat(l_second_message_content.get(i) as json_object_t);
-      if l_content.get_string('type') = 'reasoning' then
-        sys.dbms_output.put_line('Reasoning content: ' || l_content.get_clob('text'));
-        l_reasoning_message_found := true;
-      elsif l_content.get_string('type') = 'text' then
-        null;
-      else
-        sys.dbms_output.put_line('Unknown content type: ' || l_content.get_string('type'));
-        ut.expect(false, 'Unknown content type in reasoning response: ' || l_content.get_string('type')).to_equal(true);
-      end if;
+      case l_content.get_string('type')
+         when 'reasoning' then
+            sys.dbms_output.put_line('Reasoning content: ' || l_content.get_clob('text'));
+           l_reasoning_message_found := true;
+         when 'text' then
+            null;
+         else
+            sys.dbms_output.put_line('Unknown content type: ' || l_content.get_string('type'));
+           ut.expect(false, 'Unknown content type in reasoning response: ' || l_content.get_string('type')).to_equal(true);
+      end case;
     end loop assistant_content_loop;
 
     ut.expect(l_reasoning_message_found, 'No reasoning message found in response').to_equal(true);
@@ -380,11 +382,6 @@ create or replace package body test_uc_ai_ollama as
     else
       sys.dbms_output.put_line('No structured output received');
     end if;
-    
-  exception
-    when others then
-      sys.dbms_output.put_line('Error testing Ollama: ' || sqlerrm);
-      raise; -- Re-raise the exception so the test fails
   end structured_output;
 
 end test_uc_ai_ollama;
