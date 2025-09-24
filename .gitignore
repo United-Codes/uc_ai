@@ -4,3 +4,4 @@ install_uc_ai_complete_with_logger.sql
 upgrade_packages.sql
 temp
 install_uc_ai_complete_with_logger_noop.sql
+.dblinter/
