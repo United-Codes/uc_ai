@@ -94,6 +94,23 @@ begin
     p_tags => apex_t_varchar2('pame', 'pame_create_settlement')
   );
 
+  l_schema := json_object_t.parse('{
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "title": "Get User Info",
+      "description": "Retrieve user information (name, phone, etc.) by email address (insensitive). The parameter email is required.",
+      "properties":{"email":{"type":"string","description":"Email address of the user to lookup"}},"required":["email"]
+    }');
+
+
+    l_tool_id := uc_ai_tools_api.create_tool_from_schema(
+      p_tool_code => 'PAME_GET_USER_INFO',
+      p_description => 'Get user information (name, phone, etc.) by email address (insensitive)',
+      p_function_call => 'return pame_pkg.get_user_info(:parameters);',
+      p_json_schema => l_schema,
+      p_tags => apex_t_varchar2('pame', 'pame_get_user_info')
+    );
+
   commit;
 end;
 /

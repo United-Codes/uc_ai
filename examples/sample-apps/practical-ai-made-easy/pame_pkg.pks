@@ -19,7 +19,15 @@ create or replace package pame_pkg as
   */
   function create_new_settlement(p_settlement_data in clob) return clob;
 
+  /**
+  * Gets user information by email address
+  * @param p_email_data JSON object containing the email to search for
+  * @return CLOB containing user information or error message
+  */
+  function get_user_info(p_email_data in clob) return clob;
+
   function get_tools_markdown return clob;
 
 end pame_pkg;
 /
+
