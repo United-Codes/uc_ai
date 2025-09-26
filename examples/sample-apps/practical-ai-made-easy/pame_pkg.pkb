@@ -6,9 +6,9 @@ create or replace package body pame_pkg as
     uc_ai.g_base_url := 'host.containers.internal:11434/api';
     uc_ai.g_enable_tools := false;
     uc_ai.g_enable_reasoning := false;
-    uc_ai_oci.g_compartment_id := get_oci_compratment_id;
-    uc_ai_oci.g_region := 'eu-frankfurt-1';
-    uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_compartment_id := 'change_to_your_compartment_id';
+    uc_ai_oci.g_region := 'change_to_your_region';
+    uc_ai_oci.g_apex_web_credential := 'change_to_your_awc';
   end reset_global_variables;
 
   function create_new_settlement(p_settlement_data in clob) return clob
@@ -43,11 +43,11 @@ create or replace package body pame_pkg as
     if not l_settlement_data.has('incident_date') then
       return '{"status": "error", "message": "Missing required field: incident_date"}';
     end if;
-    
+
     if not l_settlement_data.has('claimant_first_name') then
       return '{"status": "error", "message": "Missing required field: claimant_first_name"}';
     end if;
-    
+
     if not l_settlement_data.has('claimant_last_name') then
       return '{"status": "error", "message": "Missing required field: claimant_last_name"}';
     end if;
@@ -142,6 +142,72 @@ create or replace package body pame_pkg as
     when others then
       return '{"status": "error", "message": "Database error: ' || sqlerrm || '", "backtrace": "' || sys.dbms_utility.format_error_backtrace || '"}';
   end create_new_settlement;
+
+  function get_user_info(p_email_data in clob) return clob
+  as
+    l_email_data   json_object_t;
+    l_email        varchar2(255 char);
+    l_user_record  pame_users%rowtype;
+    l_result       clob;
+  begin
+    BEGIN
+      l_email_data := json_object_t.parse(p_email_data);
+    EXCEPTION
+      when others then
+        return '{"status": "error", "message": "Invalid JSON input: ' || sqlerrm || '", "backtrace": "' || sys.dbms_utility.format_error_backtrace || '"}';
+    END;
+
+    -- Validate required field
+    if not l_email_data.has('email') then
+      return '{"status": "error", "message": "Missing required field: email"}';
+    end if;
+
+    -- Extract email from JSON
+    l_email := l_email_data.get_String('email');
+
+    -- Validate email format (basic check)
+    if l_email is null or length(trim(l_email)) = 0 then
+      return '{"status": "error", "message": "Email cannot be empty"}';
+    end if;
+
+    if instr(l_email, '@') = 0 then
+      return '{"status": "error", "message": "Invalid email format"}';
+    end if;
+
+    -- Query user by email
+    begin
+      select user_id, first_name, last_name, email, phone, created_at, updated_at
+      into l_user_record.user_id, l_user_record.first_name, l_user_record.last_name, 
+           l_user_record.email, l_user_record.phone, l_user_record.created_at, l_user_record.updated_at
+      from pame_users
+      where lower(email) = lower(l_email);
+
+      -- Build success response with user data
+      l_result := '{"status": "success", "user": {' ||
+        '"user_id": "' || l_user_record.user_id || '",' ||
+        '"first_name": "' || l_user_record.first_name || '",' ||
+        '"last_name": "' || l_user_record.last_name || '",' ||
+        '"email": "' || l_user_record.email || '",' ||
+        '"phone": "' || nvl(l_user_record.phone, 'null') || '",' ||
+        '"created_at": "' || to_char(l_user_record.created_at, 'YYYY-MM-DD"T"HH24:MI:SS') || '",' ||
+        '"updated_at": "' || to_char(l_user_record.updated_at, 'YYYY-MM-DD"T"HH24:MI:SS') || '"' ||
+        '}}';
+
+    exception
+      when no_data_found then
+        l_result := '{"status": "error", "message": "No user found with email: ' || l_email || '"}';
+      when too_many_rows then
+        l_result := '{"status": "error", "message": "Multiple users found with email: ' || l_email || ' (data integrity issue)"}';
+      when others then
+        l_result := '{"status": "error", "message": "Database error in user lookup: ' || sqlerrm || '", "backtrace": "' || sys.dbms_utility.format_error_backtrace || '"}';
+    end;
+
+    return l_result;
+
+  exception
+    when others then
+      return '{"status": "error", "message": "Database error: ' || sqlerrm || '", "backtrace": "' || sys.dbms_utility.format_error_backtrace || '"}';
+  end get_user_info;
 
 
   function get_tools_markdown 
@@ -243,7 +309,7 @@ create or replace package body pame_pkg as
       -- Check if we're starting a new tool
       if l_current_tool != rec.tool_code or l_current_tool is null then
         l_current_tool := rec.tool_code;
-        
+
         -- Add tool header
         l_markdown_output := l_markdown_output || chr(10) || '## ' || rec.tool_code || chr(10) || chr(10);
         l_markdown_output := l_markdown_output || rec.tool_description || chr(10) || chr(10);
@@ -252,26 +318,26 @@ create or replace package body pame_pkg as
         l_markdown_output := l_markdown_output || '| Parameter | Type | Required | Description | Constraints |' || chr(10);
         l_markdown_output := l_markdown_output || '|-----------|------|----------|-------------|-------------|' || chr(10);
 
-        l_tool_function_call := '## Function Call: ' || chr(10) || chr(10) 
+        l_tool_function_call := '### Function Call: ' || chr(10) || chr(10) 
               || '```sql' || chr(10)
               || rec.function_call || chr(10)
               || '```' || chr(10) || chr(10);
       end if;
-      
+
       -- Add parameter row
       l_markdown_output := l_markdown_output || '| ';
-      
+
       -- Parameter name with indentation for hierarchy
       if rec.hierarchy_level > 1 then
         l_markdown_output := l_markdown_output || lpad('└─ ', (rec.hierarchy_level - 1) * 2, '&nbsp;&nbsp;') || rec.parameter_name;
       else
         l_markdown_output := l_markdown_output || rec.parameter_name;
       end if;
-      
+
       l_markdown_output := l_markdown_output || ' | ' || rec.data_type_display;
       l_markdown_output := l_markdown_output || ' | ' || rec.required_display;
       l_markdown_output := l_markdown_output || ' | ' || nvl(rec.parameter_description, '-');
-      
+
       -- Constraints column
       l_markdown_output := l_markdown_output || ' | ';
       if rec.validation_info is not null then
@@ -298,14 +364,14 @@ create or replace package body pame_pkg as
       if rec.validation_info is null and rec.array_constraints is null and rec.default_value is null and rec.format is null then
         l_markdown_output := l_markdown_output || '-';
       end if;
-      
+
       l_markdown_output := l_markdown_output || ' |' || chr(10);
-      
+
       if rec.is_last_parameter = 1 then  
         l_markdown_output := l_markdown_output || chr(10) || l_tool_function_call;
       end if;
     end loop tool_loop;
-    
+
     -- Output the markdown
     return l_markdown_output;
   end get_tools_markdown;
