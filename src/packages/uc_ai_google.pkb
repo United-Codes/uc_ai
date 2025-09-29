@@ -279,7 +279,13 @@ create or replace package body uc_ai_google as
 
     -- Build API URL with model
     l_model := pio_result.get_string('model');
-    l_api_url := c_api_url_base || l_model || ':generateContent?key=' || uc_ai_get_key(uc_ai.c_provider_google);
+
+    l_api_url := c_api_url_base || l_model || ':generateContent';
+
+    if g_apex_web_credential is null then
+      l_api_url := l_api_url || '?key=' || uc_ai_get_key(uc_ai.c_provider_google);
+    end if;
+
 
     logger.log('Request body', l_scope, l_input_obj.to_clob);
 
@@ -291,7 +297,8 @@ create or replace package body uc_ai_google as
     l_resp := apex_web_service.make_rest_request(
       p_url => l_api_url,
       p_http_method => 'POST',
-      p_body => l_input_obj.to_clob
+      p_body => l_input_obj.to_clob,
+      p_credential_static_id => g_apex_web_credential
     );
 
     logger.log('Response', l_scope, l_resp);
