@@ -243,16 +243,15 @@ create or replace package body uc_ai_google as
   end convert_lm_messages_to_google;
 
 
-  function internal_generate_text (
-    p_messages           in json_array_t
+  procedure internal_generate_text (
+    pio_messages         in out json_array_t
   , p_system_prompt      in clob
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
   , pio_result           in out json_object_t
-  ) return json_array_t
+  )
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
-    l_messages     json_array_t := json_array_t();
     l_input_obj    json_object_t;
     l_api_url      varchar2(500 char);
     l_model        varchar2(255 char);
@@ -274,9 +273,8 @@ create or replace package body uc_ai_google as
       raise uc_ai.e_max_calls_exceeded;
     end if;
 
-    l_messages := p_messages;
     l_input_obj := p_input_obj;
-    l_input_obj.put('contents', l_messages);
+    l_input_obj.put('contents', pio_messages);
 
 
     -- Build API URL with model
@@ -391,7 +389,7 @@ create or replace package body uc_ai_google as
         -- Add AI's message with content (including functionCall parts) to conversation history
         l_resp_message.put('role', 'model');
         l_resp_message.put('parts', l_parts);
-        l_messages.append(l_resp_message);
+        pio_messages.append(l_resp_message);
 
         -- Execute each function call and collect results
         <<parts_loop>>
@@ -494,11 +492,11 @@ create or replace package body uc_ai_google as
           l_new_msg := json_object_t();
           l_new_msg.put('role', 'user');
           l_new_msg.put('parts', l_tool_results_parts);
-          l_messages.append(l_new_msg);
+          pio_messages.append(l_new_msg);
 
           -- Continue conversation with tool results - recursive call
-          l_messages := internal_generate_text(
-            p_messages           => l_messages
+          internal_generate_text(
+            pio_messages         => pio_messages
           , p_system_prompt      => p_system_prompt
           , p_max_tool_calls     => p_max_tool_calls
           , p_input_obj          => p_input_obj
@@ -513,9 +511,7 @@ create or replace package body uc_ai_google as
       pio_result.put('finish_reason', 'error');
     end if;
 
-    logger.log('End internal_generate_text - final messages count: ' || l_messages.get_size, l_scope);
-
-    return l_messages;
+    logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);
 
   end internal_generate_text;
 
@@ -631,8 +627,8 @@ create or replace package body uc_ai_google as
       l_input_obj.put('generationConfig', l_generation_config);
     end if;
 
-    l_google_messages := internal_generate_text(
-      p_messages           => l_google_messages
+    internal_generate_text(
+      pio_messages         => l_google_messages
     , p_system_prompt      => l_system_prompt
     , p_max_tool_calls     => p_max_tool_calls
     , p_input_obj          => l_input_obj

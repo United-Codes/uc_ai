@@ -77,7 +77,7 @@ create or replace package body uc_ai_oci as
    */
   procedure convert_lm_messages_to_generic_oci(
     p_lm_messages in json_array_t,
-    po_oci_messages out json_array_t
+    po_oci_messages out nocopy json_array_t
   )
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_generic_oci';
@@ -230,7 +230,7 @@ create or replace package body uc_ai_oci as
    */
   procedure convert_lm_messages_to_cohere_oci(
     p_lm_messages in json_array_t,
-    po_oci_messages out json_array_t
+    po_oci_messages out nocopy json_array_t
   )
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_cohere_oci';
@@ -240,7 +240,6 @@ create or replace package body uc_ai_oci as
     l_content json_array_t;
     l_content_item json_object_t;
     l_content_type varchar2(255 char);
-    l_oci_content json_array_t;
     l_oci_content_item json_object_t;
 
     l_has_tool_call boolean := false;
@@ -418,15 +417,14 @@ create or replace package body uc_ai_oci as
     return c_api_url_base || l_region || '.oci.oraclecloud.com' || c_api_endpoint;
   end build_api_url;
 
-  function internal_generate_text (
-    p_messages           in json_array_t
+  procedure internal_generate_text (
+    pio_messages         in out nocopy json_array_t
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
-  , pio_result           in out json_object_t
-  ) return json_array_t
+  , pio_result           in out nocopy json_object_t
+  )
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
-    l_messages     json_array_t := json_array_t();
     l_input_obj    json_object_t;
     l_chat_request json_object_t;
     l_api_url      varchar2(500 char);
@@ -442,15 +440,13 @@ create or replace package body uc_ai_oci as
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
       raise uc_ai.e_max_calls_exceeded;
     end if;
-
-    l_messages := p_messages.clone();
     l_input_obj := p_input_obj;
     l_chat_request := l_input_obj.get_object('chatRequest');
 
     if g_mode = gc_mode_generic then
-      l_chat_request.put('messages', l_messages);
+      l_chat_request.put('messages', pio_messages);
     else
-      l_chat_request.put('chatHistory', l_messages);
+      l_chat_request.put('chatHistory', pio_messages);
       l_chat_request.put('message', g_cohere_user_message);
 
       if g_cohere_system_prompt is not null then
@@ -529,8 +525,6 @@ create or replace package body uc_ai_oci as
             l_used_tool boolean := false;
 
             l_new_msg json_object_t;
-            l_content clob;
-            l_oci_content json_array_t;
           begin
             l_choices := l_chat_response.get_array('choices');
 
@@ -571,7 +565,7 @@ create or replace package body uc_ai_oci as
                     l_tool_response := json_object_t();
                     l_tool_response.put('role', 'ASSISTANT');
                     l_tool_response.put('toolCalls', l_tool_call_arr);
-                    l_messages.append(l_tool_response);
+                    pio_messages.append(l_tool_response);
 
                     <<tool_calls>>
                     for k in 0 .. l_tool_call_arr.get_size - 1 
@@ -623,7 +617,7 @@ create or replace package body uc_ai_oci as
                       l_tool_response_content.put('text', l_tool_result);
                       l_tool_content.append(l_tool_response_content);
                       l_tool_response.put('content', l_tool_content);
-                      l_messages.append(l_tool_response);
+                      pio_messages.append(l_tool_response);
 
                       l_new_msg := uc_ai_message_api.create_tool_result_content(
                         p_tool_call_id => l_tool_call_id,
@@ -649,8 +643,8 @@ create or replace package body uc_ai_oci as
               pio_result.put('tool_calls_count', g_tool_calls);
 
               -- Continue conversation with tool results - recursive call
-              l_messages := internal_generate_text(
-                p_messages           => l_messages
+              internal_generate_text(
+                pio_messages         => pio_messages
               , p_max_tool_calls     => p_max_tool_calls
               , p_input_obj          => p_input_obj
               , pio_result           => pio_result
@@ -665,7 +659,7 @@ create or replace package body uc_ai_oci as
           pio_result.put('finish_reason', 'error');
         end if;
       else
-        l_messages := l_chat_response.get_array('chatHistory');
+        pio_messages := l_chat_response.get_array('chatHistory');
 
         -- cohere
         if l_chat_response.has('toolCalls') then
@@ -761,10 +755,10 @@ create or replace package body uc_ai_oci as
             l_chat_request.put('toolResults', l_oci_tool_results);
             l_input_obj.put('chatRequest', l_chat_request);
 
-            l_messages := internal_generate_text(
-              p_messages           => l_messages
+            internal_generate_text(
+              pio_messages         => pio_messages
             , p_max_tool_calls     => p_max_tool_calls
-            , p_input_obj          => l_input_obj
+            , p_input_obj          => p_input_obj
             , pio_result           => pio_result
               );
           end;
@@ -789,9 +783,7 @@ create or replace package body uc_ai_oci as
       pio_result.put('finish_reason', 'error');
     end if;
 
-    logger.log('End internal_generate_text - final messages count: ' || l_messages.get_size, l_scope);
-
-    return l_messages;
+    logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);
 
   end internal_generate_text;
 
@@ -910,8 +902,8 @@ create or replace package body uc_ai_oci as
     -- Note: Tool support would need to be added here if OCI supports it
     -- This would require additional research into OCI's tool calling capabilities
 
-    l_oci_messages := internal_generate_text(
-      p_messages           => l_oci_messages
+    internal_generate_text(
+      pio_messages         => l_oci_messages
     , p_max_tool_calls     => p_max_tool_calls
     , p_input_obj          => l_input_obj
     , pio_result           => l_result
