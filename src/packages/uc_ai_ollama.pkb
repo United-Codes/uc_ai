@@ -295,7 +295,8 @@ create or replace package body uc_ai_ollama as
     l_resp := apex_web_service.make_rest_request(
       p_url => get_generate_text_url(),
       p_http_method => 'POST',
-      p_body => l_input_obj.to_clob
+      p_body => l_input_obj.to_clob,
+      p_credential_static_id => g_apex_web_credential
     );
 
     logger.log('Response', l_scope, l_resp);
