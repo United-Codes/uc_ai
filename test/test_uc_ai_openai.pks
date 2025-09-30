@@ -26,5 +26,8 @@ create or replace package test_uc_ai_openai as
   --%test(Structured output)
   procedure structured_output;
 
+  --%test(Basic text generation with APEX web credential)
+  procedure basic_web_credential;
+
 end test_uc_ai_openai;
 /

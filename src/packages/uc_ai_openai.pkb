@@ -269,17 +269,20 @@ create or replace package body uc_ai_openai as
 
     logger.log('Request body', l_scope, l_input_obj.to_clob);
 
-    apex_web_service.set_request_headers(
-      p_name_01  => 'Content-Type',
-      p_value_01 => 'application/json',
-      p_name_02  => 'Authorization',
-      p_value_02 => 'Bearer '||uc_ai_get_key(uc_ai.c_provider_openai)
-    );
+    apex_web_service.clear_request_headers;
+    apex_web_service.g_request_headers(1).name := 'Content-Type';
+    apex_web_service.g_request_headers(1).value := 'application/json';
+
+    if g_apex_web_credential is null then
+      apex_web_service.g_request_headers(2).name := 'Authorization';
+      apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(uc_ai.c_provider_openai);
+    end if;
 
     l_resp := apex_web_service.make_rest_request(
       p_url => c_api_url,
       p_http_method => 'POST',
-      p_body => l_input_obj.to_clob
+      p_body => l_input_obj.to_clob,
+      p_credential_static_id => g_apex_web_credential
     );
 
     logger.log('Response', l_scope, l_resp);
