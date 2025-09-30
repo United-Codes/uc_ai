@@ -25,6 +25,7 @@ create or replace package uc_ai_anthropic as
   -- More info at https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#how-to-use-extended-thinking
   g_reasoning_budget_tokens pls_integer := 10000; -- Minimum is 1024
 
+  -- type: HTTP-Header, credential-name: x-api-key
   g_apex_web_credential varchar2(255 char);
 
   /*

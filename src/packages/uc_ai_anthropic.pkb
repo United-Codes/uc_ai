@@ -250,16 +250,15 @@ create or replace package body uc_ai_anthropic as
 
 
 
-  function internal_generate_text (
-    p_messages           in json_array_t
+  procedure internal_generate_text (
+    pio_messages         in out json_array_t
   , p_system_prompt      in clob
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
   , pio_result           in out json_object_t
-  ) return json_array_t
+  )
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
-    l_messages     json_array_t := json_array_t();
     l_input_obj    json_object_t;
 
     l_resp      clob;
@@ -280,9 +279,8 @@ create or replace package body uc_ai_anthropic as
       raise uc_ai.e_max_calls_exceeded;
     end if;
 
-    l_messages := p_messages;
     l_input_obj := p_input_obj;
-    l_input_obj.put('messages', l_messages);
+    l_input_obj.put('messages', pio_messages);
     
     -- Add system prompt if provided (Anthropic uses separate system field)
     if p_system_prompt is not null then
@@ -291,19 +289,22 @@ create or replace package body uc_ai_anthropic as
 
     logger.log('Request body', l_scope, l_input_obj.to_clob);
 
-    apex_web_service.set_request_headers(
-      p_name_01  => 'Content-Type',
-      p_value_01 => 'application/json',
-      p_name_02  => 'x-api-key',
-      p_value_02 => uc_ai_get_key(uc_ai.c_provider_anthropic),
-      p_name_03  => 'anthropic-version',
-      p_value_03 => c_anthropic_version
-    );
+    apex_web_service.clear_request_headers;
+    apex_web_service.g_request_headers(1).name := 'Content-Type';
+    apex_web_service.g_request_headers(1).value := 'application/json';
+    apex_web_service.g_request_headers(2).name := 'anthropic-version';
+    apex_web_service.g_request_headers(2).value := c_anthropic_version;
+
+    if g_apex_web_credential is null then
+      apex_web_service.g_request_headers(3).name := 'x-api-key';
+      apex_web_service.g_request_headers(3).value := uc_ai_get_key(uc_ai.c_provider_anthropic);
+    end if;
 
     l_resp := apex_web_service.make_rest_request(
       p_url => c_api_url,
       p_http_method => 'POST',
-      p_body => l_input_obj.to_clob
+      p_body => l_input_obj.to_clob,
+      p_credential_static_id => g_apex_web_credential
     );
 
     logger.log('Response', l_scope, l_resp);
@@ -401,7 +402,7 @@ create or replace package body uc_ai_anthropic as
         -- Add AI's message with content (including tool_use blocks) to conversation history
         l_resp_message.put('role', 'assistant');
         l_resp_message.put('content', l_content);
-        l_messages.append(l_resp_message);
+        pio_messages.append(l_resp_message);
 
         -- Execute each tool call and collect results
         <<tool_use_loop>>
@@ -480,11 +481,11 @@ create or replace package body uc_ai_anthropic as
         l_new_msg := json_object_t();
         l_new_msg.put('role', 'user');
         l_new_msg.put('content', l_tool_results);
-        l_messages.append(l_new_msg);
+        pio_messages.append(l_new_msg);
 
         -- Continue conversation with tool results - recursive call
-        l_messages := internal_generate_text(
-          p_messages           => l_messages
+        internal_generate_text(
+          pio_messages         => pio_messages
         , p_system_prompt      => p_system_prompt
         , p_max_tool_calls     => p_max_tool_calls
         , p_input_obj          => p_input_obj
@@ -517,7 +518,7 @@ create or replace package body uc_ai_anthropic as
               raise_application_error(-20001, 'Unsupported content type: ' || l_content_type);
           end case; 
 
-          l_messages.append(l_content_prompt);
+          pio_messages.append(l_content_prompt);
         end loop content_loop;
 
         l_assistant_message := uc_ai_message_api.create_assistant_message(
@@ -526,12 +527,10 @@ create or replace package body uc_ai_anthropic as
         g_normalized_messages.append(l_assistant_message);
       end;
 
-      l_messages.append(l_content_prompt);
+      pio_messages.append(l_content_prompt);
     end if;
 
-    logger.log('End internal_generate_text - final messages count: ' || l_messages.get_size, l_scope);
-
-    return l_messages;
+    logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);
 
   end internal_generate_text;
 
@@ -619,8 +618,8 @@ create or replace package body uc_ai_anthropic as
       l_input_obj.put('thinking', l_reasoning);
     end if;
 
-    l_anthropic_messages := internal_generate_text(
-      p_messages           => l_anthropic_messages
+    internal_generate_text(
+      pio_messages         => l_anthropic_messages
     , p_system_prompt      => l_system_prompt
     , p_max_tool_calls     => p_max_tool_calls
     , p_input_obj          => l_input_obj

@@ -29,6 +29,9 @@ create or replace package uc_ai_google as
   -- More info at https://ai.google.dev/gemini-api/docs/thinking#set-budget
   g_reasoning_budget pls_integer; -- -1 → dynamic, 0 → no reasoning budget
 
+  -- type: url query string: key=your_api_key
+  g_apex_web_credential varchar2(255 char);
+
   /*
    * Google Gemini implementation for text generation 
    */

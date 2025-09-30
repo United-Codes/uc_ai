@@ -113,7 +113,7 @@ create or replace package body uc_ai_ollama as
    */
   procedure convert_lm_messages_to_ollama(
     p_lm_messages in json_array_t,
-    po_ollama_messages out json_array_t
+    po_ollama_messages out nocopy json_array_t
   )
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_ollama';
@@ -252,15 +252,14 @@ create or replace package body uc_ai_ollama as
 
 
 
-  function internal_generate_text (
-    p_messages           in json_array_t
+  procedure internal_generate_text (
+    pio_messages         in out nocopy json_array_t
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
-  , pio_result           in out json_object_t
-  ) return json_array_t
+  , pio_result           in out nocopy json_object_t
+  )
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
-    l_messages     json_array_t := json_array_t();
     l_input_obj    json_object_t;
 
     l_resp          clob;
@@ -282,13 +281,13 @@ create or replace package body uc_ai_ollama as
       raise uc_ai.e_max_calls_exceeded;
     end if;
 
-    l_messages := p_messages;
     l_input_obj := p_input_obj;
-    l_input_obj.put('messages', l_messages);
+    l_input_obj.put('messages', pio_messages);
     l_input_obj.put('think', uc_ai.g_enable_reasoning);
 
     logger.log('Request body', l_scope, l_input_obj.to_clob);
 
+    apex_web_service.clear_request_headers;
     apex_web_service.set_request_headers(
       p_name_01  => 'Content-Type',
       p_value_01 => 'application/json'
@@ -297,7 +296,8 @@ create or replace package body uc_ai_ollama as
     l_resp := apex_web_service.make_rest_request(
       p_url => get_generate_text_url(),
       p_http_method => 'POST',
-      p_body => l_input_obj.to_clob
+      p_body => l_input_obj.to_clob,
+      p_credential_static_id => g_apex_web_credential
     );
 
     logger.log('Response', l_scope, l_resp);
@@ -372,7 +372,7 @@ create or replace package body uc_ai_ollama as
         l_resp_message.put('role', 'assistant');
         l_resp_message.put('content', nvl(l_message.get_clob('content'), null));
         l_resp_message.put('tool_calls', l_tool_calls);
-        l_messages.append(l_resp_message);
+        pio_messages.append(l_resp_message);
 
         -- Process each tool call and collect results
         <<tool_calls_loop>>
@@ -415,7 +415,7 @@ create or replace package body uc_ai_ollama as
           l_new_msg.put('role', 'tool');
           l_new_msg.put('content', l_tool_result);
           l_new_msg.put('tool_name', l_tool_name);
-          l_messages.append(l_new_msg);
+          pio_messages.append(l_new_msg);
            
           l_normalized_tool_results.append(uc_ai_message_api.create_tool_result_content(
             p_tool_call_id => l_tool_call_id
@@ -435,8 +435,8 @@ create or replace package body uc_ai_ollama as
         pio_result.put('tool_calls_count', g_tool_calls);
 
         -- Continue conversation with tool results - recursive call
-        l_messages := internal_generate_text(
-          p_messages           => l_messages
+        internal_generate_text(
+          pio_messages         => pio_messages
         , p_max_tool_calls     => p_max_tool_calls
         , p_input_obj          => p_input_obj
         , pio_result           => pio_result
@@ -445,7 +445,7 @@ create or replace package body uc_ai_ollama as
     else
       -- Normal completion - add AI's message to conversation
       logger.log('Normal completion received', l_scope);
-      l_messages.append(l_message);
+      pio_messages.append(l_message);
 
       l_assistant_message := uc_ai_message_api.create_assistant_message(
         p_content => l_assistant_content
@@ -476,9 +476,7 @@ create or replace package body uc_ai_ollama as
       end case;
     end if;
 
-    logger.log('End internal_generate_text - final messages count: ' || l_messages.get_size, l_scope);
-
-    return l_messages;
+    logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);
 
   end internal_generate_text;
 
@@ -567,8 +565,8 @@ create or replace package body uc_ai_ollama as
       end if;
     end if;
 
-    l_ollama_messages := internal_generate_text(
-      p_messages           => l_ollama_messages
+    internal_generate_text(
+      pio_messages         => l_ollama_messages
     , p_max_tool_calls     => p_max_tool_calls
     , p_input_obj          => l_input_obj
     , pio_result           => l_result

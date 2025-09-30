@@ -1,4 +1,5 @@
 create or replace package uc_ai_ollama as
+  -- @dblinter ignore(g-7230): allow use of global variables
 
   /**
   * UC AI
@@ -9,6 +10,8 @@ create or replace package uc_ai_ollama as
   */
 
   -- See https://ollama.com/library for available models
+
+  g_apex_web_credential varchar2(255 char);
 
   /*
    * Ollama implementation for text generation
