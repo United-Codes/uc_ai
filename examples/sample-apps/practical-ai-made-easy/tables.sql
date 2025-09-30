@@ -198,3 +198,22 @@ create table pame_files (
   file_content blob not null,
   mime_type    varchar2(255 char) not null
 );
+
+create table pame_users
+(
+  user_id    varchar2(255 char) not null
+    primary key,
+  first_name varchar2(100 char) not null,
+  last_name  varchar2(100 char) not null,
+  email      varchar2(255 char) not null
+    unique,
+  phone      varchar2(20 char),
+  created_at timestamp(6)       not null,
+  updated_at timestamp(6)       not null
+);
+
+INSERT INTO PAME_USERS (USER_ID, FIRST_NAME, LAST_NAME, EMAIL, PHONE, CREATED_AT, UPDATED_AT) VALUES ('user1', 'Alice', 'Smith', 'alice.smith@example.com', '123-456-7890', TIMESTAMP '2025-09-05 15:47:33.256545', TIMESTAMP '2025-09-05 15:47:33.256545');
+INSERT INTO PAME_USERS (USER_ID, FIRST_NAME, LAST_NAME, EMAIL, PHONE, CREATED_AT, UPDATED_AT) VALUES ('user2', 'Bob', 'Johnson', 'apex_fan@example.com', '234-567-8901', TIMESTAMP '2025-09-05 15:47:33.256545', TIMESTAMP '2025-09-05 15:47:33.256545');
+INSERT INTO PAME_USERS (USER_ID, FIRST_NAME, LAST_NAME, EMAIL, PHONE, CREATED_AT, UPDATED_AT) VALUES ('user3', 'Charlie', 'Williams', 'charlie.williams@example.com', '345-678-9012', TIMESTAMP '2025-09-05 15:47:33.256545', TIMESTAMP '2025-09-05 15:47:33.256545');
+
+commit;
