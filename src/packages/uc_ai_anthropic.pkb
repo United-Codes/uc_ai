@@ -289,6 +289,7 @@ create or replace package body uc_ai_anthropic as
 
     logger.log('Request body', l_scope, l_input_obj.to_clob);
 
+    apex_web_service.clear_request_headers;
     apex_web_service.g_request_headers(1).name := 'Content-Type';
     apex_web_service.g_request_headers(1).value := 'application/json';
     apex_web_service.g_request_headers(2).name := 'anthropic-version';

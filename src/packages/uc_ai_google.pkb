@@ -289,6 +289,7 @@ create or replace package body uc_ai_google as
 
     logger.log('Request body', l_scope, l_input_obj.to_clob);
 
+    apex_web_service.clear_request_headers;
     apex_web_service.set_request_headers(
       p_name_01  => 'Content-Type',
       p_value_01 => 'application/json'
