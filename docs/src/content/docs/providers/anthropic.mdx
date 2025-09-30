@@ -20,7 +20,23 @@ The UC AI Anthropic package provides integration with Anthropic's Claude models,
 3. UC AI package installed
 4. Set up API key ([guide](/products/uc-ai/docs/guides/installation/#set-up-api-keys))
 
-You can get an API key by signing up at [Anthropic Console](https://console.anthropic.com/).ä
+You can get an API key by signing up at [Anthropic Console](https://console.anthropic.com/).
+
+## Creating a Web Credential
+
+To use your Anthropic key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following settings:
+
+- Authentication Type: HTTP Header
+- Credential Name: `x-api-key`
+- Credential Secret: `<your_api_key>`
+
+We generally recomend also setting `Valid for URLs` to the Anthropic API (https://api.anthropic.com/) to limit the scope of the credential.
+
+To use the web credential in your PL/SQL code, set the package variable `uc_ai_anthropic.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
+
+```sql
+uc_ai_anthropic.g_apex_web_credential := 'ANTHROPIC';
+```
 
 ## Models
 
