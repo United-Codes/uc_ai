@@ -20,8 +20,9 @@ echo "Generating install_uc_ai.sql..."
 
 # Start writing the install script
 cat > "$OUTPUT_FILE" << 'EOF'
+set sqlblanklines on
+
 -- UC AI Framework Installation Script
--- Run this script to install the complete framework with OpenAI and Anthropic support
 
 PROMPT ===================================================
 PROMPT UC AI Framework Installation Starting...

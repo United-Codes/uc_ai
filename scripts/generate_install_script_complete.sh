@@ -174,6 +174,7 @@ PROMPT ===================================================
 PROMPT UC AI Installation with Logger Starting...
 PROMPT ===================================================
 
+set sqlblanklines on
 EOF
 
 # First install the logger
