@@ -77,5 +77,6 @@ jobs:
             ./src/dependencies/logger_3.1.1/logger_no_op.sql
             upgrade_packages.sql
             ${{ steps.find_migration.outputs.has_migration == 'true' && steps.find_migration.outputs.migration_file || '' }}
+            uninstall.sql
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
