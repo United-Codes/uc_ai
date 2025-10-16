@@ -1,3 +1,25 @@
+#!/bin/bash
+
+# Script to generate uninstall.sql by scanning the src directory structure
+# This ensures all objects are dropped in the correct reverse order
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source the shared package utilities
+source "$SCRIPT_DIR/package_utils.sh"
+
+OUTPUT_FILE="${SCRIPT_DIR}/../uninstall.sql"
+SRC_DIR=$(get_src_dir "$SCRIPT_DIR")
+
+# Validate src directory exists
+if ! validate_src_dir "$SRC_DIR"; then
+    exit 1
+fi
+
+echo "Generating uninstall.sql..."
+
+# Start writing the uninstall script
+cat > "$OUTPUT_FILE" << 'EOF'
 -- ============================================================================
 -- UC AI Framework Uninstall Script
 -- ============================================================================
@@ -32,22 +54,55 @@ PROMPT ===================================================
 PROMPT Step 1: Dropping PL/SQL Packages...
 PROMPT ===================================================
 
-PROMPT Dropping core UC AI package...
-DROP PACKAGE uc_ai;
+EOF
 
-PROMPT Dropping AI provider packages...
-DROP PACKAGE uc_ai_openai;
-DROP PACKAGE uc_ai_ollama;
-DROP PACKAGE uc_ai_oci;
-DROP PACKAGE uc_ai_google;
-DROP PACKAGE uc_ai_anthropic;
+# Drop packages in reverse order
+# Core package body first (was installed last)
+echo "PROMPT Dropping core UC AI package..." >> "$OUTPUT_FILE"
+while IFS= read -r body_file; do
+    if is_core_package "$(basename "$body_file")"; then
+        package_name=$(basename "$body_file" .pkb)
+        echo "DROP PACKAGE ${package_name};" >> "$OUTPUT_FILE"
+        break
+    fi
+done < <(get_package_bodies_ordered "$SRC_DIR")
 
-PROMPT Dropping API packages...
-DROP PACKAGE uc_ai_structured_output;
-DROP PACKAGE uc_ai_message_api;
-DROP PACKAGE uc_ai_tools_api;
+echo "" >> "$OUTPUT_FILE"
 
-PROMPT Packages dropped successfully.
+# Provider packages
+echo "PROMPT Dropping AI provider packages..." >> "$OUTPUT_FILE"
+# Reverse the provider packages array
+declare -a PROVIDER_PACKAGES_REV=()
+for ((i=${#PROVIDER_PACKAGES[@]}-1; i>=0; i--)); do
+    PROVIDER_PACKAGES_REV+=("${PROVIDER_PACKAGES[$i]}")
+done
+
+for provider_pkg in "${PROVIDER_PACKAGES_REV[@]}"; do
+    if [ -f "$SRC_DIR/packages/${provider_pkg}.pkb" ] || [ -f "$SRC_DIR/packages/${provider_pkg}.pks" ]; then
+        echo "DROP PACKAGE ${provider_pkg};" >> "$OUTPUT_FILE"
+    fi
+done
+
+echo "" >> "$OUTPUT_FILE"
+
+# API packages (reverse order)
+echo "PROMPT Dropping API packages..." >> "$OUTPUT_FILE"
+declare -a API_PACKAGES_REV=()
+for ((i=${#API_PACKAGES[@]}-1; i>=0; i--)); do
+    API_PACKAGES_REV+=("${API_PACKAGES[$i]}")
+done
+
+for api_pkg in "${API_PACKAGES_REV[@]}"; do
+    if [ -f "$SRC_DIR/packages/${api_pkg}.pkb" ] || [ -f "$SRC_DIR/packages/${api_pkg}.pks" ]; then
+        echo "DROP PACKAGE ${api_pkg};" >> "$OUTPUT_FILE"
+    fi
+done
+
+echo "" >> "$OUTPUT_FILE"
+echo "PROMPT Packages dropped successfully." >> "$OUTPUT_FILE"
+
+# Drop dependencies
+cat >> "$OUTPUT_FILE" << 'EOF'
 
 -- ============================================================================
 -- 2. DROP FUNCTIONS (Standalone)
@@ -58,10 +113,17 @@ PROMPT ===================================================
 PROMPT Step 2: Dropping Standalone Functions...
 PROMPT ===================================================
 
-PROMPT Dropping UC_AI_GET_KEY function...
-DROP FUNCTION UC_AI_GET_KEY;
+EOF
 
-PROMPT Functions dropped successfully.
+echo "PROMPT Dropping UC_AI_GET_KEY function..." >> "$OUTPUT_FILE"
+echo "DROP FUNCTION UC_AI_GET_KEY;" >> "$OUTPUT_FILE"
+echo "" >> "$OUTPUT_FILE"
+
+
+echo "PROMPT Functions dropped successfully." >> "$OUTPUT_FILE"
+
+# Drop triggers
+cat >> "$OUTPUT_FILE" << 'EOF'
 
 -- ============================================================================
 -- 3. DROP TRIGGERS
@@ -88,6 +150,11 @@ END;
 
 PROMPT Triggers dropped successfully.
 
+EOF
+
+# Drop tables - need to scan tables/install.sql to find what tables exist
+if [ -f "$SRC_DIR/tables/install.sql" ]; then
+    cat >> "$OUTPUT_FILE" << 'EOF'
 -- ============================================================================
 -- 4. DROP TABLES (Drop dependent tables first)
 -- ============================================================================
@@ -118,6 +185,11 @@ END;
 
 PROMPT Tables dropped successfully.
 
+EOF
+fi
+
+# Drop sequences
+cat >> "$OUTPUT_FILE" << 'EOF'
 -- ============================================================================
 -- 5. DROP SEQUENCES
 -- ============================================================================
@@ -221,3 +293,53 @@ SET VERIFY ON
 
 -- End of uninstall script
 
+EOF
+
+echo "Generated uninstall.sql successfully!"
+echo ""
+echo "Objects to be dropped (in order):"
+echo ""
+echo "1. Packages (reverse installation order):"
+
+# Core package
+while IFS= read -r body_file; do
+    if is_core_package "$(basename "$body_file")"; then
+        package_name=$(basename "$body_file" .pkb)
+        echo "   - ${package_name} (Core)"
+        break
+    fi
+done < <(get_package_bodies_ordered "$SRC_DIR")
+
+# Provider packages (reversed)
+for provider_pkg in "${PROVIDER_PACKAGES_REV[@]}"; do
+    if [ -f "$SRC_DIR/packages/${provider_pkg}.pkb" ] || [ -f "$SRC_DIR/packages/${provider_pkg}.pks" ]; then
+        echo "   - ${provider_pkg} (Provider)"
+    fi
+done
+
+# API packages (reversed)
+for api_pkg in "${API_PACKAGES_REV[@]}"; do
+    if [ -f "$SRC_DIR/packages/${api_pkg}.pkb" ] || [ -f "$SRC_DIR/packages/${api_pkg}.pks" ]; then
+        echo "   - ${api_pkg} (API)"
+    fi
+done
+
+echo ""
+echo "2. Standalone Functions:"
+echo "   - UC_AI_GET_KEY"
+
+
+echo ""
+echo "3. Triggers:"
+echo "   - All triggers on UC AI tables"
+
+echo ""
+echo "4. Tables:"
+echo "   - All UC_AI* tables (dynamic detection)"
+
+echo ""
+echo "5. Sequences:"
+echo "   - All UC_AI* sequences (dynamic detection)"
+
+echo ""
+echo "Uninstall order ensures proper dependency cleanup."
