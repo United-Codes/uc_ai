@@ -20,14 +20,12 @@ echo "Generating install_uc_ai.sql..."
 
 # Start writing the install script
 cat > "$OUTPUT_FILE" << 'EOF'
-set sqlblanklines on
-
 -- UC AI Framework Installation Script
-
 PROMPT ===================================================
 PROMPT UC AI Framework Installation Starting...
 PROMPT ===================================================
 
+set sqlblanklines on
 EOF
 
 # Install tables first
