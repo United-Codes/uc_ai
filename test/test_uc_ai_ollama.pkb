@@ -384,5 +384,28 @@ create or replace package body test_uc_ai_ollama as
     end if;
   end structured_output;
 
+  procedure embeddings
+  as
+    l_result json_array_t;
+    l_array_clob clob;
+  begin
+    uc_ai.g_base_url := 'host.containers.internal:11434/api';
+    uc_ai.g_enable_tools := false; -- disable tools for this test
+    uc_ai.g_enable_reasoning := false; -- disable reasoning for this test
+
+    l_result := uc_ai.generate_embeddings(
+      p_input => json_array_t('["APEX Office Print lets you create and manage print jobs directly from your APEX applications."]'),
+      p_provider => uc_ai.c_provider_ollama,
+      p_model => 'granite-embedding:30m'
+    );
+    
+
+    ut.expect(l_result).to_be_not_null();
+    l_array_clob := l_result.to_clob;
+    sys.dbms_output.put_line('Embeddings array: ' || l_array_clob);
+    ut.expect(l_result.get_size).to_equal(1);
+    ut.expect(treat(l_result.get(0) as json_array_t).get_size).to_be_greater_than(0);
+  end embeddings;
+
 end test_uc_ai_ollama;
 /
