@@ -71,5 +71,11 @@ create or replace package uc_ai as
   , p_response_json_schema  in json_object_t default null
   ) return json_object_t;
 
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_provider in provider_type
+  , p_model in model_type
+  ) return json_array_t;
+
 end uc_ai;
 /

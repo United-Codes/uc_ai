@@ -3,6 +3,7 @@ create or replace package body uc_ai_ollama as
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_api_url constant varchar2(255 char) := 'http://localhost:1143/api';
   c_api_generate_text_path constant varchar2(255 char) := '/chat';
+  c_api_generate_embeddings_path constant varchar2(255 char) := '/embed';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
@@ -19,6 +20,16 @@ create or replace package body uc_ai_ollama as
     
     return c_api_url || c_api_generate_text_path;
   end get_generate_text_url;
+
+  function get_generate_embeddings_url return varchar2
+  as
+  begin
+    if uc_ai.g_base_url is not null then
+      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_embeddings_path;
+    end if;
+
+    return c_api_url || c_api_generate_embeddings_path;
+  end get_generate_embeddings_url;
 
   function get_text_content (
     p_message in json_object_t
@@ -585,6 +596,50 @@ create or replace package body uc_ai_ollama as
     
     return l_result;
   end generate_text;
+
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_model in uc_ai.model_type
+  ) return json_array_t
+  as
+    l_scope logger_logs.scope%type := c_scope_prefix || 'generate_embeddings';
+    l_url           varchar2(4000 char);
+    l_resp          clob;
+    l_resp_json     json_object_t;
+    l_embeddings    json_array_t;
+    l_input_obj     json_object_t := json_object_t();
+  begin
+    logger.log('Starting generate_embeddings with ' || p_input.get_size || ' input items',
+      l_scope);
+    
+    l_input_obj.put('model', p_model);
+    l_input_obj.put('input', p_input);
+
+    apex_web_service.clear_request_headers;
+    apex_web_service.set_request_headers(
+      p_name_01  => 'content-type',
+      p_value_01 => 'application/json'
+    );
+
+    logger.log('Request body', l_scope, l_input_obj.to_clob);
+
+    l_url := get_generate_embeddings_url();
+    logger.log('Request URL: ' || l_url, l_scope);
+
+    l_resp := apex_web_service.make_rest_request(
+      p_url => l_url,
+      p_http_method => 'POST',
+      p_body => l_input_obj.to_clob,
+      p_credential_static_id => g_apex_web_credential
+    );
+
+    logger.log('Response', l_scope, l_resp);
+
+    l_resp_json := json_object_t.parse(l_resp);
+    l_embeddings := l_resp_json.get_array('embeddings');
+
+    return l_embeddings;
+  end generate_embeddings;
 
 end uc_ai_ollama;
 /

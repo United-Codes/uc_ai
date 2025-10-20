@@ -119,5 +119,40 @@ create or replace package body uc_ai as
     );
   end generate_text;
 
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_provider in provider_type
+  , p_model in model_type
+  ) return json_array_t
+  as
+    e_unknown_provider exception;
+    
+    l_result json_array_t;
+  begin
+    case p_provider
+      when c_provider_ollama then
+        l_result := uc_ai_ollama.generate_embeddings(
+          p_input => p_input
+        , p_model => p_model
+        );
+      else
+        raise e_unknown_provider;
+      
+    end case;
+
+    return l_result;
+  exception
+    when e_unknown_provider then
+      raise_application_error(-20001, 'Unknown AI provider: ' || p_provider);
+    when others then
+      logger.log_error(
+        'Unhandled exception in uc_ai.generate_embeddings',
+        c_scope_prefix || 'generate_embeddings',
+        sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+      );
+
+      raise;
+  end generate_embeddings;
+
 end uc_ai;
 /
