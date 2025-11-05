@@ -134,7 +134,7 @@ create or replace package body uc_ai_ollama as
     l_content json_array_t;
     l_content_item json_object_t;
     l_content_type varchar2(255 char);
-    l_ollama_content varchar2(32767 char);
+    l_ollama_content clob;
     l_images json_array_t;
     l_tool_calls json_array_t;
     l_tool_call json_object_t;
@@ -636,6 +636,13 @@ create or replace package body uc_ai_ollama as
     logger.log('Response', l_scope, l_resp);
 
     l_resp_json := json_object_t.parse(l_resp);
+
+    if l_resp_json.has('error') then
+      l_resp := l_resp_json.get_clob('error');
+      logger.log_error('Error in response', l_scope, l_resp);
+      raise uc_ai.e_error_response;
+    end if;
+
     l_embeddings := l_resp_json.get_array('embeddings');
 
     return l_embeddings;
