@@ -86,7 +86,7 @@ create or replace package body uc_ai_google as
     l_function_call json_object_t;
     l_function_response json_object_t;
   begin
-    logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to Google format', l_scope);
+    uc_ai_logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to Google format', l_scope);
     
     po_system_prompt := null;
     po_google_messages := json_array_t();
@@ -232,27 +232,26 @@ create or replace package body uc_ai_google as
           end if;
 
         else
-          logger.log_warn('Unknown message role: ' || l_role, l_scope);
+          uc_ai_logger.log_warn('Unknown message role: ' || l_role, l_scope);
       end case;
     end loop message_loop;
 
-    logger.log('Converted to ' || po_google_messages.get_size || ' Google messages', l_scope);
+    uc_ai_logger.log('Converted to ' || po_google_messages.get_size || ' Google messages', l_scope);
     if po_system_prompt is not null then
-      logger.log('Extracted system prompt', l_scope, po_system_prompt);
+      uc_ai_logger.log('Extracted system prompt', l_scope, po_system_prompt);
     end if;
   end convert_lm_messages_to_google;
 
 
-  function internal_generate_text (
-    p_messages           in json_array_t
+  procedure internal_generate_text (
+    pio_messages         in out json_array_t
   , p_system_prompt      in clob
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
   , pio_result           in out json_object_t
-  ) return json_array_t
+  )
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
-    l_messages     json_array_t := json_array_t();
     l_input_obj    json_object_t;
     l_api_url      varchar2(500 char);
     l_model        varchar2(255 char);
@@ -269,22 +268,28 @@ create or replace package body uc_ai_google as
     l_usage_metadata json_object_t;
   begin
     if g_tool_calls >= p_max_tool_calls then
-      logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
+      uc_ai_logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
       raise uc_ai.e_max_calls_exceeded;
     end if;
 
-    l_messages := p_messages;
     l_input_obj := p_input_obj;
-    l_input_obj.put('contents', l_messages);
+    l_input_obj.put('contents', pio_messages);
 
 
     -- Build API URL with model
     l_model := pio_result.get_string('model');
-    l_api_url := c_api_url_base || l_model || ':generateContent?key=' || uc_ai_get_key(uc_ai.c_provider_google);
 
-    logger.log('Request body', l_scope, l_input_obj.to_clob);
+    l_api_url := c_api_url_base || l_model || ':generateContent';
 
+    if g_apex_web_credential is null then
+      l_api_url := l_api_url || '?key=' || uc_ai_get_key(uc_ai.c_provider_google);
+    end if;
+
+
+    uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
+
+    apex_web_service.clear_request_headers;
     apex_web_service.set_request_headers(
       p_name_01  => 'Content-Type',
       p_value_01 => 'application/json'
@@ -293,17 +298,18 @@ create or replace package body uc_ai_google as
     l_resp := apex_web_service.make_rest_request(
       p_url => l_api_url,
       p_http_method => 'POST',
-      p_body => l_input_obj.to_clob
+      p_body => l_input_obj.to_clob,
+      p_credential_static_id => g_apex_web_credential
     );
 
-    logger.log('Response', l_scope, l_resp);
+    uc_ai_logger.log('Response', l_scope, l_resp);
 
     l_resp_json := json_object_t.parse(l_resp);
 
     if l_resp_json.has('error') then
       l_temp_obj := l_resp_json.get_object('error');
-      logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-      logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
+      uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
+      uc_ai_logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
       raise uc_ai.e_error_response;
     end if;
 
@@ -391,7 +397,7 @@ create or replace package body uc_ai_google as
         -- Add AI's message with content (including functionCall parts) to conversation history
         l_resp_message.put('role', 'model');
         l_resp_message.put('parts', l_parts);
-        l_messages.append(l_resp_message);
+        pio_messages.append(l_resp_message);
 
         -- Execute each function call and collect results
         <<parts_loop>>
@@ -401,7 +407,7 @@ create or replace package body uc_ai_google as
 
           
           if l_part.has('functionCall') then
-            logger.log('Executing function call', l_scope, l_part.to_clob);
+            uc_ai_logger.log('Executing function call', l_scope, l_part.to_clob);
 
             g_tool_calls := g_tool_calls + 1;
             l_used_tool := true;
@@ -412,7 +418,7 @@ create or replace package body uc_ai_google as
             
             -- Handle function arguments (can be null for parameterless functions)
             if l_tool_call.has('args') then
-              logger.log('Function call has args', l_scope, l_tool_call.get_object('args').to_clob);
+              uc_ai_logger.log('Function call has args', l_scope, l_tool_call.get_object('args').to_clob);
               l_tool_args := l_tool_call.get_object('args');
             else
               l_tool_args := json_object_t(); -- Empty args for parameterless functions
@@ -421,17 +427,17 @@ create or replace package body uc_ai_google as
             if l_tool_args is not null then
               -- when we have a top-level object parameter, extract it. Google wraps it into a named object
               l_param_name := uc_ai_tools_api.get_tools_object_param_name(l_tool_name);
-              logger.log('Top-level object parameter name', l_scope, 'Tool: ' || l_tool_name || ', Param: ' || nvl(l_param_name, 'null'));
+              uc_ai_logger.log('Top-level object parameter name', l_scope, 'Tool: ' || l_tool_name || ', Param: ' || nvl(l_param_name, 'null'));
               if l_param_name is not null then
                 l_tool_args := l_tool_args.get_object(l_param_name);
               end if;
             end if;
 
-            logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name);
+            uc_ai_logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name);
             if l_tool_args is not null then
-              logger.log('Tool args', l_scope, 'Args: ' || l_tool_args.to_clob);
+              uc_ai_logger.log('Tool args', l_scope, 'Args: ' || l_tool_args.to_clob);
             else
-              logger.log('Tool args', l_scope, 'No args provided');
+              uc_ai_logger.log('Tool args', l_scope, 'No args provided');
               l_tool_args := json_object_t();
             end if;
 
@@ -450,7 +456,7 @@ create or replace package body uc_ai_google as
               );
             exception
               when others then
-                logger.log_error('Tool execution failed', l_scope, 'Tool: ' || l_tool_name || ', Error: ' || sqlerrm || chr(10) || sys.dbms_utility.format_error_backtrace);
+                uc_ai_logger.log_error('Tool execution failed', l_scope, 'Tool: ' || l_tool_name || ', Error: ' || sqlerrm || chr(10) || sys.dbms_utility.format_error_backtrace);
                 l_tool_result := 'Error executing tool: ' || sqlerrm;
             end;
 
@@ -477,7 +483,7 @@ create or replace package body uc_ai_google as
 
           -- normal text part
           elsif l_part.has('text') then
-            logger.log('Text received', l_scope, l_part.to_clob);
+            uc_ai_logger.log('Text received', l_scope, l_part.to_clob);
             l_new_msg := get_text_content(l_part);
             l_normalized_messages.append(l_new_msg);
           end if;
@@ -494,11 +500,11 @@ create or replace package body uc_ai_google as
           l_new_msg := json_object_t();
           l_new_msg.put('role', 'user');
           l_new_msg.put('parts', l_tool_results_parts);
-          l_messages.append(l_new_msg);
+          pio_messages.append(l_new_msg);
 
           -- Continue conversation with tool results - recursive call
-          l_messages := internal_generate_text(
-            p_messages           => l_messages
+          internal_generate_text(
+            pio_messages         => pio_messages
           , p_system_prompt      => p_system_prompt
           , p_max_tool_calls     => p_max_tool_calls
           , p_input_obj          => p_input_obj
@@ -509,13 +515,11 @@ create or replace package body uc_ai_google as
   
     else
       -- No candidates returned
-      logger.log_error('No candidates in response', l_scope);
+      uc_ai_logger.log_error('No candidates in response', l_scope);
       pio_result.put('finish_reason', 'error');
     end if;
 
-    logger.log('End internal_generate_text - final messages count: ' || l_messages.get_size, l_scope);
-
-    return l_messages;
+    uc_ai_logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);
 
   end internal_generate_text;
 
@@ -544,7 +548,7 @@ create or replace package body uc_ai_google as
     l_response_schema    json_object_t;
   begin
     l_result := json_object_t();
-    logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
+    uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
     
     -- Reset global variables
     g_tool_calls := 0;
@@ -621,7 +625,7 @@ create or replace package body uc_ai_google as
           l_tools_wrapper.put('functionDeclarations', l_tools);
           l_tools_array.append(l_tools_wrapper);
           l_input_obj.put('tools', l_tools_array);
-          logger.log('Tools configured', l_scope, 'Tool count: ' || l_tools.get_size);
+          uc_ai_logger.log('Tools configured', l_scope, 'Tool count: ' || l_tools.get_size);
         end;
       end if;
     end if;
@@ -631,8 +635,8 @@ create or replace package body uc_ai_google as
       l_input_obj.put('generationConfig', l_generation_config);
     end if;
 
-    l_google_messages := internal_generate_text(
-      p_messages           => l_google_messages
+    internal_generate_text(
+      pio_messages         => l_google_messages
     , p_system_prompt      => l_system_prompt
     , p_max_tool_calls     => p_max_tool_calls
     , p_input_obj          => l_input_obj
@@ -648,7 +652,7 @@ create or replace package body uc_ai_google as
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_google);
     
-    logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
+    uc_ai_logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
     
     return l_result;
   end generate_text;

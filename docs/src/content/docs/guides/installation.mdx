@@ -10,26 +10,17 @@ sidebar:
 - Oracle Database 12.2 or later
 - Oracle APEX (older versions are fine, this project uses some of the APIs)
 
-## Logger
-
-The project uses the [Logger](https://github.com/OraOpenSource/Logger) package to log trace information like the requests and responses from the AI providers.
-
-I do recommend installing the Logger package aswell as it helps debugging issues and keeping track of how the AI gets used.
-
-However you have the option to install a "no op" (no operation) version of the Logger package which installs the necessary objects so that the packages compile but does not log anything.
-
-If you want to use your own logging solution you can modify the no op version to insert the log messages into your own logging tables.
-
 ## Installing UC AI
+
+UC logs some debug relevant information. If you don't have [Logger](https://github.com/OraOpenSource/Logger)  installed it will log via the `apex_debug` package.
 
 ### Option 1: GitHub release scripts
 
 For each new release of UC AI the release page in GitHub will contain scripts to install the UC AI package and its dependencies.
 
 - `install_uc_ai_complete.sql` installs all UC AI objects
-- `install_uc_ai_complete_with_logger.sql` installs all UC AI objects and the Logger package
-- `logger_no_op.sql` installs Logger in "no op" mode, meaning it will not log anything but the objects will compile. You can run `install_uc_ai_complete.sql` afterwards.
-- `upgrade_packages.sql` upgrades the UC AI packages.Most of the time only packages get modified. So for most releases you just need to run this script to upgrade to a newer version. Please still keep an eye ont the [release notes](https://github.com/United-Codes/uc_ai/releases) to see if there are any changes that require you to run the complete installation script.
+- `install_uc_ai_complete_with_logger.sql` installs all UC AI objects and the  [Logger](https://github.com/OraOpenSource/Logger) package
+- `upgrade_packages.sql` upgrades the UC AI packages. Most of the time only packages get modified. So for most releases you just need to run this script to upgrade to a newer version. Please still keep an eye on the [release notes](https://github.com/United-Codes/uc_ai/releases) to see if there are any changes that require you to run the complete installation script.
 
 Just run the necessary script in your SQL client to install the UC AI package and its dependencies.
 
@@ -61,6 +52,10 @@ sql ./logger_install_no_op.sql
 
 ## Set up API Keys
 
+There are two ways to manage your API keys for the AI providers: Key function or APEX Web Credentials.
+
+### Option 1: Key function
+
 The installation script created the following function. Modify it to return your API keys for the AI providers you want to use.
 
 ```sql
@@ -91,12 +86,30 @@ end uc_ai_get_key;
 /
 ```
 
+### Option 2: APEX Web Credentials
+
+You can also store your secret API keys with APEX Web Credentials. For this you have to have an APEX Workspace for the schema where UC AI is installed. Log in there and head to Workspace Utilities → Web Credentials ([guide with screenshots](/products/uc-ai/docs/help/create-oci-key/#create-apex-web-credential)). Check out the following guides on how to set up the web credentials:
+
+- [Anthropic](/products/uc-ai/docs/providers/anthropic/#creating-a-web-credential)
+- [Google](/products/uc-ai/docs/providers/google/#creating-a-web-credential)
+- [OCI](/products/uc-ai/docs/providers/oci/#prerequisites)
+- [OpenAI](/products/uc-ai/docs/providers/openai/#creating-a-web-credential)
+
+Now before calling any UC AI functions you have to set the package variable for the provider you want to use to the static ID of your web credential. For example if you created a web credential with the static ID `OPENAI` for OpenAI you would run this code:
+
+```sql
+uc_ai_openai.g_apex_web_credential := 'OPENAI';
+```
+
 ## Test if it is working
 
 ```sql
 DECLARE
   l_result JSON_OBJECT_T;
 BEGIN
+  -- If you are using APEX Web Credentials set it here
+  -- uc_ai_openai.g_apex_web_credential := 'OPENAI';
+
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is APEX Office Print?',
     p_provider => uc_ai.c_provider_openai, -- change to your preferred provider

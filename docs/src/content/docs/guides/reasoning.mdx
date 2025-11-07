@@ -13,7 +13,7 @@ Reasoning consumes an additional amount of tokens, making it substantially more 
 
 ## Provider Support
 
-Different providers implement reasoning in various ways. Thats why UC AI provides provider specific settings to control reasoning behavior. See the provider pages for more details on how to configure reasoning for each provider:
+Different providers implement reasoning in various ways. That's why UC AI provides provider specific settings to control reasoning behavior. See the provider pages for more details on how to configure reasoning for each provider:
 
 - [Anthropic Claude](/products/uc-ai/docs/providers/anthropic/#reasoning--extended-thinking)
 - [Google Gemini](/products/uc-ai/docs/providers/google/#reasoning--thinking)
@@ -114,7 +114,7 @@ DECLARE
   l_content_item json_object_t;
   l_reasoning_found boolean := false;
 BEGIN
-  uc_ai.g_enable_reasoning := true;et
+  uc_ai.g_enable_reasoning := true;
   uc_ai_google.g_reasoning_budget := 512;
 
   l_result := uc_ai.generate_text(

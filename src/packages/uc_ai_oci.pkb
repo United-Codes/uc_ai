@@ -29,7 +29,7 @@ create or replace package body uc_ai_oci as
     l_message := p_message.clone();
 
     if l_message.get_string('type') != 'TEXT' then
-      logger.log_error('Message type is not TEXT.', c_scope_prefix || 'get_text_content_generic', l_message.to_clob);
+      uc_ai_logger.log_error('Message type is not TEXT.', c_scope_prefix || 'get_text_content_generic', l_message.to_clob);
       raise uc_ai.e_unhandled_format;
     end if;
 
@@ -57,7 +57,7 @@ create or replace package body uc_ai_oci as
     l_lm_text_content  json_object_t;
   begin
     if not p_chat_response.has('text') then
-      logger.log_error('Cohere response does not contain text field', c_scope_prefix || 'get_text_content_cohere');
+      uc_ai_logger.log_error('Cohere response does not contain text field', c_scope_prefix || 'get_text_content_cohere');
       raise uc_ai.e_unhandled_format;
     end if;
 
@@ -77,7 +77,7 @@ create or replace package body uc_ai_oci as
    */
   procedure convert_lm_messages_to_generic_oci(
     p_lm_messages in json_array_t,
-    po_oci_messages out json_array_t
+    po_oci_messages out nocopy json_array_t
   )
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_generic_oci';
@@ -90,7 +90,7 @@ create or replace package body uc_ai_oci as
     l_oci_content json_array_t;
     l_oci_content_item json_object_t;
   begin
-    logger.log('Converting ' || p_lm_messages.get_size || ' LLM messages to OCI generic format', l_scope);
+    uc_ai_logger.log('Converting ' || p_lm_messages.get_size || ' LLM messages to OCI generic format', l_scope);
     
     po_oci_messages := json_array_t();
 
@@ -216,11 +216,11 @@ create or replace package body uc_ai_oci as
           end if;
 
         else
-          logger.log_warn('Unknown message role: ' || l_role, l_scope);
+          uc_ai_logger.log_warn('Unknown message role: ' || l_role, l_scope);
       end case;
     end loop message_loop;
 
-    logger.log('Converted to ' || po_oci_messages.get_size || ' OCI messages', l_scope);
+    uc_ai_logger.log('Converted to ' || po_oci_messages.get_size || ' OCI messages', l_scope);
   end convert_lm_messages_to_generic_oci;
 
   /*
@@ -230,7 +230,7 @@ create or replace package body uc_ai_oci as
    */
   procedure convert_lm_messages_to_cohere_oci(
     p_lm_messages in json_array_t,
-    po_oci_messages out json_array_t
+    po_oci_messages out nocopy json_array_t
   )
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_cohere_oci';
@@ -240,7 +240,6 @@ create or replace package body uc_ai_oci as
     l_content json_array_t;
     l_content_item json_object_t;
     l_content_type varchar2(255 char);
-    l_oci_content json_array_t;
     l_oci_content_item json_object_t;
 
     l_has_tool_call boolean := false;
@@ -248,7 +247,7 @@ create or replace package body uc_ai_oci as
     l_tool_call_message clob;
     l_tool_calls json_array_t;
   begin
-    logger.log('Converting ' || p_lm_messages.get_size || ' LLM messages to OCI cohere format', l_scope, p_lm_messages.to_clob);
+    uc_ai_logger.log('Converting ' || p_lm_messages.get_size || ' LLM messages to OCI cohere format', l_scope, p_lm_messages.to_clob);
     
     po_oci_messages := json_array_t();
 
@@ -257,7 +256,7 @@ create or replace package body uc_ai_oci as
     loop
       l_lm_message := treat(p_lm_messages.get(i) as json_object_t);
       l_role := l_lm_message.get_string('role');
-      logger.log('Processing LLM message', l_scope, l_lm_message.to_clob);
+      uc_ai_logger.log('Processing LLM message', l_scope, l_lm_message.to_clob);
 
       case l_role
         when 'system' then
@@ -265,7 +264,7 @@ create or replace package body uc_ai_oci as
         when 'user' then
           -- User message: extract content from content array
           l_content := l_lm_message.get_array('content');
-          logger.log('User message content', l_scope, l_content.to_clob);
+          uc_ai_logger.log('User message content', l_scope, l_content.to_clob);
 
           <<user_content_loop>>
           for j in 0 .. l_content.get_size - 1
@@ -279,13 +278,13 @@ create or replace package body uc_ai_oci as
                 l_oci_message := json_object_t();
                 l_oci_message.put('role', 'USER');
                 l_oci_message.put('message', l_content_item.get_clob('text'));
-                logger.log('Append user message', l_scope, l_oci_message.to_clob);
+                uc_ai_logger.log('Append user message', l_scope, l_oci_message.to_clob);
                 po_oci_messages.append(l_oci_message);
               when 'file' then
-                logger.log_error('Cohere cannot handle files', l_scope);
+                uc_ai_logger.log_error('Cohere cannot handle files', l_scope);
                 raise uc_ai.e_unhandled_format;
               else
-                logger.log_error('Unknown content type in user message: ' || l_content_type, l_scope);
+                uc_ai_logger.log_error('Unknown content type in user message: ' || l_content_type, l_scope);
                 raise uc_ai.e_unhandled_format;
             end case;
           end loop user_content_loop;
@@ -332,7 +331,7 @@ create or replace package body uc_ai_oci as
 
                   l_tool_calls.append(l_tool_call);
                 else
-                  logger.log_error('Unknown content type in assistant message: ' || l_content_type, l_scope);
+                  uc_ai_logger.log_error('Unknown content type in assistant message: ' || l_content_type, l_scope);
                   raise uc_ai.e_unhandled_format;
               end case;
                 l_oci_message := json_object_t();
@@ -374,11 +373,11 @@ create or replace package body uc_ai_oci as
           end if;
 
         else
-          logger.log_warn('Unknown message role: ' || l_role, l_scope);
+          uc_ai_logger.log_warn('Unknown message role: ' || l_role, l_scope);
       end case;
     end loop message_loop;
 
-    logger.log('Cohere messages after conversion: ', l_scope, po_oci_messages.to_clob);
+    uc_ai_logger.log('Cohere messages after conversion: ', l_scope, po_oci_messages.to_clob);
 
     declare
       l_last_message json_object_t;
@@ -395,7 +394,7 @@ create or replace package body uc_ai_oci as
       end if;
     end;
 
-    logger.log('Converted to ' || po_oci_messages.get_size || ' OCI messages', l_scope);
+    uc_ai_logger.log('Converted to ' || po_oci_messages.get_size || ' OCI messages', l_scope);
   end convert_lm_messages_to_cohere_oci;
 
   /*
@@ -418,15 +417,14 @@ create or replace package body uc_ai_oci as
     return c_api_url_base || l_region || '.oci.oraclecloud.com' || c_api_endpoint;
   end build_api_url;
 
-  function internal_generate_text (
-    p_messages           in json_array_t
+  procedure internal_generate_text (
+    pio_messages         in out nocopy json_array_t
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
-  , pio_result           in out json_object_t
-  ) return json_array_t
+  , pio_result           in out nocopy json_object_t
+  )
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
-    l_messages     json_array_t := json_array_t();
     l_input_obj    json_object_t;
     l_chat_request json_object_t;
     l_api_url      varchar2(500 char);
@@ -438,19 +436,17 @@ create or replace package body uc_ai_oci as
     l_code varchar2(255 char);
   begin
     if g_tool_calls >= p_max_tool_calls then
-      logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
+      uc_ai_logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
       raise uc_ai.e_max_calls_exceeded;
     end if;
-
-    l_messages := p_messages.clone();
     l_input_obj := p_input_obj;
     l_chat_request := l_input_obj.get_object('chatRequest');
 
     if g_mode = gc_mode_generic then
-      l_chat_request.put('messages', l_messages);
+      l_chat_request.put('messages', pio_messages);
     else
-      l_chat_request.put('chatHistory', l_messages);
+      l_chat_request.put('chatHistory', pio_messages);
       l_chat_request.put('message', g_cohere_user_message);
 
       if g_cohere_system_prompt is not null then
@@ -462,7 +458,7 @@ create or replace package body uc_ai_oci as
     -- Build API URL
     l_api_url := build_api_url();
 
-    logger.log('Request body', l_scope, l_input_obj.to_clob);
+    uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
 
     apex_web_service.clear_request_headers;
     apex_web_service.set_request_headers('Content-Type', 'application/json; charset=utf-8');   
@@ -475,26 +471,26 @@ create or replace package body uc_ai_oci as
       p_credential_static_id => g_apex_web_credential
     );
 
-    logger.log('Response', l_scope, l_resp);
+    uc_ai_logger.log('Response', l_scope, l_resp);
 
     l_resp_json := json_object_t.parse(l_resp);
 
     if l_resp_json.has('error') then
       l_temp_obj := l_resp_json.get_object('error');
-      logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
+      uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
       raise uc_ai.e_error_response;
     elsif l_resp_json.has('code') then
       l_code := l_resp_json.get_string('code');
-      logger.log('API returned code: ' || l_code, l_scope);
+      uc_ai_logger.log('API returned code: ' || l_code, l_scope);
       case l_code 
         when '400' then
-          logger.log_error('Bad request', l_scope);
+          uc_ai_logger.log_error('Bad request', l_scope);
           raise uc_ai.e_error_response;
         when '401' then
-          logger.log_error('Authentication error', l_scope);
+          uc_ai_logger.log_error('Authentication error', l_scope);
           raise uc_ai.e_error_response;
         when '404' then
-          logger.log_error('Model not found', l_scope);
+          uc_ai_logger.log_error('Model not found', l_scope);
           raise uc_ai.e_model_not_found_error;
         else
           null;
@@ -529,8 +525,6 @@ create or replace package body uc_ai_oci as
             l_used_tool boolean := false;
 
             l_new_msg json_object_t;
-            l_content clob;
-            l_oci_content json_array_t;
           begin
             l_choices := l_chat_response.get_array('choices');
 
@@ -571,7 +565,7 @@ create or replace package body uc_ai_oci as
                     l_tool_response := json_object_t();
                     l_tool_response.put('role', 'ASSISTANT');
                     l_tool_response.put('toolCalls', l_tool_call_arr);
-                    l_messages.append(l_tool_response);
+                    pio_messages.append(l_tool_response);
 
                     <<tool_calls>>
                     for k in 0 .. l_tool_call_arr.get_size - 1 
@@ -583,15 +577,15 @@ create or replace package body uc_ai_oci as
                       l_tool_name := l_tool_call_item.get_string('name');
                       l_tool_args_str := l_tool_call_item.get_string('arguments');
 
-                      logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name);
+                      uc_ai_logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name);
 
                       if l_tool_args_str is not null then
                         -- Parse tool arguments if available
                         l_tool_args := json_object_t.parse(l_tool_args_str);
-                        logger.log('Tool args', l_scope, 'Args: ' || l_tool_args.to_clob);
+                        uc_ai_logger.log('Tool args', l_scope, 'Args: ' || l_tool_args.to_clob);
                       else
                         l_tool_args := json_object_t();
-                        logger.log('Tool args', l_scope, 'No args provided');
+                        uc_ai_logger.log('Tool args', l_scope, 'No args provided');
                       end if;
 
                       l_new_msg := uc_ai_message_api.create_tool_call_content(
@@ -609,11 +603,11 @@ create or replace package body uc_ai_oci as
                         );
                       exception
                         when others then
-                          logger.log_error('Tool execution failed', l_scope, 'Tool: ' || l_tool_name || ', Error: ' || sqlerrm || chr(10) || sys.dbms_utility.format_error_backtrace);
+                          uc_ai_logger.log_error('Tool execution failed', l_scope, 'Tool: ' || l_tool_name || ', Error: ' || sqlerrm || chr(10) || sys.dbms_utility.format_error_backtrace);
                           l_tool_result := 'Error executing tool: ' || sqlerrm;
                       end;
 
-                      logger.log('Tool result', l_scope, l_tool_result);
+                      uc_ai_logger.log('Tool result', l_scope, l_tool_result);
 
                       l_tool_response := json_object_t();
                       l_tool_response.put('role', 'TOOL');
@@ -623,7 +617,7 @@ create or replace package body uc_ai_oci as
                       l_tool_response_content.put('text', l_tool_result);
                       l_tool_content.append(l_tool_response_content);
                       l_tool_response.put('content', l_tool_content);
-                      l_messages.append(l_tool_response);
+                      pio_messages.append(l_tool_response);
 
                       l_new_msg := uc_ai_message_api.create_tool_result_content(
                         p_tool_call_id => l_tool_call_id,
@@ -637,7 +631,7 @@ create or replace package body uc_ai_oci as
                 end if;
 
               else
-                logger.log_error('Unknown role in OCI response: ' || l_role, l_scope);
+                uc_ai_logger.log_error('Unknown role in OCI response: ' || l_role, l_scope);
               end if;
             end loop choices_loop;
             
@@ -649,8 +643,8 @@ create or replace package body uc_ai_oci as
               pio_result.put('tool_calls_count', g_tool_calls);
 
               -- Continue conversation with tool results - recursive call
-              l_messages := internal_generate_text(
-                p_messages           => l_messages
+              internal_generate_text(
+                pio_messages         => pio_messages
               , p_max_tool_calls     => p_max_tool_calls
               , p_input_obj          => p_input_obj
               , pio_result           => pio_result
@@ -661,11 +655,11 @@ create or replace package body uc_ai_oci as
             pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
           end;
         else
-          logger.log_error('No text in OCI chatResponse', l_scope);
+          uc_ai_logger.log_error('No text in OCI chatResponse', l_scope);
           pio_result.put('finish_reason', 'error');
         end if;
       else
-        l_messages := l_chat_response.get_array('chatHistory');
+        pio_messages := l_chat_response.get_array('chatHistory');
 
         -- cohere
         if l_chat_response.has('toolCalls') then
@@ -696,10 +690,10 @@ create or replace package body uc_ai_oci as
 
               l_tool_call_id := 'tool_call_' || i;
               l_tool_name := l_tool_call_item.get_string('name');
-              logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name);
+              uc_ai_logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name);
 
               l_tool_args := treat(l_tool_call_item.get('parameters') as json_object_t);
-              logger.log('Tool call', l_scope, 'Tool Args: ' || l_tool_args.to_clob);
+              uc_ai_logger.log('Tool call', l_scope, 'Tool Args: ' || l_tool_args.to_clob);
 
               l_new_msg := uc_ai_message_api.create_tool_call_content(
                 p_tool_call_id => l_tool_call_id
@@ -716,11 +710,11 @@ create or replace package body uc_ai_oci as
                 );
               exception
                 when others then
-                  logger.log_error('Tool execution failed', l_scope, 'Tool: ' || l_tool_name || ', Error: ' || sqlerrm || chr(10) || sys.dbms_utility.format_error_backtrace);
+                  uc_ai_logger.log_error('Tool execution failed', l_scope, 'Tool: ' || l_tool_name || ', Error: ' || sqlerrm || chr(10) || sys.dbms_utility.format_error_backtrace);
                   l_tool_result := 'Error executing tool: ' || sqlerrm;
               end;
 
-              logger.log('Tool result', l_scope, l_tool_result);
+              uc_ai_logger.log('Tool result', l_scope, l_tool_result);
 
               l_tool_response := json_object_t();
 
@@ -761,10 +755,10 @@ create or replace package body uc_ai_oci as
             l_chat_request.put('toolResults', l_oci_tool_results);
             l_input_obj.put('chatRequest', l_chat_request);
 
-            l_messages := internal_generate_text(
-              p_messages           => l_messages
+            internal_generate_text(
+              pio_messages         => pio_messages
             , p_max_tool_calls     => p_max_tool_calls
-            , p_input_obj          => l_input_obj
+            , p_input_obj          => p_input_obj
             , pio_result           => pio_result
               );
           end;
@@ -779,19 +773,17 @@ create or replace package body uc_ai_oci as
             g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
           end;
         else
-          logger.log_error('No text in OCI chatResponse', l_scope);
+          uc_ai_logger.log_error('No text in OCI chatResponse', l_scope);
           pio_result.put('finish_reason', 'error');
         end if;
 
       end if;
     else
-      logger.log_error('No chatResponse in OCI response', l_scope);
+      uc_ai_logger.log_error('No chatResponse in OCI response', l_scope);
       pio_result.put('finish_reason', 'error');
     end if;
 
-    logger.log('End internal_generate_text - final messages count: ' || l_messages.get_size, l_scope);
-
-    return l_messages;
+    uc_ai_logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);
 
   end internal_generate_text;
 
@@ -814,7 +806,7 @@ create or replace package body uc_ai_oci as
     l_tools              json_array_t;
   begin
     l_result := json_object_t();
-    logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
+    uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
 
     if p_model like 'cohere.%' then
       g_mode := gc_mode_cohere;
@@ -843,7 +835,7 @@ create or replace package body uc_ai_oci as
     -- Build OCI request structure
     -- Set compartment ID (must be configured)
     if g_compartment_id is null then
-      logger.log_error('OCI compartment ID not configured', l_scope);
+      uc_ai_logger.log_error('OCI compartment ID not configured', l_scope);
       raise_application_error(-20001, 'OCI compartment ID (g_compartment_id) must be configured');
     end if;
     
@@ -910,8 +902,8 @@ create or replace package body uc_ai_oci as
     -- Note: Tool support would need to be added here if OCI supports it
     -- This would require additional research into OCI's tool calling capabilities
 
-    l_oci_messages := internal_generate_text(
-      p_messages           => l_oci_messages
+    internal_generate_text(
+      pio_messages         => l_oci_messages
     , p_max_tool_calls     => p_max_tool_calls
     , p_input_obj          => l_input_obj
     , pio_result           => l_result
@@ -926,7 +918,7 @@ create or replace package body uc_ai_oci as
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_oci);
     
-    logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
+    uc_ai_logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
     
     return l_result;
   end generate_text;

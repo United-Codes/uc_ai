@@ -1,4 +1,5 @@
 create or replace package uc_ai_google as
+  -- @dblinter ignore(g-7230): allow use of global variables
 
   /**
   * UC AI
@@ -27,6 +28,9 @@ create or replace package uc_ai_google as
   -- Min and max values are model-dependent, reasoning can't be disabled with 2.5 Pro
   -- More info at https://ai.google.dev/gemini-api/docs/thinking#set-budget
   g_reasoning_budget pls_integer; -- -1 → dynamic, 0 → no reasoning budget
+
+  -- type: url query string: key=your_api_key
+  g_apex_web_credential varchar2(255 char);
 
   /*
    * Google Gemini implementation for text generation 

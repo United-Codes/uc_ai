@@ -1,0 +1,68 @@
+---
+title: Generate Embedding
+description: Detailed guide to the generate_embeddings function with parameter and return object description
+sidebar:
+  order: 20
+
+---
+
+## Parameters
+
+This is the functions signature of `generate_embeddings`:
+
+```sql
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_provider in provider_type
+  , p_model in model_type
+  ) return json_array_t;
+```
+
+Most notably `p_input` receives an array of strings as `generate_embeddings` which the function embeds in one go also returning an array of embeddings.
+
+| Parameter    | Type            | Required | Description                                                  |
+| ------------ | --------------- | -------- | ------------------------------------------------------------ |
+| `p_input`    | `json_array_t`  | Yes      | Array of texts to embed                                      |
+| `p_provider` | `provider_type` | Yes      | AI provider to use. See `uc_ai` spec for constants.          |
+| `p_model`    | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants. |
+
+## Usage Example
+
+```sql
+declare
+  l_result json_array_t;
+  l_array_clob clob;
+begin
+  uc_ai.g_base_url := 'host.containers.internal:11434/api';
+  uc_ai.g_enable_tools := false; -- disable tools for this test
+  uc_ai.g_enable_reasoning := false; -- disable reasoning for this test
+
+  l_result := uc_ai.generate_embeddings(
+    p_input => json_array_t('["APEX Office Print lets you create and manage print jobs directly from your APEX applications.", "UC AI allows you to easily use AI from PL/SQL"]'),
+    p_provider => uc_ai.c_provider_ollama,
+    p_model => 'granite-embedding:30m'
+  );
+  
+  -- example result: [0.340329043034, 0.2334029034]
+  
+  -- l_result.get_size → 2
+  -- l_result.get(0) → 0.340329043034
+end;
+```
+
+You can convert the result to an Oracle Vector datatype on 23ai or 26ai with the following command ([docs](https://docs.oracle.com/en/database/oracle/oracle-database/26/vecse/vector-vecse.html)):
+
+```sql
+declare
+  l_result json_array_t := json_array_t('[0.340329043034, 0.2334029034]');
+	l_my_vector vector;
+begin
+  -- convert JSON array to Oracle native vector type:
+	l_my_vector := vector(l_result.to_clob);
+	
+	-- log Oracle native vector type
+  sys.dbms_output.put_line(from_vector(l_my_vector));
+end;
+```
+
+On older databases you can send the JSON array vector to any third party vector database or process it manually.

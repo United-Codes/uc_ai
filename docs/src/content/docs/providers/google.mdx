@@ -21,6 +21,22 @@ The UC AI Google package provides integration with Google's Gemini models, allow
 
 You can get an API key by signing up at [Google AI Studio](https://aistudio.google.com/).
 
+## Creating a Web Credential
+
+To use your Google key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following settings:
+
+- Authentication Type: URL Query String
+- Credential Name: `key`
+- Credential Secret: `<your_api_key>`
+
+We generally recommend also setting `Valid for URLs` to the Google API (https://generativelanguage.googleapis.com/) to limit the scope of the credential.
+
+To use the web credential in your PL/SQL code, set the package variable `uc_ai_google.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
+
+```sql
+uc_ai_google.g_apex_web_credential := 'GOOGLE';
+```
+
 ## Models
 
 Google offers the Gemini family of models with different capabilities and performance characteristics. The UC AI Google package provides constants for all current models:

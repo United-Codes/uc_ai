@@ -59,12 +59,17 @@ create or replace package body uc_ai_message_api as
   as
     l_b64 clob;
   begin
-    -- Convert BLOB to Base64 CLOB
-    l_b64 := apex_web_service.blob2clobbase64(
-      p_blob => p_data_blob,
-      p_newlines => 'N',
-      p_padding => 'Y'
-    );
+    $if wwv_flow_api.c_current < 20231031 $then
+      -- APEX version < 21.1
+      l_b64 := apex_web_service.blob2clobbase64(p_data_blob);
+    $else
+      -- Convert BLOB to Base64 CLOB
+      l_b64 := apex_web_service.blob2clobbase64(
+        p_blob => p_data_blob,
+        p_newlines => 'N',
+        p_padding => 'Y'
+      );
+    $end
 
     return create_file_content(p_media_type, l_b64, p_filename, p_provider_options);  
 

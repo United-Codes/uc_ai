@@ -21,12 +21,11 @@ echo "Generating install_uc_ai.sql..."
 # Start writing the install script
 cat > "$OUTPUT_FILE" << 'EOF'
 -- UC AI Framework Installation Script
--- Run this script to install the complete framework with OpenAI and Anthropic support
-
 PROMPT ===================================================
 PROMPT UC AI Framework Installation Starting...
 PROMPT ===================================================
 
+set sqlblanklines on
 EOF
 
 # Install tables first
@@ -117,6 +116,18 @@ while IFS= read -r body_file; do
 done < <(get_package_bodies_ordered "$SRC_DIR")
 
 echo "" >> "$OUTPUT_FILE"
+
+# Run post-installation scripts
+if [ -d "$SRC_DIR/post-scripts" ]; then
+    echo "PROMPT Running post-installation scripts..." >> "$OUTPUT_FILE"
+    for post_script in "$SRC_DIR/post-scripts"/*.sql; do
+        if [ -f "$post_script" ]; then
+            echo "@@src/post-scripts/$(basename "$post_script")" >> "$OUTPUT_FILE"
+        fi
+    done
+    echo "" >> "$OUTPUT_FILE"
+fi
+
 echo "PROMPT ===================================================" >> "$OUTPUT_FILE"
 echo "PROMPT UC AI installation complete!" >> "$OUTPUT_FILE"
 echo "PROMPT Refer to the documentation for usage instructions: https://www.united-codes.com/products/uc-ai/docs/" >> "$OUTPUT_FILE"
@@ -137,6 +148,18 @@ echo "Dependencies:"
 [ -f "$SRC_DIR/dependencies/key_function.sql" ] && echo "  - src/dependencies/key_function.sql"
 
 list_installed_packages "$SRC_DIR" false
+
+echo ""
+echo "Post-installation scripts:"
+if [ -d "$SRC_DIR/post-scripts" ]; then
+    for post_script in "$SRC_DIR/post-scripts"/*.sql; do
+        if [ -f "$post_script" ]; then
+            echo "  - src/post-scripts/$(basename "$post_script")"
+        fi
+    done
+else
+    echo "  (none found)"
+fi
 
 echo ""
 echo "Installation order ensures proper dependency resolution."

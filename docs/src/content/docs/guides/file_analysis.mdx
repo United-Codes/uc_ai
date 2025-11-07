@@ -19,7 +19,7 @@ This guide demonstrates how to implement file analysis workflows using the UC AI
 
 ## Example 1: Analyze a PDF file
 
-In this example we are using a simple PDF that contains a table of characters for the TV show "The Office". It contaims this data:
+In this example we are using a simple PDF that contains a table of characters for the TV show "The Office". It contains this data:
 
 | First Name | Last Name | Email                            |
 | ---------- | --------- | -------------------------------- |
@@ -30,7 +30,7 @@ In this example we are using a simple PDF that contains a table of characters fo
 | Dwight     | Schrute   | dwight.schrute@dundermifflin.com |
 | Kevin      | Malone    | kevin.malone@dundermifflin.com   |
 
-As we have to attach the file itself we will manually creat a message array with a system message, a user message and the file content.
+As we have to attach the file itself we will manually create a message array with a system message, a user message and the file content.
 
 ```sql
 declare
@@ -41,7 +41,7 @@ declare
 begin
   -- Create a system message to set the context for the AI
   l_messages.append(uc_ai_message_api.create_system_message(
-    'You are an assistant answering trivia questions about TV Shows. Please answeer in super short sentences.'));
+    'You are an assistant answering trivia questions about TV Shows. Please answer in super short sentences.'));
 
   -- The user message consists of two parts: the file content and a text content
 

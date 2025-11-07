@@ -30,6 +30,11 @@ jobs:
           cd scripts
           ./generate_upgrade_script.sh
 
+      - name: Generate uninstall script
+        run: |
+          cd scripts
+          ./generate_uninstall_script.sh
+
       - name: Find migration file for release
         id: find_migration
         run: |
@@ -58,10 +63,12 @@ jobs:
           ls -la install_uc_ai_complete.sql
           ls -la install_uc_ai_complete_with_logger.sql
           ls -la upgrade_packages.sql
+          ls -la uninstall.sql
           echo "File sizes:"
           wc -l install_uc_ai_complete.sql
           wc -l install_uc_ai_complete_with_logger.sql
           wc -l upgrade_packages.sql
+          wc -l uninstall.sql
 
           if [ "${{ steps.find_migration.outputs.has_migration }}" = "true" ]; then
             echo "Migration file: ${{ steps.find_migration.outputs.migration_file }}"
@@ -77,5 +84,6 @@ jobs:
             ./src/dependencies/logger_3.1.1/logger_no_op.sql
             upgrade_packages.sql
             ${{ steps.find_migration.outputs.has_migration == 'true' && steps.find_migration.outputs.migration_file || '' }}
+            uninstall.sql
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

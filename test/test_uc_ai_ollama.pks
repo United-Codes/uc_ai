@@ -53,5 +53,8 @@ create or replace package test_uc_ai_ollama as
   --%test(Structured output)
   procedure structured_output;
 
+  --%test(Embeddings)
+  procedure embeddings;
+
 end test_uc_ai_ollama;
 /

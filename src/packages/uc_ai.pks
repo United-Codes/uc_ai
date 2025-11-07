@@ -1,4 +1,6 @@
 create or replace package uc_ai as
+  -- @dblinter ignore(g-7230): allow use of global variables
+
 
   /**
   * UC AI
@@ -14,6 +16,7 @@ create or replace package uc_ai as
   c_provider_google    constant provider_type := 'google';
   c_provider_ollama    constant provider_type := 'ollama';
   c_provider_oci       constant provider_type := 'oci';
+  -- c_provider_xai       constant provider_type := 'xai';
 
   subtype model_type is varchar2(128 char);
 
@@ -34,6 +37,8 @@ create or replace package uc_ai as
   g_enable_tools boolean := false;
   g_tool_tags apex_t_varchar2;
 
+  -- internal use only
+  g_provider_override varchar2(4000 char);
 
   e_max_calls_exceeded exception;
   pragma exception_init(e_max_calls_exceeded, -20301);
@@ -68,6 +73,12 @@ create or replace package uc_ai as
   , p_max_tool_calls        in pls_integer default null
   , p_response_json_schema  in json_object_t default null
   ) return json_object_t;
+
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_provider in provider_type
+  , p_model in model_type
+  ) return json_array_t;
 
 end uc_ai;
 /

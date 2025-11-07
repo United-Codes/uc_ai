@@ -1,4 +1,5 @@
 create or replace package uc_ai_ollama as
+  -- @dblinter ignore(g-7230): allow use of global variables
 
   /**
   * UC AI
@@ -10,6 +11,8 @@ create or replace package uc_ai_ollama as
 
   -- See https://ollama.com/library for available models
 
+  g_apex_web_credential varchar2(255 char);
+
   /*
    * Ollama implementation for text generation
    */
@@ -19,6 +22,11 @@ create or replace package uc_ai_ollama as
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
   ) return json_object_t;
+
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_model in uc_ai.model_type
+  ) return json_array_t;
 
 end uc_ai_ollama;
 /

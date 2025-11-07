@@ -1,4 +1,5 @@
 create or replace package body test_uc_ai_ollama as
+  -- @dblinter ignore(g-5010): allow logger in test packages
 
   c_model_qwen_1b constant uc_ai.model_type := 'qwen3:1.7b';
   c_model_qwen_4b constant uc_ai.model_type := 'qwen3:4b';
@@ -301,15 +302,16 @@ create or replace package body test_uc_ai_ollama as
     for i in 0 .. l_second_message_content.get_size - 1 
     loop
       l_content := treat(l_second_message_content.get(i) as json_object_t);
-      if l_content.get_string('type') = 'reasoning' then
-        sys.dbms_output.put_line('Reasoning content: ' || l_content.get_clob('text'));
-        l_reasoning_message_found := true;
-      elsif l_content.get_string('type') = 'text' then
-        null;
-      else
-        sys.dbms_output.put_line('Unknown content type: ' || l_content.get_string('type'));
-        ut.expect(false, 'Unknown content type in reasoning response: ' || l_content.get_string('type')).to_equal(true);
-      end if;
+      case l_content.get_string('type')
+         when 'reasoning' then
+            sys.dbms_output.put_line('Reasoning content: ' || l_content.get_clob('text'));
+           l_reasoning_message_found := true;
+         when 'text' then
+            null;
+         else
+            sys.dbms_output.put_line('Unknown content type: ' || l_content.get_string('type'));
+           ut.expect(false, 'Unknown content type in reasoning response: ' || l_content.get_string('type')).to_equal(true);
+      end case;
     end loop assistant_content_loop;
 
     ut.expect(l_reasoning_message_found, 'No reasoning message found in response').to_equal(true);
@@ -380,12 +382,30 @@ create or replace package body test_uc_ai_ollama as
     else
       sys.dbms_output.put_line('No structured output received');
     end if;
-    
-  exception
-    when others then
-      sys.dbms_output.put_line('Error testing Ollama: ' || sqlerrm);
-      raise; -- Re-raise the exception so the test fails
   end structured_output;
+
+  procedure embeddings
+  as
+    l_result json_array_t;
+    l_array_clob clob;
+  begin
+    uc_ai.g_base_url := 'host.containers.internal:11434/api';
+    uc_ai.g_enable_tools := false; -- disable tools for this test
+    uc_ai.g_enable_reasoning := false; -- disable reasoning for this test
+
+    l_result := uc_ai.generate_embeddings(
+      p_input => json_array_t('["APEX Office Print lets you create and manage print jobs directly from your APEX applications."]'),
+      p_provider => uc_ai.c_provider_ollama,
+      p_model => 'granite-embedding:30m'
+    );
+    
+
+    ut.expect(l_result).to_be_not_null();
+    l_array_clob := l_result.to_clob;
+    sys.dbms_output.put_line('Embeddings array: ' || l_array_clob);
+    ut.expect(l_result.get_size).to_equal(1);
+    ut.expect(treat(l_result.get(0) as json_array_t).get_size).to_be_greater_than(0);
+  end embeddings;
 
 end test_uc_ai_ollama;
 /

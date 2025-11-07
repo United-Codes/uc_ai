@@ -21,6 +21,22 @@ The UC AI OpenAI package provides integration with OpenAI's GPT models, allowing
 
 You can get an API key by signing up at [OpenAI Platform](https://platform.openai.com/).
 
+## Creating a Web Credential
+
+To use your OpenAI key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following settings:
+
+- Authentication Type: HTTP Header
+- Credential Name: `Authorization`
+- Credential Secret: `Bearer <your_api_key>`
+
+We generally recommend also setting `Valid for URLs` to the OpenAI API (https://api.openai.com/) to limit the scope of the credential.
+
+To use the web credential in your PL/SQL code, set the package variable `uc_ai_openai.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
+
+```sql
+uc_ai_openai.g_apex_web_credential := 'OPENAI';
+```
+
 ## Models
 
 OpenAI offers a wide range of models optimized for different use cases. The UC AI OpenAI package provides constants for all current models:
@@ -142,3 +158,57 @@ The reasoning effort parameter controls how many reasoning tokens are generated 
 Refer to OpenAI's [reasoning best practices guide](https://platform.openai.com/docs/guides/reasoning-best-practices#page-top) for advanced usage and best practices.
 
 OpenAI does not return reasoning summary messages like some other providers. It only returns the final message after reasoning is complete.
+
+## Using OpenAI API compliant providers
+
+Many providers like DeepSeek or Perplexity offer APIs that behave the same way as the OpenAI API. You can use them with UC AI as well even though it is not first level supported by the package.
+
+### Authorization
+
+To use your provider specific key instead of a OpenAI key you have two methods:
+
+**1: Add key to key function**
+
+Add the provider key [to your key function](/products/uc-ai//docs/guides/installation/#option-1-key-function) with a custom name:
+
+```sql
+  case p_provider
+    when 'deepseek' then
+      return 'your_deepseek_key';
+```
+
+When calling the provider make sure to override this global variable:
+
+```sql
+uc_ai.g_provider_override := 'deepseek';
+```
+
+**2: Use an APEX Web Credential**
+
+Create an APEX Web Credential passing the secret in the desired format [like described in this guide](/products/uc-ai/docs/guides/installation/#option-2-apex-web-credentials). Then reference the Web Credential the following way:
+
+```sql
+uc_ai_openai.g_apex_web_credential := 'STATIC_ID_OF_WEB_CREDENTIAL';
+```
+
+### Calling the LLM Provider
+
+```sql
+-- override base url of provider
+uc_ai.g_base_url := 'https://api.deepseek.com';
+
+-- based on your chosen way of authentication either set web credential or provider override
+-- uc_ai.g_provider_override := 'deepseek';
+-- uc_ai_openai.g_apex_web_credential := 'MY_DEEPKSEEK_WEB_CREDENTIAL';
+
+l_result := uc_ai.GENERATE_TEXT(
+  p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What an I cook with that?',
+  p_provider => uc_ai.c_provider_openai,
+  p_model => 'deepseek-chat' -- set desired model
+);
+```
+
+
+
+
+

@@ -40,40 +40,40 @@ create or replace package body uc_ai_tools_api as
   as
     l_scope logger_logs.scope%type := gc_scope_prefix || 'convert_input_schema_to_cohere';
     
-    l_result_obj     json_object_t := json_object_t();
-    l_properties     json_object_t;
-    l_parameters_obj json_object_t;
-    l_param_props    json_object_t;
-    l_required_arr   json_array_t;
-    l_param_obj      json_object_t;
-    l_keys           json_key_list;
-    l_required_keys  json_key_list;
-    l_prop_name      varchar2(255 char);
-    l_is_required    boolean;
+    l_result_obj        json_object_t := json_object_t();
+    l_properties        json_object_t;
+    l_parameters_obj    json_object_t;
+    l_param_props       json_object_t;
+    l_required_arr      json_array_t;
+    l_param_obj         json_object_t;
+    l_keys_arr          json_key_list;
+    l_required_keys_arr json_key_list;
+    l_prop_name         varchar2(255 char);
+    l_is_required       boolean;
     
   begin
     -- Get the properties object from the input schema
     l_properties := treat(p_input_schema.get('properties') as json_object_t);
     
     if l_properties is null then
-      logger.log_error('No properties found in input schema', l_scope);
+      uc_ai_logger.log_error('No properties found in input schema', l_scope);
       return l_result_obj;
     end if;
     
     -- Look for the parameters object within properties
     -- In most cases this will be the first (and likely only) property
-    l_keys := l_properties.get_keys;
+    l_keys_arr := l_properties.get_keys;
     
-    if l_keys is null or l_keys.count = 0 then
-      logger.log_error('No properties keys found in input schema', l_scope);
+    if l_keys_arr is null or l_keys_arr.count = 0 then
+      uc_ai_logger.log_error('No properties keys found in input schema', l_scope);
       return l_result_obj;
     end if;
     
     -- Get the first property (assumed to be the parameters object)
-    l_parameters_obj := treat(l_properties.get(l_keys(1)) as json_object_t);
+    l_parameters_obj := treat(l_properties.get(l_keys_arr(1)) as json_object_t);
     
     if l_parameters_obj is null then
-      logger.log_error('Parameters object is null for key: %s', l_scope, l_keys(1));
+      uc_ai_logger.log_error('Parameters object is null for key: %s', l_scope, l_keys_arr(1));
       return l_result_obj;
     end if;
     
@@ -81,7 +81,7 @@ create or replace package body uc_ai_tools_api as
     l_param_props := treat(l_parameters_obj.get('properties') as json_object_t);
     
     if l_param_props is null then
-      logger.log_error('No properties found in parameters object', l_scope);
+      uc_ai_logger.log_error('No properties found in parameters object', l_scope);
       return l_result_obj;
     end if;
     
@@ -89,21 +89,21 @@ create or replace package body uc_ai_tools_api as
     l_required_arr := treat(l_parameters_obj.get('required') as json_array_t);
     
     -- Convert required array to a list for easier lookup
-    l_required_keys := json_key_list();
+    l_required_keys_arr := json_key_list();
     if l_required_arr is not null then
       <<required_loop>>
       for i in 0 .. l_required_arr.get_size - 1 loop
-        l_required_keys.extend;
-        l_required_keys(l_required_keys.count) := l_required_arr.get_string(i);
+        l_required_keys_arr.extend;
+        l_required_keys_arr(l_required_keys_arr.count) := l_required_arr.get_string(i);
       end loop required_loop;
     end if;
     
     -- Process each property in the parameters
-    l_keys := l_param_props.get_keys;
+    l_keys_arr := l_param_props.get_keys;
     
     <<property_loop>>
-    for i in 1 .. l_keys.count loop
-      l_prop_name := l_keys(i);
+    for i in 1 .. l_keys_arr.count loop
+      l_prop_name := l_keys_arr(i);
       l_param_obj := treat(l_param_props.get(l_prop_name) as json_object_t);
       
       if l_param_obj is not null then
@@ -112,10 +112,10 @@ create or replace package body uc_ai_tools_api as
         
         -- Check if this property is required
         l_is_required := false;
-        if l_required_keys is not null then
+        if l_required_keys_arr is not null then
           <<check_required>>
-          for j in 1 .. l_required_keys.count loop
-            if l_required_keys(j) = l_prop_name then
+          for j in 1 .. l_required_keys_arr.count loop
+            if l_required_keys_arr(j) = l_prop_name then
               l_is_required := true;
               exit;
             end if;
@@ -130,13 +130,13 @@ create or replace package body uc_ai_tools_api as
       end if;
     end loop property_loop;
     
-    logger.log('Converted schema to Cohere format', l_scope, l_result_obj.to_clob());
+    uc_ai_logger.log('Converted schema to Cohere format', l_scope, l_result_obj.to_clob());
     
     return l_result_obj;
     
   exception
     when others then
-      logger.log_error('Error in convert_input_schema_to_cohere: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      uc_ai_logger.log_error('Error in convert_input_schema_to_cohere: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end convert_input_schema_to_cohere;
 
@@ -150,6 +150,7 @@ create or replace package body uc_ai_tools_api as
   , pio_param_obj in out nocopy json_object_t
   )
   as
+    l_scope logger_logs.scope%type := gc_scope_prefix || 'wrap_as_array';
     l_param_copy json_object_t := pio_param_obj;
   begin
     pio_param_obj := json_object_t();
@@ -166,7 +167,7 @@ create or replace package body uc_ai_tools_api as
     end if;
   exception
     when others then
-      logger.log_error('Error in wrap_as_array: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      uc_ai_logger.log_error('Error in wrap_as_array: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end wrap_as_array;
 
@@ -183,9 +184,10 @@ create or replace package body uc_ai_tools_api as
   procedure prepare_single_parameter (
     p_row          in uc_ai_tool_parameters%rowtype
   , pio_required   in out nocopy json_array_t
-  , po_param_obj   out    json_object_t
+  , po_param_obj   out nocopy json_object_t
   )
   as
+    l_scope logger_logs.scope%type := gc_scope_prefix || 'prepare_single_parameter';
     e_unhandled_type exception;
 
     l_obj_attrs     json_object_t;
@@ -260,7 +262,7 @@ create or replace package body uc_ai_tools_api as
         po_param_obj.put('properties', l_obj_attrs);
         po_param_obj.put('required', l_obj_required);
       ELSE
-        logger.log_error('Unhandled data type: %s', p_row.data_type);
+        uc_ai_logger.log_error('Unhandled data type: %s', l_scope, p_row.data_type);
         raise e_unhandled_type;
     END CASE;
     
@@ -318,7 +320,7 @@ create or replace package body uc_ai_tools_api as
     pio_required := l_new_required;
   exception
     when others then
-      apex_debug.error('Error in prepare_single_parameter: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      uc_ai_logger.log_error('Error in prepare_single_parameter: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end prepare_single_parameter;
 
@@ -365,7 +367,8 @@ create or replace package body uc_ai_tools_api as
     FROM uc_ai_tools
     WHERE id = p_tool_id;
 
-    select count(*)
+    
+    select count(*) -- @dblinter ignore(G-8110) we distinct between 1 and >1
       into l_param_count
       from uc_ai_tool_parameters
      where tool_id = p_tool_id
@@ -437,7 +440,7 @@ create or replace package body uc_ai_tools_api as
     return l_function;
   exception
     when others then
-      apex_debug.error('Error in get_tool_schema: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      uc_ai_logger.log_error('Error in get_tool_schema: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;
   END get_tool_schema;
 
@@ -452,7 +455,7 @@ create or replace package body uc_ai_tools_api as
     l_tools_array  json_array_t := json_array_t();
     l_tool_obj     json_object_t;
     l_tool_cpy_obj json_object_t;
-    l_enable_tool_filter number(1) := 0;
+    l_enable_tool_filter number(1) := 0; -- @dbLinter ignore(G-2410) used in SQL 
   begin
     if not uc_ai.g_enable_tools then
       return l_tools_array;
@@ -491,7 +494,7 @@ create or replace package body uc_ai_tools_api as
         l_tool_obj.put('function', l_tool_cpy_obj);
       elsif p_provider = uc_ai.c_provider_oci then
         l_tool_cpy_obj := l_tool_obj.clone();
-        logger.log('Creating tool schema for OCI provider (' || p_additional_info || ')', l_scope, l_tool_cpy_obj.to_clob());
+        uc_ai_logger.log('Creating tool schema for OCI provider (' || p_additional_info || ')', l_scope, l_tool_cpy_obj.to_clob());
 
         l_tool_obj := json_object_t();
         if p_additional_info != gc_cohere then
@@ -514,7 +517,7 @@ create or replace package body uc_ai_tools_api as
     return l_tools_array;
   exception
     when others then
-      apex_debug.error('Error in get_tools_array: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      uc_ai_logger.log_error('Error in get_tools_array: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace, l_scope);
       raise;
   end get_tools_array;
 
@@ -569,7 +572,7 @@ create or replace package body uc_ai_tools_api as
     -- use apex_plugin_util.get_plsql_func_result_clob if apex_session is available
     if sys_context('APEX$SESSION', 'APP_SESSION') is not null then
 
-      logger.log('Executing tool with apex_plugin_util.get_plsql_func_result_clob', l_scope, l_fc_code);
+      uc_ai_logger.log('Executing tool with apex_plugin_util.get_plsql_func_result_clob', l_scope, l_fc_code);
 
       if l_found_binds is null or l_found_binds.count = 0 then
         null;
@@ -579,13 +582,13 @@ create or replace package body uc_ai_tools_api as
         l_bind.name  := upper(l_found_binds(1));
         l_bind.value := p_arguments.to_clob;
         l_bind_list(1) := l_bind;
-        logger.log('Bind variable found', l_scope, l_bind.name || ' = ' || l_bind.value);
+        uc_ai_logger.log('Bind variable found', l_scope, l_bind.name || ' = ' || l_bind.value);
       else
-        logger.log_error('Error in execute_tool: %s', 'Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
+        uc_ai_logger.log_error('Error in execute_tool: %s', 'Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '), l_scope);
         raise_application_error(-20001, 'You are only allowed to set one parameter bind. Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
       end if;
 
-      logger.log('Executing tool', l_scope, l_fc_code);
+      uc_ai_logger.log('Executing tool', l_scope, l_fc_code);
 
       -- Execute the tool's PL/SQL function with bound arguments
       -- Function should return CLOB result that gets sent back to AI
@@ -595,17 +598,17 @@ create or replace package body uc_ai_tools_api as
       , p_bind_list        => l_bind_list
       );
     
-      logger.log('Tool execution result', l_scope, l_return);
+      uc_ai_logger.log('Tool execution result', l_scope, l_return);
 
       if l_return is null then
-        logger.log_error('Error in execute_tool: %s', 'Tool execution returned NULL');
+        uc_ai_logger.log_error('Error in execute_tool: %s', 'Tool execution returned NULL', l_scope);
         raise_application_error(-20001, 'Tool execution returned NULL');
       end if;
 
       return l_return;
 
     else
-      logger.log('Executing tool with dbms_sql', l_scope, l_fc_code);
+      uc_ai_logger.log('Executing tool with dbms_sql', l_scope, l_fc_code);
 
       l_plsql_block := '
         DECLARE
@@ -624,7 +627,7 @@ create or replace package body uc_ai_tools_api as
         -- For DBMS_SQL, we need a full PL/SQL block that assigns the result to an OUT variable
         
         l_cursor_id := sys.dbms_sql.open_cursor;
-        logger.log('l_plsql_block', l_scope, l_plsql_block);
+        uc_ai_logger.log('l_plsql_block', l_scope, l_plsql_block);
         sys.dbms_sql.parse(l_cursor_id, l_plsql_block, sys.dbms_sql.native);
         sys.dbms_sql.bind_variable(l_cursor_id, ':return_val', l_clob); -- Bind the OUT variable
 
@@ -640,11 +643,11 @@ create or replace package body uc_ai_tools_api as
         l_bind.value := p_arguments.to_clob;
         l_bind_value := l_bind.value;
 
-        logger.log('Bind variable found', l_scope, l_bind.name || ' = ' || l_bind.value);
+        uc_ai_logger.log('Bind variable found', l_scope, l_bind.name || ' = ' || l_bind.value);
 
         -- Construct the PL/SQL block for DBMS_SQL with a bind variable and an OUT parameter
         l_plsql_block := replace(l_plsql_block, ':' || l_bind.name, ':' || l_bind.name);
-        logger.log('l_plsql_block', l_scope, l_plsql_block);
+        uc_ai_logger.log('l_plsql_block', l_scope, l_plsql_block);
 
         l_cursor_id := sys.dbms_sql.open_cursor;
         sys.dbms_sql.parse(l_cursor_id, l_plsql_block, sys.dbms_sql.native);
@@ -661,7 +664,7 @@ create or replace package body uc_ai_tools_api as
         l_return := l_clob;
 
       else
-        logger.log_error('Error in execute_tool: %s', 'Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
+        uc_ai_logger.log_error('Error in execute_tool: %s', 'Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '), l_scope);
         raise_application_error(-20001, 'You are only allowed to set one parameter bind. Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
       end if;
     end if;
@@ -669,7 +672,7 @@ create or replace package body uc_ai_tools_api as
     return l_return;
   exception
     when others then
-      logger.log_error('Error in execute_tool: %s', sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      uc_ai_logger.log_error('Error in execute_tool: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;
 
   end execute_tool;
@@ -683,7 +686,7 @@ create or replace package body uc_ai_tools_api as
     l_count pls_integer;
     l_param_name uc_ai_tool_parameters.name%type;
   begin
-    select count(*)
+    select count(*)  -- @dblinter ignore(G-8110) we check for exactly 1
       into l_count
       from uc_ai_tool_parameters tp
       join uc_ai_tools t
@@ -711,7 +714,7 @@ create or replace package body uc_ai_tools_api as
     when no_data_found then
       return null; -- No parameter found, return null
     when others then
-      logger.log_error('Error in get_tools_object_param_name: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      uc_ai_logger.log_error('Error in get_tools_object_param_name: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end get_tools_object_param_name;
 
@@ -728,7 +731,7 @@ create or replace package body uc_ai_tools_api as
   as
     l_scope logger_logs.scope%type := gc_scope_prefix || 'create_parameters_recursive';
 
-    l_prop_keys json_key_list;
+    l_prop_keys_arr json_key_list;
     l_prop_name varchar2(255 char);
     l_prop_obj json_object_t;
     l_current_param_id uc_ai_tool_parameters.id%type;
@@ -751,25 +754,25 @@ create or replace package body uc_ai_tools_api as
     l_enum_str_arr apex_t_varchar2 := apex_t_varchar2();
     l_nested_properties json_object_t;
     l_nested_required json_array_t;
-    l_nested_required_keys json_key_list := json_key_list();
+    l_nested_required_keys_arr json_key_list := json_key_list();
   begin
     if p_properties is null then
       return;
     end if;
     
-    l_prop_keys := p_properties.get_keys;
+    l_prop_keys_arr := p_properties.get_keys;
     
-    if l_prop_keys is null or l_prop_keys.count = 0 then
+    if l_prop_keys_arr is null or l_prop_keys_arr.count = 0 then
       return;
     end if;
     
     <<property_loop>>
-    for i in 1 .. l_prop_keys.count loop
-      l_prop_name := l_prop_keys(i);
+    for i in 1 .. l_prop_keys_arr.count loop
+      l_prop_name := l_prop_keys_arr(i);
       l_prop_obj := treat(p_properties.get(l_prop_name) as json_object_t);
       
       if l_prop_obj is null then
-        logger.log_warn('Property object is null for: ' || l_prop_name, l_scope);
+        uc_ai_logger.log_warn('Property object is null for: ' || l_prop_name, l_scope);
         continue;
       end if;
       
@@ -878,7 +881,7 @@ create or replace package body uc_ai_tools_api as
       l_is_array_num := case when l_is_array then 1 else 0 end;
 
       -- Insert the parameter
-      insert into uc_ai_tool_parameters (
+      insert into uc_ai_tool_parameters ( -- @dbLinter ignore(G-3210) we do not process too many rows and do pre-processing
         tool_id,
         name,
         description,
@@ -930,19 +933,19 @@ create or replace package body uc_ai_tools_api as
         l_nested_required := treat(l_prop_obj.get('required') as json_array_t);
         
         -- Convert required array to key list
-        l_nested_required_keys := json_key_list();
+        l_nested_required_keys_arr := json_key_list();
         if l_nested_required is not null then
           <<nested_required_loop>>
           for j in 0 .. l_nested_required.get_size - 1 loop
-            l_nested_required_keys.extend;
-            l_nested_required_keys(l_nested_required_keys.count) := l_nested_required.get_string(j);
+            l_nested_required_keys_arr.extend;
+            l_nested_required_keys_arr(l_nested_required_keys_arr.count) := l_nested_required.get_string(j);
           end loop nested_required_loop;
         end if;
         
         -- Recursively create nested parameters
         create_parameters_recursive(
           p_properties => l_nested_properties
-        , p_required_keys => l_nested_required_keys
+        , p_required_keys => l_nested_required_keys_arr
         , p_parent_param_id => l_current_param_id
         , p_created_by => p_created_by
         , p_tool_id => p_tool_id
@@ -952,7 +955,7 @@ create or replace package body uc_ai_tools_api as
     end loop property_loop;
   exception
     when others then
-      logger.log_error('Error in create_parameters_recursive: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      uc_ai_logger.log_error('Error in create_parameters_recursive: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;  
   end create_parameters_recursive;
 
@@ -976,10 +979,10 @@ create or replace package body uc_ai_tools_api as
     l_tool_id uc_ai_tools.id%type;
     l_properties json_object_t;
     l_required_arr json_array_t;
-    l_required_keys json_key_list := json_key_list();
+    l_required_keys_arr json_key_list := json_key_list();
     l_schema_clob clob;
   begin
-    logger.log('Creating tool from schema', l_scope, 'Tool: ' || p_tool_code);
+    uc_ai_logger.log('Creating tool from schema', l_scope, 'Tool: ' || p_tool_code);
 
     l_schema_clob := case when p_json_schema is not null then p_json_schema.to_clob else null end;
 
@@ -1010,7 +1013,7 @@ create or replace package body uc_ai_tools_api as
       systimestamp
     ) returning id into l_tool_id;
     
-    logger.log('Created tool with ID: ' || l_tool_id, l_scope);
+    uc_ai_logger.log('Created tool with ID: ' || l_tool_id, l_scope);
 
     if l_schema_clob is null then
       return l_tool_id;
@@ -1024,15 +1027,15 @@ create or replace package body uc_ai_tools_api as
     if l_required_arr is not null then
       <<required_loop>>
       for i in 0 .. l_required_arr.get_size - 1 loop
-        l_required_keys.extend;
-        l_required_keys(l_required_keys.count) := l_required_arr.get_string(i);
+        l_required_keys_arr.extend;
+        l_required_keys_arr(l_required_keys_arr.count) := l_required_arr.get_string(i);
       end loop required_loop;
     end if;
     
     -- Create parameters from schema properties
     create_parameters_recursive(
       p_properties => l_properties
-    , p_required_keys => l_required_keys
+    , p_required_keys => l_required_keys_arr
     , p_parent_param_id => null
     , p_created_by => p_created_by
     , p_tool_id => l_tool_id
@@ -1040,8 +1043,7 @@ create or replace package body uc_ai_tools_api as
     
     -- Create tags if provided
     if p_tags is not null and p_tags.count > 0 then
-      <<tag_loop>>
-      for i in 1 .. p_tags.count loop
+      forall i in 1 .. p_tags.count
         insert into uc_ai_tool_tags (
           tool_id,
           tag_name,
@@ -1057,16 +1059,15 @@ create or replace package body uc_ai_tools_api as
           p_created_by,
           systimestamp
         );
-      end loop tag_loop;
     end if;
     
-    logger.log('Successfully created tool with schema', l_scope, 'Tool ID: ' || l_tool_id);
+    uc_ai_logger.log('Successfully created tool with schema', l_scope, 'Tool ID: ' || l_tool_id);
     
     return l_tool_id;
     
   exception
     when others then
-      logger.log_error('Error in create_tool_from_schema', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      uc_ai_logger.log_error('Error in create_tool_from_schema', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end create_tool_from_schema;
 
