@@ -43,6 +43,7 @@ DROP PACKAGE uc_ai_google;
 DROP PACKAGE uc_ai_anthropic;
 
 PROMPT Dropping API packages...
+DROP PACKAGE uc_ai_logger;
 DROP PACKAGE uc_ai_structured_output;
 DROP PACKAGE uc_ai_message_api;
 DROP PACKAGE uc_ai_tools_api;
