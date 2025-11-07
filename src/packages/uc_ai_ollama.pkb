@@ -97,7 +97,7 @@ create or replace package body uc_ai_ollama as
     l_lm_reasoning_content := get_reasoning_content(p_message);
 
     if l_lm_reasoning_content is null and l_lm_text_content is null then
-      logger.LOG_ERROR(
+      uc_ai_logger.log_error(
         'No content to process response',
         c_scope_prefix || 'process_llm_response',
         p_message.to_clob
@@ -140,7 +140,7 @@ create or replace package body uc_ai_ollama as
     l_tool_call json_object_t;
     l_function json_object_t;
   begin
-    logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to Ollama format', l_scope);
+    uc_ai_logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to Ollama format', l_scope);
     
     po_ollama_messages := json_array_t();
 
@@ -176,7 +176,7 @@ create or replace package body uc_ai_ollama as
               when 'file' then
                 l_images.append(l_content_item.get_clob('data'));
               else
-                logger.log_warn('Unsupported user content type for Ollama: ' || l_content_type, l_scope);
+                uc_ai_logger.log_warn('Unsupported user content type for Ollama: ' || l_content_type, l_scope);
             end case;
           end loop user_content_loop;
           
@@ -218,7 +218,7 @@ create or replace package body uc_ai_ollama as
                 l_tool_call.put('function', l_function);
                 l_tool_calls.append(l_tool_call);
               else
-                logger.log_warn('Unsupported assistant content type for Ollama: ' || l_content_type, l_scope);
+                uc_ai_logger.log_warn('Unsupported assistant content type for Ollama: ' || l_content_type, l_scope);
             end case;
           end loop assistant_content_loop;
           
@@ -254,11 +254,11 @@ create or replace package body uc_ai_ollama as
           end loop tool_content_loop;
 
         else
-          logger.log_warn('Unknown message role: ' || l_role, l_scope);
+          uc_ai_logger.log_warn('Unknown message role: ' || l_role, l_scope);
       end case;
     end loop message_loop;
 
-    logger.log('Converted to ' || po_ollama_messages.get_size || ' Ollama messages', l_scope);
+    uc_ai_logger.log('Converted to ' || po_ollama_messages.get_size || ' Ollama messages', l_scope);
   end convert_lm_messages_to_ollama;
 
 
@@ -287,7 +287,7 @@ create or replace package body uc_ai_ollama as
     l_has_tool_calls boolean := false;
   begin
     if g_tool_calls >= p_max_tool_calls then
-      logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
+      uc_ai_logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
       raise uc_ai.e_max_calls_exceeded;
     end if;
@@ -296,7 +296,7 @@ create or replace package body uc_ai_ollama as
     l_input_obj.put('messages', pio_messages);
     l_input_obj.put('think', uc_ai.g_enable_reasoning);
 
-    logger.log('Request body', l_scope, l_input_obj.to_clob);
+    uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
 
     apex_web_service.clear_request_headers;
     apex_web_service.set_request_headers(
@@ -311,13 +311,13 @@ create or replace package body uc_ai_ollama as
       p_credential_static_id => g_apex_web_credential
     );
 
-    logger.log('Response', l_scope, l_resp);
+    uc_ai_logger.log('Response', l_scope, l_resp);
 
     l_resp_json := json_object_t.parse(l_resp);
 
     if l_resp_json.has('error') then
       l_resp := l_resp_json.get_clob('error');
-      logger.log_error('Error in response', l_scope, l_resp);
+      uc_ai_logger.log_error('Error in response', l_scope, l_resp);
       raise uc_ai.e_error_response;
     end if;
 
@@ -390,7 +390,7 @@ create or replace package body uc_ai_ollama as
         for j in 0 .. l_tool_calls.get_size - 1
         loop
           l_tool_call := treat(l_tool_calls.get(j) as json_object_t);
-          logger.log('Processing tool call', l_scope, 'Tool Call: ' || l_tool_call.to_clob);
+          uc_ai_logger.log('Processing tool call', l_scope, 'Tool Call: ' || l_tool_call.to_clob);
           
           g_tool_calls := g_tool_calls + 1;
 
@@ -412,8 +412,8 @@ create or replace package body uc_ai_ollama as
           );
           l_assistant_content.append(l_new_msg);
 
-          logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name || ', Tool ID: ' || l_tool_call_id);
-          logger.log('Tool input', l_scope, 'Input: ' || l_tool_input.to_clob);
+          uc_ai_logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name || ', Tool ID: ' || l_tool_call_id);
+          uc_ai_logger.log('Tool input', l_scope, 'Input: ' || l_tool_input.to_clob);
 
           -- Execute the tool and get result
           l_tool_result := uc_ai_tools_api.execute_tool(
@@ -455,7 +455,7 @@ create or replace package body uc_ai_ollama as
       end;
     else
       -- Normal completion - add AI's message to conversation
-      logger.log('Normal completion received', l_scope);
+      uc_ai_logger.log('Normal completion received', l_scope);
       pio_messages.append(l_message);
 
       l_assistant_message := uc_ai_message_api.create_assistant_message(
@@ -487,7 +487,7 @@ create or replace package body uc_ai_ollama as
       end case;
     end if;
 
-    logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);
+    uc_ai_logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);
 
   end internal_generate_text;
 
@@ -533,7 +533,7 @@ create or replace package body uc_ai_ollama as
     l_format             json_object_t;
   begin
     l_result := json_object_t();
-    logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
+    uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
     
     -- Reset global variables
     g_tool_calls := 0;
@@ -592,7 +592,7 @@ create or replace package body uc_ai_ollama as
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_ollama);
     
-    logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
+    uc_ai_logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
     
     return l_result;
   end generate_text;
@@ -609,7 +609,7 @@ create or replace package body uc_ai_ollama as
     l_embeddings    json_array_t;
     l_input_obj     json_object_t := json_object_t();
   begin
-    logger.log('Starting generate_embeddings with ' || p_input.get_size || ' input items',
+    uc_ai_logger.log('Starting generate_embeddings with ' || p_input.get_size || ' input items',
       l_scope);
     
     l_input_obj.put('model', p_model);
@@ -621,10 +621,10 @@ create or replace package body uc_ai_ollama as
       p_value_01 => 'application/json'
     );
 
-    logger.log('Request body', l_scope, l_input_obj.to_clob);
+    uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
 
     l_url := get_generate_embeddings_url();
-    logger.log('Request URL: ' || l_url, l_scope);
+    uc_ai_logger.log('Request URL: ' || l_url, l_scope);
 
     l_resp := apex_web_service.make_rest_request(
       p_url => l_url,
@@ -633,13 +633,13 @@ create or replace package body uc_ai_ollama as
       p_credential_static_id => g_apex_web_credential
     );
 
-    logger.log('Response', l_scope, l_resp);
+    uc_ai_logger.log('Response', l_scope, l_resp);
 
     l_resp_json := json_object_t.parse(l_resp);
 
     if l_resp_json.has('error') then
       l_resp := l_resp_json.get_clob('error');
-      logger.log_error('Error in response', l_scope, l_resp);
+      uc_ai_logger.log_error('Error in response', l_scope, l_resp);
       raise uc_ai.e_error_response;
     end if;
 
