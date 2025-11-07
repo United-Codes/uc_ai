@@ -29,7 +29,7 @@ To use your OpenAI key with APEX Web Credentials, create a new web credential in
 - Credential Name: `Authorization`
 - Credential Secret: `Bearer <your_api_key>`
 
-We generally recomend also setting `Valid for URLs` to the OpenAI API (https://api.openai.com/) to limit the scope of the credential.
+We generally recommend also setting `Valid for URLs` to the OpenAI API (https://api.openai.com/) to limit the scope of the credential.
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_openai.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 

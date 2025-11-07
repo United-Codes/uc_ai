@@ -296,7 +296,7 @@ To achieve this we actually will use three tools:
 
 #### Function definition
 
-The clock in tool is more advanced as it needs parameters to work. So let's take a closer look to the `TT_CLOCK_IN` function:
+The clock in tool is more advanced as it needs parameters to work. So let's take a closer look at the `TT_CLOCK_IN` function:
 
 ```sql
 FUNCTION clock_in_json(
@@ -336,7 +336,7 @@ end clock_in_json;
 
 Note that the only parameter is a `CLOB`. The AI speaks in JSON and that's why we get a CLOB and have to manually extract the attributes from it.
 
-We also return a `CLOB` again. We are talking to an LLM so it expects text responses. So on success we return somethin like "User (X) clocked in succesfuklly on project (Y) with note (Z)".
+We also return a `CLOB` again. We are talking to an LLM so it expects text responses. So on success we return something like "User (X) clocked in successfully on project (Y) with note (Z)".
 
 Also note that we don't raise errors but instead also return text with the error message. As LLMs understand the message they can actually recover. If you pass them a project with a typo, and the function returns "Error: Project 'ProjecX' not found", the AI can then either ask the user to correct the project name or call the project lookup tool again and try to spot the typos.
 

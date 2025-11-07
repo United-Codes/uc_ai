@@ -30,7 +30,7 @@ To use your Anthropic key with APEX Web Credentials, create a new web credential
 - Credential Name: `x-api-key`
 - Credential Secret: `<your_api_key>`
 
-We generally recomend also setting `Valid for URLs` to the Anthropic API (https://api.anthropic.com/) to limit the scope of the credential.
+We generally recommend also setting `Valid for URLs` to the Anthropic API (https://api.anthropic.com/) to limit the scope of the credential.
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_anthropic.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
