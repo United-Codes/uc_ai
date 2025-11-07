@@ -1,13 +1,25 @@
 create or replace package body uc_ai_openai as 
 
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
-  c_api_url constant varchar2(255 char) := 'https://api.openai.com/v1/chat/completions';
+  c_api_url constant varchar2(255 char) := 'https://api.openai.com/v1';
+  c_api_generate_text_path constant varchar2(255 char) := '/chat/completions';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
   g_final_message clob;
 
   -- Chat API reference: https://platform.openai.com/docs/api-reference/chat/create
+  
+  
+  function get_generate_text_url return varchar2
+  as
+  begin
+    if uc_ai.g_base_url is not null then
+      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_text_path;
+    end if;
+    
+    return c_api_url || c_api_generate_text_path;
+  end get_generate_text_url;
 
   procedure process_text_message(
     p_message in json_object_t
@@ -248,6 +260,7 @@ create or replace package body uc_ai_openai as
     l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
     l_message      json_object_t;
     l_input_obj    json_object_t;
+    l_url          varchar2(4000 char);
 
     l_resp      clob;
     l_resp_json json_object_t;
@@ -275,11 +288,14 @@ create or replace package body uc_ai_openai as
 
     if g_apex_web_credential is null then
       apex_web_service.g_request_headers(2).name := 'Authorization';
-      apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(uc_ai.c_provider_openai);
+      apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(coalesce(uc_ai.g_provider_override, uc_ai.c_provider_openai));
     end if;
 
+    l_url := get_generate_text_url;
+    logger.log('Calling OpenAI API at ' || l_url, l_scope);
+
     l_resp := apex_web_service.make_rest_request(
-      p_url => c_api_url,
+      p_url => l_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
       p_credential_static_id => g_apex_web_credential
@@ -287,7 +303,13 @@ create or replace package body uc_ai_openai as
 
     logger.log('Response', l_scope, l_resp);
 
-    l_resp_json := json_object_t.parse(l_resp);
+    begin
+      l_resp_json := json_object_t.parse(l_resp);
+    exception
+      when others then
+        logger.log_error('Response is not JSON, probable error', l_scope, l_resp);
+        raise uc_ai.e_error_response;
+    end;
 
     if l_resp_json.has('error') then
       l_temp_obj := l_resp_json.get_object('error');
