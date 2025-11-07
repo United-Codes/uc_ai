@@ -68,12 +68,20 @@ create or replace package body uc_ai_logger as
     p_params in tab_param)
   is
     $if $$USE_LOGGER $then
-      -- Use logger package
+      l_logger_params logger.tab_param;
     $else
       l_message clob;
     $end
   begin
     $if $$USE_LOGGER $then
+      -- Convert uc_ai_logger params to logger params
+      if p_params.count > 0 then
+        for i in 1 .. p_params.count loop
+          l_logger_params(i).name := p_params(i).name;
+          l_logger_params(i).val := p_params(i).val;
+        end loop;
+      end if;
+      
       -- Call appropriate logger procedure based on level
       case upper(p_level)
         when 'ERROR' then
@@ -81,32 +89,32 @@ create or replace package body uc_ai_logger as
             p_text => p_text,
             p_scope => p_scope,
             p_extra => p_extra,
-            p_params => p_params);
+            p_params => l_logger_params);
         when 'WARNING' then
           logger.log_warning(
             p_text => p_text,
             p_scope => p_scope,
             p_extra => p_extra,
-            p_params => p_params);
+            p_params => l_logger_params);
         when 'INFO' then
           logger.log_info(
             p_text => p_text,
             p_scope => p_scope,
             p_extra => p_extra,
-            p_params => p_params);
+            p_params => l_logger_params);
         when 'DEBUG' then
           logger.log(
             p_text => p_text,
             p_scope => p_scope,
             p_extra => p_extra,
-            p_params => p_params);
+            p_params => l_logger_params);
         else
           -- Default to debug
           logger.log(
             p_text => p_text,
             p_scope => p_scope,
             p_extra => p_extra,
-            p_params => p_params);
+            p_params => l_logger_params);
       end case;
     $else
       -- Use apex_debug
