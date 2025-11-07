@@ -37,7 +37,7 @@ create or replace package body uc_ai_structured_output as
     l_property_value json_object_t;
     l_type varchar2(100 char);
   begin
-    logger.log('Converting schema to Google format', l_scope);
+    uc_ai_logger.log('Converting schema to Google format', l_scope);
 
     -- Convert type
     if p_schema.has('type') then
@@ -163,7 +163,7 @@ create or replace package body uc_ai_structured_output as
     l_schema_copy json_object_t;
     l_json_schema json_object_t;
   begin
-    logger.log('Converting schema to OpenAI format', l_scope, 'Name: ' || p_name || ', Strict: ' || case when p_strict then 'true' else 'false' end);
+    uc_ai_logger.log('Converting schema to OpenAI format', l_scope, 'Name: ' || p_name || ', Strict: ' || case when p_strict then 'true' else 'false' end);
 
     -- Create a copy of the input schema and process for strict mode
     if p_strict then
@@ -181,7 +181,7 @@ create or replace package body uc_ai_structured_output as
 
     l_response_format.put('json_schema', l_json_schema);
     
-    logger.log('OpenAI format conversion complete', l_scope, l_response_format.to_clob);
+    uc_ai_logger.log('OpenAI format conversion complete', l_scope, l_response_format.to_clob);
     return l_response_format;
   end to_openai_format;
 
@@ -194,7 +194,7 @@ create or replace package body uc_ai_structured_output as
   as
     l_scope logger_logs.scope%type := c_scope_prefix || 'to_google_format';
   begin
-    logger.log('Converting schema to Google format', l_scope);
+    uc_ai_logger.log('Converting schema to Google format', l_scope);
     return convert_schema_to_google(p_schema);
   end to_google_format;
 
@@ -208,7 +208,7 @@ create or replace package body uc_ai_structured_output as
     l_scope logger_logs.scope%type := c_scope_prefix || 'to_ollama_format';
     l_schema_copy json_object_t;
   begin
-    logger.log('Converting schema to Ollama format', l_scope);
+    uc_ai_logger.log('Converting schema to Ollama format', l_scope);
     
     -- Ollama uses the schema directly, just make a clean copy
     l_schema_copy := json_object_t(p_schema.to_clob);
@@ -234,7 +234,7 @@ create or replace package body uc_ai_structured_output as
     l_scope logger_logs.scope%type := c_scope_prefix || 'format_schema';
     l_result json_object_t;
   begin
-    logger.log('Formatting schema for provider: ' || p_provider, l_scope);
+    uc_ai_logger.log('Formatting schema for provider: ' || p_provider, l_scope);
     
     case p_provider
       when uc_ai.c_provider_openai then
@@ -244,7 +244,7 @@ create or replace package body uc_ai_structured_output as
       when uc_ai.c_provider_ollama then
         l_result := to_ollama_format(p_schema);
       else
-        logger.log_error('Unsupported provider for structured output: ' || p_provider, l_scope);
+        uc_ai_logger.log_error('Unsupported provider for structured output: ' || p_provider, l_scope);
         raise_application_error(-20999, 'Provider ' || p_provider || ' does not support structured output');
     end case;
     

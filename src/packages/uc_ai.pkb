@@ -59,6 +59,18 @@ create or replace package body uc_ai as
           , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
           );
         end if;
+      -- when c_provider_xai then
+      --   g_base_url := 'https://api.x.ai/v1';
+      --   g_provider_override := c_provider_xai;
+
+      --   l_result := uc_ai_openai.generate_text(
+      --     p_messages       => p_messages
+      --   , p_model          => p_model
+      --   , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+      --   , p_schema         => p_response_json_schema
+      --   , p_schema_name    => 'structured_output'
+      --   , p_strict         => true
+      --   );
       else
         raise e_unknown_provider;
     end case;
@@ -77,7 +89,7 @@ create or replace package body uc_ai as
     when e_format_processing_error then
       raise_application_error(-20304, 'Error processing message format. Please check the logs for details.');
     when others then
-      logger.log_error(
+      uc_ai_logger.log_error(
         'Unhandled exception in uc_ai.generate_text',
         c_scope_prefix || 'generate_text',
         sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
@@ -145,7 +157,7 @@ create or replace package body uc_ai as
     when e_unknown_provider then
       raise_application_error(-20001, 'Unknown AI provider: ' || p_provider);
     when others then
-      logger.log_error(
+      uc_ai_logger.log_error(
         'Unhandled exception in uc_ai.generate_embeddings',
         c_scope_prefix || 'generate_embeddings',
         sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace

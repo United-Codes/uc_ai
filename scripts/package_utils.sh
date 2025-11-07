@@ -14,6 +14,7 @@ declare -a API_PACKAGES=(
     "uc_ai_tools_api"
     "uc_ai_message_api"
     "uc_ai_structured_output"
+    uc_ai_logger
 )
 
 # Provider packages (alphabetical order)
