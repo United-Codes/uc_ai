@@ -29,10 +29,9 @@ create or replace package body uc_ai_logger as
     p_scope in varchar2,
     p_extra in clob,
     p_params in tab_param)
-    return varchar2
+    return clob
   is
-    l_message varchar2(32767 char);
-    l_extra_str varchar2(4000 char);
+    l_message clob;
   begin
     l_message := p_text;
     
@@ -40,20 +39,14 @@ create or replace package body uc_ai_logger as
       l_message := '[' || p_scope || '] ' || l_message;
     end if;
     
-    if p_extra is not null then
-      -- Convert clob to varchar2 (truncate if too long)
-      if length(p_extra) <= 4000 then
-        l_extra_str := p_extra;
-      else
-        l_extra_str := substr(p_extra, 1, 3997) || '...';
-      end if;
-      l_message := l_message || ' | Extra: ' || l_extra_str;
-    end if;
-
     if p_params.count > 0 then
       l_message := l_message || params_to_string(p_params);
     end if;
-    
+
+    if p_extra is not null then
+      l_message := l_message || ' | Extra: ' || p_extra;
+    end if;
+
     return l_message;
   end build_message;
 
@@ -77,7 +70,7 @@ create or replace package body uc_ai_logger as
     $if $$USE_LOGGER $then
       -- Use logger package
     $else
-      l_message varchar2(32767 char);
+      l_message clob;
     $end
   begin
     $if $$USE_LOGGER $then
@@ -123,19 +116,56 @@ create or replace package body uc_ai_logger as
         p_extra => p_extra,
         p_params => p_params);
       
-      case upper(p_level)
-        when 'ERROR' then
-          apex_debug.error(l_message);
-        when 'WARNING' then
-          apex_debug.warn(l_message);
-        when 'INFO' then
-          apex_debug.info(l_message);
-        when 'DEBUG' then
-          apex_debug.trace(l_message);
+      -- Log in chunks of max 4000 characters
+      declare
+        c_max_chunk_size constant pls_integer := 4000;
+        c_indicator_overhead constant pls_integer := 20; -- Reserve space for "[999/999] " indicator
+        l_message_length pls_integer;
+        l_offset pls_integer := 1;
+        l_chunk varchar2(4000 char);
+        l_chunk_num pls_integer := 1;
+        l_total_chunks pls_integer;
+        l_actual_chunk_size pls_integer;
+        l_indicator varchar2(20 char);
+      begin
+        l_message_length := length(l_message);
+        
+        -- Calculate if we need to split and adjust chunk size accordingly
+        if l_message_length > c_max_chunk_size then
+          l_actual_chunk_size := c_max_chunk_size - c_indicator_overhead;
+          l_total_chunks := ceil(l_message_length / l_actual_chunk_size);
         else
-          -- Default to log
-          apex_debug.info(l_message);
-      end case;
+          l_actual_chunk_size := c_max_chunk_size;
+          l_total_chunks := 1;
+        end if;
+        
+        while l_offset <= l_message_length loop
+          l_chunk := substr(l_message, l_offset, l_actual_chunk_size);
+          
+          -- Add chunk indicator if message is split
+          if l_total_chunks > 1 then
+            l_indicator := '[' || l_chunk_num || '/' || l_total_chunks || '] ';
+            l_chunk := l_indicator || l_chunk;
+          end if;
+          
+          case upper(p_level)
+            when 'ERROR' then
+              apex_debug.error(l_chunk);
+            when 'WARNING' then
+              apex_debug.warn(l_chunk);
+            when 'INFO' then
+              apex_debug.info(l_chunk);
+            when 'DEBUG' then
+              apex_debug.trace(l_chunk);
+            else
+              -- Default to log
+              apex_debug.info(l_chunk);
+          end case;
+          
+          l_offset := l_offset + l_actual_chunk_size;
+          l_chunk_num := l_chunk_num + 1;
+        end loop;
+      end;
     $end
   end log_internal;
 
@@ -230,15 +260,24 @@ create or replace package body uc_ai_logger as
 
   procedure enable_apex_debug(p_workspace in varchar2)
   as
+    l_sec_group_id number;
   begin
-      -- thanks anton nielsen: https://apexdebug.com/using-apexdebug-without-an-apex-session
-      if sys_context('APEX$SESSION','WORKSPACE_ID') is null then
-        apex_util.set_security_group_id(
-          p_security_group_id => apex_util.find_security_group_id(p_workspace => p_workspace)
-        );
+    -- thanks anton nielsen: https://apexdebug.com/using-apexdebug-without-an-apex-session
+    if sys_context('APEX$SESSION','WORKSPACE_ID') is null then
+      l_sec_group_id := apex_util.find_security_group_id(p_workspace => p_workspace);
 
+      if l_sec_group_id is null then
+        raise_application_error(
+          -20001,
+          'Workspace "' || p_workspace || '" not found. Cannot enable APEX debug.');
       end if;
-    apex_debug.enable(p_workspace);
+
+      apex_util.set_security_group_id(
+        p_security_group_id => l_sec_group_id
+      );
+
+    end if;
+    apex_debug.enable(apex_debug.c_log_level_app_trace);
   end enable_apex_debug;
 
 end uc_ai_logger;
