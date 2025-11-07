@@ -126,10 +126,20 @@ done < <(get_package_bodies_ordered "$SRC_DIR")
 echo "PROMPT - Installing core UC AI package body..." >> "$OUTPUT_FILE"
 while IFS= read -r body_file; do
     if is_core_package "$(basename "$body_file")"; then
-        add_file_content "$body_file" "Core UC AI Package Body - $(basename "$body_file")"
+        add_file_content "$body_file" "Core UC AI Package Body - uc_ai.pkb"
         break
     fi
 done < <(get_package_bodies_ordered "$SRC_DIR")
+
+# Run post-installation scripts
+if [ -d "$SRC_DIR/post-scripts" ]; then
+    echo "PROMPT Running post-installation scripts..." >> "$OUTPUT_FILE"
+    for post_script in "$SRC_DIR/post-scripts"/*.sql; do
+        if [ -f "$post_script" ]; then
+            add_file_content "$post_script" "Post-installation script - $(basename "$post_script")"
+        fi
+    done
+fi
 
 # Final completion message
 cat >> "$OUTPUT_FILE" << 'EOF'
@@ -155,6 +165,18 @@ echo "Dependencies:"
 [ -f "$SRC_DIR/dependencies/key_function.sql" ] && echo "  ✓ src/dependencies/key_function.sql"
 
 list_installed_packages "$SRC_DIR" false
+
+echo ""
+echo "Post-installation scripts:"
+if [ -d "$SRC_DIR/post-scripts" ]; then
+    for post_script in "$SRC_DIR/post-scripts"/*.sql; do
+        if [ -f "$post_script" ]; then
+            echo "  ✓ src/post-scripts/$(basename "$post_script")"
+        fi
+    done
+else
+    echo "  (none found)"
+fi
 
 echo ""
 echo "The complete script is self-contained and ready to run without external file dependencies."
@@ -257,10 +279,20 @@ done < <(get_package_bodies_ordered "$SRC_DIR")
 echo "PROMPT - Installing core UC AI package body..." >> "$OUTPUT_FILE_WITH_LOGGER"
 while IFS= read -r body_file; do
     if is_core_package "$(basename "$body_file")"; then
-        add_file_content "$body_file" "Core UC AI Package Body - $(basename "$body_file")" "$OUTPUT_FILE_WITH_LOGGER"
+        add_file_content "$body_file" "Core UC AI Package Body - uc_ai.pkb" "$OUTPUT_FILE_WITH_LOGGER"
         break
     fi
 done < <(get_package_bodies_ordered "$SRC_DIR")
+
+# Run post-installation scripts
+if [ -d "$SRC_DIR/post-scripts" ]; then
+    echo "PROMPT Running post-installation scripts..." >> "$OUTPUT_FILE_WITH_LOGGER"
+    for post_script in "$SRC_DIR/post-scripts"/*.sql; do
+        if [ -f "$post_script" ]; then
+            add_file_content "$post_script" "Post-installation script - $(basename "$post_script")" "$OUTPUT_FILE_WITH_LOGGER"
+        fi
+    done
+fi
 
 # Final completion message for logger version
 cat >> "$OUTPUT_FILE_WITH_LOGGER" << 'EOF'

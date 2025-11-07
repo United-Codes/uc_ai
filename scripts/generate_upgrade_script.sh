@@ -123,6 +123,17 @@ while IFS= read -r body_file; do
     fi
 done < <(get_package_bodies_ordered "$SRC_DIR")
 
+# Run post-installation scripts
+if [ -d "$SRC_DIR/post-scripts" ]; then
+    echo "PROMPT Running post-installation scripts..." >> "$OUTPUT_FILE"
+    for post_script in "$SRC_DIR/post-scripts"/*.sql; do
+        if [ -f "$post_script" ]; then
+            desc="Post-installation script - $(basename "$post_script")"
+            add_file_content "$post_script" "$desc"
+        fi
+    done
+fi
+
 # Final completion message
 cat >> "$OUTPUT_FILE" << 'EOF'
 
