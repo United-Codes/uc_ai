@@ -10,25 +10,16 @@ sidebar:
 - Oracle Database 12.2 or later
 - Oracle APEX (older versions are fine, this project uses some of the APIs)
 
-## Logger
-
-The project uses the [Logger](https://github.com/OraOpenSource/Logger) package to log trace information like the requests and responses from the AI providers.
-
-I do recommend installing the Logger package aswell as it helps debugging issues and keeping track of how the AI gets used.
-
-However you have the option to install a "no op" (no operation) version of the Logger package which installs the necessary objects so that the packages compile but does not log anything.
-
-If you want to use your own logging solution you can modify the no op version to insert the log messages into your own logging tables.
-
 ## Installing UC AI
+
+UC logs some debug relevant information. If you don't have [Logger](https://github.com/OraOpenSource/Logger)  installed it will log via the `apex_debug` package.
 
 ### Option 1: GitHub release scripts
 
 For each new release of UC AI the release page in GitHub will contain scripts to install the UC AI package and its dependencies.
 
 - `install_uc_ai_complete.sql` installs all UC AI objects
-- `install_uc_ai_complete_with_logger.sql` installs all UC AI objects and the Logger package
-- `logger_no_op.sql` installs Logger in "no op" mode, meaning it will not log anything but the objects will compile. You can run `install_uc_ai_complete.sql` afterwards.
+- `install_uc_ai_complete_with_logger.sql` installs all UC AI objects and the  [Logger](https://github.com/OraOpenSource/Logger) package
 - `upgrade_packages.sql` upgrades the UC AI packages.Most of the time only packages get modified. So for most releases you just need to run this script to upgrade to a newer version. Please still keep an eye ont the [release notes](https://github.com/United-Codes/uc_ai/releases) to see if there are any changes that require you to run the complete installation script.
 
 Just run the necessary script in your SQL client to install the UC AI package and its dependencies.

@@ -111,3 +111,31 @@ begin
 end;
 /
 ```
+
+###  Generating Embeddings
+
+UC AI supports embedding generation with Ollama. You first have to find and download one of the embedding models which are [listed here](https://ollama.com/search?c=embedding). Then you can start generating embeddings:
+
+```sql
+declare
+  l_result json_array_t;
+  l_array_clob clob;
+begin
+  uc_ai.g_base_url := 'host.containers.internal:11434/api';
+  uc_ai.g_enable_tools := false; -- disable tools for this test
+  uc_ai.g_enable_reasoning := false; -- disable reasoning for this test
+
+  l_result := uc_ai.generate_embeddings(
+    p_input => json_array_t('["APEX Office Print lets you create and manage print jobs directly from your APEX applications.", "UC AI allows you to easily use AI from PL/SQL"]'),
+    p_provider => uc_ai.c_provider_ollama,
+    p_model => 'granite-embedding:30m'
+  );
+  
+  -- example result: [0.340329043034, 0.2334029034]
+  
+  -- l_result.get_size → 2
+  -- l_result.get(0) → 0.340329043034
+end;
+```
+
+For more information about the `generate_embeddings` function, visit its [documentation page](/products/uc-ai/docs/api/generate_embeddings/).

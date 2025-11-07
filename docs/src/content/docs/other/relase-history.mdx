@@ -5,6 +5,23 @@ sidebar:
   order: 3
 ---
 
+## v25.6
+
+To upgrade first run `v25.4_to_v25.5.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v25.6).
+
+For new installations follow [this guide](https://www.united-codes.com/products/uc-ai/docs/guides/installation/).
+
+**Features**:
+
+- Initial support to [generate embeddings](/products/uc-ai/docs/api/generate_embeddings/) (currently just Ollama)
+- [Support providers which have OpenAI compliant APIs](/products/uc-ai/docs/providers/openai/#using-openai-api-compliant-providers)
+- Instead of using the API key function you can now use [APEX Web Credentials](/products/uc-ai/docs/guides/installation/#option-2-apex-web-credentials)
+- Logger is now optional. If you have it installed UC AI will use it. Otherwise it will use `apex_debug`. You can use `uc_ai_logger.enable_apex_debug` when you are calling UC AI from no APEX contexts and need logging.
+- Uninstall script
+- Comaptibility fixes
+- Bug fixes
+- Added constants for new models
+
 ## v25.5
 
 To upgrade first run `v25.4_to_v25.5.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v25.5).

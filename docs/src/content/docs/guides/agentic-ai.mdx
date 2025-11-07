@@ -1,0 +1,70 @@
+---
+title: Agentic AI
+description: How to create AI Agents with UC AI running in your database
+sidebar:
+  order: 900
+
+---
+
+## AI Agents with UC AI
+
+Agentic AI has many definitions, but in essence you give LLMs additional capabilities that the model can decide to use based on their autonomous decisions. Importantly, these capabilities are not executed within the LLM itself – instead, you inform the LLM that it can perform X, and it requests execution externally. Thus, the agent's core logic resides not in the LLM, but in the calling mechanism: your database's PL/SQL code with UC AI.
+
+You can build agents in UC AI through these techniques:
+
+- Prompt engineering: give the right instructions with system prompts and context
+- [Tools](/products/uc-ai/docs/guides/tools/): Allow the LLM to request PL/SQL function executions to let the agent ad hoc request additional context (like triggering a RAG search) or run data-manipulating processes.
+- [Reasoning](/products/uc-ai/docs/guides/tools/): Allow the LLM to think before acting by using reasoning models and configuring reasoning preferences.
+- Call orchestration: instead of overwhelming an LLM by giving it a big task, break it down into steps and call AIs (maybe different models and providers) sequentially or in parallel.
+
+All of this can be achieved through your own compiled PL/SQL procedures with calls to UC AI. 
+
+## Example
+
+Consider building a **Customer Insights Agent** that autonomously analyzes support tickets and recommends actions.
+
+```
+Ticket → LLM Reasoning → Tool Requests → PL/SQL Execution → Synthesis → Response
+```
+
+The agent begins with reasoning: the LLM analyzes the incoming ticket and decides what additional context it needs. Based on this internal thinking, it autonomously requests tool execution. UC AI handles the requests so it executes your PL/SQL functions, captures results, and feeds them back to the agent.
+
+**Tools the agent might request:**
+
+- RAG search tool (retrieve similar past tickets)
+- Customer account query tool (transaction history, account status)
+- Escalation trigger tool (route to specialist)
+- Task creation tool (schedule follow-up)
+- Recommendation engine tool (personalized suggestions)
+
+In the end what you would need to do to achieve this:
+
+- Write PL/SQL functions that power the tools
+- [Register the tools with UC AI](/products/uc-ai/docs/guides/tools/#registering-a-tool)
+- Create procedure that gets triggered an new ticket and calls UC AI with the correct parameters:
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  -- allow model to reason
+  uc_ai.g_enable_reasoning := true;
+  uc_ai_openai.g_reasoning_effort := 'medium';
+  
+  -- allow model to use tools
+  uc_ai.g_enable_tools := true;
+  -- only pass tools created for this task
+  uc_ai.g_tool_tags := apex_t_varchar2('customer_insight_agent');
+
+  l_result := uc_ai.generate_text(
+    p_system_prompt => 'You are an... First analyze the ticket and think of actions that make sense from the given tools...'
+    p_user_prompt => 'Ticket #1243: ...',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_o4_mini
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+

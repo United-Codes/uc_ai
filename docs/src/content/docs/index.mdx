@@ -1,11 +1,11 @@
 ---
-title: UC AI Introduction
-description: AI framework for Oracle PL/SQL - Integrate AI models with function calling capabilities
+title: UC AI - Agentic AI for Oracle
+description: Call LLMs from the database and create PL/SQL based agents
 sidebar:
   order: 10
 template: doc
 hero:
-  tagline: Agentic AI for Oracle PL/SQL developers
+  tagline: Call LLMs from the database and create PL/SQL based agents
   actions:
     - text: Installation
       link: /products/uc-ai/docs/guides/installation/
@@ -29,21 +29,23 @@ import { Card, CardGrid } from "@astrojs/starlight/components";
     Support for OpenAI GPT, Anthropic Claude, and Google Gemini models with
     unified API interface.
   </Card>
-  <Card title="Function Calling" icon="puzzle">
+  <Card title="Tools/Function Calling" icon="puzzle">
     AI models can execute PL/SQL functions with type-safe parameter passing and
     JSON schema validation.
   </Card>
   <Card title="Unified API" icon="seti:json">
-    All AI providers have a consistent interface for text generation and
-    function calling. This allows you to switch providers without changing your
-    code.
+    Consistent interface for text generation and
+    tool calls for all providers.
   </Card>
   <Card title="Runs on older DBs" icon="seti:db">
-    It's just PL/SQL! This framework should work on Oracle Database 12.2 and
-    later!
+    No need for 26ai. This is just PL/SQL! Oracle Database 12.2+ are supported!
   </Card>
   <Card title="Agentic AI" icon="starlight">
     Create agents that work directly with data in your Oracle databases.
+  </Card>
+
+ <Card title="Local LLMs" icon="codePen">
+    Integrate offline LLMs like GPT OSS or Qwen via Ollama
   </Card>
 
 </CardGrid>
@@ -99,14 +101,15 @@ END;
 
 ## Feature Matrix
 
-| Feature                                                                                        | OpenAI GPT                                                                                                         | Anthropic Claude                                                                                                                                       | Google Gemini                                                                   | Ollama                                                                                                  | OCI                                                                                                               |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| [Text generation](/products/uc-ai/docs/api/generate_text/)                                     | Yes <sup>[(i)](https://platform.openai.com/docs/guides/text?api-mode=responses)</sup>                              | Yes                                                                                                                                                    | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/text-generation)</sup>     | Yes                                                                                                     | Yes<sup>[(i)](https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/ChatResult/Chat)</sup> |
-| • [Tools/Function calling](/products/uc-ai/docs/guides/tools/)                                 | Yes <sup>[(i)](https://platform.openai.com/docs/guides/function-calling?api-mode=responses)</sup>                  | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview)</sup>                                                            | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/function-calling)</sup>    | Yes <sup>[(i)](https://ollama.com/blog/tool-support)</sup>                                              | Yes                                                                                                               |
-| • [PDF analysis](/products/uc-ai/docs/guides/file_analysis/#example-1-analyze-a-pdf-file)      | Yes <sup>[(i)](https://platform.openai.com/docs/guides/pdf-files?api-mode=responses)</sup>                         | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/build-with-claude/pdf-support)</sup>                                                                 | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/document-processing)</sup> | Not supported                                                                                           | No                                                                                                                |
-| • [Image analysis](/products/uc-ai/docs/guides/file_analysis/#example-2-analyze-an-image-file) | Yes <sup>[(i)](https://platform.openai.com/docs/guides/images-vision?api-mode=responses#analyze-images)</sup>      | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/build-with-claude/vision)</sup>                                                                      | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/image-understanding)</sup> | Yes <sup>[(i)](https://ollama.com/blog/vision-models)</sup>                                             | No                                                                                                                |
-| • [Reasoning/Thinking](/products/uc-ai/docs/guides/reasoning)                                  | Yes <sup>[(i)](https://platform.openai.com/docs/guides/reasoning?api-mode=responses)</sup>                         | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#best-practices-and-considerations-for-extended-thinking)</sup>   | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/thinking)</sup>            | Yes <sup>[(i)](https://ollama.com/blog/thinking)</sup>                                                  | No                                                                                                                |
-| • [Structured Output](/products/uc-ai/docs/guides/structured_output)                           | Yes <sup>[(i)](https://platform.openai.com/docs/guides/structured-outputs?lang=curl&example=structured-data)</sup> | No <sup>[(i)](https://docs.anthropic.com/en/docs/test-and-evaluate/strengthen-guardrails/increase-consistency#specify-the-desired-output-format)</sup> | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/structured-output)</sup>   | Yes <sup>[(i)](https://github.com/ollama/ollama/blob/main/docs/api.md#request-structured-outputs)</sup> | No                                                                                                                |
+| Feature                                                      | OpenAI GPT                                                   | Anthropic Claude                                             | Google Gemini                                                | Ollama                                                       | OCI                                                          |
+| ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| [Text generation](/products/uc-ai/docs/api/generate_text/)   | Yes <sup>[(i)](https://platform.openai.com/docs/guides/text?api-mode=responses)</sup> | Yes                                                          | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/text-generation)</sup> | Yes                                                          | Yes<sup>[(i)](https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/ChatResult/Chat)</sup> |
+| • [Tools/Function calling](/products/uc-ai/docs/guides/tools/) | Yes <sup>[(i)](https://platform.openai.com/docs/guides/function-calling?api-mode=responses)</sup> | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview)</sup> | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/function-calling)</sup> | Yes <sup>[(i)](https://ollama.com/blog/tool-support)</sup>   | Yes                                                          |
+| • [PDF analysis](/products/uc-ai/docs/guides/file_analysis/#example-1-analyze-a-pdf-file) | Yes <sup>[(i)](https://platform.openai.com/docs/guides/pdf-files?api-mode=responses)</sup> | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/build-with-claude/pdf-support)</sup> | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/document-processing)</sup> | Not supported                                                | No                                                           |
+| • [Image analysis](/products/uc-ai/docs/guides/file_analysis/#example-2-analyze-an-image-file) | Yes <sup>[(i)](https://platform.openai.com/docs/guides/images-vision?api-mode=responses#analyze-images)</sup> | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/build-with-claude/vision)</sup> | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/image-understanding)</sup> | Yes <sup>[(i)](https://ollama.com/blog/vision-models)</sup>  | No                                                           |
+| • [Reasoning/Thinking](/products/uc-ai/docs/guides/reasoning) | Yes <sup>[(i)](https://platform.openai.com/docs/guides/reasoning?api-mode=responses)</sup> | Yes <sup>[(i)](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#best-practices-and-considerations-for-extended-thinking)</sup> | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/thinking)</sup> | Yes <sup>[(i)](https://ollama.com/blog/thinking)</sup>       | No                                                           |
+| • [Structured Output](/products/uc-ai/docs/guides/structured_output) | Yes <sup>[(i)](https://platform.openai.com/docs/guides/structured-outputs?lang=curl&example=structured-data)</sup> | No <sup>[(i)](https://docs.anthropic.com/en/docs/test-and-evaluate/strengthen-guardrails/increase-consistency#specify-the-desired-output-format)</sup> | Yes <sup>[(i)](https://ai.google.dev/gemini-api/docs/structured-output)</sup> | Yes <sup>[(i)](https://github.com/ollama/ollama/blob/main/docs/api.md#request-structured-outputs)</sup> | No                                                           |
+| [Embedding generation](/products/uc-ai/docs/api/generate_embeddings/) | No                                                           | No                                                           | No                                                           | Yes                                                          | No                                                           |
 
 \* The `(i)` links to the provider documentation for the feature.
 
