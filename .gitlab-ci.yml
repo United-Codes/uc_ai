@@ -1,4 +1,4 @@
-image: oven/bun:1
+image: oven/bun:1.2
 
 stages:
   - build
