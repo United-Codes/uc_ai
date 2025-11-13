@@ -74,7 +74,7 @@ create or replace package body uc_ai_google as
     po_google_messages out json_array_t
   )
   as
-    l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_google';
+    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'convert_lm_messages_to_google';
     l_lm_message json_object_t;
     l_google_message json_object_t;
     l_role varchar2(255 char);
@@ -251,7 +251,7 @@ create or replace package body uc_ai_google as
   , pio_result           in out json_object_t
   )
   as
-    l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
+    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'internal_generate_text';
     l_input_obj    json_object_t;
     l_api_url      varchar2(500 char);
     l_model        varchar2(255 char);
@@ -535,7 +535,7 @@ create or replace package body uc_ai_google as
   , p_schema         in json_object_t default null
   ) return json_object_t
   as
-    l_scope logger_logs.scope%type := c_scope_prefix || 'generate_text_with_messages';
+    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'generate_text_with_messages';
     l_input_obj          json_object_t := json_object_t();
     l_google_messages    json_array_t;
     l_system_prompt      clob;

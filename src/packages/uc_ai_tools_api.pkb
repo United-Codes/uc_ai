@@ -38,7 +38,7 @@ create or replace package body uc_ai_tools_api as
     p_input_schema in json_object_t
   ) return json_object_t
   as
-    l_scope logger_logs.scope%type := gc_scope_prefix || 'convert_input_schema_to_cohere';
+    l_scope uc_ai_logger.scope%type := gc_scope_prefix || 'convert_input_schema_to_cohere';
     
     l_result_obj        json_object_t := json_object_t();
     l_properties        json_object_t;
@@ -150,7 +150,7 @@ create or replace package body uc_ai_tools_api as
   , pio_param_obj in out nocopy json_object_t
   )
   as
-    l_scope logger_logs.scope%type := gc_scope_prefix || 'wrap_as_array';
+    l_scope uc_ai_logger.scope%type := gc_scope_prefix || 'wrap_as_array';
     l_param_copy json_object_t := pio_param_obj;
   begin
     pio_param_obj := json_object_t();
@@ -187,7 +187,7 @@ create or replace package body uc_ai_tools_api as
   , po_param_obj   out nocopy json_object_t
   )
   as
-    l_scope logger_logs.scope%type := gc_scope_prefix || 'prepare_single_parameter';
+    l_scope uc_ai_logger.scope%type := gc_scope_prefix || 'prepare_single_parameter';
     e_unhandled_type exception;
 
     l_obj_attrs     json_object_t;
@@ -342,7 +342,7 @@ create or replace package body uc_ai_tools_api as
   ) 
     return json_object_t 
   as
-    l_scope logger_logs.scope%type := gc_scope_prefix || 'get_tool_schema';
+    l_scope uc_ai_logger.scope%type := gc_scope_prefix || 'get_tool_schema';
 
     l_tool_code        uc_ai_tools.code%type;
     l_tool_description uc_ai_tools.description%type;
@@ -450,7 +450,7 @@ create or replace package body uc_ai_tools_api as
   , p_additional_info in varchar2 default null
   ) return json_array_t
   as
-    l_scope logger_logs.scope%type := gc_scope_prefix || 'get_tools_array';
+    l_scope uc_ai_logger.scope%type := gc_scope_prefix || 'get_tools_array';
 
     l_tools_array  json_array_t := json_array_t();
     l_tool_obj     json_object_t;
@@ -540,7 +540,7 @@ create or replace package body uc_ai_tools_api as
   , p_arguments in json_object_t
   ) return clob
   as
-    l_scope logger_logs.scope%type := gc_scope_prefix || 'execute_tool';
+    l_scope uc_ai_logger.scope%type := gc_scope_prefix || 'execute_tool';
 
     l_fc_code      clob;
     l_found_binds  apex_t_varchar2 := apex_t_varchar2();
@@ -682,7 +682,7 @@ create or replace package body uc_ai_tools_api as
     p_tool_code in uc_ai_tools.code%type
   ) return uc_ai_tool_parameters.name%type result_cache
   as
-    l_scope logger_logs.scope%type := gc_scope_prefix || 'get_tools_object_param_name';
+    l_scope uc_ai_logger.scope%type := gc_scope_prefix || 'get_tools_object_param_name';
     l_count pls_integer;
     l_param_name uc_ai_tool_parameters.name%type;
   begin
@@ -729,7 +729,7 @@ create or replace package body uc_ai_tools_api as
     p_tool_id in uc_ai_tools.id%type
   ) 
   as
-    l_scope logger_logs.scope%type := gc_scope_prefix || 'create_parameters_recursive';
+    l_scope uc_ai_logger.scope%type := gc_scope_prefix || 'create_parameters_recursive';
 
     l_prop_keys_arr json_key_list;
     l_prop_name varchar2(255 char);
@@ -974,7 +974,7 @@ create or replace package body uc_ai_tools_api as
     p_tags                  in apex_t_varchar2 default apex_t_varchar2()
   ) return uc_ai_tools.id%type
   as
-    l_scope logger_logs.scope%type := gc_scope_prefix || 'create_tool_from_schema';
+    l_scope uc_ai_logger.scope%type := gc_scope_prefix || 'create_tool_from_schema';
     
     l_tool_id uc_ai_tools.id%type;
     l_properties json_object_t;

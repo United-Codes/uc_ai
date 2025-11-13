@@ -16,6 +16,8 @@ create or replace package uc_ai_logger authid definer as
 
   type tab_param is table of rec_param index by binary_integer; -- @dblinter ignore(g-9112): compliant with real logger
 
+  subtype scope is varchar2(100 char); -- @dblinter ignore(g-9115): compliant with real logger
+
   gc_empty_tab_param constant tab_param := tab_param();
 
   /**

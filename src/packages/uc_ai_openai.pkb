@@ -61,7 +61,7 @@ create or replace package body uc_ai_openai as
     p_lm_messages in json_array_t
   ) return json_array_t
   as
-    l_scope logger_logs.scope%type := c_scope_prefix || 'convert_lm_messages_to_openai';
+    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'convert_lm_messages_to_openai';
     l_openai_messages json_array_t := json_array_t();
     l_lm_message json_object_t;
     l_openai_message json_object_t;
@@ -257,7 +257,7 @@ create or replace package body uc_ai_openai as
   , pio_result       in out nocopy json_object_t
   )
   as
-    l_scope logger_logs.scope%type := c_scope_prefix || 'internal_generate_text';
+    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'internal_generate_text';
     l_message      json_object_t;
     l_input_obj    json_object_t;
     l_url          varchar2(4000 char);
@@ -504,7 +504,7 @@ create or replace package body uc_ai_openai as
   , p_strict         in boolean default true
   ) return json_object_t
   as
-    l_scope logger_logs.scope%type := c_scope_prefix || 'generate_text_with_messages';
+    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'generate_text_with_messages';
     l_input_obj        json_object_t := json_object_t();
     l_openai_messages  json_array_t;
     l_tools            json_array_t;
