@@ -26,7 +26,7 @@ create or replace package body uc_ai_structured_output as
    */
   function convert_schema_to_google(p_schema in json_object_t) return json_object_t
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'convert_schema_to_google';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_schema_to_google';
     l_google_schema json_object_t := json_object_t();
     l_properties json_object_t;
     l_google_properties json_object_t := json_object_t();
@@ -158,7 +158,7 @@ create or replace package body uc_ai_structured_output as
     p_strict in boolean default true
   ) return json_object_t
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'to_openai_format';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'to_openai_format';
     l_response_format json_object_t := json_object_t();
     l_schema_copy json_object_t;
     l_json_schema json_object_t;
@@ -192,7 +192,7 @@ create or replace package body uc_ai_structured_output as
     p_schema in json_object_t
   ) return json_object_t
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'to_google_format';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'to_google_format';
   begin
     uc_ai_logger.log('Converting schema to Google format', l_scope);
     return convert_schema_to_google(p_schema);
@@ -205,7 +205,7 @@ create or replace package body uc_ai_structured_output as
     p_schema in json_object_t
   ) return json_object_t
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'to_ollama_format';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'to_ollama_format';
     l_schema_copy json_object_t;
   begin
     uc_ai_logger.log('Converting schema to Ollama format', l_scope);
@@ -231,7 +231,7 @@ create or replace package body uc_ai_structured_output as
     p_strict in boolean default true
   ) return json_object_t
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'format_schema';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'format_schema';
     l_result json_object_t;
   begin
     uc_ai_logger.log('Formatting schema for provider: ' || p_provider, l_scope);

@@ -80,7 +80,7 @@ create or replace package body uc_ai_oci as
     po_oci_messages out nocopy json_array_t
   )
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'convert_lm_messages_to_generic_oci';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_lm_messages_to_generic_oci';
     l_lm_message json_object_t;
     l_oci_message json_object_t;
     l_role varchar2(255 char);
@@ -233,7 +233,7 @@ create or replace package body uc_ai_oci as
     po_oci_messages out nocopy json_array_t
   )
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'convert_lm_messages_to_cohere_oci';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_lm_messages_to_cohere_oci';
     l_lm_message json_object_t;
     l_oci_message json_object_t;
     l_role varchar2(255 char);
@@ -424,7 +424,7 @@ create or replace package body uc_ai_oci as
   , pio_result           in out nocopy json_object_t
   )
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'internal_generate_text';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'internal_generate_text';
     l_input_obj    json_object_t;
     l_chat_request json_object_t;
     l_api_url      varchar2(500 char);
@@ -796,7 +796,7 @@ create or replace package body uc_ai_oci as
   , p_max_tool_calls in pls_integer
   ) return json_object_t
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'generate_text_with_messages';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_with_messages';
     l_input_obj          json_object_t := json_object_t();
     l_oci_messages       json_array_t;
     l_result             json_object_t;

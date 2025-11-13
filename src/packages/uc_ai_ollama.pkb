@@ -127,7 +127,7 @@ create or replace package body uc_ai_ollama as
     po_ollama_messages out nocopy json_array_t
   )
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'convert_lm_messages_to_ollama';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_lm_messages_to_ollama';
     l_lm_message json_object_t;
     l_ollama_message json_object_t;
     l_role varchar2(255 char);
@@ -270,7 +270,7 @@ create or replace package body uc_ai_ollama as
   , pio_result           in out nocopy json_object_t
   )
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'internal_generate_text';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'internal_generate_text';
     l_input_obj    json_object_t;
 
     l_resp          clob;
@@ -524,7 +524,7 @@ create or replace package body uc_ai_ollama as
   , p_schema         in json_object_t default null
   ) return json_object_t
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'generate_text_with_messages';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_with_messages';
     l_input_obj          json_object_t := json_object_t();
     l_ollama_messages    json_array_t;
     l_tools              json_array_t;
@@ -602,7 +602,7 @@ create or replace package body uc_ai_ollama as
   , p_model in uc_ai.model_type
   ) return json_array_t
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'generate_embeddings';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_embeddings';
     l_url           varchar2(4000 char);
     l_resp          clob;
     l_resp_json     json_object_t;

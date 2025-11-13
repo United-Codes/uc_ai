@@ -67,7 +67,7 @@ create or replace package body uc_ai_anthropic as
     po_anthropic_messages out json_array_t
   )
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'convert_lm_messages_to_anthropic';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_lm_messages_to_anthropic';
     l_lm_message json_object_t;
     l_anthropic_message json_object_t;
     l_role varchar2(255 char);
@@ -258,7 +258,7 @@ create or replace package body uc_ai_anthropic as
   , pio_result           in out json_object_t
   )
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'internal_generate_text';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'internal_generate_text';
     l_input_obj    json_object_t;
 
     l_resp      clob;
@@ -565,7 +565,7 @@ create or replace package body uc_ai_anthropic as
   , p_max_tool_calls in pls_integer
   ) return json_object_t
   as
-    l_scope uc_ai_logger.scope%type := c_scope_prefix || 'generate_text_with_messages';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_with_messages';
     l_input_obj          json_object_t := json_object_t();
     l_anthropic_messages json_array_t;
     l_system_prompt      clob;
