@@ -338,9 +338,9 @@ create or replace package body uc_ai_toon as
         l_arr := treat(l_element as json_array_t);
         sys.dbms_lob.writeappend(l_result, length(l_indent || l_keys_arr(i)), l_indent || l_keys_arr(i));
         l_nested := process_array(l_arr, p_indent_level);
-        -- Remove leading space after [N]: for primitive arrays
-        if l_arr.get_size = 0 or is_primitive_array(l_arr) then
-          l_nested := regexp_replace(l_nested, '^\[(\d+)\]: ', '[$1]:');
+        -- Remove space after [0]: for empty arrays only
+        if l_arr.get_size = 0 then
+          l_nested := replace(l_nested, '[0]: ', '[0]:');
         end if;
         sys.dbms_lob.append(l_result, l_nested);
       else
@@ -360,22 +360,36 @@ create or replace package body uc_ai_toon as
    * Convert a JSON_OBJECT_T to TOON format
    */
   function to_toon(p_json_object in json_object_t) return clob is
+    l_result clob;
   begin
     if p_json_object is null then
       return null;
     end if;
-    return process_object(p_json_object, 0);
+    l_result := process_object(p_json_object, 0);
+    -- Remove trailing newlines
+    <<trim_newlines>>
+    while length(l_result) > 0 and substr(l_result, -1) = chr(10) loop
+      l_result := substr(l_result, 1, length(l_result) - 1);
+    end loop trim_newlines;
+    return l_result;
   end to_toon;
 
   /**
    * Convert a JSON_ARRAY_T to TOON format
    */
   function to_toon(p_json_array in json_array_t) return clob is
+    l_result clob;
   begin
     if p_json_array is null then
       return null;
     end if;
-    return process_array(p_json_array, 0);
+    l_result := process_array(p_json_array, 0);
+    -- Remove trailing newlines
+    <<trim_newlines>>
+    while length(l_result) > 0 and substr(l_result, -1) = chr(10) loop
+      l_result := substr(l_result, 1, length(l_result) - 1);
+    end loop trim_newlines;
+    return l_result;
   end to_toon;
 
   /**
