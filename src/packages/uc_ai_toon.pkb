@@ -11,30 +11,88 @@ create or replace package body uc_ai_toon as
   );
 
   /**
+   * Check if a string should remain quoted according to TOON rules
+   */
+  function needs_quotes(p_value in varchar2) return boolean is
+  begin
+    if p_value is null then
+      return false; -- null doesn't need quotes
+    end if;
+
+    -- Empty string must be quoted
+    if length(p_value) = 0 then
+      return true;
+    end if;
+
+    -- Has leading or trailing whitespace
+    if p_value != trim(p_value) then
+      return true;
+    end if;
+
+    -- Equals true, false, or null (case-sensitive)
+    if p_value in ('true', 'false', 'null') then
+      return true;
+    end if;
+
+    -- Starts with hyphen or equals "-"
+    if substr(p_value, 1, 1) = '-' then
+      return true;
+    end if;
+
+    -- Numeric-like: matches /^-?\d+(?:.\d+)?(?:e[+-]?\d+)?$/i or /^0\d+$/
+    if regexp_like(p_value, '^\d+$') or
+       regexp_like(p_value, '^\d+\.\d+$') or
+       regexp_like(p_value, '^\d+(?:\.\d+)?[eE][+-]?\d+$') or
+       regexp_like(p_value, '^0\d+$') then
+      return true;
+    end if;
+
+    -- Contains special characters that require quoting
+    if instr(p_value, ':') > 0 or
+       instr(p_value, '"') > 0 or
+       instr(p_value, '\') > 0 or
+       instr(p_value, '[') > 0 or
+       instr(p_value, ']') > 0 or
+       instr(p_value, '{') > 0 or
+       instr(p_value, '}') > 0 then
+      return true;
+    end if;
+
+    -- Contains control characters (newline, carriage return, tab)
+    if instr(p_value, chr(10)) > 0 or
+       instr(p_value, chr(13)) > 0 or
+       instr(p_value, chr(9)) > 0 then
+      return true;
+    end if;
+
+    -- String is safe to remain unquoted
+    return false;
+  end needs_quotes;
+
+  /**
    * Escape special characters in a string value
    */
-  function escape_string(p_value in varchar2) return varchar2 is
+  function remove_quotes_when_needed(p_value in varchar2) return varchar2
+  as
+    l_str varchar2(32767 char) := p_value;
   begin
     if p_value is null then
       return 'null';
     end if;
 
-    -- Check if string needs quotes (contains special chars, starts/ends with space, or is empty)
-    if instr(p_value, '"') > 0
-       or instr(p_value, '\') > 0
-       or instr(p_value, chr(10)) > 0
-       or instr(p_value, chr(13)) > 0
-       or instr(p_value, chr(9)) > 0
-       or substr(p_value, 1, 1) = ' ' 
-       or substr(p_value, -1) = ' '
-       or length(p_value) = 0 then
-      -- Escape backslashes first, then quotes
-      return '"' || replace(replace(p_value, '\', '\\'), '"', '\"') || '"';
+    -- JSON to_string returns quoted string, so strip the outer quotes
+    if substr(l_str, 1, 1) = '"' and substr(l_str, -1) = '"' then
+      l_str := substr(l_str, 2, length(l_str) - 2);
     end if;
-    
+
+    -- Keep quotes if the string needs them according to TOON rules
+    if needs_quotes(l_str) then
+      return '"' || l_str || '"';
+    end if;
+
     -- Return unquoted string for simple values
-    return p_value;
-  end escape_string;
+    return l_str;
+  end remove_quotes_when_needed;
 
   /**
    * Convert a JSON element to its TOON string representation
@@ -51,11 +109,8 @@ create or replace package body uc_ai_toon as
     elsif p_element.is_string then
       -- Get the string value from JSON element
       l_str := p_element.to_string;
-      -- JSON to_string returns quoted string, so strip the outer quotes
-      if substr(l_str, 1, 1) = '"' and substr(l_str, -1) = '"' then
-        l_str := substr(l_str, 2, length(l_str) - 2);
-      end if;
-      return escape_string(l_str);
+      
+      return remove_quotes_when_needed(l_str);
     end if;
 
     return null; -- Will be handled as nested object/array
