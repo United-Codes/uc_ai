@@ -15,8 +15,8 @@ create or replace package body uc_ai_toon as
    */
   function needs_quotes(p_value in varchar2) return boolean is
   begin
-    if p_value is null then
-      return false; -- null doesn't need quotes
+    if p_value is null or trim(p_value) is null then
+      return true; -- null doesn't need quotes
     end if;
 
     -- Empty string must be quoted
