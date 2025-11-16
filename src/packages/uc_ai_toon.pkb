@@ -402,9 +402,13 @@ create or replace package body uc_ai_toon as
         sys.dbms_lob.writeappend(l_result, length(l_indent || l_keys_arr(i) || ': '), l_indent || l_keys_arr(i) || ': ');
         l_value := element_to_toon_value(l_element);
         sys.dbms_output.put_line('Processing key "' || l_keys_arr(i) || '" with value: ' || l_value);
+        sys.dbms_output.put_line('Trim value length: ' || length(trim(l_value)));
+
         if length(trim(l_value)) != 0 then
-          sys.dbms_lob.writeappend(l_result, length(l_value), l_value);
+          sys.dbms_lob.writeappend(l_result, lengthb(l_value), l_value);
         end if;
+
+        sys.dbms_output.put_line('Current result:' || chr(10) || l_result);
       end if;
     end loop object_keys_loop;
 
