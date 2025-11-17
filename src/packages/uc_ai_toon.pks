@@ -1,23 +1,12 @@
 create or replace package uc_ai_toon authid current_user as
 
   /**
-   * UC AI TOON - TOON Format Encoder
-   * 
-   * This package provides utilities to convert Oracle JSON objects and arrays
-   * into TOON format - a compact, LLM-optimized data serialization format.
-   * 
-   * TOON Features:
-   * - Compact array syntax: [length]: elements
-   * - Key-value pairs: key: value
-   * - Indentation-based nesting instead of braces
-   * - Columnar format for homogeneous object arrays
-   * - Full Unicode support
-   * - Type preservation (numbers, booleans, strings, null)
-   * 
-   * @author  Philipp Hartenfeller
-   * @created November 2025
-   * @version 1.0
-   */
+  * UC AI
+  * Package to integrate AI capabilities into Oracle databases.
+  * 
+  * Copyright (c) 2025 United Codes
+  * https://www.united-codes.com
+  */
 
   /**
    * Convert a JSON_OBJECT_T to TOON format
