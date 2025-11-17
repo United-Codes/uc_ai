@@ -184,6 +184,20 @@ create or replace package body uc_ai_toon as
       end loop compare_keys_loop;
     end loop check_keys_loop;
 
+    -- Check all values in all objects are primitives (not arrays or objects)
+    <<check_primitive_values_loop>>
+    for i in 0 .. p_array.get_size - 1 loop
+      l_obj := treat(p_array.get(i) as json_object_t);
+      
+      <<check_each_value_loop>>
+      for j in 1 .. l_first_keys_arr.count loop
+        l_element := l_obj.get(l_first_keys_arr(j));
+        if l_element.is_array or l_element.is_object then
+          return l_result;  -- Contains nested structure, not homogeneous
+        end if;
+      end loop check_each_value_loop;
+    end loop check_primitive_values_loop;
+
     l_result.is_homogeneous := true;
     l_result.keys_arr := l_first_keys_arr;
     return l_result;
@@ -260,7 +274,6 @@ create or replace package body uc_ai_toon as
     <<data_rows_loop>>
     for i in 0 .. p_array.get_size - 1 loop
       sys.dbms_output.put_line('Processing row ' || i || ': ' || p_array.get(i).stringify);
-      sys.dbms_output.put_line('Indent: "' || l_indent || '"');
 
       sys.dbms_lob.writeappend(l_result, length(l_indent), l_indent);
       l_obj := treat(p_array.get(i) as json_object_t);
@@ -295,6 +308,7 @@ create or replace package body uc_ai_toon as
   ) return clob is
     l_result clob;
     l_indent varchar2(200 char);
+    l_indent_next_line varchar2(200 char);
     l_element json_element_t;
     l_obj json_object_t;
     l_arr json_array_t;
@@ -352,8 +366,8 @@ create or replace package body uc_ai_toon as
           if j > 1 then
             sys.dbms_lob.writeappend(l_result, 1, chr(10));
             -- indent is one level deeper as no dash
-            l_indent := rpad(' ', (p_indent_level + 2) * length(c_indent), c_indent);
-            sys.dbms_lob.writeappend(l_result, length(l_indent), l_indent);
+            l_indent_next_line := l_indent;
+            sys.dbms_lob.writeappend(l_result, length(l_indent_next_line), l_indent_next_line);
             sys.dbms_lob.writeappend(l_result, length(l_part), l_part);
           else
             sys.dbms_lob.writeappend(l_result, length(l_part), l_part);
@@ -425,6 +439,10 @@ create or replace package body uc_ai_toon as
         l_arr := treat(l_element as json_array_t);
         sys.dbms_lob.writeappend(l_result, length(l_indent || l_keys_arr(i)), l_indent || l_keys_arr(i));
         l_nested := process_array(l_arr, p_indent_level);
+
+        sys.dbms_output.put_line('Processing key "' || l_keys_arr(i) || '" with array value of size ' || l_arr.get_size);
+        sys.dbms_output.put_line('Resulting TOON for array:' || chr(10) || l_nested);
+
         -- Remove space after [0]: for empty arrays only
         if l_arr.get_size = 0 then
           l_nested := replace(l_nested, '[0]: ', '[0]:');
