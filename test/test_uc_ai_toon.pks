@@ -59,5 +59,11 @@ create or replace package test_uc_ai_toon as
   --%test(Nested Mixed Types)
   procedure nested_mixed;
 
+  --%test(Glossary Structure)
+  procedure glossary_structure;
+
+  --%test(Countries Array Data Set)
+  procedure countries_array;
+
 end test_uc_ai_toon;
 /

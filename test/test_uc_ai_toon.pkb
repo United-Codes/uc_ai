@@ -486,8 +486,9 @@ create or replace package body test_uc_ai_toon as
 
   procedure nested_mixed
   as
+    l_json  json_object_t;
     l_items json_array_t;
-    l_item json_object_t;
+    l_item  json_object_t;
     l_users json_array_t;
     l_user1 json_object_t;
     l_user2 json_object_t;
@@ -513,8 +514,11 @@ create or replace package body test_uc_ai_toon as
     
     l_items := json_array_t();
     l_items.append(l_item);
+
+    l_json := json_object_t();
+    l_json.put('items', l_items);
     
-    l_result := uc_ai_toon.to_toon(l_items);
+    l_result := uc_ai_toon.to_toon(l_json);
     
     l_expected := 'items[1]:' || chr(10)
                || '  - users[2]{id,name}:' || chr(10)
@@ -525,6 +529,170 @@ create or replace package body test_uc_ai_toon as
     ut.expect(l_result).to_equal(l_expected);
     sys.dbms_output.put_line('Result:' || chr(10) || l_result);
   end nested_mixed;
+
+  procedure glossary_structure
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    l_result := uc_ai_toon.to_toon(q'!{
+    "glossary": {
+        "title": "example glossary",
+		"GlossDiv": {
+            "title": "S",
+			"GlossList": {
+                "GlossEntry": {
+                    "ID": "SGML",
+					"SortAs": "SGML",
+					"GlossTerm": "Standard Generalized Markup Language",
+					"Acronym": "SGML",
+					"Abbrev": "ISO 8879:1986",
+					"GlossDef": {
+                        "para": "A meta-markup language, used to create markup languages such as DocBook.",
+						"GlossSeeAlso": ["GML", "XML"]
+                    },
+					"GlossSee": "markup"
+                }
+            }
+        }
+    }
+}
+!');
+    l_expected := q'!glossary:
+  title: example glossary
+  GlossDiv:
+    title: S
+    GlossList:
+      GlossEntry:
+        ID: SGML
+        SortAs: SGML
+        GlossTerm: Standard Generalized Markup Language
+        Acronym: SGML
+        Abbrev: "ISO 8879:1986"
+        GlossDef:
+          para: "A meta-markup language, used to create markup languages such as DocBook."
+          GlossSeeAlso[2]: GML,XML
+        GlossSee: markup!';
+
+    -- remove qutoes from para value in expected
+    -- for some reason the TS reference implementation adds quotes here
+    -- but from the spec it is not required as there are no special chars (https://github.com/toon-format/spec/blob/main/SPEC.md#72-quoting-rules-for-string-values-encoding)
+    l_expected := replace(l_expected, '"A meta-markup language, used to create markup languages such as DocBook."', 'A meta-markup language, used to create markup languages such as DocBook.');
+
+    ut.expect(l_result).to_equal(l_expected);
+
+  end glossary_structure;
+
+
+  procedure countries_array
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    l_result := uc_ai_toon.to_toon(q'![
+  {
+    "name": "France",
+    "capital": "Paris",
+    "population": 67364357,
+    "area": 551695,
+    "currency": "Euro",
+    "languages": [
+      "French"
+    ],
+    "region": "Europe",
+    "subregion": "Western Europe",
+    "flag": "https://upload.wikimedia.org/wikipedia/commons/c/c3/Flag_of_France.svg"
+  },
+  {
+    "name": "Germany",
+    "capital": "Berlin",
+    "population": 83240525,
+    "area": 357022,
+    "currency": "Euro",
+    "languages": [
+      "German"
+    ],
+    "region": "Europe",
+    "subregion": "Western Europe",
+    "flag": "https://upload.wikimedia.org/wikipedia/commons/b/ba/Flag_of_Germany.svg"
+  },
+  {
+    "name": "United States",
+    "capital": "Washington, D.C.",
+    "population": 331893745,
+    "area": 9833517,
+    "currency": "USD",
+    "languages": [
+      "English"
+    ],
+    "region": "Americas",
+    "subregion": "Northern America",
+    "flag": "https://upload.wikimedia.org/wikipedia/commons/a/a4/Flag_of_the_United_States.svg"
+  },
+  {
+    "name": "Belgium",
+    "capital": "Brussels",
+    "population": 11589623,
+    "area": 30528,
+    "currency": "Euro",
+    "languages": [
+      "Flemish",
+      "French",
+      "German"
+    ],
+    "region": "Europe",
+    "subregion": "Western Europe",
+    "flag": "https://upload.wikimedia.org/wikipedia/commons/6/65/Flag_of_Belgium.svg"
+  }
+]
+!');
+    l_expected := q'![4]:
+  - name: France
+    capital: Paris
+    population: 67364357
+    area: 551695
+    currency: Euro
+    languages[1]: French
+    region: Europe
+    subregion: Western Europe
+    flag: "https://upload.wikimedia.org/wikipedia/commons/c/c3/Flag_of_France.svg"
+  - name: Germany
+    capital: Berlin
+    population: 83240525
+    area: 357022
+    currency: Euro
+    languages[1]: German
+    region: Europe
+    subregion: Western Europe
+    flag: "https://upload.wikimedia.org/wikipedia/commons/b/ba/Flag_of_Germany.svg"
+  - name: United States
+    capital: "Washington, D.C."
+    population: 331893745
+    area: 9833517
+    currency: USD
+    languages[1]: English
+    region: Americas
+    subregion: Northern America
+    flag: "https://upload.wikimedia.org/wikipedia/commons/a/a4/Flag_of_the_United_States.svg"
+  - name: Belgium
+    capital: Brussels
+    population: 11589623
+    area: 30528
+    currency: Euro
+    languages[3]: Flemish,French,German
+    region: Europe
+    subregion: Western Europe
+    flag: "https://upload.wikimedia.org/wikipedia/commons/6/65/Flag_of_Belgium.svg"!';
+
+    -- remove qutoes Washington, D.C. value in expected
+    -- for some reason the TS reference implementation adds quotes here
+    -- but from the spec it is not required as there are no special chars (https://github.com/toon-format/spec/blob/main/SPEC.md#72-quoting-rules-for-string-values-encoding)
+    l_expected := replace(l_expected, '"Washington, D.C."', 'Washington, D.C.');
+
+
+    ut.expect(l_result).to_equal(l_expected);
+
+  end countries_array;
 
 end test_uc_ai_toon;
 /

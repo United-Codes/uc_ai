@@ -232,6 +232,7 @@ create or replace package body uc_ai_toon as
       end if;
       l_element := p_array.get(i);
       l_result := l_result || element_to_toon_value(l_element);
+      dbms_output.put_line('Primitive array element ' || i || ': ' || l_result);
     end loop primitive_loop;
 
     return l_result;
@@ -328,6 +329,7 @@ create or replace package body uc_ai_toon as
 
     -- Primitive array (compact format)
     if is_primitive_array(p_array) then
+      dbms_output.put_line('is_primitive_array: yes');
       l_nested := process_primitive_array(p_array);
       sys.dbms_lob.append(l_result, l_nested);
       return l_result;
@@ -336,12 +338,14 @@ create or replace package body uc_ai_toon as
     -- Homogeneous object array (columnar format)
     l_homogeneous_check := is_homogeneous_object_array(p_array);
     if l_homogeneous_check.is_homogeneous then
+      dbms_output.put_line('is_homogeneous_object_array: yes');
       return process_homogeneous_array(p_array, l_homogeneous_check.keys_arr, p_indent_level);
     end if;
 
     -- Irregular array (each element on its own line with dash)
     sys.dbms_lob.writeappend(l_result, length('[' || p_array.get_size || ']:' || chr(10)), '[' || p_array.get_size || ']:' || chr(10));
     
+    dbms_output.put_line('Processing irregular array of size ' || p_array.get_size);
     <<irregular_array_loop>>
     for i in 0 .. p_array.get_size - 1 loop
       l_element := p_array.get(i);
@@ -365,8 +369,8 @@ create or replace package body uc_ai_toon as
           -- every next part gets its own line without dash
           if j > 1 then
             sys.dbms_lob.writeappend(l_result, 1, chr(10));
-            -- indent is one level deeper as no dash
-            l_indent_next_line := l_indent;
+            -- indent to align with the first property (after the "- " prefix)
+            l_indent_next_line := l_indent || c_indent;
             sys.dbms_lob.writeappend(l_result, length(l_indent_next_line), l_indent_next_line);
             sys.dbms_lob.writeappend(l_result, length(l_part), l_part);
           else
