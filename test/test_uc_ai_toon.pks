@@ -65,5 +65,8 @@ create or replace package test_uc_ai_toon as
   --%test(Countries Array Data Set)
   procedure countries_array;
 
+  --%test(Products Array Data Set)
+  procedure products_array;
+
 end test_uc_ai_toon;
 /

@@ -49,6 +49,7 @@ create or replace package body uc_ai_toon as
 
     -- Contains special characters that require quoting
     if instr(p_value, ':') > 0 or
+       instr(p_value, ',') > 0 or
        instr(p_value, '"') > 0 or
        instr(p_value, '\') > 0 or
        instr(p_value, '[') > 0 or
