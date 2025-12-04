@@ -46,7 +46,7 @@ jobs:
           logLevel=Trace
           logFile=${{ github.workspace }}/.dblinter/check.log
           logFormat=ext3
-          outputFormats=github
+          outputFormats=github,sarif
           outputName=${{ github.workspace }}/.dblinter/check
           EOF
 
@@ -56,3 +56,8 @@ jobs:
 
       - name: Output dbLinter annotations
         run: cat .dblinter/check.github.txt
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .dblinter/check.sarif.sarif
