@@ -54,20 +54,5 @@ jobs:
         run: |
           java -jar dblinter-1.0.0/dblinter-cli.jar --options=.dblinter/check.properties check
 
-      - name: List dblinter output
-        if: always()
-        run: |
-          echo "Contents of .dblinter directory:"
-          ls -la .dblinter/ || echo "Directory does not exist or is empty"
-
-      - name: Copy results to workspace root
-        if: always()
-        run: cp .dblinter/check.github.txt ./dblinter-results.txt || echo "No results file found"
-
-      - name: Upload dbLinter results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: dblinter-results
-          path: dblinter-results.txt
-          retention-days: 30
+      - name: Output dbLinter annotations
+        run: cat .dblinter/check.github.txt
