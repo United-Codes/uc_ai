@@ -8,6 +8,10 @@ on:
     branches:
       - development
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   lint:
     name: Run dbLinter
@@ -58,6 +62,6 @@ jobs:
         run: cat .dblinter/check.github.txt
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: .dblinter/check.sarif.sarif
