@@ -59,13 +59,15 @@ jobs:
         run: |
           echo "Contents of .dblinter directory:"
           ls -la .dblinter/ || echo "Directory does not exist or is empty"
-          echo "Contents of workspace:"
-          ls -la
+
+      - name: Copy results to workspace root
+        if: always()
+        run: cp .dblinter/check.github.txt ./dblinter-results.txt || echo "No results file found"
 
       - name: Upload dbLinter results
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: dblinter-results
-          path: ${{ github.workspace }}/.dblinter/
+          path: dblinter-results.txt
           retention-days: 30
