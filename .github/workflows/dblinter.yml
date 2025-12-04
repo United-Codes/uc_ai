@@ -67,5 +67,5 @@ jobs:
         if: always()
         with:
           name: dblinter-results
-          path: .dblinter/
+          path: ${{ github.workspace }}/.dblinter/
           retention-days: 30
