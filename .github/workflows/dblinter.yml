@@ -54,6 +54,14 @@ jobs:
         run: |
           java -jar dblinter-1.0.0/dblinter-cli.jar --options=.dblinter/check.properties check
 
+      - name: List dblinter output
+        if: always()
+        run: |
+          echo "Contents of .dblinter directory:"
+          ls -la .dblinter/ || echo "Directory does not exist or is empty"
+          echo "Contents of workspace:"
+          ls -la
+
       - name: Upload dbLinter results
         uses: actions/upload-artifact@v4
         if: always()
