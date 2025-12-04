@@ -16,7 +16,7 @@ create or replace package uc_ai as
   c_provider_google    constant provider_type := 'google';
   c_provider_ollama    constant provider_type := 'ollama';
   c_provider_oci       constant provider_type := 'oci';
-  -- c_provider_xai       constant provider_type := 'xai';
+  c_provider_xai       constant provider_type := 'xai';
 
   subtype model_type is varchar2(128 char);
 
@@ -32,10 +32,14 @@ create or replace package uc_ai as
 
   -- reasoning global settings
   g_enable_reasoning boolean := false;
+  g_reasoning_level varchar2(10 char); -- low, medium, high
 
   -- tools relevant global settings
   g_enable_tools boolean := false;
   g_tool_tags apex_t_varchar2;
+
+  -- global settings for APEX Web Credentials
+  g_apex_web_credential varchar2(255 char);
 
   -- internal use only
   g_provider_override varchar2(4000 char);

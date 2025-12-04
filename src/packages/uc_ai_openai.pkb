@@ -298,7 +298,7 @@ create or replace package body uc_ai_openai as
       p_url => l_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => g_apex_web_credential
+      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);
