@@ -27,8 +27,8 @@ jobs:
       - name: Download dbLinter CLI
         run: |
           curl -L -o dblinter.zip https://github.com/Grisselbav/dbLinter/releases/download/cli-v1.0.0/dblinter-1.0.0.zip
-          unzip dblinter.zip -d dblinter
-          chmod +x dblinter/dblinter
+          unzip dblinter.zip
+          chmod +x dblinter-1.0.0/dblinter
 
       - name: Create .dblinter directory
         run: mkdir -p .dblinter
@@ -52,7 +52,7 @@ jobs:
 
       - name: Run dbLinter
         run: |
-          java -jar dblinter/dblinter-cli.jar --options=.dblinter/check.properties check
+          java -jar dblinter-1.0.0/dblinter-cli.jar --options=.dblinter/check.properties check
 
       - name: Upload dbLinter results
         uses: actions/upload-artifact@v4
