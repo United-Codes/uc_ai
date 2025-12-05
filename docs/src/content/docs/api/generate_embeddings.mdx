@@ -26,6 +26,8 @@ Most notably `p_input` receives an array of strings as `generate_embeddings` whi
 | `p_provider` | `provider_type` | Yes      | AI provider to use. See `uc_ai` spec for constants.          |
 | `p_model`    | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants. |
 
+The return is **an array of arrays**. As you can pass multiple input texts you can get back multiple vectors. The first vector represents the first input text and so on.
+
 ## Usage Example
 
 ```sql
@@ -43,10 +45,14 @@ begin
     p_model => 'granite-embedding:30m'
   );
   
-  -- example result: [0.340329043034, 0.2334029034]
+  -- example result: 
+  -- [
+  --  [0.340329043034, 0.2334029034, ...]
+  --  [0.954233454545, 0.5343434023, ...]
+  -- ]
   
   -- l_result.get_size → 2
-  -- l_result.get(0) → 0.340329043034
+  -- l_result.get(0) → [0.340329043034, 0.2334029034, ...]
 end;
 ```
 

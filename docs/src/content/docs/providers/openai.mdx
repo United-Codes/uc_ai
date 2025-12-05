@@ -159,6 +159,34 @@ Refer to OpenAI's [reasoning best practices guide](https://platform.openai.com/d
 
 OpenAI does not return reasoning summary messages like some other providers. It only returns the final message after reasoning is complete.
 
+## Generating Embeddings
+
+OpenAI provides powerful embedding models for semantic search, clustering, and other vector-based operations. UC AI supports embedding generation with OpenAI's latest models:
+
+- `uc_ai_openai.c_model_text_embedding_3_small` - Cost-effective, good for most use cases
+- `uc_ai_openai.c_model_text_embedding_3_large` - Higher quality, more dimensions
+- `uc_ai_openai.c_model_text_embedding_ada_002` - Legacy model
+
+Refer to the [OpenAI embedding documentation](https://platform.openai.com/docs/guides/embeddings#embedding-models) for additional information and potential new models that are not listed here yet.
+
+```sql
+declare
+  l_result json_array_t;
+begin
+  l_result := uc_ai.generate_embeddings(
+    p_input => json_array_t('["Oracle APEX is a low-code development platform.", "UC AI allows you to easily use AI from PL/SQL."]'),
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_text_embedding_3_small
+  );
+
+  -- l_result.get_size → 2 (one embedding per input string)
+  -- l_result.get(0) → JSON array of embedding values for first input
+end;
+/
+```
+
+For more information about the `generate_embeddings` function, visit its [documentation page](/products/uc-ai/docs/api/generate_embeddings/).
+
 ## Using OpenAI API compliant providers
 
 Many providers like DeepSeek or Perplexity offer APIs that behave the same way as the OpenAI API. You can use them with UC AI as well even though it is not first level supported by the package.
