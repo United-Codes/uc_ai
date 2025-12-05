@@ -1,0 +1,23 @@
+{
+  "id": "/43711D06F3474B52AEF9491A895678A0/CF83362D81DDF1D597948849025F58E6",
+  "embeddings": [
+    [
+      0.014251709,
+      -0.044189453,
+      0.00415802,
+      -0.06750488,
+      -0.04647827,
+      0.017501831,
+      -0.060516357,
+      0.000,
+      0.016921997
+    ]
+  ],
+  "modelId": "cohere.embed-english-v3.0",
+  "modelVersion": "3.0",
+  "usage": {
+    "completionTokens": 0,
+    "promptTokens": 16,
+    "totalTokens": 16
+  }
+}
