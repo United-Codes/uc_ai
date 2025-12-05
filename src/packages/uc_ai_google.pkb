@@ -176,6 +176,7 @@ create or replace package body uc_ai_google as
                   end if;
                 exception
                   when others then
+                    uc_ai_logger.log_warning('Failed to parse tool call arguments JSON: ' || sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace, l_scope, l_content_item.get_clob('args'));
                     -- If parsing fails, don't add args
                     null;
                 end;
@@ -607,6 +608,13 @@ create or replace package body uc_ai_google as
         l_thinking_config.put('includeThoughts', true);
         if g_reasoning_budget is not null then
           l_thinking_config.put('thinkingBudget', g_reasoning_budget);
+        elsif uc_ai.g_reasoning_level is not null then
+          l_thinking_config.put('thinkingBudget', case uc_ai.g_reasoning_level
+            when 'low' then '2048'
+            when 'medium' then '8192'
+            when 'high' then '32768'
+            else uc_ai.g_reasoning_level
+          end);
         end if;
         l_generation_config.put('thinkingConfig', l_thinking_config);
       end;

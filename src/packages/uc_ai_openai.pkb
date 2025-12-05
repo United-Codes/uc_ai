@@ -556,7 +556,7 @@ create or replace package body uc_ai_openai as
     end if;
 
     if uc_ai.g_enable_reasoning then
-      l_input_obj.put('reasoning_effort', uc_ai_openai.g_reasoning_effort);
+      l_input_obj.put('reasoning_effort', coalesce(uc_ai_openai.g_reasoning_effort, uc_ai.g_reasoning_level));
     end if;
 
     internal_generate_text(

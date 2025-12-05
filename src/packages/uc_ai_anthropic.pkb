@@ -191,6 +191,7 @@ create or replace package body uc_ai_anthropic as
                   l_tool_use.put('input', l_args_obj);
                 exception
                   when others then
+                    uc_ai_logger.log_warning('Failed to parse tool call arguments JSON: ' || sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace, l_scope, l_content_item.get_clob('args'));
                     -- If parsing fails, create empty input object
                     l_tool_use.put('input', json_object_t());
                 end;
@@ -614,7 +615,16 @@ create or replace package body uc_ai_anthropic as
    if uc_ai.g_enable_reasoning then
       l_reasoning := json_object_t();
       l_reasoning.put('type', 'enabled');
-      l_reasoning.put('budget_tokens', g_reasoning_budget_tokens);
+      if g_reasoning_budget_tokens is not null then
+        l_reasoning.put('budget', g_reasoning_budget_tokens);
+      elsif uc_ai.g_reasoning_level is not null then
+        l_reasoning.put('budget', case uc_ai.g_reasoning_level
+          when 'low' then '2048'
+          when 'medium' then '8192'
+          when 'high' then '32768'
+          else uc_ai.g_reasoning_level
+        end);
+      end if;
       l_input_obj.put('thinking', l_reasoning);
     end if;
 

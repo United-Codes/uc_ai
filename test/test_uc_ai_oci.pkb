@@ -1,5 +1,5 @@
 create or replace package body test_uc_ai_oci as
-  -- @dblinter ignore(g-5010): allow logger in test packages
+-- @dblinter ignore(g-5010): allow dbms_output in test packages
 
   procedure basic_recipe_generic
   as

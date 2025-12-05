@@ -32,7 +32,7 @@ create or replace package body uc_ai_structured_output as
     l_google_properties json_object_t := json_object_t();
     l_items json_object_t;
     l_required json_array_t;
-    l_property_names json_key_list;
+    l_property_name_arr json_key_list;
     l_property_name varchar2(4000 char);
     l_property_value json_object_t;
     l_type varchar2(100 char);
@@ -53,11 +53,11 @@ create or replace package body uc_ai_structured_output as
     -- Convert properties for object types
     if p_schema.has('properties') then
       l_properties := p_schema.get_object('properties');
-      l_property_names := l_properties.get_keys();
+      l_property_name_arr := l_properties.get_keys();
       
       <<property_loop>>
-      for i in 1 .. l_property_names.count loop
-        l_property_name := l_property_names(i);
+      for i in 1 .. l_property_name_arr.count loop
+        l_property_name := l_property_name_arr(i);
         l_property_value := l_properties.get_object(l_property_name);
         l_google_properties.put(l_property_name, convert_schema_to_google(l_property_value));
       end loop property_loop;
@@ -95,7 +95,7 @@ create or replace package body uc_ai_structured_output as
     l_properties json_object_t;
     l_processed_properties json_object_t := json_object_t();
     l_items json_object_t;
-    l_property_names json_key_list;
+    l_property_name_arr json_key_list;
     l_property_name varchar2(4000 char);
     l_property_value json_object_t;
     l_type varchar2(100 char);
@@ -116,11 +116,11 @@ create or replace package body uc_ai_structured_output as
     -- Process nested properties and ensure all are required
     if l_result.has('properties') then
       l_properties := l_result.get_object('properties');
-      l_property_names := l_properties.get_keys();
+      l_property_name_arr := l_properties.get_keys();
       
       <<property_loop>>
-      for i in 1 .. l_property_names.count loop
-        l_property_name := l_property_names(i);
+      for i in 1 .. l_property_name_arr.count loop
+        l_property_name := l_property_name_arr(i);
         l_property_value := l_properties.get_object(l_property_name);
         l_processed_properties.put(l_property_name, process_openai_strict_schema(l_property_value));
       end loop property_loop;
@@ -132,8 +132,8 @@ create or replace package body uc_ai_structured_output as
         l_required_array json_array_t := json_array_t();
       begin
         <<required_loop>>
-        for i in 1 .. l_property_names.count loop
-          l_required_array.append(l_property_names(i));
+        for i in 1 .. l_property_name_arr.count loop
+          l_required_array.append(l_property_name_arr(i));
         end loop required_loop;
         
         l_result.put('required', l_required_array);
