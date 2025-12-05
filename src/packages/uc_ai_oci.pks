@@ -38,6 +38,18 @@ create or replace package uc_ai_oci as
   -- Oracle proprietary models (if available)
   c_model_oracle_genai              constant uc_ai.model_type := 'oracle.genai';
 
+  -- Cohere Embedding models
+  -- See https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/EmbedTextResult/EmbedText
+  c_model_cohere_embed_4                          constant uc_ai.model_type := 'cohere.embed-v4.0';
+  c_model_cohere_embed_english_image_3            constant uc_ai.model_type := 'cohere.embed-english-image-v3.0';
+  c_model_cohere_embed_english_light_image_3      constant uc_ai.model_type := 'cohere.embed-english-light-image-v3.0';
+  c_model_cohere_embed_multi_image_light_3        constant uc_ai.model_type := 'cohere.embed-multilingual-light-image-v3.0';
+  c_model_cohere_embed_multilingual_light_image_3 constant uc_ai.model_type := 'cohere.embed-multilingual-light-image-v3.0';
+  c_model_cohere_embed_english_3                  constant uc_ai.model_type := 'cohere.embed-english-v3.0';
+  c_model_cohere_embed_english_light_3            constant uc_ai.model_type := 'cohere.embed-english-light-v3.0';
+  c_model_cohere_embed_multi_3                    constant uc_ai.model_type := 'cohere.embed-multilingual-v3.0';
+  c_model_cohere_embed_multi_light_3              constant uc_ai.model_type := 'cohere.embed-multilingual-light-v3.0';
+
   -- Global settings for OCI
   g_compartment_id varchar2(255 char); -- OCID of the compartment to use
   g_serving_type varchar2(64 char) := 'ON_DEMAND'; -- ON_DEMAND or DEDICATED
@@ -52,6 +64,19 @@ create or replace package uc_ai_oci as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   ) return json_object_t;
+
+  /*
+   * Oracle Cloud Infrastructure (OCI) implementation for embeddings generation
+   * 
+   * p_input: JSON array of strings to embed
+   * p_model: Embedding model to use (e.g., cohere.embed-english-v3.0)
+   * 
+   * Returns: JSON array of embedding arrays (one per input string)
+   */
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_model in uc_ai.model_type
+  ) return json_array_t;
 
 end uc_ai_oci;
 /

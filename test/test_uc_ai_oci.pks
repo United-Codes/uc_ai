@@ -26,6 +26,8 @@ create or replace package test_uc_ai_oci as
   --%test(Tool usage - clock in user in Cohere Mode)
   procedure tool_clock_in_user_cohere;
 
+  --%test(Embeddings generation)
+  procedure embeddings;
 
 end test_uc_ai_oci;
 /
