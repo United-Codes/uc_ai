@@ -147,6 +147,11 @@ create or replace package body uc_ai as
           p_input => p_input
         , p_model => p_model
         );
+      when c_provider_google then
+        l_result := uc_ai_google.generate_embeddings(
+          p_input => p_input
+        , p_model => p_model
+        );
       when c_provider_ollama then
         l_result := uc_ai_ollama.generate_embeddings(
           p_input => p_input
