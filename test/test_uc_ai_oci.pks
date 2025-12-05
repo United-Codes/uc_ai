@@ -29,5 +29,8 @@ create or replace package test_uc_ai_oci as
   --%test(Embeddings generation)
   procedure embeddings;
 
+  --%test(Embeddings generation with multiple inputs)
+  procedure embeddings_multi;
+
 end test_uc_ai_oci;
 /

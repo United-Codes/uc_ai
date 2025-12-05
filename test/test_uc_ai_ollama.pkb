@@ -400,12 +400,37 @@ create or replace package body test_uc_ai_ollama as
     );
     
 
-    ut.expect(l_result).to_be_not_null();
     l_array_clob := l_result.to_clob;
+    ut.expect(l_array_clob).to_be_not_null();
     sys.dbms_output.put_line('Embeddings array: ' || l_array_clob);
     ut.expect(l_result.get_size).to_equal(1);
     ut.expect(treat(l_result.get(0) as json_array_t).get_size).to_be_greater_than(0);
   end embeddings;
+
+  procedure embeddings_multi
+  as
+    l_result json_array_t;
+    l_array_clob clob;
+  begin
+    uc_ai.g_base_url := 'host.containers.internal:11434/api';
+    uc_ai.g_enable_tools := false;
+    uc_ai.g_enable_reasoning := false;
+
+    l_result := uc_ai.generate_embeddings(
+      p_input => json_array_t('["APEX Office Print lets you create and manage print jobs.", "Oracle Database is the world leading relational database.", "PL/SQL is a procedural extension to SQL."]'),
+      p_provider => uc_ai.c_provider_ollama,
+      p_model => 'granite-embedding:30m'
+    );
+
+    l_array_clob := l_result.to_clob;
+    ut.expect(l_array_clob).to_be_not_null();
+    sys.dbms_output.put_line('Multi embeddings count: ' || l_result.get_size);
+    ut.expect(l_result.get_size).to_equal(3);
+    -- Check each embedding has values
+    ut.expect(treat(l_result.get(0) as json_array_t).get_size).to_be_greater_than(0);
+    ut.expect(treat(l_result.get(1) as json_array_t).get_size).to_be_greater_than(0);
+    ut.expect(treat(l_result.get(2) as json_array_t).get_size).to_be_greater_than(0);
+  end embeddings_multi;
 
 end test_uc_ai_ollama;
 /
