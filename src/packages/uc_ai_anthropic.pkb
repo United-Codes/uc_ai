@@ -3,7 +3,6 @@ create or replace package body uc_ai_anthropic as
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_api_url constant varchar2(255 char) := 'https://api.anthropic.com/v1/messages';
   c_anthropic_version constant varchar2(32 char) := '2023-06-01';
-  c_default_max_tokens constant pls_integer := 8192;  -- Default max tokens for Anthropic
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
@@ -574,6 +573,7 @@ create or replace package body uc_ai_anthropic as
     l_reasoning          json_object_t;
     l_result             json_object_t;
     l_message            json_object_t;
+    l_reasoning_tokens   pls_integer;
   begin
     l_result := json_object_t();
     uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
@@ -603,7 +603,6 @@ create or replace package body uc_ai_anthropic as
     );
 
     l_input_obj.put('model', p_model);
-    l_input_obj.put('max_tokens', c_default_max_tokens); -- Anthropic requires max_tokens
 
     -- Get all available tools formatted for Anthropic
     l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_anthropic);
@@ -612,21 +611,29 @@ create or replace package body uc_ai_anthropic as
       l_input_obj.put('tools', l_tools);
     end if;
 
-   if uc_ai.g_enable_reasoning then
+    if uc_ai.g_enable_reasoning then
       l_reasoning := json_object_t();
       l_reasoning.put('type', 'enabled');
       if g_reasoning_budget_tokens is not null then
-        l_reasoning.put('budget', g_reasoning_budget_tokens);
+        l_reasoning_tokens := g_reasoning_budget_tokens;
       elsif uc_ai.g_reasoning_level is not null then
-        l_reasoning.put('budget', case uc_ai.g_reasoning_level
-          when 'low' then '2048'
-          when 'medium' then '8192'
-          when 'high' then '32768'
+        l_reasoning_tokens := case uc_ai.g_reasoning_level
+          when uc_ai.c_reasoning_level_low then 2048
+          when uc_ai.c_reasoning_level_medium then 8192
+          when uc_ai.c_reasoning_level_high then 32768
           else uc_ai.g_reasoning_level
-        end);
+        end;
       end if;
+      uc_ai_logger.log_info('Using reasoning with budget tokens: ' || l_reasoning_tokens, l_scope);
+      l_reasoning.put('budget_tokens', l_reasoning_tokens);
       l_input_obj.put('thinking', l_reasoning);
     end if;
+
+    if g_max_tokens < l_reasoning_tokens then
+      raise_application_error(-20001, 'Reasoning budget tokens (' || l_reasoning_tokens || ') exceed max tokens allowed (' || g_max_tokens || '). Set a higher max tokens value (uc_ai_anthropic.g_max_tokens).');
+    end if;
+
+    l_input_obj.put('max_tokens', g_max_tokens); -- Anthropic requires max_tokens
 
     internal_generate_text(
       pio_messages         => l_anthropic_messages

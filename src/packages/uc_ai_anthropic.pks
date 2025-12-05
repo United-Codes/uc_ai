@@ -23,9 +23,11 @@ create or replace package uc_ai_anthropic as
   c_model_claude_4_opus constant uc_ai.model_type := 'claude-opus-4-0';
   c_model_claude_3_opus     constant uc_ai.model_type := 'claude-3-opus-latest';
 
+  g_max_tokens pls_integer := 8192; -- Default maximum tokens for Claude models
+
   -- Maximum number of tokens Claude is allowed to use for its internal reasoning process
   -- More info at https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#how-to-use-extended-thinking
-  g_reasoning_budget_tokens pls_integer := 10000; -- Minimum is 1024
+  g_reasoning_budget_tokens pls_integer; -- Minimum is 1024
 
   -- type: HTTP-Header, credential-name: x-api-key
   g_apex_web_credential varchar2(255 char);
