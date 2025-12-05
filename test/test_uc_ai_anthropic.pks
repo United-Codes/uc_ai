@@ -23,6 +23,9 @@ create or replace package test_uc_ai_anthropic as
   --%test(reasoning)
   procedure reasoning;
 
+  --%test(reasoning from main package)
+  procedure reasoning_main;
+
   --%test(Basic text generation with APEX web credential)
   procedure basic_web_credential;
 
