@@ -77,6 +77,35 @@ END;
 /
 ```
 
+## Generic Reasoning Settings
+
+Instead of manually setting the provider setting UC AI also lets you simply choose between 3 levels: `low`, `medium`, `high`. In that case you don't need to supply any provider specific settings. Although we recommend for real productive systems to experiment and fine-tune reasoning settings for you chosen provider and model.
+
+You can use these generic settings via the `g_reasoning_level` variable in the `uc_ai` package.
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_final_message clob;
+  l_messages json_array_t;
+BEGIN
+  -- Enable reasoning
+  uc_ai.g_enable_reasoning := true;
+  -- Set reasoning effort
+  uc_ai.g_reasoning_level := uc_ai.c_reasoning_level_low; -- low, medium, high
+
+  l_result := uc_ai.GENERATE_TEXT(
+    p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_o4_mini
+  );
+
+  l_final_message := l_result.get_clob('final_message');
+  dbms_output.put_line('Final Answer: ' || l_final_message);
+END;
+/
+```
+
 ## Processing Reasoning Content
 
 ### Message Structure with Reasoning

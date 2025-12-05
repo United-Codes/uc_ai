@@ -610,9 +610,9 @@ create or replace package body uc_ai_google as
           l_thinking_config.put('thinkingBudget', g_reasoning_budget);
         elsif uc_ai.g_reasoning_level is not null then
           l_thinking_config.put('thinkingBudget', case uc_ai.g_reasoning_level
-            when 'low' then '2048'
-            when 'medium' then '8192'
-            when 'high' then '32768'
+            when uc_ai.c_reasoning_level_low then 2048
+            when uc_ai.c_reasoning_level_medium then 8192
+            when uc_ai.c_reasoning_level_high then 32768
             else uc_ai.g_reasoning_level
           end);
         end if;

@@ -30,9 +30,14 @@ create or replace package uc_ai as
   -- general global settings
   g_base_url varchar2(4000 char);
 
+  -- reasoning level constants
+  c_reasoning_level_low    constant varchar2(10 char) := 'low';
+  c_reasoning_level_medium constant varchar2(10 char) := 'medium';
+  c_reasoning_level_high   constant varchar2(10 char) := 'high';
+
   -- reasoning global settings
   g_enable_reasoning boolean := false;
-  g_reasoning_level varchar2(10 char); -- low, medium, high
+  g_reasoning_level varchar2(10 char); -- use c_reasoning_level_* constants
 
   -- tools relevant global settings
   g_enable_tools boolean := false;
