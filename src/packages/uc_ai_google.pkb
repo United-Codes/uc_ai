@@ -267,6 +267,7 @@ create or replace package body uc_ai_google as
     l_part      json_object_t;
     l_finish_reason varchar2(255 char);
     l_usage_metadata json_object_t;
+    l_web_credential varchar2(255 char);
   begin
     if g_tool_calls >= p_max_tool_calls then
       uc_ai_logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
@@ -283,7 +284,9 @@ create or replace package body uc_ai_google as
 
     l_api_url := c_api_url_base || l_model || ':generateContent';
 
-    if g_apex_web_credential is null then
+    l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+
+    if l_web_credential is null then
       l_api_url := l_api_url || '?key=' || uc_ai_get_key(uc_ai.c_provider_google);
     end if;
 
@@ -300,7 +303,7 @@ create or replace package body uc_ai_google as
       p_url => l_api_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
+      p_credential_static_id => l_web_credential
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);
@@ -693,6 +696,7 @@ create or replace package body uc_ai_google as
     l_parts         json_array_t;
     l_part          json_object_t;
     l_text          clob;
+    l_web_credential varchar2(255 char);
   begin
     uc_ai_logger.log('Starting generate_embeddings with ' || p_input.get_size || ' input items', l_scope);
     
@@ -732,7 +736,8 @@ create or replace package body uc_ai_google as
     -- Build API URL
     l_api_url := c_api_url_base || p_model || ':batchEmbedContents';
     
-    if g_apex_web_credential is null then
+    l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+    if l_web_credential is null then
       l_api_url := l_api_url || '?key=' || uc_ai_get_key(uc_ai.c_provider_google);
     end if;
 
@@ -749,7 +754,7 @@ create or replace package body uc_ai_google as
       p_url => l_api_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
+      p_credential_static_id => l_web_credential
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);

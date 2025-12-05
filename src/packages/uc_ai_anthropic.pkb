@@ -270,6 +270,7 @@ create or replace package body uc_ai_anthropic as
     l_usage     json_object_t;
     l_model     varchar2(255 char);
     l_content_type varchar2(64 char);
+    l_web_credential varchar2(255 char);
     
     l_has_tool_use boolean := false;
   begin
@@ -295,7 +296,8 @@ create or replace package body uc_ai_anthropic as
     apex_web_service.g_request_headers(2).name := 'anthropic-version';
     apex_web_service.g_request_headers(2).value := c_anthropic_version;
 
-    if g_apex_web_credential is null then
+    l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+    if l_web_credential is null then
       apex_web_service.g_request_headers(3).name := 'x-api-key';
       apex_web_service.g_request_headers(3).value := uc_ai_get_key(uc_ai.c_provider_anthropic);
     end if;
@@ -304,7 +306,7 @@ create or replace package body uc_ai_anthropic as
       p_url => c_api_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
+      p_credential_static_id => l_web_credential
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);
