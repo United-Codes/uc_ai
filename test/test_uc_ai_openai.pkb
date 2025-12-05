@@ -460,5 +460,26 @@ create or replace package body test_uc_ai_openai as
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
   end basic_web_credential;
 
+  procedure embeddings
+  as
+    l_result json_array_t;
+    l_array_clob clob;
+  begin
+    uc_ai.g_enable_tools := false; -- disable tools for this test
+    uc_ai.g_enable_reasoning := false; -- disable reasoning for this test
+
+    l_result := uc_ai.generate_embeddings(
+      p_input => json_array_t('["APEX Office Print lets you create and manage print jobs directly from your APEX applications."]'),
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_text_embedding_3_small
+    );
+
+    l_array_clob := l_result.to_clob;
+    ut.expect(l_array_clob).to_be_not_null();
+    sys.dbms_output.put_line('Embeddings array: ' || substr(l_array_clob, 1, 500) || '...');
+    ut.expect(l_result.get_size).to_equal(1);
+    ut.expect(treat(l_result.get(0) as json_array_t).get_size).to_be_greater_than(0);
+  end embeddings;
+
 end test_uc_ai_openai;
 /

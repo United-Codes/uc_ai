@@ -142,6 +142,11 @@ create or replace package body uc_ai as
     l_result json_array_t;
   begin
     case p_provider
+      when c_provider_openai then
+        l_result := uc_ai_openai.generate_embeddings(
+          p_input => p_input
+        , p_model => p_model
+        );
       when c_provider_ollama then
         l_result := uc_ai_ollama.generate_embeddings(
           p_input => p_input

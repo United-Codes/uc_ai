@@ -32,5 +32,8 @@ create or replace package test_uc_ai_openai as
   --%test(Basic text generation with APEX web credential)
   procedure basic_web_credential;
 
+  --%test(Embeddings generation)
+  procedure embeddings;
+
 end test_uc_ai_openai;
 /
