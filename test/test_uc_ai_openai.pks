@@ -23,6 +23,9 @@ create or replace package test_uc_ai_openai as
   --%test(reasoning)
   procedure reasoning;
 
+  --%test(reasoning from main package)
+  procedure reasoning_main;
+
   --%test(Structured output)
   procedure structured_output;
 
