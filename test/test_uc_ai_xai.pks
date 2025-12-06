@@ -14,8 +14,9 @@ create or replace package test_uc_ai_xai as
   --%test(Convert messages)
   procedure convert_messages;
 
-  --%test(PDF file input)
-  procedure pdf_file_input;
+  -- disabled due to having to upload a PDF file first
+  --%test-no(PDF file input)
+  --procedure pdf_file_input;
 
   --%test(image file input)
   procedure image_file_input;

@@ -298,7 +298,11 @@ create or replace package body uc_ai_openai as
     apex_web_service.g_request_headers(1).name := 'Content-Type';
     apex_web_service.g_request_headers(1).value := 'application/json';
 
-    l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+    if uc_ai.g_provider_override = uc_ai.c_provider_xai then
+      l_web_credential := coalesce(uc_ai.g_apex_web_credential, uc_ai_xai.g_apex_web_credential);
+    else
+      l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+    end if;
 
     if l_web_credential is null then
       apex_web_service.g_request_headers(2).name := 'Authorization';
@@ -306,7 +310,7 @@ create or replace package body uc_ai_openai as
     end if;
 
     l_url := get_generate_text_url;
-    uc_ai_logger.log('Calling OpenAI API at ' || l_url, l_scope);
+    uc_ai_logger.log('Calling OpenAI API at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null'), l_scope);
 
     l_resp := apex_web_service.make_rest_request(
       p_url => l_url,
@@ -579,7 +583,29 @@ create or replace package body uc_ai_openai as
     end if;
 
     if uc_ai.g_enable_reasoning then
-      l_input_obj.put('reasoning_effort', coalesce(uc_ai_openai.g_reasoning_effort, uc_ai.g_reasoning_level));
+      if uc_ai.g_provider_override = uc_ai.c_provider_xai then
+        declare
+          l_reasoning_effort varchar2(32 char);
+          l_model varchar2(255 char);
+        begin
+          l_reasoning_effort := coalesce(uc_ai_xai.g_reasoning_effort, uc_ai.g_reasoning_level);
+          if l_reasoning_effort = uc_ai.c_reasoning_level_medium then
+            l_reasoning_effort := uc_ai.c_reasoning_level_low; -- xAI does not have medium, map to low
+            uc_ai_logger.log('Mapping reasoning_effort "medium" to "low" for xAI provider', l_scope);
+          end if;
+
+          l_model := l_input_obj.get_string('model');
+          if l_model like '%non-reasoning%' then
+            l_model := replace(l_model, 'non-reasoning', 'reasoning');
+            l_input_obj.put('model', l_model);
+            uc_ai_logger.log('Switching model to reasoning variant for xAI provider: ' || l_model, l_scope);
+          end if;
+          
+          l_input_obj.put('reasoning_level', l_reasoning_effort);
+        end;
+      else
+        l_input_obj.put('reasoning_effort', coalesce(uc_ai_openai.g_reasoning_effort, uc_ai.g_reasoning_level));
+      end if;
     end if;
 
     internal_generate_text(

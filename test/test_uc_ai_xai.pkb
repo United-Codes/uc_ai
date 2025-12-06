@@ -286,6 +286,7 @@ create or replace package body test_uc_ai_xai as
     uc_ai_test_message_utils.validate_message_array(l_messages, 'Image file input before');
 
     uc_ai.g_enable_tools := false; -- disable tools for this test
+    uc_ai.g_enable_reasoning := false; -- disable reasoning for this test
 
     l_result := uc_ai.generate_text(
       p_messages => l_messages,
@@ -443,7 +444,7 @@ create or replace package body test_uc_ai_xai as
     l_messages json_array_t;
     l_message_count pls_integer;
   begin
-    uc_ai_xai.g_apex_web_credential := 'OPENAI'; -- name of the APEX web credential
+    uc_ai_xai.g_apex_web_credential := 'XAI'; -- name of the APEX web credential
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What an I cook with that?',
       p_system_prompt => 'You are an assistant helping users to get recipes. Please answer in short sentences.',

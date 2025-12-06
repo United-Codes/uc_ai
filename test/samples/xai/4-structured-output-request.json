@@ -1,0 +1,44 @@
+{
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "structured_output",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "response": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "response",
+          "confidence"
+        ]
+      },
+      "strict": true
+    }
+  },
+  "model": "grok-4-fast-reasoning",
+  "reasoning_level": "low",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant that provides accurate information."
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "What is the capital of France? Please respond with confidence."
+        }
+      ]
+    }
+  ]
+}

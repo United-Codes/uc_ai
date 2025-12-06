@@ -1,0 +1,36 @@
+{
+  "id": "84410c7e-f8ae-71de-69b5-d95ceb477945",
+  "object": "chat.completion",
+  "created": 1765031700,
+  "model": "grok-4-fast-reasoning",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": " {\"response\":\"The capital of France is Paris.\",\"confidence\":1}",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 259,
+    "completion_tokens": 14,
+    "total_tokens": 375,
+    "prompt_tokens_details": {
+      "text_tokens": 259,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 157
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 102,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0
+  },
+  "system_fingerprint": "fp_adbb3573fd"
+}
