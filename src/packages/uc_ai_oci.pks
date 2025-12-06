@@ -35,6 +35,10 @@ create or replace package uc_ai_oci as
   c_model_grok_3_fast               constant uc_ai.model_type := 'xai.grok-3-fast';
   c_model_grok_3_mini_fast          constant uc_ai.model_type := 'xai.grok-3-mini-fast';
 
+  -- OpenAI models
+  c_model_gpt_oss_120b              constant uc_ai.model_type := 'openai.gpt-oss-120b';
+  c_model_gpt_oss_20b               constant uc_ai.model_type := 'openai.gpt-oss-20b';
+
   -- Oracle proprietary models (if available)
   c_model_oracle_genai              constant uc_ai.model_type := 'oracle.genai';
 
