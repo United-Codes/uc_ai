@@ -1,0 +1,54 @@
+{
+  "id": "bfa04f8a-4bb8-cce7-3948-129707c9ed28",
+  "object": "chat.completion",
+  "created": 1765020408,
+  "model": "grok-4-fast-reasoning",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_48506919",
+            "function": {
+              "name": "TT_GET_USERS",
+              "arguments": "{}"
+            },
+            "type": "function"
+          },
+          {
+            "id": "call_09133740",
+            "function": {
+              "name": "TT_GET_PROJETS",
+              "arguments": "{}"
+            },
+            "type": "function"
+          }
+        ],
+        "refusal": null
+      },
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 689,
+    "completion_tokens": 34,
+    "total_tokens": 1061,
+    "prompt_tokens_details": {
+      "text_tokens": 689,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 688
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 338,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0
+  },
+  "system_fingerprint": "fp_adbb3573fd"
+}

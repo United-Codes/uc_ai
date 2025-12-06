@@ -1,0 +1,106 @@
+{
+  "model": "gpt-4o-mini",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "name": "TT_GET_USERS",
+        "description": "Get information on all the users in the system"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "name": "TT_GET_PROJETS",
+        "description": "Get information on all the projects in the system"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "parameters": {
+              "type": "object",
+              "description": "JSON object containing parameters",
+              "properties": {
+                "user_email": {
+                  "type": "string",
+                  "description": "Email of the user"
+                },
+                "project_name": {
+                  "type": "string",
+                  "description": "Name of the project"
+                },
+                "notes": {
+                  "type": "string",
+                  "description": "Optional description of what the user is working on"
+                }
+              },
+              "required": [
+                "user_email",
+                "project_name"
+              ]
+            }
+          },
+          "required": [
+            "parameters"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "name": "TT_CLOCK_IN",
+        "description": "Clock in a user to the time tracking system. This needs a user_email and project_name as parameters. You can get these from other tools. Optionally pass notes if given by the user.\nExample parameters: {\"user_email\": \"user@example.com\",\"project_name\": \"TV Marketing\", \"notes\": \"Look for actors\"} or {\"user_email\": \"john.doe@gmail.com\",\"project_name\": \"Inventing Teleportation\"}"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.\n        The current user is Michael Scott.\n\n        If you clock somebody in, answer with: \"You are now clocked in to the project \"{{project_name}}\" with the note \"{{notes| - }}\"."
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Please clock me in to the marketing project with the note \"meeting\"."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [
+        {
+          "id": "call_27sGV8SxJf5dp78lNq2dc01c",
+          "type": "function",
+          "function": {
+            "name": "TT_CLOCK_IN",
+            "arguments": "{\"user_email\":\"michael.scott@example.com\",\"project_name\":\"Marketing\",\"notes\":\"meeting\"}"
+          }
+        }
+      ],
+      "refusal": null,
+      "annotations": []
+    },
+    {
+      "role": "tool",
+      "content": "Error: ORA-20001: User with email michael.scott@example.com not found or inactive - Backtrace: ORA-06512: at \"UC_AI.TT_TIMETRACKING_API\", line 49\nORA-06512: at \"UC_AI.TT_TIMETRACKING_API\", line 383\nORA-06512: at \"UC_AI.TT_TIMETRACKING_API\", line 447\n",
+      "tool_call_id": "call_27sGV8SxJf5dp78lNq2dc01c"
+    }
+  ]
+}

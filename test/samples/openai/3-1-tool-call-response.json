@@ -1,0 +1,46 @@
+{
+  "id": "chatcmpl-CjkRqD0z6d4raT17D14qa3s3iFBj1",
+  "object": "chat.completion",
+  "created": 1765019342,
+  "model": "gpt-4o-mini-2024-07-18",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_27sGV8SxJf5dp78lNq2dc01c",
+            "type": "function",
+            "function": {
+              "name": "TT_CLOCK_IN",
+              "arguments": "{\"user_email\":\"michael.scott@example.com\",\"project_name\":\"Marketing\",\"notes\":\"meeting\"}"
+            }
+          }
+        ],
+        "refusal": null,
+        "annotations": []
+      },
+      "logprobs": null,
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 245,
+    "completion_tokens": 31,
+    "total_tokens": 276,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    }
+  },
+  "service_tier": "default",
+  "system_fingerprint": "fp_11f3029f6b"
+}
