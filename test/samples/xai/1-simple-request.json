@@ -1,0 +1,18 @@
+{
+  "model": "grok-4-fast-non-reasoning",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are an assistant helping users to get recipes. Please answer in short sentences."
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "I have tomatoes, salad, potatoes, olives, and cheese. What an I cook with that?"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "id": "93fcd6c9-9726-3091-0aac-3ac8b8051723",
+  "object": "chat.completion",
+  "created": 1765018003,
+  "model": "grok-4-fast-non-reasoning",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "You can make a simple Greek-inspired salad with chopped tomatoes, salad greens, sliced potatoes (boiled first), olives, and crumbled cheese like feta. Toss with olive oil, salt, and pepper for dressing.",
+        "refusal": null
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 204,
+    "completion_tokens": 42,
+    "total_tokens": 246,
+    "prompt_tokens_details": {
+      "text_tokens": 204,
+      "audio_tokens": 0,
+      "image_tokens": 0,
+      "cached_tokens": 160
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0
+    },
+    "num_sources_used": 0
+  },
+  "system_fingerprint": "fp_9ca713e9d0"
+}

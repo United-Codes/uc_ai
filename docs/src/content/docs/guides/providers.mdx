@@ -12,6 +12,8 @@ Currently the framework supports the following AI providers:
 - **OpenAI**: GPT
 - **Anthropic**: Claude
 - **Google**: Gemini
+- **OCI**: Oracle Cloud Infrastructure
+- **xAI**: Grok
 - **Ollama**: Open source models (Llama, Mistral, Qwen, etc.)
 
 The goal is to make it easy to switch between providers without changing your code. Each provider has its own package with a consistent interface for text generation and function calling.
@@ -62,6 +64,7 @@ Each provider has its own package with a consistent interface. For example:
 - **OpenAI**: `uc_ai_openai`
 - **Anthropic**: `uc_ai_anthropic`
 - **Google**: `uc_ai_google`
+- **xAI**: `uc_ai_xai`
 - **Ollama**: `uc_ai_ollama`
 
 That way the API differences between providers are abstracted away, allowing you to switch providers easily.
