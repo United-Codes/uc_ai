@@ -326,9 +326,13 @@ create or replace package body uc_ai_openai as
     end;
 
     if l_resp_json.has('error') then
-      l_temp_obj := l_resp_json.get_object('error');
-      uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-      uc_ai_logger.log_error('Error message: ', l_scope,l_temp_obj.get_string('message'));
+      if l_resp_json.get('error').is_object then
+        l_temp_obj := l_resp_json.get_object('error');
+        uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
+        uc_ai_logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
+      else
+        uc_ai_logger.log_error('Error in response', l_scope, l_resp_json.get_string('error'));
+      end if;
       raise uc_ai.e_error_response;
     end if;
 
@@ -417,6 +421,11 @@ create or replace package body uc_ai_openai as
    
               uc_ai_logger.log('Tool call', l_scope, 'Tool ID: ' || l_tool_id || ', Call ID: ' || l_call_id || ', Arguments: ' || l_arguments);
               l_args_json := json_object_t.parse(l_arguments);
+
+              -- xAI wraps arguments in "parameters" object
+              if uc_ai.g_provider_override = uc_ai.c_provider_xai then
+                l_args_json := treat( l_args_json.get('parameters') as json_object_t );
+              end if;
    
               -- Execute the tool and get result
               l_tool_result := uc_ai_tools_api.execute_tool(
@@ -565,7 +574,7 @@ create or replace package body uc_ai_openai as
 
     -- Get all available tools formatted for OpenAI (if tools are enabled)
     if uc_ai.g_enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array('openai');
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_openai, uc_ai.g_provider_override);
       l_input_obj.put('tools', l_tools);
     end if;
 
@@ -655,9 +664,13 @@ create or replace package body uc_ai_openai as
     end;
 
     if l_resp_json.has('error') then
-      l_temp_obj := l_resp_json.get_object('error');
-      uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-      uc_ai_logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
+      if l_resp_json.get('error').is_object then
+        l_temp_obj := l_resp_json.get_object('error');
+        uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
+        uc_ai_logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
+      else
+        uc_ai_logger.log_error('Error in response', l_scope, l_resp_json.get_string('error'));
+      end if;
       raise uc_ai.e_error_response;
     end if;
 

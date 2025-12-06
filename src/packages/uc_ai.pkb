@@ -59,18 +59,18 @@ create or replace package body uc_ai as
           , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
           );
         end if;
-      -- when c_provider_xai then
-      --   g_base_url := 'https://api.x.ai/v1';
-      --   g_provider_override := c_provider_xai;
+      when c_provider_xai then
+        g_base_url := 'https://api.x.ai/v1';
+        g_provider_override := c_provider_xai;
 
-      --   l_result := uc_ai_openai.generate_text(
-      --     p_messages       => p_messages
-      --   , p_model          => p_model
-      --   , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
-      --   , p_schema         => p_response_json_schema
-      --   , p_schema_name    => 'structured_output'
-      --   , p_strict         => true
-      --   );
+        l_result := uc_ai_openai.generate_text(
+          p_messages       => p_messages
+        , p_model          => p_model
+        , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        , p_schema         => p_response_json_schema
+        , p_schema_name    => 'structured_output'
+        , p_strict         => true
+        );
       else
         raise e_unknown_provider;
     end case;
