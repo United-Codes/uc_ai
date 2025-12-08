@@ -1,0 +1,263 @@
+---
+title: OpenRouter
+description: UC AI provider documentation for OpenRouter - unified API for hundreds of AI models
+---
+
+The UC AI OpenRouter integration provides access to hundreds of AI models from various providers (OpenAI, Anthropic, Google, Meta, and many more) through a single unified API endpoint.
+
+## Features
+
+- Access to 300+ models from 60+ providers through a single API
+- Full function calling (tools) support
+- Structured output support
+- Multi-modal support (text, images, PDFs)
+- Embedding generation
+- Automatic fallback and provider routing
+- Pay-per-use pricing with no subscriptions
+
+## Prerequisites
+
+1. OpenRouter API key
+2. Oracle database with internet access to OpenRouter's API endpoints
+3. UC AI package installed
+4. Set up API key ([guide](/products/uc-ai/docs/guides/installation/#set-up-api-keys))
+
+You can get an API key by signing up at [OpenRouter](https://openrouter.ai/).
+
+## Creating a Web Credential
+
+To use your OpenRouter key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following settings:
+
+- Authentication Type: HTTP Header
+- Credential Name: `Authorization`
+- Credential Secret: `Bearer <your_api_key>`
+
+We generally recommend also setting `Valid for URLs` to the OpenRouter API (https://openrouter.ai/) to limit the scope of the credential.
+
+To use the web credential in your PL/SQL code, set the package variable `uc_ai_openai.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
+
+```sql
+uc_ai_openai.g_apex_web_credential := 'OPENROUTER';
+```
+
+Note: OpenRouter uses the OpenAI-compatible API format, so the `uc_ai_openai` package is used under the hood.
+
+## Models
+
+OpenRouter provides access to models from many providers. You can browse all available models at [openrouter.ai/models](https://openrouter.ai/models).
+
+Models are identified by their provider prefix and model name, for example:
+
+- `openai/gpt-4o` - OpenAI GPT-4o
+- `anthropic/claude-3.5-sonnet` - Anthropic Claude 3.5 Sonnet
+- `google/gemini-pro` - Google Gemini Pro
+- `meta-llama/llama-3-70b-instruct` - Meta Llama 3 70B
+- `mistralai/mixtral-8x7b-instruct` - Mistral Mixtral
+
+Some models are available for free (with rate limits), identifiable by the `:free` suffix:
+
+- `meta-llama/llama-3-8b-instruct:free`
+- `google/gemma-7b-it:free`
+
+See [OpenRouter's model page](https://openrouter.ai/models) for the complete list of available models, pricing, and capabilities.
+
+## Usage Examples
+
+### Basic Text Generation
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is Oracle APEX?',
+    p_provider => uc_ai.c_provider_openrouter,
+    p_model => 'openai/gpt-4o-mini'
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### With System Prompt
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
+    p_system_prompt => 'You are an assistant helping users to get recipes. Please answer in short sentences.',
+    p_provider => uc_ai.c_provider_openrouter,
+    p_model => 'anthropic/claude-3.5-sonnet'
+  );
+
+  dbms_output.put_line('Recipe suggestions: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### Using Tools/Function Calling
+
+OpenRouter supports tools/function calling for models that have this capability. You can define tools in your application and the model will call them as needed.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai.g_enable_tools := true; -- enable tools usage
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is the email address of Jim?',
+    p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.',
+    p_provider => uc_ai.c_provider_openrouter,
+    p_model => 'openai/gpt-4o'
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to set up and use tools.
+
+### Multi-modal Analysis
+
+Many models available through OpenRouter have vision capabilities for Image and PDF Analysis.
+
+```sql
+declare
+  l_messages json_array_t := json_array_t();
+  l_content json_array_t := json_array_t();
+  l_result json_object_t;
+  l_final_message clob;
+begin
+  l_messages.append(uc_ai_message_api.create_system_message(
+    'You are an image analysis assistant.'));
+
+  l_content.append(uc_ai_message_api.create_file_content(
+    p_media_type => 'image/png',
+    p_data_blob => your_image_blob,
+    p_filename => 'image.png'
+  ));
+
+  l_content.append(uc_ai_message_api.create_text_content(
+    'What is depicted in the attached image?'
+  ));
+
+  l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+  l_result := uc_ai.generate_text(
+    p_messages => l_messages,
+    p_provider => uc_ai.c_provider_openrouter,
+    p_model => 'openai/gpt-4o'
+  );
+
+  l_final_message := l_result.get_clob('final_message');
+  dbms_output.put_line('Analysis: ' || l_final_message);
+end;
+/
+```
+
+Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for more examples on how to analyze images and PDFs.
+
+### Structured Output
+
+OpenRouter supports structured output (JSON schema) for models that have this capability:
+
+```sql
+declare
+  l_result json_object_t;
+  l_schema json_object_t;
+  l_final_message clob;
+  l_structured_output json_object_t;
+begin
+  -- Define the expected JSON schema
+  l_schema := json_object_t('{
+    "type": "object",
+    "properties": {
+      "response": {"type": "string"},
+      "confidence": {"type": "number"}
+    },
+    "required": ["response", "confidence"]
+  }');
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is the capital of France? Please respond with confidence.',
+    p_system_prompt => 'You are a helpful assistant that provides accurate information.',
+    p_provider => uc_ai.c_provider_openrouter,
+    p_model => 'openai/gpt-4o',
+    p_response_json_schema => l_schema
+  );
+
+  l_final_message := l_result.get_clob('final_message');
+  l_structured_output := json_object_t(l_final_message);
+
+  dbms_output.put_line('Response: ' || l_structured_output.get_string('response'));
+  dbms_output.put_line('Confidence: ' || l_structured_output.get_number('confidence'));
+end;
+/
+```
+
+### Reasoning / Thinking
+
+For models that support reasoning (like OpenAI's o-series models), you can enable extended thinking:
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai.g_enable_reasoning := true;
+  uc_ai.g_reasoning_level := 'low'; -- 'low', 'medium', 'high'
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
+    p_provider => uc_ai.c_provider_openrouter,
+    p_model => 'openai/o1-mini'
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+## Generating Embeddings
+
+OpenRouter provides access to embedding models for semantic search, clustering, and other vector-based operations:
+
+```sql
+declare
+  l_result json_array_t;
+begin
+  l_result := uc_ai.generate_embeddings(
+    p_input => json_array_t('["Oracle APEX is a low-code development platform.", "UC AI allows you to easily use AI from PL/SQL."]'),
+    p_provider => uc_ai.c_provider_openrouter,
+    p_model => 'thenlper/gte-base'
+  );
+
+  -- l_result.get_size → 2 (one embedding per input string)
+  -- l_result.get(0) → JSON array of embedding values for first input
+end;
+/
+```
+
+Check the [OpenRouter models page](https://openrouter.ai/models) and filter by "Embeddings" output modality to see available embedding models.
+
+## Benefits of Using OpenRouter
+
+### Unified API
+
+Access models from OpenAI, Anthropic, Google, Meta, Mistral, and many more through a single API endpoint. This simplifies your code and reduces vendor lock-in.
+
+### Automatic Fallbacks
+
+OpenRouter automatically handles provider outages by falling back to alternative providers, improving uptime and reliability.
+
+### Cost Optimization
+
+OpenRouter routes requests to the most cost-effective providers while maintaining quality. You only pay for what you use with no subscriptions required.
+
+### Model Discovery
+
+Easily experiment with different models by simply changing the model parameter. No need to set up separate API keys or credentials for each provider.
