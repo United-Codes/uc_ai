@@ -1,0 +1,43 @@
+{
+  "id": "gen-1765045883-RFK6q5pbJvwiSz2lTpAd",
+  "provider": "Amazon Nova",
+  "model": "amazon/nova-2-lite-v1:free",
+  "object": "chat.completion",
+  "created": 1765045884,
+  "choices": [
+    {
+      "logprobs": null,
+      "finish_reason": "stop",
+      "native_finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "### Simple Recipes Using Your Ingredients:\n\n1. **Potato & Tomato Salad**  \n   - Boil potatoes, slice tomatoes.  \n   - Toss with olives, cheese, and salad greens.  \n   - Drizzle olive oil & balsamic vinegar.\n\n2. **Mediterranean Bowl**  \n   - Roast sliced potatoes and tomatoes.  \n   - Top with olives, cheese, and salad.  \n   - Add salt, pepper, and herbs if you have them.\n\n3. **Cheesy Potato & Olive Side**  \n   - Slice potatoes and olives.  \n   - Sauté together until tender.  \n   - Stir in grated cheese at the end.\n\n4. **Tomato & Cheese Platter Salad**  \n   - Combine chopped tomatoes, olives, cheese, and salad greens.  \n   - Add a squeeze of lemon or vinegar.\n\n*Tip: Use olive oil, salt, and pepper for seasoning if available!*",
+        "refusal": null,
+        "reasoning": null,
+        "annotations": []
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 132,
+    "completion_tokens": 501,
+    "total_tokens": 633,
+    "cost": 0,
+    "is_byok": false,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 0,
+      "video_tokens": 0
+    },
+    "cost_details": {
+      "upstream_inference_cost": null,
+      "upstream_inference_prompt_cost": 0,
+      "upstream_inference_completions_cost": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "image_tokens": 0
+    }
+  }
+}

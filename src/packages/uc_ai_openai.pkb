@@ -424,7 +424,7 @@ create or replace package body uc_ai_openai as
    
    
               uc_ai_logger.log('Tool call', l_scope, 'Tool ID: ' || l_tool_id || ', Call ID: ' || l_call_id || ', Arguments: ' || l_arguments);
-              l_args_json := json_object_t.parse(l_arguments);
+              l_args_json := json_object_t.parse(coalesce(l_arguments, '{}'));
 
               -- xAI wraps arguments in "parameters" object
               if uc_ai.g_provider_override = uc_ai.c_provider_xai then

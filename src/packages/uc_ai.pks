@@ -11,12 +11,13 @@ create or replace package uc_ai as
   */
 
   subtype provider_type is varchar2(64 char);
-  c_provider_openai    constant provider_type := 'openai';
-  c_provider_anthropic constant provider_type := 'anthropic';
-  c_provider_google    constant provider_type := 'google';
-  c_provider_ollama    constant provider_type := 'ollama';
-  c_provider_oci       constant provider_type := 'oci';
-  c_provider_xai       constant provider_type := 'xai';
+  c_provider_openai     constant provider_type := 'openai';
+  c_provider_anthropic  constant provider_type := 'anthropic';
+  c_provider_google     constant provider_type := 'google';
+  c_provider_ollama     constant provider_type := 'ollama';
+  c_provider_oci        constant provider_type := 'oci';
+  c_provider_xai        constant provider_type := 'xai';
+  c_provider_openrouter constant provider_type := 'openrouter';
 
   subtype model_type is varchar2(128 char);
 
