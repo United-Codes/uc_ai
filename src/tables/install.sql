@@ -44,32 +44,40 @@ create table uc_ai_tool_parameters(
   updated_by          varchar2(255 char) not null,
   updated_at          timestamp not null,
   constraint uc_ai_tool_parameters_pk primary key (id),
-  constraint uc_ai_tool_parameters_uk unique (tool_id, name),
-  constraint uc_ai_tool_parameters_required_ck check (required in (0,1)),
+  constraint uc_ai_tool_parameters_uk unique (tool_id, name)
+);
 
-  constraint uc_ai_tool_parameters_tool_id_fk foreign key (tool_id) references uc_ai_tools(id) on delete cascade,
+alter table uc_ai_tool_parameters add
+  constraint uc_ai_tool_parameters_required_ck check (required in (0,1));
 
+alter table uc_ai_tool_parameters add
+  constraint uc_ai_tool_parameters_tool_id_fk foreign key (tool_id) references uc_ai_tools(id) on delete cascade;
+
+alter table uc_ai_tool_parameters add
   constraint uc_ai_tool_parameters_data_type_ck check (
     data_type in ('string', 'number', 'integer', 'boolean', 'object')
-  ),
+  );
 
   -- For number/integer type: only min_num_val and max_num_val should be filled
+alter table uc_ai_tool_parameters add
   constraint uc_ai_tool_parameters_number_cols_ck check (
       (data_type in ('number', 'integer') and 
       (min_length is null and max_length is null and pattern is null)) 
       or 
       (data_type not in ('number', 'integer'))
-  ),
+  );
 
   -- For string type: only min_length, max_length, pattern, and format should be filled
+alter table uc_ai_tool_parameters add
   constraint uc_ai_tool_parameters_string_cols_ck check (
       (data_type = 'string' and 
       (min_num_val is null and max_num_val is null)) 
       or 
       (data_type != 'string')
-  ),
+  );
 
   -- For boolean type: most validation fields should be null
+alter table uc_ai_tool_parameters add
   constraint uc_ai_tool_parameters_boolean_cols_ck check (
       (data_type = 'boolean' and 
       (min_num_val is null and max_num_val is null and 
@@ -77,31 +85,35 @@ create table uc_ai_tool_parameters(
         pattern is null and format is null)) 
       or 
       (data_type != 'boolean')
-  ),
+  );
 
   -- For array type: ensure array flags are properly set
+alter table uc_ai_tool_parameters add
   constraint uc_ai_tool_parameters_array_cols_ck check (
       (data_type = 'array' and is_array = 1) 
       or 
       (data_type != 'array')
-  ),
+  );
 
   -- Ensure array properties are only set when is_array = 1
+alter table uc_ai_tool_parameters add
   constraint uc_ai_tool_parameters_array_props_ck check (
       (is_array = 1) 
       or 
       (is_array = 0 and array_min_items is null and array_max_items is null)
-  ),
+  );
 
   -- For enum values: ensure they're only used with appropriate types
+alter table uc_ai_tool_parameters add
   constraint uc_ai_tool_parameters_enum_ck check (
       (enum_values is not null and data_type in ('string', 'number', 'integer')) 
       or 
       (enum_values is null)
-  ),
+  );
 
+alter table uc_ai_tool_parameters add
   constraint uc_ai_tool_parameters_parent_param_id_fk foreign key (parent_param_id) references uc_ai_tool_parameters(id) on delete cascade
-);  
+;  
 
 
 create sequence uc_ai_tool_tags_seq;
