@@ -1,0 +1,264 @@
+---
+title: xAI
+description: UC AI provider documentation for xAI Grok models
+---
+
+The UC AI xAI package provides integration with xAI's Grok models, allowing you to use cutting-edge language models within your Oracle database applications.
+
+## Features
+
+- Support for latest Grok models (Grok-4, Grok-3, Grok-2)
+- Full function calling (tools) support
+- Advanced reasoning capabilities with reasoning effort control
+- Multi-modal support (text, images)
+- Structured output support
+
+## Prerequisites
+
+1. xAI API key
+2. Oracle database with internet access to xAI's API endpoints
+3. UC AI package installed
+4. Set up API key ([guide](/products/uc-ai/docs/guides/installation/#set-up-api-keys))
+
+You can get an API key by signing up at [xAI Console](https://console.x.ai/).
+
+## Creating a Web Credential
+
+To use your xAI key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following settings:
+
+- Authentication Type: HTTP Header
+- Credential Name: `Authorization`
+- Credential Secret: `Bearer <your_api_key>`
+
+We generally recommend also setting `Valid for URLs` to the xAI API (https://api.x.ai/) to limit the scope of the credential.
+
+To use the web credential in your PL/SQL code, set the package variable `uc_ai_xai.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
+
+```sql
+uc_ai_xai.g_apex_web_credential := 'XAI';
+```
+
+## Models
+
+xAI offers a range of Grok models optimized for different use cases. The UC AI xAI package provides constants for all current models:
+
+### Grok-4 Models
+
+The latest and most capable models in the Grok family:
+
+- `uc_ai_xai.c_model_grok_4` - Full Grok-4 model with reasoning capabilities
+- `uc_ai_xai.c_model_grok_4_fast` - Fast non-reasoning variant for quick responses
+- `uc_ai_xai.c_model_grok_4_1_fast` - Latest Grok-4.1 fast model
+
+### Grok-3 Models
+
+Previous generation models:
+
+- `uc_ai_xai.c_model_grok_3` - Full Grok-3 model
+- `uc_ai_xai.c_model_grok_3_mini` - Smaller, faster Grok-3 variant
+
+### Grok-2 Models
+
+- `uc_ai_xai.c_model_grok_2_vision` - Grok-2 with vision capabilities
+
+### Specialized Models
+
+- `uc_ai_xai.c_model_grok_code_fast_1` - Optimized for code generation tasks
+
+See [xAI's models documentation](https://docs.x.ai/docs/models) for the latest model information and capabilities.
+
+## Usage Examples
+
+### Basic Text Generation
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is Oracle APEX?',
+    p_provider => uc_ai.c_provider_xai,
+    p_model => uc_ai_xai.c_model_grok_4_fast
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### With System Prompt
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
+    p_system_prompt => 'You are an assistant helping users to get recipes. Please answer in short sentences.',
+    p_provider => uc_ai.c_provider_xai,
+    p_model => uc_ai_xai.c_model_grok_4_fast
+  );
+
+  dbms_output.put_line('Recipe: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### Using Tools/Function Calling
+
+All Grok models support tools/function calling. You can define tools in your application and Grok will call them as needed.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  -- Ensure tools are set up in UC_AI_TOOLS table
+  uc_ai.g_enable_tools := true;
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is the email address of Jim?',
+    p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.',
+    p_provider => uc_ai.c_provider_xai,
+    p_model => uc_ai_xai.c_model_grok_4_fast
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to set up and use tools.
+
+### Multi-modal Analysis
+
+Grok models support vision capabilities for image analysis. PDF analyisis is not implemented with UC AI yet, as xAI has a quite unique approach.
+
+#### Image Analysis
+
+```sql
+declare
+  l_messages json_array_t := json_array_t();
+  l_content json_array_t := json_array_t();
+  l_result json_object_t;
+begin
+  l_messages.append(uc_ai_message_api.create_system_message(
+    'You are an image analysis assistant.'));
+
+  l_content.append(uc_ai_message_api.create_file_content(
+    p_media_type => 'image/webp',
+    p_data_blob => your_image_blob,
+    p_filename => 'image.webp'
+  ));
+
+  l_content.append(uc_ai_message_api.create_text_content(
+    'What is depicted in the attached image?'
+  ));
+
+  l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+  l_result := uc_ai.generate_text(
+    p_messages => l_messages,
+    p_provider => uc_ai.c_provider_xai,
+    p_model => uc_ai_xai.c_model_grok_4_fast
+  );
+
+  dbms_output.put_line('Analysis: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+### Reasoning / Thinking
+
+xAI's Grok models support enhanced reasoning capabilities. You can control the reasoning effort level to balance speed and cost:
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai.g_enable_reasoning := true;
+  uc_ai_xai.g_reasoning_effort := 'high'; -- 'low', 'high'
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
+    p_provider => uc_ai.c_provider_xai,
+    p_model => uc_ai_xai.c_model_grok_4_fast
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+You can also use the main package reasoning level setting. As xAI does not have a `medium` setting it will get remapped to `low`.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai.g_enable_reasoning := true;
+  uc_ai.g_reasoning_level := 'low';
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Your complex question here',
+    p_provider => uc_ai.c_provider_xai,
+    p_model => uc_ai_xai.c_model_grok_4_fast
+  );
+
+  dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
+end;
+/
+```
+
+The reasoning effort parameter controls how many reasoning tokens are generated before creating a response. Higher effort levels result in more thorough reasoning but take longer and cost more.
+
+Refer to xAI's [reasoning guide](https://docs.x.ai/docs/guides/reasoning#control-how-hard-the-model-thinks) for advanced usage and best practices.
+
+### Structured Output
+
+xAI supports structured output with JSON schemas, allowing you to get responses in a specific format:
+
+```sql
+declare
+  l_result json_object_t;
+  l_schema json_object_t;
+  l_final_message clob;
+  l_structured_output json_object_t;
+begin
+  -- Define your JSON schema
+  l_schema := json_object_t('{
+    "name": "confidence_response",
+    "strict": true,
+    "schema": {
+      "type": "object",
+      "properties": {
+        "response": {
+          "type": "string",
+          "description": "The answer to the question"
+        },
+        "confidence": {
+          "type": "number",
+          "description": "Confidence level between 0 and 1"
+        }
+      },
+      "required": ["response", "confidence"],
+      "additionalProperties": false
+    }
+  }');
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is the capital of France? Please respond with confidence.',
+    p_system_prompt => 'You are a helpful assistant that provides accurate information.',
+    p_provider => uc_ai.c_provider_xai,
+    p_model => uc_ai_xai.c_model_grok_4_fast,
+    p_response_json_schema => l_schema
+  );
+
+  l_final_message := l_result.get_clob('final_message');
+  l_structured_output := json_object_t(l_final_message);
+
+  dbms_output.put_line('Response: ' || l_structured_output.get_string('response'));
+  dbms_output.put_line('Confidence: ' || l_structured_output.get_number('confidence'));
+end;
+/
+```
+

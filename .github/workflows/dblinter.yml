@@ -1,0 +1,67 @@
+name: dbLinter
+
+on:
+  push:
+    branches:
+      - development
+  pull_request:
+    branches:
+      - development
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  lint:
+    name: Run dbLinter
+    runs-on: ubuntu-latest
+    environment: dblinter
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Download dbLinter CLI
+        run: |
+          curl -L -o dblinter.zip https://github.com/Grisselbav/dbLinter/releases/download/cli-v1.0.0/dblinter-1.0.0.zip
+          unzip dblinter.zip
+          chmod +x dblinter-1.0.0/dblinter
+
+      - name: Create .dblinter directory
+        run: mkdir -p .dblinter
+
+      - name: Create dblinter properties file
+        run: |
+          cat > .dblinter/check.properties << EOF
+          workspace=${{ github.workspace }}
+          repoUrl=https://api.dblinter.app/
+          tenantName=Free-1001-CUGF-2426
+          userName=${{ secrets.DBLINTER_USERNAME }}
+          accessToken=${{ secrets.DBLINTER_ACCESS_TOKEN }}
+          configName=Default
+          parallel=2
+          logLevel=Trace
+          logFile=${{ github.workspace }}/.dblinter/check.log
+          logFormat=ext3
+          outputFormats=github,sarif
+          outputName=${{ github.workspace }}/.dblinter/check
+          EOF
+
+      - name: Run dbLinter
+        run: |
+          java -jar dblinter-1.0.0/dblinter-cli.jar --options=.dblinter/check.properties check
+
+      - name: Output dbLinter annotations
+        run: cat .dblinter/check.github.txt
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: .dblinter/check.sarif.sarif

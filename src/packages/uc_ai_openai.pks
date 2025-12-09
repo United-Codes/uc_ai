@@ -3,15 +3,22 @@ create or replace package uc_ai_openai as
 
   /**
   * UC AI
-  * Package to integrate AI capabilities into Oracle databases.
+  * PL/SQL SDK to integrate AI capabilities into Oracle databases.
   * 
-  * Copyright (c) 2025 United Codes
+  * Licensed under the GNU Lesser General Public License v3.0
+  * Copyright (c) 2025-present United Codes
   * https://www.united-codes.com
   */
 
 
   -- get from https://platform.openai.com/docs/pricing
+  c_model_gpt_5_1 constant uc_ai.model_type := 'gpt-5.1';
+
   c_model_gpt_5 constant uc_ai.model_type := 'gpt-5';
+  c_model_gpt_5_mini constant uc_ai.model_type := 'gpt-5-mini';
+  c_model_gpt_5_nano constant uc_ai.model_type := 'gpt-5-nano';
+  c_model_gpt_5_pro constant uc_ai.model_type := 'gpt-5-pro';
+
   c_model_gpt_4_5 constant uc_ai.model_type := 'gpt-4.5-preview';
   c_model_gpt_4_1 constant uc_ai.model_type := 'gpt-4.1';
   c_model_gpt_4_1_mini constant uc_ai.model_type := 'gpt-4.1-mini';
@@ -42,6 +49,11 @@ create or replace package uc_ai_openai as
   -- type: HTTP-Header, credential-name: Authorization, value: Bearer <token>
   g_apex_web_credential varchar2(255 char);
 
+  -- Embedding models: https://platform.openai.com/docs/guides/embeddings#embedding-models
+  c_model_text_embedding_3_small constant uc_ai.model_type := 'text-embedding-3-small';
+  c_model_text_embedding_3_large constant uc_ai.model_type := 'text-embedding-3-large';
+  c_model_text_embedding_ada_002 constant uc_ai.model_type := 'text-embedding-ada-002';
+
   /*
    * OpenAI implementation for text generation
    */
@@ -53,6 +65,19 @@ create or replace package uc_ai_openai as
   , p_schema_name    in varchar2 default 'structured_output'
   , p_strict         in boolean default true
   ) return json_object_t;
+
+  /*
+   * OpenAI implementation for embeddings generation
+   * 
+   * p_input: JSON array of strings to embed
+   * p_model: Embedding model to use (e.g., text-embedding-3-small)
+   * 
+   * Returns: JSON array of embedding arrays (one per input string)
+   */
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_model in uc_ai.model_type
+  ) return json_array_t;
 
 end uc_ai_openai;
 /

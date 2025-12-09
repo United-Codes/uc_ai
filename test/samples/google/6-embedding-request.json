@@ -1,0 +1,16 @@
+{
+  "requests": [
+    {
+      "model": "models/gemini-embedding-001",
+      "content": {
+        "parts": [
+          {
+            "text": "APEX Office Print lets you create and manage print jobs directly from your APEX applications."
+          }
+        ]
+      },
+      "task_type": "SEMANTIC_SIMILARITY",
+      "output_dimensionality": 1536
+    }
+  ]
+}

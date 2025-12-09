@@ -36,6 +36,8 @@ PROMPT Dropping core UC AI package...
 DROP PACKAGE uc_ai;
 
 PROMPT Dropping AI provider packages...
+DROP PACKAGE uc_ai_openrouter;
+DROP PACKAGE uc_ai_xai;
 DROP PACKAGE uc_ai_openai;
 DROP PACKAGE uc_ai_ollama;
 DROP PACKAGE uc_ai_oci;
@@ -43,6 +45,7 @@ DROP PACKAGE uc_ai_google;
 DROP PACKAGE uc_ai_anthropic;
 
 PROMPT Dropping API packages...
+DROP PACKAGE uc_ai_toon;
 DROP PACKAGE uc_ai_logger;
 DROP PACKAGE uc_ai_structured_output;
 DROP PACKAGE uc_ai_message_api;

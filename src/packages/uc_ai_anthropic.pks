@@ -3,19 +3,21 @@ create or replace package uc_ai_anthropic as
 
   /**
   * UC AI
-  * Package to integrate AI capabilities into Oracle databases.
+  * PL/SQL SDK to integrate AI capabilities into Oracle databases.
   * 
-  * Copyright (c) 2025 United Codes
+  * Licensed under the GNU Lesser General Public License v3.0
+  * Copyright (c) 2025-present United Codes
   * https://www.united-codes.com
   */
 
 
   -- Anthropic Claude models
   -- See https://docs.anthropic.com/en/docs/about-claude/models
-  c_model_claude_4_1_opus constant uc_ai.model_type := 'claude-opus-4-1';
+  c_model_claude_4_5_opus constant uc_ai.model_type := 'claude-opus-4-5';
   c_model_claude_4_5_sonnet constant uc_ai.model_type := 'claude-sonnet-4-5';
   c_model_claude_4_5_haiku  constant uc_ai.model_type := 'claude-haiku-4-5';
 
+  c_model_claude_4_1_opus constant uc_ai.model_type := 'claude-opus-4-1';
   c_model_claude_4_sonnet constant uc_ai.model_type := 'claude-sonnet-4-0';
   c_model_claude_3_7_sonnet constant uc_ai.model_type := 'claude-3-7-sonnet-latest';
   c_model_claude_3_5_sonnet constant uc_ai.model_type := 'claude-3-5-sonnet-latest';
@@ -23,9 +25,11 @@ create or replace package uc_ai_anthropic as
   c_model_claude_4_opus constant uc_ai.model_type := 'claude-opus-4-0';
   c_model_claude_3_opus     constant uc_ai.model_type := 'claude-3-opus-latest';
 
+  g_max_tokens pls_integer := 8192; -- Default maximum tokens for Claude models
+
   -- Maximum number of tokens Claude is allowed to use for its internal reasoning process
   -- More info at https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#how-to-use-extended-thinking
-  g_reasoning_budget_tokens pls_integer := 10000; -- Minimum is 1024
+  g_reasoning_budget_tokens pls_integer; -- Minimum is 1024
 
   -- type: HTTP-Header, credential-name: x-api-key
   g_apex_web_credential varchar2(255 char);

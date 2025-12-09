@@ -41,9 +41,13 @@ uc_ai_google.g_apex_web_credential := 'GOOGLE';
 
 Google offers the Gemini family of models with different capabilities and performance characteristics. The UC AI Google package provides constants for all current models:
 
-### Gemini 2.5 Series (Latest)
+### Gemini 3 Series
 
-The latest generation of Gemini models with enhanced capabilities:
+- `uc_ai_google.c_model_gemini_3_pro` - Most capable model for complex tasks
+
+### Gemini 2.5 Series
+
+Enhanced second generation models:
 
 - `uc_ai_google.c_model_gemini_2_5_pro` - Most capable model for complex tasks
 - `uc_ai_google.c_model_gemini_2_5_flash` - Fast and efficient for most tasks
@@ -144,3 +148,40 @@ The reasoning budget parameter controls how many thinking tokens the model uses:
 Note that reasoning cannot be disabled with Gemini 2.5 Pro models as they always use some level of reasoning.
 
 Refer to Google's [thinking documentation](https://ai.google.dev/gemini-api/docs/thinking#set-budget) for more details on reasoning capabilities.
+
+## Generating Embeddings
+
+Google provides the Gemini Embedding model for semantic search, clustering, and other vector-based operations:
+
+- `uc_ai_google.c_model_gemini_embedding_001` - Latest embedding model
+
+### Configuration Options
+
+Google's embedding API supports additional configuration parameters:
+
+- **Task Type** - Optimize embeddings for a specific task (default: `SEMANTIC_SIMILARITY`)
+- **Output Dimensions** - Control the size of the embedding vectors (default: `1536`)
+
+See [Google's embedding documentation](https://ai.google.dev/gemini-api/docs/embeddings#supported-task-types) for supported task types.
+
+```sql
+declare
+  l_result json_array_t;
+begin
+  -- Optional: Configure embedding parameters
+  uc_ai_google.g_embedding_task_type := 'SEMANTIC_SIMILARITY'; -- or RETRIEVAL_QUERY, RETRIEVAL_DOCUMENT, etc.
+  uc_ai_google.g_embedding_output_dimensions := 768; -- Reduce dimensions for smaller vectors
+
+  l_result := uc_ai.generate_embeddings(
+    p_input => json_array_t('["Oracle APEX is a low-code development platform.", "UC AI allows you to easily use AI from PL/SQL."]'),
+    p_provider => uc_ai.c_provider_google,
+    p_model => uc_ai_google.c_model_gemini_embedding_001
+  );
+
+  -- l_result.get_size → 2 (one embedding per input string)
+  -- l_result.get(0) → JSON array of embedding values for first input
+end;
+/
+```
+
+For more information about the `generate_embeddings` function, visit its [documentation page](/products/uc-ai/docs/api/generate_embeddings/).

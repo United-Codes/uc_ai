@@ -1,13 +1,40 @@
 create or replace package body uc_ai_google as 
 
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
-  c_api_url_base constant varchar2(255 char) := 'https://generativelanguage.googleapis.com/v1beta/models/';
+  c_api_url constant varchar2(255 char) := 'https://generativelanguage.googleapis.com/v1beta/models';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
   g_final_message clob;
 
   -- Chat API reference: https://ai.google.dev/api/generate-content
+
+  function get_api_url_base return varchar2
+  as
+  begin
+    if uc_ai.g_base_url is not null then
+      return rtrim(uc_ai.g_base_url, '/');
+    end if;
+    
+    return c_api_url;
+  end get_api_url_base;
+
+  function get_generate_text_url(
+    p_model in varchar2
+  ) return varchar2
+  as
+  begin
+    return get_api_url_base || '/' || p_model || ':generateContent';
+  end get_generate_text_url;
+
+  function get_generate_embeddings_url(
+    p_model in varchar2
+  ) return varchar2
+  as
+  begin
+    return get_api_url_base || '/' || p_model || ':batchEmbedContents';
+  end get_generate_embeddings_url;
+
   function get_thought_content (
     p_message in json_object_t
   ) return json_object_t
@@ -176,6 +203,7 @@ create or replace package body uc_ai_google as
                   end if;
                 exception
                   when others then
+                    uc_ai_logger.log_warning('Failed to parse tool call arguments JSON: ' || sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace, l_scope, l_content_item.get_clob('args'));
                     -- If parsing fails, don't add args
                     null;
                 end;
@@ -266,6 +294,7 @@ create or replace package body uc_ai_google as
     l_part      json_object_t;
     l_finish_reason varchar2(255 char);
     l_usage_metadata json_object_t;
+    l_web_credential varchar2(255 char);
   begin
     if g_tool_calls >= p_max_tool_calls then
       uc_ai_logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
@@ -280,9 +309,11 @@ create or replace package body uc_ai_google as
     -- Build API URL with model
     l_model := pio_result.get_string('model');
 
-    l_api_url := c_api_url_base || l_model || ':generateContent';
+    l_api_url := get_generate_text_url(l_model);
 
-    if g_apex_web_credential is null then
+    l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+
+    if l_web_credential is null then
       l_api_url := l_api_url || '?key=' || uc_ai_get_key(uc_ai.c_provider_google);
     end if;
 
@@ -299,7 +330,7 @@ create or replace package body uc_ai_google as
       p_url => l_api_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => g_apex_web_credential
+      p_credential_static_id => l_web_credential
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);
@@ -607,6 +638,13 @@ create or replace package body uc_ai_google as
         l_thinking_config.put('includeThoughts', true);
         if g_reasoning_budget is not null then
           l_thinking_config.put('thinkingBudget', g_reasoning_budget);
+        elsif uc_ai.g_reasoning_level is not null then
+          l_thinking_config.put('thinkingBudget', case uc_ai.g_reasoning_level
+            when uc_ai.c_reasoning_level_low then 2048
+            when uc_ai.c_reasoning_level_medium then 8192
+            when uc_ai.c_reasoning_level_high then 32768
+            else uc_ai.g_reasoning_level
+          end);
         end if;
         l_generation_config.put('thinkingConfig', l_thinking_config);
       end;
@@ -656,6 +694,133 @@ create or replace package body uc_ai_google as
     
     return l_result;
   end generate_text;
+
+
+  /*
+   * Generate embeddings using Google Gemini API
+   * 
+   * API reference: https://ai.google.dev/api/embeddings
+   * Uses batchEmbedContents for multiple inputs
+   * 
+   * Returns array of embedding arrays (one per input string)
+   */
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_model in uc_ai.model_type
+  ) return json_array_t
+  as
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_embeddings';
+    l_api_url       varchar2(4000 char);
+    l_resp          clob;
+    l_resp_json     json_object_t;
+    l_temp_obj      json_object_t;
+    l_embeddings    json_array_t;
+    l_embedding_obj json_object_t;
+    l_input_obj     json_object_t := json_object_t();
+    l_requests      json_array_t := json_array_t();
+    l_request       json_object_t;
+    l_content       json_object_t;
+    l_parts         json_array_t;
+    l_part          json_object_t;
+    l_text          clob;
+    l_web_credential varchar2(255 char);
+  begin
+    uc_ai_logger.log('Starting generate_embeddings with ' || p_input.get_size || ' input items', l_scope);
+    
+    -- Build requests array for batchEmbedContents
+    -- Each request needs: {"model": "models/...", "content": {"parts": [{"text": "..."}]}}
+    <<build_requests_loop>>
+    for i in 0 .. p_input.get_size - 1
+    loop
+      l_text := p_input.get_clob(i);
+      
+      l_part := json_object_t();
+      l_part.put('text', l_text);
+      
+      l_parts := json_array_t();
+      l_parts.append(l_part);
+      
+      l_content := json_object_t();
+      l_content.put('parts', l_parts);
+      
+      l_request := json_object_t();
+      l_request.put('model', 'models/' || p_model);
+      l_request.put('content', l_content);
+
+      if g_embedding_task_type is not null then
+        l_request.put('task_type', g_embedding_task_type);
+      end if;
+
+      if g_embedding_output_dimensions is not null then
+        l_request.put('output_dimensionality', g_embedding_output_dimensions);
+      end if;
+      
+      l_requests.append(l_request);
+    end loop build_requests_loop;
+    
+    l_input_obj.put('requests', l_requests);
+
+    -- Build API URL
+    l_api_url := get_generate_embeddings_url(p_model);
+    
+    l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+    if l_web_credential is null then
+      l_api_url := l_api_url || '?key=' || uc_ai_get_key(uc_ai.c_provider_google);
+    end if;
+
+    apex_web_service.clear_request_headers;
+    apex_web_service.set_request_headers(
+      p_name_01  => 'Content-Type',
+      p_value_01 => 'application/json'
+    );
+
+    uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
+    uc_ai_logger.log('Request URL: ' || l_api_url, l_scope);
+
+    l_resp := apex_web_service.make_rest_request(
+      p_url => l_api_url,
+      p_http_method => 'POST',
+      p_body => l_input_obj.to_clob,
+      p_credential_static_id => l_web_credential
+    );
+
+    uc_ai_logger.log('Response', l_scope, l_resp);
+
+    begin
+      l_resp_json := json_object_t.parse(l_resp);
+    exception
+      when others then
+        uc_ai_logger.log_error('Response is not JSON, probable error', l_scope, l_resp);
+        raise uc_ai.e_error_response;
+    end;
+
+    if l_resp_json.has('error') then
+      l_temp_obj := l_resp_json.get_object('error');
+      uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
+      uc_ai_logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
+      raise uc_ai.e_error_response;
+    end if;
+
+    -- Google returns embeddings in "embeddings" array, each item has "values" array
+    l_embeddings := json_array_t();
+    
+    declare
+      l_resp_embeddings json_array_t;
+    begin
+      l_resp_embeddings := l_resp_json.get_array('embeddings');
+      
+      <<embeddings_loop>>
+      for i in 0 .. l_resp_embeddings.get_size - 1
+      loop
+        l_embedding_obj := treat(l_resp_embeddings.get(i) as json_object_t);
+        l_embeddings.append(l_embedding_obj.get_array('values'));
+      end loop embeddings_loop;
+    end;
+
+    uc_ai_logger.log('Returning ' || l_embeddings.get_size || ' embeddings', l_scope);
+
+    return l_embeddings;
+  end generate_embeddings;
 
 end uc_ai_google;
 /

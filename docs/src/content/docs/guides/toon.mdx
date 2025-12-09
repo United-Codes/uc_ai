@@ -1,0 +1,341 @@
+---
+title: TOON - Token-Oriented Object Notation
+description: Learn how to use TOON to reduce token usage when sending JSON data to LLMs
+sidebar:
+  order: 55
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**Token-Oriented Object Notation (TOON)** is a compact, human-readable encoding of the JSON data model that minimizes tokens and makes structure easy for models to follow. It's intended for LLM input as a drop-in, lossless representation of your existing JSON.
+
+TOON combines YAML's indentation-based structure for nested objects with a CSV-style tabular layout for uniform arrays. TOON's sweet spot is uniform arrays of objects (multiple fields per row, same structure across items), achieving CSV-like compactness while adding explicit structure that helps LLMs parse and validate data reliably.
+
+<Aside type="tip">
+  Think of TOON as a translation layer: use JSON programmatically, and encode it
+  as TOON for LLM input.
+</Aside>
+
+## Why Use TOON?
+
+When sending data to LLMs, every token counts:
+
+- **Cost reduction**: Fewer tokens means lower API costs
+- **Context efficiency**: More room for actual content in the context window
+- **Better parsing**: The structured format helps LLMs understand and work with data reliably
+
+The similarity to CSV is intentional: CSV is simple and ubiquitous, and TOON aims to keep that familiarity while remaining a lossless, drop-in representation of JSON for Large Language Models.
+
+<Aside type="caution">
+  For deeply nested or non-uniform data, JSON may be more efficient. TOON excels
+  with uniform arrays of objects.
+</Aside>
+
+## TOON Format Rules
+
+### Simple Objects
+
+Objects use YAML-like `key: value` notation with newlines between properties:
+
+```
+name: Alice
+age: 30
+```
+
+This is equivalent to the JSON: `{"name": "Alice", "age": 30}`
+
+### Nested Objects
+
+Nested objects use indentation (2 spaces per level):
+
+```
+user:
+  name: Bob
+  contact:
+    email: bob@ex.com
+```
+
+### Primitive Arrays
+
+Arrays of primitives are shown inline with count notation:
+
+```
+[3]: 1,2,3
+```
+
+This represents `[1, 2, 3]`.
+
+### Homogeneous Object Arrays (Tabular Format)
+
+Arrays of objects with the same structure use a CSV-like columnar format:
+
+```
+[2]{id,active}:
+  1,true
+  2,false
+```
+
+This represents `[{"id": 1, "active": true}, {"id": 2, "active": false}]`.
+
+### Irregular Arrays
+
+Arrays with mixed structures use dash notation:
+
+```
+[3]:
+  - a: 1
+  - a: 1
+    b: 2
+  - c: 3
+```
+
+### Special Values
+
+- **Null values**: Represented as `null`
+- **Booleans**: Represented as `true` or `false`
+- **Empty arrays**: Shown as `key[0]:`
+- **Empty objects**: Shown as `key:`
+- **Strings with special characters**: Quoted and escaped (e.g., `"He said \"hello\""`)
+
+## Using TOON in UC AI
+
+The `uc_ai_toon` package provides functions to convert JSON to TOON format.
+
+### Converting a Single Row to TOON
+
+Use `JSON_OBJECT` to build a JSON object from a single row and convert it to TOON:
+
+```sql
+DECLARE
+  l_json json_object_t;
+  l_toon clob;
+BEGIN
+  SELECT json_object(
+           'employee_id' value employee_id,
+           'first_name'  value first_name,
+           'last_name'   value last_name,
+           'salary'      value salary
+         )
+    INTO l_json
+    FROM employees
+   WHERE employee_id = 100;
+
+  l_toon := uc_ai_toon.to_toon(l_json);
+
+  dbms_output.put_line(l_toon);
+  -- Output:
+  -- employee_id: 100
+  -- first_name: Steven
+  -- last_name: King
+  -- salary: 24000
+END;
+/
+```
+
+### Converting Multiple Rows to TOON
+
+Use `JSON_ARRAYAGG` to aggregate multiple rows into a JSON array:
+
+```sql
+DECLARE
+  l_json json_array_t;
+  l_toon clob;
+BEGIN
+  SELECT json_arrayagg(
+           json_object(
+             'department_id'   value department_id,
+             'department_name' value department_name,
+             'manager_id'      value manager_id
+           )
+         )
+    INTO l_json
+    FROM departments
+   WHERE location_id = 1700;
+
+  l_toon := uc_ai_toon.to_toon(l_json);
+
+  dbms_output.put_line(l_toon);
+  -- Output (homogeneous array uses tabular format):
+  -- [7]{department_id,department_name,manager_id}:
+  --   10,Administration,200
+  --   30,Purchasing,114
+  --   90,Executive,100
+  --   ...
+END;
+/
+```
+
+### Converting a JSON String
+
+You can also pass a JSON string (CLOB) directly:
+
+```sql
+DECLARE
+  l_json_str clob;
+  l_toon clob;
+BEGIN
+  -- Query returning JSON as string
+  SELECT json_object(
+           'count' value count(*),
+           'avg_salary' value round(avg(salary), 2)
+         returning clob)
+    INTO l_json_str
+    FROM employees;
+
+  l_toon := uc_ai_toon.to_toon(l_json_str);
+
+  dbms_output.put_line(l_toon);
+  -- Output:
+  -- count: 107
+  -- avg_salary: 6461.83
+END;
+/
+```
+
+## Practical Example: Sending Data Context to LLM
+
+Here's a complete example showing how to use TOON to efficiently send database records to an LLM:
+
+```sql
+DECLARE
+  l_products json_array_t;
+  l_toon_data clob;
+  l_result json_object_t;
+  l_response clob;
+BEGIN
+  -- Build product data using JSON SQL functions
+  SELECT json_arrayagg(
+           json_object(
+             'id'    value product_id,
+             'name'  value product_name,
+             'price' value list_price,
+             'stock' value quantity_on_hand
+           )
+           ORDER BY product_name
+         )
+    INTO l_products
+    FROM products p
+    JOIN inventories i ON p.product_id = i.product_id
+   WHERE category_id = 1  -- Electronics
+   FETCH FIRST 10 ROWS ONLY;
+
+  -- Convert to TOON for token efficiency
+  l_toon_data := uc_ai_toon.to_toon(l_products);
+
+  -- Send to LLM with TOON-formatted context
+  l_result := uc_ai.generate_text(
+    p_system_prompt => 'You are analyzing product inventory data provided in TOON format (a compact JSON representation).',
+    p_user_prompt => 'Here is our current electronics inventory:' || chr(10) ||
+                     l_toon_data || chr(10) || chr(10) ||
+                     'Which products are running low on stock (less than 10 units)?',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini
+  );
+
+  l_response := l_result.get_clob('final_message');
+  dbms_output.put_line(l_response);
+END;
+/
+```
+
+## Complex Example: Nested Data Structures
+
+TOON handles complex nested structures efficiently. Use nested `JSON_OBJECT` and `JSON_ARRAYAGG` calls:
+
+```sql
+DECLARE
+  l_json json_object_t;
+  l_toon clob;
+BEGIN
+  -- Build nested JSON with departments and their employees
+  SELECT json_object(
+           'department'  value department_name,
+           'manager'     value (
+             SELECT json_object(
+                      'id'   value e.employee_id,
+                      'name' value e.first_name || ' ' || e.last_name
+                    )
+               FROM employees e
+              WHERE e.employee_id = d.manager_id
+           ),
+           'employee_count' value (
+             SELECT count(*)
+               FROM employees e
+              WHERE e.department_id = d.department_id
+           )
+         )
+    INTO l_json
+    FROM departments d
+   WHERE department_id = 90;
+
+  l_toon := uc_ai_toon.to_toon(l_json);
+
+  dbms_output.put_line(l_toon);
+  -- Output:
+  -- department: Executive
+  -- manager:
+  --   id: 100
+  --   name: Steven King
+  -- employee_count: 3
+END;
+/
+```
+
+## API Reference
+
+### `uc_ai_toon.to_toon` (JSON Object)
+
+```sql
+function to_toon(p_json_object in json_object_t) return clob;
+```
+
+Converts a `json_object_t` to TOON format.
+
+**Parameters:**
+
+- `p_json_object`: The JSON object to convert
+
+**Returns:** CLOB containing the TOON representation
+
+### `uc_ai_toon.to_toon` (JSON Array)
+
+```sql
+function to_toon(p_json_array in json_array_t) return clob;
+```
+
+Converts a `json_array_t` to TOON format.
+
+**Parameters:**
+
+- `p_json_array`: The JSON array to convert
+
+**Returns:** CLOB containing the TOON representation
+
+### `uc_ai_toon.to_toon` (JSON String)
+
+```sql
+function to_toon(p_json_string in clob) return clob;
+```
+
+Converts a JSON string (CLOB) to TOON format.
+
+**Parameters:**
+
+- `p_json_string`: The JSON string to convert
+
+**Returns:** CLOB containing the TOON representation
+
+<Aside type="note">
+  All `to_toon` functions return `null` if the input is `null`.
+</Aside>
+
+## When to Use TOON
+
+| Scenario                                   | Recommendation                                |
+| ------------------------------------------ | --------------------------------------------- |
+| Uniform arrays of objects (same structure) | ✅ **Use TOON** - Maximum token savings       |
+| Tabular data from database queries         | ✅ **Use TOON** - CSV-like efficiency         |
+| Simple flat objects                        | ✅ **Use TOON** - Cleaner than JSON           |
+| Deeply nested irregular structures         | ⚠️ Consider JSON - May be more efficient      |
+| Non-uniform arrays with varied schemas     | ⚠️ Consider JSON - TOON overhead may not help |
+| Data that will be returned by the LLM      | ❌ **Use JSON** - Standard format for parsing |

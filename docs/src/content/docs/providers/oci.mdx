@@ -104,3 +104,43 @@ end;
 ### Tools
 
 Tools / function calling is supported. Refer to the [model documentation page](https://docs.oracle.com/en-us/iaas/Content/generative-ai/pretrained-models.htm) to see which models support it.
+
+## Generating Embeddings
+
+OCI provides Cohere embedding models for semantic search, clustering, and other vector-based operations:
+
+- `uc_ai_oci.c_model_cohere_embed_4` - Latest Cohere v4 embedding model
+- `uc_ai_oci.c_model_cohere_embed_english_3` - English-optimized v3 model
+- `uc_ai_oci.c_model_cohere_embed_english_light_3` - Lightweight English model
+- `uc_ai_oci.c_model_cohere_embed_multi_3` - Multilingual v3 model
+- `uc_ai_oci.c_model_cohere_embed_multi_light_3` - Lightweight multilingual model
+
+Image-capable embedding models are also available:
+
+- `uc_ai_oci.c_model_cohere_embed_english_image_3`
+- `uc_ai_oci.c_model_cohere_embed_english_light_image_3`
+- `uc_ai_oci.c_model_cohere_embed_multi_image_light_3`
+
+Also refer to the [OCI documentation](https://docs.oracle.com/en-us/iaas/Content/generative-ai/pretrained-models.htm) for any new models that might not be listed here and region availability.
+
+```sql
+declare
+  l_result json_array_t;
+begin
+  uc_ai_oci.g_compartment_id := 'your_compartment_id_here';
+  uc_ai_oci.g_region := 'eu-frankfurt-1';
+  uc_ai_oci.g_apex_web_credential := 'NAME_OF_YOUR_APEX_WEB_CREDENTIAL';
+
+  l_result := uc_ai.generate_embeddings(
+    p_input => json_array_t('["Oracle APEX is a low-code development platform.", "UC AI allows you to easily use AI from PL/SQL."]'),
+    p_provider => uc_ai.c_provider_oci,
+    p_model => uc_ai_oci.c_model_cohere_embed_english_3
+  );
+
+  -- l_result.get_size → 2 (one embedding per input string)
+  -- l_result.get(0) → JSON array of embedding values for first input
+end;
+/
+```
+
+For more information about the `generate_embeddings` function, visit its [documentation page](/products/uc-ai/docs/api/generate_embeddings/).

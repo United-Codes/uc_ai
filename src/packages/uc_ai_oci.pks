@@ -3,9 +3,10 @@ create or replace package uc_ai_oci as
 
   /**
   * UC AI
-  * Package to integrate AI capabilities into Oracle databases.
+  * PL/SQL SDK to integrate AI capabilities into Oracle databases.
   * 
-  * Copyright (c) 2025 United Codes
+  * Licensed under the GNU Lesser General Public License v3.0
+  * Copyright (c) 2025-present United Codes
   * https://www.united-codes.com
   */
 
@@ -35,8 +36,24 @@ create or replace package uc_ai_oci as
   c_model_grok_3_fast               constant uc_ai.model_type := 'xai.grok-3-fast';
   c_model_grok_3_mini_fast          constant uc_ai.model_type := 'xai.grok-3-mini-fast';
 
+  -- OpenAI models
+  c_model_gpt_oss_120b              constant uc_ai.model_type := 'openai.gpt-oss-120b';
+  c_model_gpt_oss_20b               constant uc_ai.model_type := 'openai.gpt-oss-20b';
+
   -- Oracle proprietary models (if available)
   c_model_oracle_genai              constant uc_ai.model_type := 'oracle.genai';
+
+  -- Cohere Embedding models
+  -- See https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/EmbedTextResult/EmbedText
+  c_model_cohere_embed_4                          constant uc_ai.model_type := 'cohere.embed-v4.0';
+  c_model_cohere_embed_english_image_3            constant uc_ai.model_type := 'cohere.embed-english-image-v3.0';
+  c_model_cohere_embed_english_light_image_3      constant uc_ai.model_type := 'cohere.embed-english-light-image-v3.0';
+  c_model_cohere_embed_multi_image_light_3        constant uc_ai.model_type := 'cohere.embed-multilingual-light-image-v3.0';
+  c_model_cohere_embed_multilingual_light_image_3 constant uc_ai.model_type := 'cohere.embed-multilingual-light-image-v3.0';
+  c_model_cohere_embed_english_3                  constant uc_ai.model_type := 'cohere.embed-english-v3.0';
+  c_model_cohere_embed_english_light_3            constant uc_ai.model_type := 'cohere.embed-english-light-v3.0';
+  c_model_cohere_embed_multi_3                    constant uc_ai.model_type := 'cohere.embed-multilingual-v3.0';
+  c_model_cohere_embed_multi_light_3              constant uc_ai.model_type := 'cohere.embed-multilingual-light-v3.0';
 
   -- Global settings for OCI
   g_compartment_id varchar2(255 char); -- OCID of the compartment to use
@@ -52,6 +69,19 @@ create or replace package uc_ai_oci as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   ) return json_object_t;
+
+  /*
+   * Oracle Cloud Infrastructure (OCI) implementation for embeddings generation
+   * 
+   * p_input: JSON array of strings to embed
+   * p_model: Embedding model to use (e.g., cohere.embed-english-v3.0)
+   * 
+   * Returns: JSON array of embedding arrays (one per input string)
+   */
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_model in uc_ai.model_type
+  ) return json_array_t;
 
 end uc_ai_oci;
 /

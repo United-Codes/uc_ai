@@ -308,12 +308,18 @@ create or replace package body uc_ai_ollama as
       p_url => get_generate_text_url(),
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => g_apex_web_credential
+      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);
 
-    l_resp_json := json_object_t.parse(l_resp);
+    begin
+      l_resp_json := json_object_t.parse(l_resp);
+    exception
+      when others then
+        uc_ai_logger.log_error('Error parsing response JSON', l_scope, l_resp);
+        raise uc_ai.e_format_processing_error;
+    end;
 
     if l_resp_json.has('error') then
       l_resp := l_resp_json.get_clob('error');
@@ -488,7 +494,10 @@ create or replace package body uc_ai_ollama as
     end if;
 
     uc_ai_logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);
-
+  exception
+    when others then
+      uc_ai_logger.log_error('Exception in internal_generate_text', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace );
+      raise;
   end internal_generate_text;
 
 
@@ -630,7 +639,7 @@ create or replace package body uc_ai_ollama as
       p_url => l_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => g_apex_web_credential
+      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);

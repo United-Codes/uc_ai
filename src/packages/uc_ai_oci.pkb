@@ -2,7 +2,8 @@ create or replace package body uc_ai_oci as
 
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_api_url_base constant varchar2(255 char) := 'https://inference.generativeai.';
-  c_api_endpoint constant varchar2(255 char) := '/20231130/actions/chat';
+  c_api_generate_text_path constant varchar2(255 char) := '/20231130/actions/chat';
+  c_api_generate_embeddings_path constant varchar2(255 char) := '/20231130/actions/embedText';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
@@ -407,15 +408,34 @@ create or replace package body uc_ai_oci as
   end get_oci_region;
 
   /*
-   * Build the full API URL for OCI Generative AI
+   * Build the full API URL for OCI Generative AI chat
    */
-  function build_api_url return varchar2
+  function get_generate_text_url return varchar2
   as
     l_region varchar2(64 char);
   begin
+    if uc_ai.g_base_url is not null then
+      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_text_path;
+    end if;
+    
     l_region := get_oci_region();
-    return c_api_url_base || l_region || '.oci.oraclecloud.com' || c_api_endpoint;
-  end build_api_url;
+    return c_api_url_base || l_region || '.oci.oraclecloud.com' || c_api_generate_text_path;
+  end get_generate_text_url;
+
+  /*
+   * Build the full API URL for OCI Generative AI embeddings
+   */
+  function get_generate_embeddings_url return varchar2
+  as
+    l_region varchar2(64 char);
+  begin
+    if uc_ai.g_base_url is not null then
+      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_embeddings_path;
+    end if;
+    
+    l_region := get_oci_region();
+    return c_api_url_base || l_region || '.oci.oraclecloud.com' || c_api_generate_embeddings_path;
+  end get_generate_embeddings_url;
 
   procedure internal_generate_text (
     pio_messages         in out nocopy json_array_t
@@ -456,7 +476,7 @@ create or replace package body uc_ai_oci as
     l_input_obj.put('chatRequest', l_chat_request);
 
     -- Build API URL
-    l_api_url := build_api_url();
+    l_api_url := get_generate_text_url();
 
     uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
 
@@ -468,7 +488,7 @@ create or replace package body uc_ai_oci as
       p_url => l_api_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => g_apex_web_credential
+      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);
@@ -922,6 +942,91 @@ create or replace package body uc_ai_oci as
     
     return l_result;
   end generate_text;
+
+
+  /*
+   * Generate embeddings using OCI Generative AI API
+   * 
+   * API reference: https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/EmbedTextResult/EmbedText
+   * 
+   * Returns array of embedding arrays (one per input string)
+   */
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_model in uc_ai.model_type
+  ) return json_array_t
+  as
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_embeddings';
+    l_api_url       varchar2(4000 char);
+    l_resp          clob;
+    l_resp_json     json_object_t;
+    l_embeddings    json_array_t;
+    l_input_obj     json_object_t := json_object_t();
+    l_serving_mode  json_object_t := json_object_t();
+    l_inputs        json_array_t := json_array_t();
+  begin
+    uc_ai_logger.log('Starting generate_embeddings with ' || p_input.get_size || ' input items', l_scope);
+    
+    -- Build inputs array (OCI expects array of strings)
+    <<build_inputs_loop>>
+    for i in 0 .. p_input.get_size - 1
+    loop
+      l_inputs.append(p_input.get_clob(i));
+    end loop build_inputs_loop;
+    
+    -- Build serving mode
+    l_serving_mode.put('servingType', g_serving_type);
+    l_serving_mode.put('modelId', p_model);
+    
+    -- Build request body
+    l_input_obj.put('inputs', l_inputs);
+    l_input_obj.put('servingMode', l_serving_mode);
+    l_input_obj.put('compartmentId', g_compartment_id);
+    l_input_obj.put('truncate', 'NONE');
+
+    -- Build API URL
+    l_api_url := get_generate_embeddings_url();
+
+    apex_web_service.clear_request_headers;
+    apex_web_service.set_request_headers(
+      p_name_01  => 'Content-Type',
+      p_value_01 => 'application/json'
+    );
+
+    uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
+    uc_ai_logger.log('Request URL: ' || l_api_url, l_scope);
+
+    l_resp := apex_web_service.make_rest_request(
+      p_url => l_api_url,
+      p_http_method => 'POST',
+      p_body => l_input_obj.to_clob,
+      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
+    );
+
+    uc_ai_logger.log('Response', l_scope, l_resp);
+
+    begin
+      l_resp_json := json_object_t.parse(l_resp);
+    exception
+      when others then
+        uc_ai_logger.log_error('Response is not JSON, probable error', l_scope, l_resp);
+        raise uc_ai.e_error_response;
+    end;
+
+    -- Check for error in response
+    if l_resp_json.has('code') and l_resp_json.has('message') then
+      uc_ai_logger.log_error('Error in response', l_scope, l_resp_json.to_clob);
+      uc_ai_logger.log_error('Error message: ', l_scope, l_resp_json.get_string('message'));
+      raise uc_ai.e_error_response;
+    end if;
+
+    -- OCI returns embeddings directly as an array of arrays
+    l_embeddings := l_resp_json.get_array('embeddings');
+
+    uc_ai_logger.log('Returning ' || l_embeddings.get_size || ' embeddings', l_scope);
+
+    return l_embeddings;
+  end generate_embeddings;
 
 end uc_ai_oci;
 /

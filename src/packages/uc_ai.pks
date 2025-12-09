@@ -1,22 +1,26 @@
 create or replace package uc_ai as
   -- @dblinter ignore(g-7230): allow use of global variables
 
-
   /**
   * UC AI
-  * Package to integrate AI capabilities into Oracle databases.
+  * PL/SQL SDK to integrate AI capabilities into Oracle databases.
   * 
-  * Copyright (c) 2025 United Codes
+  * Licensed under the GNU Lesser General Public License v3.0
+  * Copyright (c) 2025-present United Codes
   * https://www.united-codes.com
   */
 
+  c_version     constant varchar2(16 char) := '25.7';
+  c_version_num constant number := 20250700;
+
   subtype provider_type is varchar2(64 char);
-  c_provider_openai    constant provider_type := 'openai';
-  c_provider_anthropic constant provider_type := 'anthropic';
-  c_provider_google    constant provider_type := 'google';
-  c_provider_ollama    constant provider_type := 'ollama';
-  c_provider_oci       constant provider_type := 'oci';
-  -- c_provider_xai       constant provider_type := 'xai';
+  c_provider_openai     constant provider_type := 'openai';
+  c_provider_anthropic  constant provider_type := 'anthropic';
+  c_provider_google     constant provider_type := 'google';
+  c_provider_ollama     constant provider_type := 'ollama';
+  c_provider_oci        constant provider_type := 'oci';
+  c_provider_xai        constant provider_type := 'xai';
+  c_provider_openrouter constant provider_type := 'openrouter';
 
   subtype model_type is varchar2(128 char);
 
@@ -30,12 +34,21 @@ create or replace package uc_ai as
   -- general global settings
   g_base_url varchar2(4000 char);
 
+  -- reasoning level constants
+  c_reasoning_level_low    constant varchar2(10 char) := 'low';
+  c_reasoning_level_medium constant varchar2(10 char) := 'medium';
+  c_reasoning_level_high   constant varchar2(10 char) := 'high';
+
   -- reasoning global settings
   g_enable_reasoning boolean := false;
+  g_reasoning_level varchar2(10 char); -- use c_reasoning_level_* constants
 
   -- tools relevant global settings
   g_enable_tools boolean := false;
   g_tool_tags apex_t_varchar2;
+
+  -- global settings for APEX Web Credentials
+  g_apex_web_credential varchar2(255 char);
 
   -- internal use only
   g_provider_override varchar2(4000 char);

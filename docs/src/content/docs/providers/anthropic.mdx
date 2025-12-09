@@ -46,9 +46,9 @@ The UC AI Anthropic package provides constants for these Claude models:
 
 ### Claude 4 Models (Latest)
 
-- `uc_ai_anthropic.c_model_claude_4_1_opus` - Most capable model
-- `uc_ai_anthropic.c_model_claude_4_sonnet` - Balanced performance and speed
-- `uc_ai_anthropic.c_model_claude_4_opus` - Previous generation Opus model
+- `uc_ai_anthropic.c_model_claude_4_5_opus` - Most capable model
+- `uc_ai_anthropic.c_model_claude_4_5_sonnet` - Balanced performance and speed
+- `uc_ai_anthropic.c_model_claude_4_5_haiku` - Smaller model
 
 ### Claude 3.x Models
 
@@ -92,6 +92,14 @@ begin
   dbms_output.put_line('Recipe suggestions: ' || l_result.get_string('final_message'));
 end;
 /
+```
+
+### Max tokens
+
+Anthropic requires an upper limited of maximum generated tokens to be send with API requests. UC AI defaults this setting to `8192`. If you want to generate longer answers or reasoning sequences you have to increase this value:
+
+```sql
+uc_ai_anthropic.g_max_tokens := 32768;
 ```
 
 ### Tools

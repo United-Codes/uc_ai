@@ -1,0 +1,19 @@
+{
+  "model": "gemini-2.5-flash",
+  "generationConfig": {
+    "thinkingConfig": {
+      "includeThoughts": true,
+      "thinkingBudget": "2048"
+    }
+  },
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "Answer in one sentence. If there is a great filter, are we before or after it and why."
+        }
+      ]
+    }
+  ]
+}

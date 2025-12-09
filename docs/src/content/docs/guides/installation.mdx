@@ -12,14 +12,14 @@ sidebar:
 
 ## Installing UC AI
 
-UC logs some debug relevant information. If you don't have [Logger](https://github.com/OraOpenSource/Logger)  installed it will log via the `apex_debug` package.
+UC logs some debug relevant information. If you don't have [Logger](https://github.com/OraOpenSource/Logger) installed it will log via the `apex_debug` package.
 
 ### Option 1: GitHub release scripts
 
 For each new release of UC AI the release page in GitHub will contain scripts to install the UC AI package and its dependencies.
 
 - `install_uc_ai_complete.sql` installs all UC AI objects
-- `install_uc_ai_complete_with_logger.sql` installs all UC AI objects and the  [Logger](https://github.com/OraOpenSource/Logger) package
+- `install_uc_ai_complete_with_logger.sql` installs all UC AI objects and the [Logger](https://github.com/OraOpenSource/Logger) package
 - `upgrade_packages.sql` upgrades the UC AI packages. Most of the time only packages get modified. So for most releases you just need to run this script to upgrade to a newer version. Please still keep an eye on the [release notes](https://github.com/United-Codes/uc_ai/releases) to see if there are any changes that require you to run the complete installation script.
 
 Just run the necessary script in your SQL client to install the UC AI package and its dependencies.
@@ -94,6 +94,8 @@ You can also store your secret API keys with APEX Web Credentials. For this you 
 - [Google](/products/uc-ai/docs/providers/google/#creating-a-web-credential)
 - [OCI](/products/uc-ai/docs/providers/oci/#prerequisites)
 - [OpenAI](/products/uc-ai/docs/providers/openai/#creating-a-web-credential)
+- [OpenRouter](/products/uc-ai/docs/providers/openrouter/#creating-a-web-credential)
+- [xAI](/products/uc-ai/docs/providers/xai/#creating-a-web-credential)
 
 Now before calling any UC AI functions you have to set the package variable for the provider you want to use to the static ID of your web credential. For example if you created a web credential with the static ID `OPENAI` for OpenAI you would run this code:
 

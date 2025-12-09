@@ -1,5 +1,6 @@
 create or replace package body test_uc_ai_tools_api as
   -- @dblinter ignore(g-5010): allow logger in test packages
+  -- @dblinter ignore(g-2160): allow initialzing variables in declare in test packages
 
   gc_test_user constant varchar2(255 char) := 'TEST_USER';
   gc_test_prefix constant varchar2(50 char) := 'TEST_TOOL_';

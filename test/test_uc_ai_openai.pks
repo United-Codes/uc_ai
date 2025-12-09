@@ -23,11 +23,20 @@ create or replace package test_uc_ai_openai as
   --%test(reasoning)
   procedure reasoning;
 
+  --%test(reasoning from main package)
+  procedure reasoning_main;
+
   --%test(Structured output)
   procedure structured_output;
 
   --%test(Basic text generation with APEX web credential)
   procedure basic_web_credential;
+
+  --%test(Embeddings generation)
+  procedure embeddings;
+
+  --%test(Embeddings generation with multiple inputs)
+  procedure embeddings_multi;
 
 end test_uc_ai_openai;
 /

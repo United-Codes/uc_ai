@@ -1,0 +1,15 @@
+{
+  "model": "o4-mini",
+  "reasoning_effort": "low",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "Answer in one sentence. If there is a great filter, are we before or after it and why."
+        }
+      ]
+    }
+  ]
+}

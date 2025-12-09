@@ -131,10 +131,8 @@ begin
     p_model => 'granite-embedding:30m'
   );
   
-  -- example result: [0.340329043034, 0.2334029034]
-  
-  -- l_result.get_size → 2
-  -- l_result.get(0) → 0.340329043034
+  -- l_result.get_size → 2 (one embedding per input string)
+  -- l_result.get(0) → JSON array of embedding values for first input
 end;
 ```
 

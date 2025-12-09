@@ -1,0 +1,11 @@
+{
+  "inputs": [
+    "APEX Office Print lets you create and manage print jobs directly from your APEX applications."
+  ],
+  "servingMode": {
+    "servingType": "ON_DEMAND",
+    "modelId": "cohere.embed-english-v3.0"
+  },
+  "compartmentId": "...",
+  "truncate": "NONE"
+}

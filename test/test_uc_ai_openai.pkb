@@ -1,5 +1,6 @@
 create or replace package body test_uc_ai_openai as
   -- @dblinter ignore(g-5010): allow logger in test packages
+  -- @dblinter ignore(g-2160): allow initialzing variables in declare in test packages
   
   procedure basic_recipe
   as
@@ -335,6 +336,42 @@ create or replace package body test_uc_ai_openai as
 
   end reasoning;
 
+
+  procedure reasoning_main
+  as
+    l_messages json_array_t := json_array_t();
+    l_result json_object_t;
+    l_message_count pls_integer;
+    l_final_message clob;
+  begin
+    uc_ai.g_enable_tools := false; -- disable tools for this test
+    uc_ai_openai.g_reasoning_effort := null;
+    uc_ai.g_enable_reasoning := true; -- enable reasoning for this test
+    uc_ai.g_reasoning_level := 'low';
+
+    l_result := uc_ai.GENERATE_TEXT(
+      p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_o4_mini
+    );
+
+    sys.dbms_output.put_line('Result: ' || l_result.to_string);
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(lower(l_final_message)).to_be_like('%filter%');
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Reasoning Response');
+    l_message_count := l_messages.get_size;
+    -- One user message and one assistant message are expected
+    -- OpenAI adds no reasoning messages
+    ut.expect(l_message_count).to_equal(2);
+
+    ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
+
+  end reasoning_main;
+
   procedure structured_output
   as
     l_result json_object_t;
@@ -423,6 +460,51 @@ create or replace package body test_uc_ai_openai as
 
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
   end basic_web_credential;
+
+  procedure embeddings
+  as
+    l_result json_array_t;
+    l_array_clob clob;
+  begin
+    uc_ai.g_enable_tools := false; -- disable tools for this test
+    uc_ai.g_enable_reasoning := false; -- disable reasoning for this test
+
+    l_result := uc_ai.generate_embeddings(
+      p_input => json_array_t('["APEX Office Print lets you create and manage print jobs directly from your APEX applications."]'),
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_text_embedding_3_small
+    );
+
+    l_array_clob := l_result.to_clob;
+    ut.expect(l_array_clob).to_be_not_null();
+    sys.dbms_output.put_line('Embeddings array: ' || substr(l_array_clob, 1, 500) || '...');
+    ut.expect(l_result.get_size).to_equal(1);
+    ut.expect(treat(l_result.get(0) as json_array_t).get_size).to_be_greater_than(0);
+  end embeddings;
+
+  procedure embeddings_multi
+  as
+    l_result json_array_t;
+    l_array_clob clob;
+  begin
+    uc_ai.g_enable_tools := false;
+    uc_ai.g_enable_reasoning := false;
+
+    l_result := uc_ai.generate_embeddings(
+      p_input => json_array_t('["APEX Office Print lets you create and manage print jobs.", "Oracle Database is the world leading relational database.", "PL/SQL is a procedural extension to SQL."]'),
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_text_embedding_3_small
+    );
+
+    l_array_clob := l_result.to_clob;
+    ut.expect(l_array_clob).to_be_not_null();
+    sys.dbms_output.put_line('Multi embeddings count: ' || l_result.get_size);
+    ut.expect(l_result.get_size).to_equal(3);
+    -- Check each embedding has values
+    ut.expect(treat(l_result.get(0) as json_array_t).get_size).to_be_greater_than(0);
+    ut.expect(treat(l_result.get(1) as json_array_t).get_size).to_be_greater_than(0);
+    ut.expect(treat(l_result.get(2) as json_array_t).get_size).to_be_greater_than(0);
+  end embeddings_multi;
 
 end test_uc_ai_openai;
 /
