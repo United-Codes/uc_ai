@@ -1,5 +1,6 @@
 create or replace package body test_uc_ai_toon as
   -- @dblinter ignore(g-5010): allow logger in test packages
+  -- @dblinter ignore(g-2160): allow initialzing variables in declare in test packages
 
   procedure basic_object
   as

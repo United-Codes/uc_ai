@@ -1,0 +1,43 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "embedding",
+      "embedding": [
+        0.024633146822452545,
+        0.03067026287317276,
+        0.000,
+        -0.002666620770469308
+      ],
+      "index": 0
+    },
+    {
+      "object": "embedding",
+      "embedding": [
+        -0.024790296331048012,
+        0.03867384046316147,
+        0.00,
+        0.0063796862959861755
+      ],
+      "index": 1
+    },
+    {
+      "object": "embedding",
+      "embedding": [
+        -0.0018287446582689881,
+        0.025370191782712936,
+        0.00,
+        0.015465574339032173
+      ],
+      "index": 2
+    }
+  ],
+  "model": "thenlper/gte-base",
+  "usage": {
+    "prompt_tokens": 36,
+    "total_tokens": 36,
+    "cost": 1.8e-7
+  },
+  "provider": "DeepInfra",
+  "id": "gen-emb-1765236007-KLtNq1uuZ8ZNQPb2ncvv"
+}

@@ -298,11 +298,14 @@ create or replace package body uc_ai_openai as
     apex_web_service.g_request_headers(1).name := 'Content-Type';
     apex_web_service.g_request_headers(1).value := 'application/json';
 
-    if uc_ai.g_provider_override = uc_ai.c_provider_xai then
-      l_web_credential := coalesce(uc_ai.g_apex_web_credential, uc_ai_xai.g_apex_web_credential);
-    else
-      l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
-    end if;
+    case uc_ai.g_provider_override
+      when uc_ai.c_provider_xai then
+         l_web_credential := coalesce(uc_ai.g_apex_web_credential, uc_ai_xai.g_apex_web_credential);
+      when uc_ai.c_provider_openrouter then
+         l_web_credential := coalesce(uc_ai.g_apex_web_credential, uc_ai_openrouter.g_apex_web_credential);
+      else
+         l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+    end case;
 
     if l_web_credential is null then
       apex_web_service.g_request_headers(2).name := 'Authorization';
@@ -424,7 +427,7 @@ create or replace package body uc_ai_openai as
    
    
               uc_ai_logger.log('Tool call', l_scope, 'Tool ID: ' || l_tool_id || ', Call ID: ' || l_call_id || ', Arguments: ' || l_arguments);
-              l_args_json := json_object_t.parse(l_arguments);
+              l_args_json := json_object_t.parse(coalesce(l_arguments, '{}'));
 
               -- xAI wraps arguments in "parameters" object
               if uc_ai.g_provider_override = uc_ai.c_provider_xai then
@@ -583,29 +586,39 @@ create or replace package body uc_ai_openai as
     end if;
 
     if uc_ai.g_enable_reasoning then
-      if uc_ai.g_provider_override = uc_ai.c_provider_xai then
-        declare
-          l_reasoning_effort varchar2(32 char);
-          l_model varchar2(255 char);
-        begin
-          l_reasoning_effort := coalesce(uc_ai_xai.g_reasoning_effort, uc_ai.g_reasoning_level);
-          if l_reasoning_effort = uc_ai.c_reasoning_level_medium then
-            l_reasoning_effort := uc_ai.c_reasoning_level_low; -- xAI does not have medium, map to low
-            uc_ai_logger.log('Mapping reasoning_effort "medium" to "low" for xAI provider', l_scope);
-          end if;
-
-          l_model := l_input_obj.get_string('model');
-          if l_model like '%non-reasoning%' then
-            l_model := replace(l_model, 'non-reasoning', 'reasoning');
-            l_input_obj.put('model', l_model);
-            uc_ai_logger.log('Switching model to reasoning variant for xAI provider: ' || l_model, l_scope);
-          end if;
-          
-          l_input_obj.put('reasoning_level', l_reasoning_effort);
-        end;
-      else
-        l_input_obj.put('reasoning_effort', coalesce(uc_ai_openai.g_reasoning_effort, uc_ai.g_reasoning_level));
-      end if;
+      case uc_ai.g_provider_override
+        when uc_ai.c_provider_xai then
+          declare
+            l_reasoning_effort varchar2(32 char);
+            l_model varchar2(255 char);
+          begin
+            l_reasoning_effort := coalesce(uc_ai_xai.g_reasoning_effort, uc_ai.g_reasoning_level);
+            if l_reasoning_effort = uc_ai.c_reasoning_level_medium then
+              l_reasoning_effort := uc_ai.c_reasoning_level_low; -- xAI does not have medium, map to low
+              uc_ai_logger.log('Mapping reasoning_effort "medium" to "low" for xAI provider', l_scope);
+            end if;
+   
+            l_model := l_input_obj.get_string('model');
+            if l_model like '%non-reasoning%' then
+              l_model := replace(l_model, 'non-reasoning', 'reasoning');
+              l_input_obj.put('model', l_model);
+              uc_ai_logger.log('Switching model to reasoning variant for xAI provider: ' || l_model, l_scope);
+            end if;
+            
+            l_input_obj.put('reasoning_level', l_reasoning_effort);
+          end;
+        when uc_ai.c_provider_openrouter then
+          declare
+            l_reasoning_obj json_object_t;
+          begin
+            l_reasoning_obj := json_object_t();
+            l_reasoning_obj.put('level', coalesce(uc_ai_openrouter.g_reasoning_effort, uc_ai.g_reasoning_level));
+            l_input_obj.put('reasoning', l_reasoning_obj);
+            uc_ai_logger.log('Setting reasoning level for OpenRouter provider: ' || l_reasoning_obj.to_clob, l_scope);
+          end;
+        else
+          l_input_obj.put('reasoning_effort', coalesce(uc_ai_openai.g_reasoning_effort, uc_ai.g_reasoning_level));
+      end case;
     end if;
 
     internal_generate_text(
@@ -660,7 +673,13 @@ create or replace package body uc_ai_openai as
     apex_web_service.g_request_headers(1).name := 'Content-Type';
     apex_web_service.g_request_headers(1).value := 'application/json';
 
-    l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+    case uc_ai.g_provider_override
+      when uc_ai.c_provider_openrouter then
+         l_web_credential := coalesce(uc_ai.g_apex_web_credential, uc_ai_openrouter.g_apex_web_credential);
+      else
+         l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+    end case;
+
 
     if l_web_credential is null then
       apex_web_service.g_request_headers(2).name := 'Authorization';

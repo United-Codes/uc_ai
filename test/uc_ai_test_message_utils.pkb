@@ -1,5 +1,6 @@
 create or replace package body uc_ai_test_message_utils as
   -- @dblinter ignore(g-5010): allow logger in test packages
+  -- @dblinter ignore(g-2160): allow initialzing variables in declare in test packages
 
   procedure validate_message_array(
     p_messages in json_array_t,

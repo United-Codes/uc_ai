@@ -1,0 +1,8 @@
+{
+  "model": "thenlper/gte-base",
+  "input": [
+    "APEX Office Print lets you create and manage print jobs.",
+    "Oracle Database is the world leading relational database.",
+    "PL/SQL is a procedural extension to SQL."
+  ]
+}

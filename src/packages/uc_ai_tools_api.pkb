@@ -429,7 +429,7 @@ create or replace package body uc_ai_tools_api as
 
     if    p_provider in (uc_ai.c_provider_google, uc_ai.c_provider_ollama) 
        -- xAI uses "parameters" as input schema name
-       or (p_provider = uc_ai.c_provider_openai and p_additional_info = uc_ai.c_provider_xai) 
+       or (p_provider = uc_ai.c_provider_openai and p_additional_info in (uc_ai.c_provider_xai, uc_ai.c_provider_openrouter)) 
     then
       l_input_schema_name := 'parameters';
     else

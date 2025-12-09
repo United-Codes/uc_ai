@@ -1,5 +1,6 @@
 create or replace package body test_uc_ai_ollama as
   -- @dblinter ignore(g-5010): allow logger in test packages
+  -- @dblinter ignore(g-2160): allow initialzing variables in declare in test packages
 
   c_model_qwen_1b constant uc_ai.model_type := 'qwen3:1.7b';
   c_model_qwen_4b constant uc_ai.model_type := 'qwen3:4b';
