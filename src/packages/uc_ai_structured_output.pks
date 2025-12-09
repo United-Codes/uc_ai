@@ -1,10 +1,11 @@
 create or replace package uc_ai_structured_output as
 
   /**
-  * UC AI Structured Output
-  * Package to format JSON schemas for different AI providers to enable structured output
+  * UC AI
+  * PL/SQL SDK to integrate AI capabilities into Oracle databases.
   * 
-  * Copyright (c) 2025 United Codes
+  * Licensed under the GNU Lesser General Public License v3.0
+  * Copyright (c) 2025-present United Codes
   * https://www.united-codes.com
   */
 

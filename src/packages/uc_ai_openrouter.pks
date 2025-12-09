@@ -3,9 +3,10 @@ create or replace package uc_ai_openrouter as
 
   /**
   * UC AI
-  * Package to integrate AI capabilities into Oracle databases.
+  * PL/SQL SDK to integrate AI capabilities into Oracle databases.
   * 
-  * Copyright (c) 2025 United Codes
+  * Licensed under the GNU Lesser General Public License v3.0
+  * Copyright (c) 2025-present United Codes
   * https://www.united-codes.com
   */
 
