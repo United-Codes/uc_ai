@@ -1,7 +1,6 @@
 create or replace package uc_ai as
   -- @dblinter ignore(g-7230): allow use of global variables
 
-
   /**
   * UC AI
   * Package to integrate AI capabilities into Oracle databases.
@@ -9,6 +8,9 @@ create or replace package uc_ai as
   * Copyright (c) 2025 United Codes
   * https://www.united-codes.com
   */
+
+  c_version     constant varchar2(16 char) := '25.7';
+  c_version_num constant number := 20250700;
 
   subtype provider_type is varchar2(64 char);
   c_provider_openai     constant provider_type := 'openai';
