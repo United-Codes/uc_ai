@@ -13,6 +13,8 @@ create or replace package uc_ai_google as
 
   -- Google Gemini models
   -- See https://ai.google.dev/gemini-api/docs/models/gemini
+  c_model_gemini_3_pro          constant uc_ai.model_type := 'gemini-3-pro-preview';
+
   c_model_gemini_2_5_pro        constant uc_ai.model_type := 'gemini-2.5-pro';
   c_model_gemini_2_5_flash      constant uc_ai.model_type := 'gemini-2.5-flash';
   c_model_gemini_2_5_flash_lite constant uc_ai.model_type := 'gemini-2.5-flash-lite-preview-06-17';

@@ -12,7 +12,13 @@ create or replace package uc_ai_openai as
 
 
   -- get from https://platform.openai.com/docs/pricing
+  c_model_gpt_5_1 constant uc_ai.model_type := 'gpt-5.1';
+
   c_model_gpt_5 constant uc_ai.model_type := 'gpt-5';
+  c_model_gpt_5_mini constant uc_ai.model_type := 'gpt-5-mini';
+  c_model_gpt_5_nano constant uc_ai.model_type := 'gpt-5-nano';
+  c_model_gpt_5_pro constant uc_ai.model_type := 'gpt-5-pro';
+
   c_model_gpt_4_5 constant uc_ai.model_type := 'gpt-4.5-preview';
   c_model_gpt_4_1 constant uc_ai.model_type := 'gpt-4.1';
   c_model_gpt_4_1_mini constant uc_ai.model_type := 'gpt-4.1-mini';
