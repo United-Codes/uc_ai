@@ -1,7 +1,8 @@
 create or replace package body uc_ai_anthropic as 
 
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
-  c_api_url constant varchar2(255 char) := 'https://api.anthropic.com/v1/messages';
+  c_api_url constant varchar2(255 char) := 'https://api.anthropic.com/v1';
+  c_api_generate_text_path constant varchar2(255 char) := '/messages';
   c_anthropic_version constant varchar2(32 char) := '2023-06-01';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
@@ -9,6 +10,16 @@ create or replace package body uc_ai_anthropic as
   g_final_message clob;
 
   -- Chat API reference: https://docs.anthropic.com/en/api/messages
+
+  function get_generate_text_url return varchar2
+  as
+  begin
+    if uc_ai.g_base_url is not null then
+      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_text_path;
+    end if;
+    
+    return c_api_url || c_api_generate_text_path;
+  end get_generate_text_url;
 
   function get_text_content (
     p_message in json_object_t
@@ -303,7 +314,7 @@ create or replace package body uc_ai_anthropic as
     end if;
 
     l_resp := apex_web_service.make_rest_request(
-      p_url => c_api_url,
+      p_url => get_generate_text_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
       p_credential_static_id => l_web_credential

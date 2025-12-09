@@ -2,8 +2,8 @@ create or replace package body uc_ai_oci as
 
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_api_url_base constant varchar2(255 char) := 'https://inference.generativeai.';
-  c_api_endpoint constant varchar2(255 char) := '/20231130/actions/chat';
-  c_api_embed_endpoint constant varchar2(255 char) := '/20231130/actions/embedText';
+  c_api_generate_text_path constant varchar2(255 char) := '/20231130/actions/chat';
+  c_api_generate_embeddings_path constant varchar2(255 char) := '/20231130/actions/embedText';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
@@ -408,15 +408,34 @@ create or replace package body uc_ai_oci as
   end get_oci_region;
 
   /*
-   * Build the full API URL for OCI Generative AI
+   * Build the full API URL for OCI Generative AI chat
    */
-  function build_api_url return varchar2
+  function get_generate_text_url return varchar2
   as
     l_region varchar2(64 char);
   begin
+    if uc_ai.g_base_url is not null then
+      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_text_path;
+    end if;
+    
     l_region := get_oci_region();
-    return c_api_url_base || l_region || '.oci.oraclecloud.com' || c_api_endpoint;
-  end build_api_url;
+    return c_api_url_base || l_region || '.oci.oraclecloud.com' || c_api_generate_text_path;
+  end get_generate_text_url;
+
+  /*
+   * Build the full API URL for OCI Generative AI embeddings
+   */
+  function get_generate_embeddings_url return varchar2
+  as
+    l_region varchar2(64 char);
+  begin
+    if uc_ai.g_base_url is not null then
+      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_embeddings_path;
+    end if;
+    
+    l_region := get_oci_region();
+    return c_api_url_base || l_region || '.oci.oraclecloud.com' || c_api_generate_embeddings_path;
+  end get_generate_embeddings_url;
 
   procedure internal_generate_text (
     pio_messages         in out nocopy json_array_t
@@ -457,7 +476,7 @@ create or replace package body uc_ai_oci as
     l_input_obj.put('chatRequest', l_chat_request);
 
     -- Build API URL
-    l_api_url := build_api_url();
+    l_api_url := get_generate_text_url();
 
     uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
 
@@ -966,7 +985,7 @@ create or replace package body uc_ai_oci as
     l_input_obj.put('truncate', 'NONE');
 
     -- Build API URL
-    l_api_url := c_api_url_base || g_region || '.oci.oraclecloud.com' || c_api_embed_endpoint;
+    l_api_url := get_generate_embeddings_url();
 
     apex_web_service.clear_request_headers;
     apex_web_service.set_request_headers(

@@ -1,13 +1,40 @@
 create or replace package body uc_ai_google as 
 
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
-  c_api_url_base constant varchar2(255 char) := 'https://generativelanguage.googleapis.com/v1beta/models/';
+  c_api_url constant varchar2(255 char) := 'https://generativelanguage.googleapis.com/v1beta/models';
 
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
   g_final_message clob;
 
   -- Chat API reference: https://ai.google.dev/api/generate-content
+
+  function get_api_url_base return varchar2
+  as
+  begin
+    if uc_ai.g_base_url is not null then
+      return rtrim(uc_ai.g_base_url, '/');
+    end if;
+    
+    return c_api_url;
+  end get_api_url_base;
+
+  function get_generate_text_url(
+    p_model in varchar2
+  ) return varchar2
+  as
+  begin
+    return get_api_url_base || '/' || p_model || ':generateContent';
+  end get_generate_text_url;
+
+  function get_generate_embeddings_url(
+    p_model in varchar2
+  ) return varchar2
+  as
+  begin
+    return get_api_url_base || '/' || p_model || ':batchEmbedContents';
+  end get_generate_embeddings_url;
+
   function get_thought_content (
     p_message in json_object_t
   ) return json_object_t
@@ -282,7 +309,7 @@ create or replace package body uc_ai_google as
     -- Build API URL with model
     l_model := pio_result.get_string('model');
 
-    l_api_url := c_api_url_base || l_model || ':generateContent';
+    l_api_url := get_generate_text_url(l_model);
 
     l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
 
@@ -734,7 +761,7 @@ create or replace package body uc_ai_google as
     l_input_obj.put('requests', l_requests);
 
     -- Build API URL
-    l_api_url := c_api_url_base || p_model || ':batchEmbedContents';
+    l_api_url := get_generate_embeddings_url(p_model);
     
     l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
     if l_web_credential is null then
