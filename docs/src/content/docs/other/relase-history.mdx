@@ -5,9 +5,27 @@ sidebar:
   order: 3
 ---
 
+## v25.7
+
+To upgrade run `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v25.7).
+
+For new installations follow [this guide](https://www.united-codes.com/products/uc-ai/docs/guides/installation/).
+
+**Features**:
+
+- New providers: [xAI](/products/uc-ai/docs/providers/xai/) and [OpenRouer](/products/uc-ai/docs/providers/openrouter/)
+- Support [generate embeddings](/products/uc-ai/docs/api/generate_embeddings/) for all providers
+- [Support providers which have OpenAI compliant APIs](/products/uc-ai/docs/providers/openai/#using-openai-api-compliant-providers)
+- Overrride base URL for all provider via `uc_ai.g_base_url`. This makes it possible to use hosted models on other URLs (Amazon Bedrock, Azure, etc.) as long as they have the same API structure.
+- Global APEX web credential variable ` uc_ai.g_apex_web_credential` which will be used as fallback when no provider specific one is provided
+- Global Reasoning settings variable ` uc_ai.g_reasoning_level` (low, medium, high) which will be mapped to provider specific implementations
+- Global UC AI version constants `uc_ai.c_version` and `uc_ai.c_version_num`
+- Bug fixes
+- Added constants for new models
+
 ## v25.6
 
-To upgrade first run `v25.4_to_v25.5.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v25.6).
+To upgrade run `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v25.6).
 
 For new installations follow [this guide](https://www.united-codes.com/products/uc-ai/docs/guides/installation/).
 
