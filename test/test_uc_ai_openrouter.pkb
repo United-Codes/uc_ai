@@ -1,5 +1,6 @@
 create or replace package body test_uc_ai_openrouter as
   -- @dblinter ignore(g-5010): allow logger in test packages
+  -- @dblinter ignore(g-2160): allow initialzing variables in declare in test packages
   
   c_test_model constant uc_ai.model_type := 'z-ai/glm-4.5-air:free';
   c_embeddings_model constant uc_ai.model_type := 'thenlper/gte-base';
