@@ -1,10 +1,11 @@
 // @ts-check
+
+
+import react from "@astrojs/react";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
 import starlightImageZoom from "starlight-image-zoom";
 import starlightLinksValidator from "starlight-links-validator";
-
-import react from "@astrojs/react";
 
 // https://astro.build/config
 export default defineConfig({
@@ -67,6 +68,8 @@ export default defineConfig({
         customCss: ["./src/styles/uc.css"],
         components: {
             Footer: "./src/components/Footer.astro",
+            Head: "./src/components/Head.astro",
+            PageFrame: "./src/components/PageFrame.astro",
         },
         plugins: [
             starlightLinksValidator({ errorOnLocalLinks: false }),

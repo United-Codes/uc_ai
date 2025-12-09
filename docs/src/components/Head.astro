@@ -1,0 +1,76 @@
+---
+import type { Props } from '@astrojs/starlight/props';
+import Default from '@astrojs/starlight/components/Head.astro';
+
+// JSON-LD structured data for UC AI library/SDK
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareSourceCode",
+  "name": "UC AI",
+  "description": "A PL/SQL framework that lets you integrate AI agents and automations directly into your Oracle database. Call LLMs from the database and create PL/SQL based agents with support for OpenAI GPT, Anthropic Claude, Google Gemini, xAI Grok, Ollama, and OCI.",
+  "url": "https://united-codes.com/products/uc-ai/docs",
+  "codeRepository": "https://github.com/United-Codes/uc_ai",
+  "programmingLanguage": {
+    "@type": "ComputerLanguage",
+    "name": "PL/SQL"
+  },
+  "runtimePlatform": "Oracle Database 12.2+",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Oracle Database",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "United Codes",
+    "url": "https://www.united-codes.com/",
+    "sameAs": [
+      "https://github.com/United-Codes",
+      "https://www.linkedin.com/company/united-codes/",
+      "https://x.com/united_codes",
+      "https://bsky.app/profile/united-codes.com",
+      "https://www.youtube.com/@united-codes"
+    ]
+  },
+  "keywords": [
+    "PL/SQL",
+    "Oracle Database",
+    "AI",
+    "LLM",
+    "OpenAI",
+    "GPT",
+    "Anthropic",
+    "Claude",
+    "Google Gemini",
+    "Ollama",
+    "OCI",
+    "xAI",
+    "Grok",
+    "OpenRouter",
+    "AI Agents",
+    "Function Calling",
+    "Agentic AI",
+    "Oracle APEX"
+  ],
+  "featureList": [
+    "Multi-Provider Support (OpenAI, Anthropic, Google, xAI, Ollama, OCI, OpenRouter)",
+    "Tools/Function Calling",
+    "Unified API",
+    "Runs on Oracle Database 12.2+",
+    "Agentic AI",
+    "Local LLM Support via Ollama",
+    "PDF Analysis",
+    "Image Analysis/Vision",
+    "Reasoning/Thinking",
+    "Structured Output",
+    "Embedding Generation"
+  ],
+  "license": "https://github.com/United-Codes/uc_ai/blob/main/LICENSE"
+};
+---
+
+<Default {...Astro.props}><slot /></Default>
+
+<script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />

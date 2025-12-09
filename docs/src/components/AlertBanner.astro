@@ -1,0 +1,120 @@
+---
+// Dismissable alert banner for workshop announcement
+---
+
+<div id="workshop-banner" class="alert-banner" style="display: none;">
+  <div class="alert-banner-content">
+    <span class="alert-banner-text">
+      🎓 <strong>UC AI Workshop in February!</strong> From LLM basics to powerful PL/SQL Agents. 
+      <a href="https://www.united-codes.com/ai/training" target="_blank" rel="noopener">Learn more →</a>
+    </span>
+    <button id="dismiss-banner" class="alert-banner-dismiss" aria-label="Dismiss banner">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<script is:inline>
+  (function() {
+    var STORAGE_KEY = 'uc-ai-workshop-banner-dismissed';
+
+    function initBanner() {
+      var banner = document.getElementById('workshop-banner');
+      var dismissBtn = document.getElementById('dismiss-banner');
+
+      if (!banner || !dismissBtn) return;
+
+      // Check if already dismissed
+      var isDismissed = localStorage.getItem(STORAGE_KEY) === 'true';
+      
+      if (!isDismissed) {
+        banner.style.display = 'block';
+        document.documentElement.classList.add('has-banner');
+      } else {
+        document.documentElement.classList.remove('has-banner');
+      }
+
+      dismissBtn.addEventListener('click', function() {
+        banner.style.display = 'none';
+        document.documentElement.classList.remove('has-banner');
+        localStorage.setItem(STORAGE_KEY, 'true');
+      });
+    }
+
+    // Run on initial load
+    initBanner();
+
+    // Re-run on Astro page transitions (View Transitions)
+    document.addEventListener('astro:after-swap', initBanner);
+  })();
+</script>
+
+<style>
+  .alert-banner {
+    background: var(--sl-color-text-accent);
+    color: var(--sl-color-black);
+    padding: 0.5rem 1rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    height: var(--sl-banner-height);
+    box-sizing: border-box;
+  }
+
+  .alert-banner-content {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    text-align: center;
+    height: 100%;
+  }
+
+  .alert-banner-text {
+    font-size: 0.875rem;
+  }
+
+  .alert-banner-text a {
+    color: var(--sl-color-black);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    font-weight: 500;
+  }
+
+  .alert-banner-text a:hover {
+    text-decoration-thickness: 2px;
+  }
+
+  .alert-banner-dismiss {
+    background: transparent;
+    border: none;
+    color: var(--sl-color-black);
+    cursor: pointer;
+    padding: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .alert-banner-dismiss:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  @media (max-width: 600px) {
+    .alert-banner-text {
+      font-size: 0.8rem;
+    }
+  }
+</style>

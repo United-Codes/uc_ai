@@ -1,0 +1,49 @@
+---
+import type { Props } from '@astrojs/starlight/props';
+import Default from '@astrojs/starlight/components/PageFrame.astro';
+import AlertBanner from './AlertBanner.astro';
+---
+
+<AlertBanner />
+<Default {...Astro.props}>
+  <slot name="header" slot="header" />
+  <slot name="sidebar" slot="sidebar" />
+  <slot />
+</Default>
+
+<style is:global>
+  :root {
+    --sl-banner-height: 2.25rem;
+  }
+
+  @media (max-width: 600px) {
+    :root {
+      --sl-banner-height: 2.75rem;
+    }
+  }
+
+  /* When banner is visible, offset all fixed elements */
+  html.has-banner header.header {
+    top: var(--sl-banner-height);
+  }
+
+  html.has-banner .sidebar {
+    padding-top: var(--sl-banner-height);
+  }
+
+  html.has-banner #starlight__sidebar {
+    padding-top: var(--sl-banner-height);
+  }
+
+  html.has-banner .right-sidebar-container {
+    margin-top: var(--sl-banner-height);
+  }
+
+  html.has-banner .right-sidebar-panel {
+    margin-top: var(--sl-banner-height);
+  }
+
+  html.has-banner mobile-starlight-toc nav {
+    top: calc(var(--sl-nav-height) + var(--sl-banner-height));
+  }
+</style>
