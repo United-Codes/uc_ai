@@ -93,5 +93,10 @@ create or replace package uc_ai as
   , p_model in model_type
   ) return json_array_t;
 
+  /*
+   * Resets all global variables in uc_ai and provider packages to their default values
+   */
+  procedure reset_globals;
+
 end uc_ai;
 /

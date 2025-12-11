@@ -424,6 +424,7 @@ create or replace package body uc_ai_prompt_profiles_api as
 
     l_key_arr := p_parameters.get_keys;
     
+    <<parameter_keys>>
     for i in 1 .. l_key_arr.count loop
       l_key := l_key_arr(i);
       
@@ -445,7 +446,7 @@ create or replace package body uc_ai_prompt_profiles_api as
         l_value,
         1, 0, 'i'
       );
-    end loop;
+    end loop parameter_keys;
     
     return l_result;
   exception
@@ -489,6 +490,10 @@ create or replace package body uc_ai_prompt_profiles_api as
     l_provider_obj  json_object_t;
     l_provider_key_arr json_key_list;
   begin
+    -- reset to defaults before applying new config
+    uc_ai.reset_globals;
+
+
     if p_config is null then
       return;
     end if;
