@@ -457,22 +457,56 @@ create or replace package body uc_ai_prompt_profiles_api as
 
 
   /*
-   * Validates that all placeholders have been replaced in a template
+   * Validates that all placeholders in templates have corresponding parameters
    */
-  procedure validate_no_placeholders(
-    p_text in clob
+  procedure validate_parameters(
+    p_system_template in clob,
+    p_user_template   in clob,
+    p_parameters      in json_object_t
   )
   as
-    l_scope       uc_ai_logger.scope := gc_scope_prefix || 'validate_no_placeholders';
-    l_placeholder varchar2(4000 char);
+    l_scope             uc_ai_logger.scope := gc_scope_prefix || 'validate_parameters';
+    l_combined_template clob;
+    l_placeholder       varchar2(4000 char);
+    l_placeholder_name  varchar2(4000 char);
+    l_position          pls_integer := 1;
+    l_key_arr           json_key_list;
+    l_found             boolean;
   begin
-    -- Check for any remaining #...# patterns
-    if regexp_like(p_text, '#[^#]+#') then
-      l_placeholder := regexp_substr(p_text, '#[^#]+#');
-      uc_ai_logger.log_error('Unreplaced placeholder found: ' || l_placeholder, l_scope);
-      raise_application_error(-20003, 'Unreplaced placeholder found: ' || l_placeholder);
-    end if;
-  end validate_no_placeholders;
+    -- Combine both templates for checking
+    l_combined_template := p_system_template || chr(10) || p_user_template;
+    
+    -- Find all placeholders in templates (only alphanumeric and underscore allowed)
+    <<placeholder_loop>>
+    loop
+      l_placeholder := regexp_substr(l_combined_template, '#[A-Za-z0-9_]+#', l_position);
+      exit placeholder_loop when l_placeholder is null;
+      
+      -- Extract placeholder name (without the # symbols)
+      l_placeholder_name := substr(l_placeholder, 2, length(l_placeholder) - 2);
+      
+      -- Check if parameter exists (case-insensitive)
+      l_found := false;
+      if p_parameters is not null then
+        l_key_arr := p_parameters.get_keys;
+        <<check_keys>>
+        for i in 1 .. l_key_arr.count loop
+          if upper(l_key_arr(i)) = upper(l_placeholder_name) then
+            l_found := true;
+            exit check_keys;
+          end if;
+        end loop check_keys;
+      end if;
+      
+      if not l_found then
+        uc_ai_logger.log_error('Missing parameter for placeholder: ' || l_placeholder, l_scope);
+        raise_application_error(-20003, 'Missing parameter for placeholder: ' || l_placeholder);
+      end if;
+      
+      -- Move to next placeholder
+      l_position := regexp_instr(l_combined_template, '#[A-Za-z0-9_]+#', l_position) + length(l_placeholder);
+    end loop placeholder_loop;
+  end validate_parameters;
 
 
   /*
@@ -723,13 +757,16 @@ create or replace package body uc_ai_prompt_profiles_api as
     -- Get profile
     l_profile := get_prompt_profile(p_code, p_version);
     
+    -- Validate all placeholders have corresponding parameters
+    validate_parameters(
+      p_system_template => l_profile.system_prompt_template,
+      p_user_template   => l_profile.user_prompt_template,
+      p_parameters      => p_parameters
+    );
+    
     -- Replace placeholders in templates
     l_system_prompt := replace_placeholders(l_profile.system_prompt_template, p_parameters);
     l_user_prompt := replace_placeholders(l_profile.user_prompt_template, p_parameters);
-    
-    -- Validate all placeholders were replaced
-    validate_no_placeholders(l_system_prompt);
-    validate_no_placeholders(l_user_prompt);
     
     -- Determine final provider and model (overrides take precedence)
     l_provider := coalesce(p_provider_override, l_profile.provider);
