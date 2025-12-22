@@ -3,7 +3,7 @@ create or replace package body pame_pkg as
   procedure reset_global_variables
   as
   begin
-    uc_ai.g_base_url := 'host.containers.internal:11434/api';
+    uc_ai.g_base_url := null;
     uc_ai.g_enable_tools := false;
     uc_ai.g_enable_reasoning := false;
     uc_ai_oci.g_compartment_id := 'change_to_your_compartment_id';
