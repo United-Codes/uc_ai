@@ -204,7 +204,6 @@ create or replace package uc_ai_prompt_profiles_api as
    * @param p_provider_override   Override the profile's provider setting
    * @param p_model_override      Override the profile's model setting
    * @param p_config_override     Override the profile's model_config_json setting
-   * @param p_max_tool_calls      Maximum number of tool calls (passed to generate_text)
    * 
    * @return                      JSON object response from AI provider
    */
@@ -214,8 +213,7 @@ create or replace package uc_ai_prompt_profiles_api as
     p_parameters        in json_object_t default null,
     p_provider_override in uc_ai_prompt_profiles.provider%type default null,
     p_model_override    in uc_ai_prompt_profiles.model%type default null,
-    p_config_override   in json_object_t default null,
-    p_max_tool_calls    in pls_integer default null
+    p_config_override   in json_object_t default null
   ) return json_object_t;
 
 
@@ -227,7 +225,6 @@ create or replace package uc_ai_prompt_profiles_api as
    * @param p_provider_override   Override the profile's provider setting
    * @param p_model_override      Override the profile's model setting
    * @param p_config_override     Override the profile's model_config_json setting
-   * @param p_max_tool_calls      Maximum number of tool calls (passed to generate_text)
    * 
    * @return                      JSON object response from AI provider
    */
@@ -236,8 +233,7 @@ create or replace package uc_ai_prompt_profiles_api as
     p_parameters        in json_object_t default null,
     p_provider_override in uc_ai_prompt_profiles.provider%type default null,
     p_model_override    in uc_ai_prompt_profiles.model%type default null,
-    p_config_override   in json_object_t default null,
-    p_max_tool_calls    in pls_integer default null
+    p_config_override   in json_object_t default null
   ) return json_object_t;
 
 end uc_ai_prompt_profiles_api;

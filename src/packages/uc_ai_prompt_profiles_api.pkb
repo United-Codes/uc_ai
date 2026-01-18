@@ -556,6 +556,10 @@ create or replace package body uc_ai_prompt_profiles_api as
           if l_value.is_boolean then
             uc_ai.g_enable_tools := p_config.get_boolean(l_key);
           end if;
+        when 'g_max_tool_calls' then
+          if l_value.is_number then
+            uc_ai.g_max_tool_calls := p_config.get_number(l_key);
+          end if;
         when 'g_apex_web_credential' then
           if l_value.is_string then
             uc_ai.g_apex_web_credential := p_config.get_string(l_key);
@@ -741,8 +745,7 @@ create or replace package body uc_ai_prompt_profiles_api as
     p_parameters        in json_object_t default null,
     p_provider_override in uc_ai_prompt_profiles.provider%type default null,
     p_model_override    in uc_ai_prompt_profiles.model%type default null,
-    p_config_override   in json_object_t default null,
-    p_max_tool_calls    in pls_integer default null
+    p_config_override   in json_object_t default null
   ) return json_object_t
   as
     l_scope          uc_ai_logger.scope := gc_scope_prefix || 'execute_profile';
@@ -793,7 +796,7 @@ create or replace package body uc_ai_prompt_profiles_api as
       p_system_prompt        => l_system_prompt,
       p_provider             => l_provider,
       p_model                => l_model,
-      p_max_tool_calls       => p_max_tool_calls,
+      p_max_tool_calls       => uc_ai.g_max_tool_calls,
       p_response_json_schema => l_response_schema
     );
   exception
@@ -811,8 +814,7 @@ create or replace package body uc_ai_prompt_profiles_api as
     p_parameters        in json_object_t default null,
     p_provider_override in uc_ai_prompt_profiles.provider%type default null,
     p_model_override    in uc_ai_prompt_profiles.model%type default null,
-    p_config_override   in json_object_t default null,
-    p_max_tool_calls    in pls_integer default null
+    p_config_override   in json_object_t default null
   ) return json_object_t
   as
     l_scope   uc_ai_logger.scope := gc_scope_prefix || 'execute_profile';
@@ -828,8 +830,7 @@ create or replace package body uc_ai_prompt_profiles_api as
       p_parameters        => p_parameters,
       p_provider_override => p_provider_override,
       p_model_override    => p_model_override,
-      p_config_override   => p_config_override,
-      p_max_tool_calls    => p_max_tool_calls
+      p_config_override   => p_config_override
     );
   exception
     when others then

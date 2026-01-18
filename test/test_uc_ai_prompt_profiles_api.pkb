@@ -651,6 +651,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
 
     l_config := '{
       "g_enable_tools": true,
+      "g_max_tool_calls": 5,
       "g_enable_reasoning": false
     }';
 
@@ -675,8 +676,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       -- Execute profile
       l_result := uc_ai_prompt_profiles_api.execute_profile(
         p_code => gc_test_code || '_TOOLS',
-        p_parameters => l_parameters,
-        p_max_tool_calls => 5
+        p_parameters => l_parameters
       );
     end;
 
