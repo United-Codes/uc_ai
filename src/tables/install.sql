@@ -131,3 +131,30 @@ create table uc_ai_tool_tags(
   constraint uc_ai_tool_tags_tool_id_fk foreign key (tool_id) references uc_ai_tools(id) on delete cascade,
   constraint uc_ai_tool_tags_tag_lower_ck check (tag_name = lower(tag_name))
 );  
+
+
+create sequence uc_ai_prompt_profiles_seq;
+
+create table uc_ai_prompt_profiles (
+  id                     number default on null uc_ai_prompt_profiles_seq.nextval not null,
+  code                   varchar2(255 char)  not null,
+  version                number default on null 1 not null,
+  status                 varchar2(50 char) default on null 'draft' not null,
+  description            varchar2(4000 char) not null,
+
+  system_prompt_template clob not null,
+  user_prompt_template   clob not null,
+  provider               varchar2(512 char) not null,
+  model                  varchar2(512 char) not null,
+  model_config_json      clob,
+  response_schema        clob,
+  parameters_schema      clob,
+
+  created_by             varchar2(255 char) not null,
+  created_at             timestamp not null,
+  updated_by             varchar2(255 char) not null,
+  updated_at             timestamp not null,
+  constraint uc_ai_prompt_profiles_pk primary key (id),
+  constraint uc_ai_prompt_profiles_uk unique (code, version),
+  constraint uc_ai_prompt_profiles_status_ck check (status in ('draft', 'active', 'archived'))
+);

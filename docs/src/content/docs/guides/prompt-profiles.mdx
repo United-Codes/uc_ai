@@ -1,0 +1,681 @@
+---
+title: Prompt Profiles
+description: Manage reusable AI prompt templates with parameters and version control
+sidebar:
+  order: 60
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**Prompt profiles allow you to create, version, and reuse AI prompt templates across your application.**
+
+Instead of hardcoding prompts throughout your codebase, prompt profiles provide a centralized way to manage prompt templates with parameter substitution, model configuration, and version control. This makes it easy to maintain consistency, update prompts without code changes, and test different versions.
+
+## Why use prompt profiles?
+
+Prompt profiles solve several common problems when working with AI:
+
+- **Centralized Management**: Store all your prompts in the database instead of scattered throughout your code
+- **Parameter Substitution**: Use placeholders in templates that get replaced with actual values at runtime
+- **Version Control**: Create multiple versions of the same prompt and gradually roll them out
+- **Configuration Management**: Store model settings, structured output schemas, and other configuration alongside prompts
+- **Status Management**: Mark profiles as draft, active, or archived to control which versions are used
+- **Reusability**: Use the same prompt template from different parts of your application
+
+## How it works
+
+A prompt profile consists of:
+
+- **Code**: A unique identifier for the profile (e.g., `SUMMARIZE_TEXT`, `EXTRACT_DATA`)
+- **Version**: Numeric version to support multiple iterations
+- **Status**: Draft, active, or archived
+- **Templates**: System and user prompt templates with placeholders
+- **Configuration**: Provider, model, and optional model settings
+- **Schemas**: Optional JSON schemas for structured output and parameters
+
+When you execute a profile, UC AI:
+
+1. Retrieves the profile by code/version or ID
+2. Validates that all placeholders have corresponding parameters
+3. Replaces placeholders with actual values
+4. Applies model configuration settings
+5. Calls the AI with the prepared prompts
+
+## Creating a prompt profile
+
+Use `uc_ai_prompt_profiles_api.create_prompt_profile` to create a new profile:
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+BEGIN
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code => 'SUMMARIZE_TEXT',
+    p_description => 'Summarizes text content in a specified style',
+    p_system_prompt_template => 'You are a #style# assistant that creates concise summaries.',
+    p_user_prompt_template => 'Summarize the following text: #text#',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini,
+    p_version => 1,
+    p_status => uc_ai_prompt_profiles_api.c_status_draft
+  );
+
+  COMMIT;
+END;
+/
+```
+
+### Parameters
+
+- `p_code`: Unique identifier for the profile
+- `p_description`: Human-readable description
+- `p_system_prompt_template`: System prompt with placeholders (`#placeholder#`)
+- `p_user_prompt_template`: User prompt with placeholders
+- `p_provider`: AI provider (e.g., `uc_ai.c_provider_openai`)
+- `p_model`: Model identifier (e.g., `uc_ai_openai.c_model_gpt_4o_mini`)
+- `p_model_config_json`: Optional JSON configuration (see [Configuration](#model-configuration))
+- `p_response_schema`: Optional JSON schema for [structured output](/products/uc-ai/docs/guides/structured_output)
+- `p_parameters_schema`: Optional JSON schema defining expected parameters
+- `p_version`: Version number (defaults to 1)
+- `p_status`: Status - 'draft', 'active', or 'archived' (defaults to 'draft')
+
+<Aside type="tip">
+  Start with 'draft' status while testing, then change to 'active' when ready
+  for production use.
+</Aside>
+
+## Using placeholders
+
+Placeholders allow you to create dynamic prompts. Use `#placeholder_name#` syntax in your templates:
+
+```sql
+-- Template with placeholders
+p_system_prompt_template => 'You are a #role# assistant.',
+p_user_prompt_template => 'What is the capital of #country#?'
+```
+
+When executing the profile, provide values for the placeholders:
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_params json_object_t := json_object_t();
+BEGIN
+  l_params.put('role', 'geography');
+  l_params.put('country', 'France');
+
+  l_result := uc_ai_prompt_profiles_api.execute_profile(
+    p_code => 'GEOGRAPHY_HELPER',
+    p_parameters => l_params
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Answer: ' || l_result.get_clob('final_message'));
+END;
+/
+```
+
+<Aside type="note">
+  Placeholder matching is case-insensitive. Both `#Country#` and `#country#`
+  will match a parameter named 'country'.
+</Aside>
+
+### Placeholder validation
+
+UC AI validates that all placeholders in your templates have corresponding parameters. If a placeholder is missing, you'll get a clear error:
+
+```
+Missing parameter for placeholder: #text#
+```
+
+Only alphanumeric characters and underscores are allowed in placeholder names: `#valid_name_123#`
+
+## Executing a profile
+
+### Execute by code
+
+Retrieve and execute the latest active version:
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_params json_object_t := json_object_t();
+BEGIN
+  l_params.put('text', 'Long article text here...');
+  l_params.put('style', 'professional');
+
+  l_result := uc_ai_prompt_profiles_api.execute_profile(
+    p_code => 'SUMMARIZE_TEXT',
+    p_parameters => l_params
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+### Execute specific version
+
+Target a specific version:
+
+```sql
+l_result := uc_ai_prompt_profiles_api.execute_profile(
+  p_code => 'SUMMARIZE_TEXT',
+  p_version => 2,  -- Use version 2 specifically
+  p_parameters => l_params
+);
+```
+
+### Execute by ID
+
+If you have the profile ID:
+
+```sql
+l_result := uc_ai_prompt_profiles_api.execute_profile(
+  p_id => 42,
+  p_parameters => l_params
+);
+```
+
+## Model configuration
+
+Store model settings directly in the profile using `p_model_config_json`:
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+  l_config CLOB := '{
+    "g_enable_reasoning": true,
+    "g_reasoning_level": "high",
+    "g_temperature": 0.7,
+    "g_max_tokens": 1000
+  }';
+BEGIN
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code => 'COMPLEX_ANALYSIS',
+    p_description => 'Analyzes complex scenarios with reasoning',
+    p_system_prompt_template => 'You are an analytical assistant.',
+    p_user_prompt_template => 'Analyze: #scenario#',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_o4,
+    p_model_config_json => l_config
+  );
+END;
+/
+```
+
+### Available configuration options
+
+Configuration options map to UC AI global variables:
+
+**Root-level options:**
+
+- `g_base_url`: Base URL for API endpoints (string)
+- `g_enable_reasoning`: Enable reasoning mode (boolean)
+- `g_reasoning_level`: Reasoning level - 'low', 'medium', or 'high' (string)
+- `g_enable_tools`: Enable [tools/functions](/products/uc-ai/docs/guides/tools) (boolean)
+- `g_max_tool_calls`: Maximum number of tool calls allowed (number)
+- `g_tool_tags`: Tool tags to filter available tools (array of strings or single string)
+- `g_apex_web_credential`: APEX web credential static ID (string)
+
+**Provider-specific options:**
+
+These are nested under a provider key (e.g., `"openai": { ... }`):
+
+- **OpenAI** (`openai`):
+  - `g_reasoning_effort`: Reasoning effort level (string)
+  - `g_apex_web_credential`: Provider-specific web credential (string)
+
+- **Anthropic** (`anthropic`):
+  - `g_max_tokens`: Maximum response length (number)
+  - `g_reasoning_budget_tokens`: Token budget for reasoning (number)
+  - `g_apex_web_credential`: Provider-specific web credential (string)
+
+- **Google** (`google`):
+  - `g_reasoning_budget`: Reasoning budget (number)
+  - `g_apex_web_credential`: Provider-specific web credential (string)
+  - `g_embedding_task_type`: Task type for embeddings (string)
+  - `g_embedding_output_dimensions`: Output dimensions for embeddings (number)
+
+- **xAI** (`xai`):
+  - `g_reasoning_effort`: Reasoning effort level (string)
+  - `g_apex_web_credential`: Provider-specific web credential (string)
+
+- **OpenRouter** (`openrouter`):
+  - `g_reasoning_effort`: Reasoning effort level (string)
+  - `g_apex_web_credential`: Provider-specific web credential (string)
+
+- **Ollama** (`ollama`):
+  - `g_apex_web_credential`: Provider-specific web credential (string)
+
+- **OCI** (`oci`):
+  - `g_apex_web_credential`: Provider-specific web credential (string)
+
+Example with provider-specific settings:
+
+```json
+{
+  "g_enable_reasoning": true,
+  "g_reasoning_level": "high",
+  "anthropic": {
+    "g_max_tokens": 2000,
+    "g_reasoning_budget_tokens": 5000
+  }
+}
+```
+
+The configuration is applied when the profile is executed, setting the corresponding global variables.
+
+## Structured output
+
+Define a response schema to get consistent, parseable JSON responses:
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+  l_schema CLOB := '{
+    "type": "object",
+    "properties": {
+      "summary": {
+        "type": "string",
+        "description": "Brief summary of the text"
+      },
+      "key_points": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "List of key points"
+      },
+      "sentiment": {
+        "type": "string",
+        "enum": ["positive", "neutral", "negative"]
+      },
+      "confidence": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "required": ["summary", "key_points", "sentiment", "confidence"]
+  }';
+BEGIN
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code => 'ANALYZE_TEXT',
+    p_description => 'Analyzes text with structured output',
+    p_system_prompt_template => 'Analyze text and provide structured results.',
+    p_user_prompt_template => 'Analyze: #text#',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini,
+    p_response_schema => l_schema
+  );
+END;
+/
+```
+
+Execute and parse the structured response:
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_params json_object_t := json_object_t();
+  l_output json_object_t;
+  l_key_points json_array_t;
+BEGIN
+  l_params.put('text', 'Your text here...');
+
+  l_result := uc_ai_prompt_profiles_api.execute_profile(
+    p_code => 'ANALYZE_TEXT',
+    p_parameters => l_params
+  );
+
+  -- Parse structured output
+  l_output := json_object_t(l_result.get_clob('final_message'));
+
+  DBMS_OUTPUT.PUT_LINE('Summary: ' || l_output.get_string('summary'));
+  DBMS_OUTPUT.PUT_LINE('Sentiment: ' || l_output.get_string('sentiment'));
+  DBMS_OUTPUT.PUT_LINE('Confidence: ' || l_output.get_number('confidence'));
+
+  -- Access array
+  l_key_points := l_output.get_array('key_points');
+  FOR i IN 0..l_key_points.get_size - 1 LOOP
+    DBMS_OUTPUT.PUT_LINE('Point ' || (i+1) || ': ' || l_key_points.get_string(i));
+  END LOOP;
+END;
+/
+```
+
+<Aside type="tip">
+  Use [our JSON schema
+  builder](/products/uc-ai/docs/other/json-schema/#interactive-builder) to
+  create schemas easily.
+</Aside>
+
+## Version management
+
+### Creating a new version
+
+Create a new version based on an existing one:
+
+```sql
+DECLARE
+  l_new_version_id NUMBER;
+BEGIN
+  l_new_version_id := uc_ai_prompt_profiles_api.create_new_version(
+    p_code => 'SUMMARIZE_TEXT',
+    p_source_version => 1,
+    p_new_version => 2  -- Optional, defaults to source_version + 1
+  );
+
+  -- New version starts in 'draft' status
+  -- Modify it before activating
+END;
+/
+```
+
+The new version is an exact copy of the source version but with 'draft' status.
+
+### Changing status
+
+Control which versions are available:
+
+```sql
+BEGIN
+  -- Activate version 2
+  uc_ai_prompt_profiles_api.change_status(
+    p_code => 'SUMMARIZE_TEXT',
+    p_version => 2,
+    p_status => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  -- Archive old version 1
+  uc_ai_prompt_profiles_api.change_status(
+    p_code => 'SUMMARIZE_TEXT',
+    p_version => 1,
+    p_status => uc_ai_prompt_profiles_api.c_status_archived
+  );
+
+  COMMIT;
+END;
+/
+```
+
+Available status values:
+
+- `c_status_draft`: Under development, not used in production
+- `c_status_active`: Ready for production use
+- `c_status_archived`: No longer in use
+
+<Aside type="note">
+  When executing by code without specifying a version, only 'active' profiles
+  are considered. The latest active version by version number is used.
+</Aside>
+
+## Updating profiles
+
+### Update by ID
+
+```sql
+BEGIN
+  uc_ai_prompt_profiles_api.update_prompt_profile(
+    p_id => 42,
+    p_description => 'Updated description',
+    p_system_prompt_template => 'New system prompt with #param#',
+    p_user_prompt_template => 'New user prompt: #input#',
+    p_provider => uc_ai.c_provider_anthropic,
+    p_model => uc_ai_anthropic.c_model_claude_3_5_sonnet
+  );
+
+  COMMIT;
+END;
+/
+```
+
+### Update by code and version
+
+```sql
+BEGIN
+  uc_ai_prompt_profiles_api.update_prompt_profile(
+    p_code => 'SUMMARIZE_TEXT',
+    p_version => 2,
+    p_description => 'Updated description',
+    p_system_prompt_template => 'Updated system prompt',
+    p_user_prompt_template => 'Updated user prompt',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o
+  );
+
+  COMMIT;
+END;
+/
+```
+
+<Aside type="caution">
+  Consider creating a new version instead of updating an existing one if it's
+  actively used in production.
+</Aside>
+
+## Runtime overrides
+
+Override provider, model, or configuration when executing a profile:
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_params json_object_t := json_object_t();
+  l_override_config json_object_t := json_object_t();
+BEGIN
+  l_params.put('text', 'Some text');
+
+  -- Override configuration
+  l_override_config.put('g_temperature', 0.9);
+  l_override_config.put('g_max_tokens', 2000);
+
+  l_result := uc_ai_prompt_profiles_api.execute_profile(
+    p_code => 'SUMMARIZE_TEXT',
+    p_parameters => l_params,
+    p_provider_override => uc_ai.c_provider_anthropic,
+    p_model_override => uc_ai_anthropic.c_model_claude_3_5_sonnet,
+    p_config_override => l_override_config
+  );
+END;
+/
+```
+
+This is useful for:
+
+- A/B testing different models
+- Adjusting parameters for specific use cases
+- Temporary provider switches
+
+## Using with tools
+
+Enable [tools/functions](/products/uc-ai/docs/guides/tools) in your profile:
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+  l_config CLOB := '{
+    "g_enable_tools": true,
+    "g_max_tool_calls": 5,
+    "g_tool_tags": ["user_lookup"]
+  }';
+BEGIN
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code => 'USER_LOOKUP',
+    p_description => 'Looks up user information',
+    p_system_prompt_template => 'You are an assistant with access to user data.',
+    p_user_prompt_template => 'What is the email of #user_name#?',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini,
+    p_model_config_json => l_config
+  );
+END;
+/
+```
+
+Execute the profile:
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_params json_object_t := json_object_t();
+BEGIN
+  l_params.put('user_name', 'Jim');
+
+  l_result := uc_ai_prompt_profiles_api.execute_profile(
+    p_code => 'USER_LOOKUP',
+    p_parameters => l_params
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Response: ' || l_result.get_clob('final_message'));
+  DBMS_OUTPUT.PUT_LINE('Tool calls: ' || l_result.get_number('tool_calls_count'));
+END;
+/
+```
+
+## Retrieving profiles
+
+### Get by ID
+
+```sql
+DECLARE
+  l_profile uc_ai_prompt_profiles%ROWTYPE;
+BEGIN
+  l_profile := uc_ai_prompt_profiles_api.get_prompt_profile(p_id => 42);
+
+  DBMS_OUTPUT.PUT_LINE('Code: ' || l_profile.code);
+  DBMS_OUTPUT.PUT_LINE('Version: ' || l_profile.version);
+  DBMS_OUTPUT.PUT_LINE('Status: ' || l_profile.status);
+END;
+/
+```
+
+### Get by code
+
+Get the latest active version:
+
+```sql
+DECLARE
+  l_profile uc_ai_prompt_profiles%ROWTYPE;
+BEGIN
+  l_profile := uc_ai_prompt_profiles_api.get_prompt_profile(
+    p_code => 'SUMMARIZE_TEXT'
+    -- p_version => NULL returns latest active version
+  );
+END;
+/
+```
+
+Get a specific version:
+
+```sql
+l_profile := uc_ai_prompt_profiles_api.get_prompt_profile(
+  p_code => 'SUMMARIZE_TEXT',
+  p_version => 2
+);
+```
+
+## Deleting profiles
+
+### Delete by ID
+
+```sql
+BEGIN
+  uc_ai_prompt_profiles_api.delete_prompt_profile(p_id => 42);
+  COMMIT;
+END;
+/
+```
+
+### Delete by code and version
+
+```sql
+BEGIN
+  uc_ai_prompt_profiles_api.delete_prompt_profile(
+    p_code => 'SUMMARIZE_TEXT',
+    p_version => 1
+  );
+  COMMIT;
+END;
+/
+```
+
+<Aside type="caution">
+  Consider archiving instead of deleting profiles to maintain a history.
+</Aside>
+
+## Complete example
+
+Here's a complete example showing the full workflow:
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+  l_result json_object_t;
+  l_params json_object_t := json_object_t();
+  l_schema CLOB;
+  l_output json_object_t;
+BEGIN
+  -- Define structured output schema
+  l_schema := '{
+    "type": "object",
+    "properties": {
+      "category": {
+        "type": "string",
+        "enum": ["bug", "feature", "question", "documentation"]
+      },
+      "priority": {
+        "type": "string",
+        "enum": ["low", "medium", "high", "urgent"]
+      },
+      "summary": {
+        "type": "string",
+        "description": "Brief summary of the issue"
+      },
+      "estimated_effort": {
+        "type": "string",
+        "enum": ["small", "medium", "large"]
+      }
+    },
+    "required": ["category", "priority", "summary", "estimated_effort"]
+  }';
+
+  -- Create profile
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code => 'CLASSIFY_ISSUE',
+    p_description => 'Classifies customer support issues',
+    p_system_prompt_template => 'You are a support ticket classifier. Analyze issues and categorize them accurately.',
+    p_user_prompt_template => 'Classify this issue: #issue_text#',
+    p_provider => uc_ai.c_provider_openai,
+    p_model => uc_ai_openai.c_model_gpt_4o_mini,
+    p_response_schema => l_schema,
+    p_version => 1,
+    p_status => uc_ai_prompt_profiles_api.c_status_draft
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Created profile ID: ' || l_profile_id);
+
+  -- Activate it
+  uc_ai_prompt_profiles_api.change_status(
+    p_id => l_profile_id,
+    p_status => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  -- Use the profile
+  l_params.put('issue_text', 'The export button is not working when I try to download the report. I get an error message.');
+
+  l_result := uc_ai_prompt_profiles_api.execute_profile(
+    p_code => 'CLASSIFY_ISSUE',
+    p_parameters => l_params
+  );
+
+  -- Parse the structured response
+  l_output := json_object_t(l_result.get_clob('final_message'));
+
+  DBMS_OUTPUT.PUT_LINE('Category: ' || l_output.get_string('category'));
+  DBMS_OUTPUT.PUT_LINE('Priority: ' || l_output.get_string('priority'));
+  DBMS_OUTPUT.PUT_LINE('Summary: ' || l_output.get_string('summary'));
+  DBMS_OUTPUT.PUT_LINE('Effort: ' || l_output.get_string('estimated_effort'));
+
+  COMMIT;
+END;
+/
+```
