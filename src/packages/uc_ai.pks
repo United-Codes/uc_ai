@@ -46,6 +46,7 @@ create or replace package uc_ai as
   -- tools relevant global settings
   g_enable_tools boolean := false;
   g_tool_tags apex_t_varchar2;
+  g_max_tool_calls pls_integer;
 
   -- global settings for APEX Web Credentials
   g_apex_web_credential varchar2(255 char);
