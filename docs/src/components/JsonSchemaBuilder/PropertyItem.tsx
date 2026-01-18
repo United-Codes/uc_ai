@@ -177,7 +177,21 @@ const PropertyItem: React.FC<PropertyItemProps> = ({
           <select
             id={typeId}
             value={property.type}
-            onChange={(e) => updateField("type", e.target.value)}
+            onChange={(e) => {
+              const newType = e.target.value;
+              updateField("type", newType);
+
+              // When changing to array type, initialize items with default string type
+              if (newType === "array" && !property.items) {
+                const defaultItems: SchemaProperty = {
+                  id: `${property.id}-items`,
+                  name: "items",
+                  type: "string",
+                  required: false,
+                };
+                updateField("items", defaultItems);
+              }
+            }}
           >
             <option value="string">String</option>
             <option value="number">Number</option>
