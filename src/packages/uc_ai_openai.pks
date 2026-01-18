@@ -44,7 +44,7 @@ create or replace package uc_ai_openai as
 
   -- How many reasoning tokens to generate before creating a response
   -- More info at https://platform.openai.com/docs/guides/reasoning?api-mode=responses
-  g_reasoning_effort varchar2(32 char) := 'low'; -- 'low', 'medium', 'high'
+  g_reasoning_effort varchar2(32 char) := 'low'; -- 'minimal', 'low', 'medium', 'high', 'xhigh'
 
   -- type: HTTP-Header, credential-name: Authorization, value: Bearer <token>
   g_apex_web_credential varchar2(255 char);
