@@ -46,6 +46,7 @@ create or replace package uc_ai as
   -- tools relevant global settings
   g_enable_tools boolean := false;
   g_tool_tags apex_t_varchar2;
+  g_max_tool_calls pls_integer;
 
   -- global settings for APEX Web Credentials
   g_apex_web_credential varchar2(255 char);
@@ -92,6 +93,11 @@ create or replace package uc_ai as
   , p_provider in provider_type
   , p_model in model_type
   ) return json_array_t;
+
+  /*
+   * Resets all global variables in uc_ai and provider packages to their default values
+   */
+  procedure reset_globals;
 
 end uc_ai;
 /

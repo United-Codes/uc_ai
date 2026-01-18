@@ -12,6 +12,7 @@
 # API packages (in dependency order)
 declare -a API_PACKAGES=(
     "uc_ai_tools_api"
+    "uc_ai_prompt_profiles_api"
     "uc_ai_message_api"
     "uc_ai_structured_output"
     "uc_ai_logger"
@@ -63,6 +64,9 @@ get_package_description() {
     case "$package_name" in
         "uc_ai_tools_api")
             echo "Tools API Package"
+            ;;
+        "uc_ai_prompt_profiles_api")
+            echo "Prompt Profiles API Package"
             ;;
         "uc_ai_message_api")
             echo "Message API Package"

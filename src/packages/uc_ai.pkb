@@ -20,7 +20,7 @@ create or replace package body uc_ai as
         l_result := uc_ai_openai.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
         , p_schema_name    => 'structured_output'
         , p_strict         => true
@@ -32,21 +32,21 @@ create or replace package body uc_ai as
           l_result := uc_ai_anthropic.generate_text(
             p_messages       => p_messages
           , p_model          => p_model
-          , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+          , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
           );
         end if;
       when c_provider_google then
         l_result := uc_ai_google.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
         );
       when c_provider_ollama then
         l_result := uc_ai_ollama.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
         );
       when c_provider_oci then
@@ -56,7 +56,7 @@ create or replace package body uc_ai as
           l_result := uc_ai_oci.generate_text(
             p_messages       => p_messages
           , p_model          => p_model
-          , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+          , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
           );
         end if;
       when c_provider_xai then
@@ -66,7 +66,7 @@ create or replace package body uc_ai as
         l_result := uc_ai_openai.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
         , p_schema_name    => 'structured_output'
         , p_strict         => true
@@ -78,7 +78,7 @@ create or replace package body uc_ai as
         l_result := uc_ai_openai.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
         , p_schema_name    => 'structured_output'
         , p_strict         => true
@@ -200,6 +200,51 @@ create or replace package body uc_ai as
 
       raise;
   end generate_embeddings;
+
+  procedure reset_globals
+  as
+  begin
+    -- Reset uc_ai global variables
+    g_base_url := null;
+    g_enable_reasoning := false;
+    g_reasoning_level := null;
+    g_enable_tools := false;
+    g_tool_tags := apex_t_varchar2();
+    g_apex_web_credential := null;
+    g_provider_override := null;
+
+    -- Reset OpenAI global variables
+    uc_ai_openai.g_reasoning_effort := 'low';
+    uc_ai_openai.g_apex_web_credential := null;
+
+    -- Reset Anthropic global variables
+    uc_ai_anthropic.g_max_tokens := 8192;
+    uc_ai_anthropic.g_reasoning_budget_tokens := null;
+    uc_ai_anthropic.g_apex_web_credential := null;
+
+    -- Reset Google global variables
+    uc_ai_google.g_reasoning_budget := null;
+    uc_ai_google.g_apex_web_credential := null;
+    uc_ai_google.g_embedding_task_type := 'SEMANTIC_SIMILARITY';
+    uc_ai_google.g_embedding_output_dimensions := 1536;
+
+    -- Reset Ollama global variables
+    uc_ai_ollama.g_apex_web_credential := null;
+
+    -- Reset OCI global variables
+    uc_ai_oci.g_compartment_id := null;
+    uc_ai_oci.g_serving_type := 'ON_DEMAND';
+    uc_ai_oci.g_region := 'us-ashburn-1';
+    uc_ai_oci.g_apex_web_credential := null;
+
+    -- Reset xAI global variables
+    uc_ai_xai.g_reasoning_effort := 'low';
+    uc_ai_xai.g_apex_web_credential := null;
+
+    -- Reset OpenRouter global variables
+    uc_ai_openrouter.g_reasoning_effort := 'low';
+    uc_ai_openrouter.g_apex_web_credential := null;
+  end reset_globals;
 
 end uc_ai;
 /
