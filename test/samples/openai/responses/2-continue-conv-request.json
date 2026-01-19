@@ -1,0 +1,42 @@
+{
+  "model": "gpt-4o-mini",
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        {
+          "text": "Remember this number: 42. Say \"I will remember 42\".",
+          "type": "input_text"
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "I will remember 42."
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        {
+          "text": "What number did I ask you to remember?",
+          "type": "input_text"
+        }
+      ]
+    }
+  ],
+  "instructions": "You are a helpful assistant.",
+  "previous_response_id": "resp_07089a2b3956052a00696e57444c1081978347fd4ba12a9058",
+  "text": {
+    "verbosity": "medium"
+  },
+  "max_tool_calls": 10,
+  "store": true
+}

@@ -1,0 +1,21 @@
+{
+  "model": "gpt-4o-mini",
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        {
+          "text": "Say \"Hello, Responses API!\" and nothing else.",
+          "type": "input_text"
+        }
+      ]
+    }
+  ],
+  "instructions": "You are a helpful assistant.",
+  "text": {
+    "verbosity": "medium"
+  },
+  "max_tool_calls": 10,
+  "store": true
+}
