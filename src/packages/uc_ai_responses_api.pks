@@ -46,14 +46,14 @@ create or replace package uc_ai_responses_api as
    * - Function calls and outputs are separate items with call_id correlation
    * - Supports encrypted reasoning for Zero Data Retention (ZDR) compliance
    * 
-   * p_input: Can be a simple string (treated as user message) or JSON array of message items
+   * p_messages: Standard LM message array. System messages become instructions.
+   *             To use previous_response_id, include it in providerOptions of any message:
+   *             {"type":"text","text":"...","providerOptions":{"previous_response_id":"resp_..."}}
    * p_model: Model to use for generation
    * p_max_tool_calls: Maximum number of tool calls to allow in one request
    * p_schema: Optional JSON schema for structured output
    * p_schema_name: Name for the structured output schema
    * p_strict: Whether to enforce strict schema validation
-   * p_previous_response_id: ID of previous response to continue conversation
-   * p_instructions: System-level instructions (replaces system messages)
    * 
    * Returns: JSON object with response data including:
    *   - id: Unique response ID
@@ -63,14 +63,12 @@ create or replace package uc_ai_responses_api as
    *   - model: Model that generated the response
    */
   function generate_text (
-    p_input              in clob -- String or JSON array of items
-  , p_model              in uc_ai.model_type
-  , p_max_tool_calls     in pls_integer default 10
-  , p_schema             in json_object_t default null
-  , p_schema_name        in varchar2 default 'structured_output'
-  , p_strict             in boolean default true
-  , p_previous_response_id in varchar2 default null
-  , p_instructions       in varchar2 default null
+    p_messages       in json_array_t
+  , p_model          in uc_ai.model_type
+  , p_max_tool_calls in pls_integer
+  , p_schema         in json_object_t default null
+  , p_schema_name    in varchar2 default 'structured_output'
+  , p_strict         in boolean default true
   ) return json_object_t;
 
 end uc_ai_responses_api;

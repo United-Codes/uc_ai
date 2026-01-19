@@ -654,8 +654,10 @@ create or replace package body uc_ai_openai as
   as
   begin
     if g_use_responses_api then
+      -- Set base URL for Responses API to use OpenAI endpoint
       uc_ai_responses_api.g_base_url := 'https://api.openai.com/v1';
 
+      -- Pass messages directly - Responses API will convert them
       return uc_ai_responses_api.generate_text(
         p_messages       => p_messages
       , p_model          => p_model

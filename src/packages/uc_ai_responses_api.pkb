@@ -28,10 +28,11 @@ create or replace package body uc_ai_responses_api as
    * 
    * Returns items array compatible with the Responses API input parameter
    */
-  function convert_lm_messages_to_items(
+  procedure convert_lm_messages_to_items(
     p_lm_messages in json_array_t
-  , po_instructions out varchar2
-  ) return json_array_t
+  , po_items out nocopy json_array_t
+  , po_instructions out nocopy varchar2
+  )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_lm_messages_to_items';
     l_items json_array_t := json_array_t();
@@ -39,6 +40,7 @@ create or replace package body uc_ai_responses_api as
     l_item json_object_t;
     l_role varchar2(255 char);
     l_content json_array_t;
+    l_new_content json_array_t;
     l_content_item json_object_t;
     l_content_type varchar2(255 char);
     l_system_instructions varchar2(32767 char);
@@ -67,7 +69,30 @@ create or replace package body uc_ai_responses_api as
           
           -- Convert content array to Responses API format
           l_content := l_lm_message.get_array('content');
-          l_item.put('content', l_content);
+          l_new_content := json_array_t();
+
+          <<user_content_loop>>
+          for j in 0 .. l_content.get_size - 1
+          loop
+            -- Convert to Responses API content types
+            declare
+              l_resp_content_item json_object_t;
+            begin
+              l_resp_content_item := treat(l_content.get(j) as json_object_t);
+
+              case l_resp_content_item.get_string('type')
+                when 'text' then
+                  l_resp_content_item.put('type', 'input_text');
+                else
+                  -- For other content types, copy as-is (could extend for more types)
+                  l_resp_content_item := treat(l_content.get(j) as json_object_t);
+              end case;
+
+              l_new_content.append(l_resp_content_item);
+            end;
+          end loop user_content_loop;
+
+          l_item.put('content', l_new_content);
           
           l_items.append(l_item);
 
@@ -148,10 +173,9 @@ create or replace package body uc_ai_responses_api as
       end case;
     end loop message_loop;
 
+    po_items := l_items;
     po_instructions := l_system_instructions;
     uc_ai_logger.log('Converted to ' || l_items.get_size || ' Responses API items', l_scope);
-    
-    return l_items;
 
   exception
     when others then
@@ -170,9 +194,12 @@ create or replace package body uc_ai_responses_api as
    * - reasoning items (model reasoning process)
    * 
    * This converts them back to the standardized LM message format
+   * 
+   * p_response_id: Optional response ID to add to providerOptions for multi-turn conversations
    */
   function convert_output_to_lm_messages(
     p_output in json_array_t
+  , p_response_id in varchar2 default null
   ) return json_array_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_output_to_lm_messages';
@@ -197,6 +224,7 @@ create or replace package body uc_ai_responses_api as
     for i in 0 .. p_output.get_size - 1
     loop
       l_output_item := treat(p_output.get(i) as json_object_t);
+      uc_ai_logger.log('Processing output item: ' || l_output_item.stringify, l_scope);
       l_item_type := l_output_item.get_string('type');
       
       case l_item_type
@@ -211,6 +239,7 @@ create or replace package body uc_ai_responses_api as
             for j in 0 .. l_content.get_size - 1
             loop
               l_content_item := treat(l_content.get(j) as json_object_t);
+              uc_ai_logger.log('Processing output item content: ' || l_content_item.stringify, l_scope);
               
               if l_content_item.get_string('type') = 'output_text' then
                 -- Convert to standardized text content
@@ -219,6 +248,17 @@ create or replace package body uc_ai_responses_api as
                 begin
                   l_text_content.put('type', 'text');
                   l_text_content.put('text', l_content_item.get_string('text'));
+
+                   if p_response_id is not null then
+                     -- Add providerOptions with response_id
+                     declare
+                       l_provider_options json_object_t := json_object_t();
+                     begin
+                       l_provider_options.put('response_id', p_response_id);
+                       l_text_content.put('providerOptions', l_provider_options);
+                     end;
+                   end if;
+
                   l_assistant_content.append(l_text_content);
                   l_has_text := true;
                 end;
@@ -420,7 +460,7 @@ create or replace package body uc_ai_responses_api as
         raise uc_ai.e_error_response;
     end;
 
-    if l_resp_json.has('error') then
+    if l_resp_json.has('error') and not l_resp_json.get('error').is_null then
       if l_resp_json.get('error').is_object then
         l_temp_obj := l_resp_json.get_object('error');
         uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
@@ -444,8 +484,8 @@ create or replace package body uc_ai_responses_api as
    * Responses API implementation for text generation
    * 
    * The Responses API is a unified, agentic interface that:
-   * - Accepts both simple strings and structured item arrays as input
-   * - Handles multi-turn conversations via previous_response_id
+   * - Accepts standardized LM message arrays
+   * - Handles multi-turn conversations via previous_response_id in providerOptions
    * - Manages tool calling loops internally (unlike Chat Completions)
    * - Returns structured output with items array
    * - Supports encrypted reasoning for ZDR compliance
@@ -457,79 +497,78 @@ create or replace package body uc_ai_responses_api as
    * - Native tool support (web_search, file_search, code_interpreter, etc.)
    */
   function generate_text (
-    p_input              in clob
-  , p_model              in uc_ai.model_type
-  , p_max_tool_calls     in pls_integer default 10
-  , p_schema             in json_object_t default null
-  , p_schema_name        in varchar2 default 'structured_output'
-  , p_strict             in boolean default true
-  , p_previous_response_id in varchar2 default null
-  , p_instructions       in varchar2 default null
+    p_messages       in json_array_t
+  , p_model          in uc_ai.model_type
+  , p_max_tool_calls in pls_integer
+  , p_schema         in json_object_t default null
+  , p_schema_name    in varchar2 default 'structured_output'
+  , p_strict         in boolean default true
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text';
     l_input_obj        json_object_t := json_object_t();
-    l_input_element    json_element_t;
     l_items            json_array_t;
     l_tools            json_array_t;
     l_result           json_object_t;
+    l_api_response     json_object_t;
     l_response_format  json_object_t;
     l_text_config      json_object_t;
     l_reasoning_config json_object_t;
     l_include_array    json_array_t;
     l_instructions     varchar2(32767 char);
-    l_converted_instructions varchar2(32767 char);
+    l_previous_response_id varchar2(255 char);
+    l_message          json_object_t;
+    l_content          json_array_t;
+    l_content_item     json_object_t;
+    l_provider_options json_object_t;
+    l_output           json_array_t;
+    l_output_text      clob;
+    l_normalized_messages json_array_t;
   begin
     uc_ai_logger.log('Starting generate_text with Responses API', l_scope);
     
     l_input_obj.put('model', p_model);
 
-    -- Handle input parameter - can be string or JSON array
-    begin
-      l_input_element := json_element_t.parse(p_input);
+    -- Extract previous_response_id from providerOptions if present
+    <<extract_provider_options_loop>>
+    for i in 0 .. p_messages.get_size - 1
+    loop
+      l_message := treat(p_messages.get(i) as json_object_t);
       
-      if l_input_element.is_array then
-        -- Input is JSON array - could be LM messages or already in Responses format
-        l_items := treat(l_input_element as json_array_t);
+      -- Check if message has content array with providerOptions
+      if l_message.has('content') and l_message.get('content').is_array then
+        l_content := l_message.get_array('content');
         
-        -- Check if first item looks like LM message format
-        if l_items.get_size > 0 then
-          declare
-            l_first_item json_object_t := treat(l_items.get(0) as json_object_t);
-          begin
-            if l_first_item.has('role') and not l_first_item.has('type') then
-              -- Looks like LM messages - convert to Responses items
-              uc_ai_logger.log('Converting LM messages to Responses items', l_scope);
-              l_items := convert_lm_messages_to_items(l_items, l_converted_instructions);
-              
-              -- Use converted instructions if no explicit instructions provided
-              if p_instructions is null and l_converted_instructions is not null then
-                l_instructions := l_converted_instructions;
-              end if;
+        <<content_loop>>
+        for j in 0 .. l_content.get_size - 1
+        loop
+          l_content_item := treat(l_content.get(j) as json_object_t);
+          
+          if l_content_item.has('providerOptions') then
+            l_provider_options := l_content_item.get_object('providerOptions');
+            
+            if l_provider_options.has('response_id') then
+              l_previous_response_id := l_provider_options.get_string('response_id');
+              uc_ai_logger.log('Found previous_response_id in providerOptions', l_scope, l_previous_response_id);
+              exit extract_provider_options_loop;
             end if;
-          end;
-        end if;
-        
-        l_input_obj.put('input', l_items);
-      else
-        -- Input is a simple string
-        l_input_obj.put('input', p_input);
+          end if;
+        end loop content_loop;
       end if;
-    exception
-      -- @dblinter ignore(g-5040): treat as simple string if not valid JSON
-      when others then
-        -- Not valid JSON - treat as simple string
-        l_input_obj.put('input', p_input);
-    end;
+    end loop extract_provider_options_loop;
 
-    -- Add instructions (replaces system messages in Responses API)
-    if coalesce(p_instructions, l_instructions) is not null then
-      l_input_obj.put('instructions', coalesce(p_instructions, l_instructions));
+    -- Convert LM messages to Responses items (extracts system messages as instructions)
+    convert_lm_messages_to_items(p_messages.clone, l_items, l_instructions);
+    l_input_obj.put('input', l_items);
+
+    -- Add instructions (extracted from system messages)
+    if l_instructions is not null then
+      l_input_obj.put('instructions', l_instructions);
     end if;
 
     -- Add previous_response_id for multi-turn conversations
-    if p_previous_response_id is not null then
-      l_input_obj.put('previous_response_id', p_previous_response_id);
+    if l_previous_response_id is not null then
+      l_input_obj.put('previous_response_id', l_previous_response_id);
     end if;
 
     -- Configure structured output via text.format (not response_format)
@@ -584,7 +623,7 @@ create or replace package body uc_ai_responses_api as
     end if;
 
     -- Configure storage and encrypted reasoning
-    l_input_obj.put('store', case when g_store_responses then true else false end);
+    l_input_obj.put('store', case when coalesce(g_store_responses, false) then true else false end);
     
     if g_include_encrypted_reasoning then
       l_include_array := json_array_t();
@@ -593,21 +632,69 @@ create or replace package body uc_ai_responses_api as
     end if;
 
     -- Make the API call
-    l_result := internal_generate_text(l_input_obj);
+    l_api_response := internal_generate_text(l_input_obj);
 
-    -- Extract output_text helper field
-    if l_result.has('output') then
-      declare
-        l_output json_array_t := l_result.get_array('output');
-        l_output_text clob;
-      begin
-        l_output_text := extract_output_text(l_output);
-        if l_output_text is not null then
-          l_result.put('output_text', l_output_text);
-        end if;
-      end;
+    -- Initialize unified result object
+    l_result := json_object_t();
+    
+    -- Convert output to normalized LM messages (with response_id embedded)
+    if l_api_response.has('output') then
+      l_output := l_api_response.get_array('output');
+      
+      -- Pass response_id to conversion function
+      if l_api_response.has('id') then
+        l_normalized_messages := convert_output_to_lm_messages(l_output, l_api_response.get_string('id'));
+      else
+        l_normalized_messages := convert_output_to_lm_messages(l_output);
+      end if;
+      
+      -- Extract output text for simple usage
+      l_output_text := extract_output_text(l_output);
+      if l_output_text is not null then
+        l_result.put('final_message', l_output_text);
+      end if;
+    else
+      l_normalized_messages := json_array_t();
     end if;
-
+    
+    -- Combine input messages with output messages to create full conversation history
+    declare
+      l_all_messages json_array_t := json_array_t();
+    begin
+      -- Add input messages
+      <<input_messages>>
+      for i in 0 .. p_messages.get_size - 1
+      loop
+        l_all_messages.append(p_messages.get(i));
+      end loop input_messages;
+      
+      -- Add output messages
+      <<output_messages>>
+      for i in 0 .. l_normalized_messages.get_size - 1
+      loop
+        l_all_messages.append(l_normalized_messages.get(i));
+      end loop output_messages;
+      
+      l_result.put('messages', l_all_messages);
+    end;
+    
+    -- Add finish_reason (Responses API uses 'stop_reason')
+    if l_api_response.has('stop_reason') then
+      l_result.put('finish_reason', l_api_response.get_string('stop_reason'));
+    else
+      l_result.put('finish_reason', 'stop');
+    end if;
+    
+    -- Add usage information
+    if l_api_response.has('usage') then
+      l_result.put('usage', l_api_response.get_object('usage'));
+    end if;
+    
+    -- Add model information
+    if l_api_response.has('model') then
+      l_result.put('model', l_api_response.get_string('model'));
+    end if;
+    
     -- Add provider info
     l_result.put('provider', uc_ai.c_provider_openai);
     
