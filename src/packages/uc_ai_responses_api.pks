@@ -52,8 +52,6 @@ create or replace package uc_ai_responses_api as
    * p_model: Model to use for generation
    * p_max_tool_calls: Maximum number of tool calls to allow in one request
    * p_schema: Optional JSON schema for structured output
-   * p_schema_name: Name for the structured output schema
-   * p_strict: Whether to enforce strict schema validation
    * 
    * Returns: JSON object with response data including:
    *   - id: Unique response ID
@@ -67,8 +65,6 @@ create or replace package uc_ai_responses_api as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
-  , p_schema_name    in varchar2 default 'structured_output'
-  , p_strict         in boolean default true
   ) return json_object_t;
 
 end uc_ai_responses_api;

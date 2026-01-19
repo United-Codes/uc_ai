@@ -1,7 +1,7 @@
 {
   "id": "chatcmpl-CAwhAgRBJ7oatXs6KSlwbTYoiMLgH",
   "object": "chat.completion",
-  "created": 1756724940,
+  "created": 1768840409,
   "model": "gpt-4o-mini-2024-07-18",
   "choices": [
     {
@@ -17,9 +17,9 @@
     }
   ],
   "usage": {
-    "prompt_tokens": 84,
+    "prompt_tokens": 72,
     "completion_tokens": 16,
-    "total_tokens": 100,
+    "total_tokens": 88,
     "prompt_tokens_details": {
       "cached_tokens": 0,
       "audio_tokens": 0

@@ -1,19 +1,32 @@
 {
   "model": "gpt-4o-mini",
-  "response_format": {
-    "type": "json_schema",
-    "json_schema": {
-      "name": "structured_output",
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        {
+          "text": "What is the capital of France? Please respond with confidence.",
+          "type": "input_text"
+        }
+      ]
+    }
+  ],
+  "instructions": "You are a helpful assistant that provides accurate information.",
+  "text": {
+    "format": {
+      "type": "json_schema",
+      "name": "Response_with_confidence_score",
+      "strict": true,
       "schema": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "response": {
-            "type": "string",
-            "description": "The generated response text"
+            "type": "string"
           },
           "confidence": {
             "type": "number",
-            "description": "Confidence score between 0 and 1",
             "minimum": 0,
             "maximum": 1
           }
@@ -21,25 +34,11 @@
         "required": [
           "response",
           "confidence"
-        ],
-        "additionalProperties": false
-      },
-      "strict": true
-    }
-  },
-  "messages": [
-    {
-      "role": "system",
-      "content": "You are a helpful assistant that provides accurate information."
+        ]
+      }
     },
-    {
-      "role": "user",
-      "content": [
-        {
-          "type": "text",
-          "text": "What is the capital of France? Please respond with confidence."
-        }
-      ]
-    }
-  ]
+    "verbosity": "medium"
+  },
+  "max_tool_calls": 10,
+  "store": true
 }

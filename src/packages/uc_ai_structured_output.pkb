@@ -154,7 +154,6 @@ create or replace package body uc_ai_structured_output as
    */
   function to_openai_format(
     p_schema in json_object_t,
-    p_name in varchar2 default 'structured_output',
     p_strict in boolean default true
   ) return json_object_t
   as
@@ -162,8 +161,16 @@ create or replace package body uc_ai_structured_output as
     l_response_format json_object_t := json_object_t();
     l_schema_copy json_object_t;
     l_json_schema json_object_t;
+    l_name varchar2(4000 char) := 'structured_output';
   begin
-    uc_ai_logger.log('Converting schema to OpenAI format', l_scope, 'Name: ' || p_name || ', Strict: ' || case when p_strict then 'true' else 'false' end);
+    uc_ai_logger.log('Converting schema to OpenAI format', l_scope, ' Strict: ' || case when p_strict then 'true' else 'false' end);
+
+    if p_schema.has('title') then
+      l_name := replace(p_schema.get_string('title'), ' ', '_');
+      -- make it match [a-zA-Z0-9_-]+
+      l_name := regexp_replace(l_name, '[^a-zA-Z0-9_-]', null);
+      l_name := coalesce(l_name, 'structured_output');
+    end if;
 
     -- Create a copy of the input schema and process for strict mode
     if p_strict then
@@ -175,7 +182,7 @@ create or replace package body uc_ai_structured_output as
     l_response_format.put('type', 'json_schema');
 
     l_json_schema := json_object_t();
-    l_json_schema.put('name', p_name);
+    l_json_schema.put('name', l_name);
     l_json_schema.put('schema', l_schema_copy);
     l_json_schema.put('strict', p_strict);
 
@@ -221,13 +228,51 @@ create or replace package body uc_ai_structured_output as
     return l_schema_copy;
   end to_ollama_format;
 
+ /*
+   * Convert a standard JSON schema to Responses API format for structured output
+   */
+  function to_responses_api_format(
+    p_schema in json_object_t,
+    p_strict in boolean default true
+  ) return json_object_t
+  as
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'to_responses_api_format';
+    l_response_format json_object_t := json_object_t();
+    l_schema_copy json_object_t;
+    l_name varchar2(4000 char) := 'structured_output';
+  begin
+    uc_ai_logger.log('Converting schema to Responses API format', l_scope, ' Strict: ' || case when p_strict then 'true' else 'false' end);
+
+    if p_schema.has('title') then
+      l_name := replace(p_schema.get_string('title'), ' ', '_');
+      -- make it match [a-zA-Z0-9_-]+
+      l_name := regexp_replace(l_name, '[^a-zA-Z0-9_-]', null);
+      l_name := coalesce(l_name, 'structured_output');
+    end if;
+
+    -- Create a copy of the input schema and process for strict mode
+    if p_strict then
+      l_schema_copy := process_openai_strict_schema(p_schema);
+    else
+      l_schema_copy := json_object_t(p_schema.to_clob);
+    end if;
+
+    l_response_format.put('type', 'json_schema');
+    l_response_format.put('name', l_name);
+    l_response_format.put('strict', p_strict);
+    l_response_format.put('schema', l_schema_copy);
+
+    uc_ai_logger.log('Responses API format conversion complete', l_scope, l_response_format.to_clob);
+    return l_response_format;
+  end to_responses_api_format;
+
+
   /*
    * Generic function to convert schema based on provider
    */
   function format_schema(
     p_schema in json_object_t,
     p_provider in uc_ai.provider_type,
-    p_name in varchar2 default 'structured_output',
     p_strict in boolean default true
   ) return json_object_t
   as
@@ -238,7 +283,7 @@ create or replace package body uc_ai_structured_output as
     
     case p_provider
       when uc_ai.c_provider_openai then
-        l_result := to_openai_format(p_schema, p_name, p_strict);
+        l_result := to_openai_format(p_schema, p_strict);
       when uc_ai.c_provider_google then
         l_result := to_google_format(p_schema);
       when uc_ai.c_provider_ollama then

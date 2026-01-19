@@ -501,8 +501,6 @@ create or replace package body uc_ai_responses_api as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
-  , p_schema_name    in varchar2 default 'structured_output'
-  , p_strict         in boolean default true
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text';
@@ -575,10 +573,9 @@ create or replace package body uc_ai_responses_api as
     if p_schema is not null then
       l_text_config := json_object_t();
       
-      l_response_format := uc_ai_structured_output.to_openai_format(
+      l_response_format := uc_ai_structured_output.to_responses_api_format(
         p_schema => p_schema,
-        p_name => p_schema_name,
-        p_strict => p_strict
+        p_strict => true
       );
       
       l_text_config.put('format', l_response_format);
