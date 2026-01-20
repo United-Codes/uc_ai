@@ -651,6 +651,8 @@ create or replace package body uc_ai_openai as
     if g_use_responses_api then
       -- Set base URL for Responses API to use OpenAI endpoint
       uc_ai_responses_api.g_base_url := 'https://api.openai.com/v1';
+      uc_ai_responses_api.g_apex_web_credential := g_apex_web_credential;
+      uc_ai.g_provider_override := uc_ai.c_provider_openai;
 
       -- Pass messages directly - Responses API will convert them
       return uc_ai_responses_api.generate_text(

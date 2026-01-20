@@ -515,18 +515,11 @@ create or replace package body uc_ai_responses_api as
     apex_web_service.g_request_headers(1).name := 'Content-Type';
     apex_web_service.g_request_headers(1).value := 'application/json';
 
-    case uc_ai.g_provider_override
-      when uc_ai.c_provider_xai then
-         l_web_credential := coalesce(uc_ai.g_apex_web_credential, uc_ai_xai.g_apex_web_credential);
-      when uc_ai.c_provider_openrouter then
-         l_web_credential := coalesce(uc_ai.g_apex_web_credential, uc_ai_openrouter.g_apex_web_credential);
-      else
-         l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
-    end case;
+    l_web_credential := coalesce(g_apex_web_credential, uc_ai.g_apex_web_credential);
 
     if l_web_credential is null then
       apex_web_service.g_request_headers(2).name := 'Authorization';
-      apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(coalesce(uc_ai.g_provider_override, uc_ai.c_provider_openai));
+      apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(uc_ai.g_provider_override);
     end if;
 
     l_url := get_generate_text_url;
@@ -681,7 +674,7 @@ create or replace package body uc_ai_responses_api as
 
     -- Get all available tools formatted for Responses API (if tools are enabled)
     if uc_ai.g_enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_responses_api, uc_ai.g_provider_override);
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_responses_api);
       l_input_obj.put('tools', l_tools);
     end if;
 
