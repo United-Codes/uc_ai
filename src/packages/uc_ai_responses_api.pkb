@@ -4,6 +4,9 @@ create or replace package body uc_ai_responses_api as
   c_api_generate_text_path constant varchar2(255 char) := '/responses';
 
   g_previous_response_id varchar2(255 char);
+  g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
+  g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
+  g_final_message clob;
 
   -- Responses API reference: https://www.openresponses.org/reference
   
@@ -531,6 +534,19 @@ create or replace package body uc_ai_responses_api as
     uc_ai_logger.log('Starting generate_text with Responses API', l_scope);
     g_previous_response_id := null;
     
+    -- Reset global variables
+    g_tool_calls := 0;
+    g_final_message := null;
+    g_normalized_messages := json_array_t();
+    
+    -- Copy input messages to global normalized messages array
+    <<copy_messages_loop>>
+    for i in 0 .. p_messages.get_size - 1
+    loop
+      l_message := treat(p_messages.get(i) as json_object_t);
+      g_normalized_messages.append(l_message);
+    end loop copy_messages_loop;
+    
     l_input_obj.put('model', p_model);
 
     -- Extract previous response_id from assistant message if present
@@ -664,6 +680,41 @@ create or replace package body uc_ai_responses_api as
           
           uc_ai_logger.log('Found function calls in output, executing tools', l_scope, 'Previous response_id: ' || g_previous_response_id);
           
+          -- Convert function calls to normalized assistant message and add to global array
+          declare
+            l_assistant_content json_array_t := json_array_t();
+            l_assistant_message json_object_t;
+            l_tool_use_content json_object_t;
+            l_has_tool_calls boolean := false;
+          begin
+            <<convert_function_calls>>
+            for i in 0 .. l_current_output.get_size - 1
+            loop
+              l_output_item := treat(l_current_output.get(i) as json_object_t);
+              
+              if l_output_item.get_string('type') = 'function_call' then
+                l_has_tool_calls := true;
+                
+                -- Create tool_use content item
+                l_tool_use_content := uc_ai_message_api.create_tool_call_content(
+                  p_tool_call_id => l_output_item.get_string('call_id'),
+                  p_tool_name    => l_output_item.get_string('name'),
+                  p_args         => l_output_item.get_clob('arguments')
+                );
+                
+                l_assistant_content.append(l_tool_use_content);
+              end if;
+            end loop convert_function_calls;
+            
+            -- Add assistant message with tool_use content to normalized messages
+            if l_has_tool_calls then
+              l_assistant_message := uc_ai_message_api.create_assistant_message(
+                p_content => l_assistant_content
+              );
+              g_normalized_messages.append(l_assistant_message);
+            end if;
+          end;
+          
           -- Add current output items to the items array
           <<add_output_items>>
           for i in 0 .. l_current_output.get_size - 1
@@ -672,55 +723,83 @@ create or replace package body uc_ai_responses_api as
           end loop add_output_items;
           
           -- Execute each function call and add results
-          <<execute_function_calls>>
-          for i in 0 .. l_current_output.get_size - 1
-          loop
-            l_output_item := treat(l_current_output.get(i) as json_object_t);
-            
-            if l_output_item.get_string('type') = 'function_call' then
-              declare
-                l_call_id varchar2(255 char);
-                l_tool_name varchar2(255 char);
-                l_arguments_str clob;
-                l_tool_result clob;
-                l_function_output_item json_object_t;
-              begin
-                l_call_id := l_output_item.get_string('call_id');
-                l_tool_name := l_output_item.get_string('name');
-                l_arguments_str := l_output_item.get_clob('arguments');
-                
-                uc_ai_logger.log('Executing tool: ' || l_tool_name, l_scope, 'Arguments: ' || l_arguments_str);
-                
-                -- Execute the tool
-                l_tool_result := uc_ai_tools_api.execute_tool(
-                  p_tool_code => l_tool_name,
-                  p_arguments => json_object_t(l_arguments_str)
-                );
-                
-                uc_ai_logger.log('Tool result for ' || l_tool_name, l_scope, l_tool_result);
-                
-                -- Create function_call_output item
-                l_function_output_item := json_object_t();
-                l_function_output_item.put('type', 'function_call_output');
-                l_function_output_item.put('call_id', l_call_id);
-                l_function_output_item.put('output', l_tool_result);
-                
-                -- Add to items array
-                l_current_items.append(l_function_output_item);
-                
-                l_tool_calls_count := l_tool_calls_count + 1;
-              exception
-                when others then
-                  uc_ai_logger.log_error('Error executing tool: ' || l_tool_name, l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
-                  -- Add error as tool result
+          declare
+            l_tool_content json_array_t := json_array_t();
+            l_tool_message json_object_t;
+          begin
+            <<execute_function_calls>>
+            for i in 0 .. l_current_output.get_size - 1
+            loop
+              l_output_item := treat(l_current_output.get(i) as json_object_t);
+              
+              if l_output_item.get_string('type') = 'function_call' then
+                declare
+                  l_call_id varchar2(255 char);
+                  l_tool_name varchar2(255 char);
+                  l_arguments_str clob;
+                  l_arguments_obj json_object_t;
+                  l_tool_result clob;
+                  l_function_output_item json_object_t;
+                  l_tool_result_content json_object_t;
+                begin
+                  l_call_id := l_output_item.get_string('call_id');
+                  l_tool_name := l_output_item.get_string('name');
+                  l_arguments_str := l_output_item.get_clob('arguments');
+
+                  if l_arguments_str is null or l_arguments_str = '{}' then
+                    l_arguments_obj := json_object_t();
+                  else
+                    l_arguments_obj := json_object_t.parse(l_arguments_str);
+                    if l_arguments_obj.has('parameters') then
+                      l_arguments_obj := l_arguments_obj.get_object('parameters');
+                    end if;
+                  end if;
+                  
+                  uc_ai_logger.log('Executing tool: ' || l_tool_name, l_scope, 'Arguments: ' || l_arguments_str);
+                  
+                  -- Execute the tool
+                  l_tool_result := uc_ai_tools_api.execute_tool(
+                    p_tool_code => l_tool_name,
+                    p_arguments => l_arguments_obj
+                  );
+                  
+                  uc_ai_logger.log('Tool result for ' || l_tool_name, l_scope, l_tool_result);
+                  
+                  -- Create function_call_output item for API
                   l_function_output_item := json_object_t();
                   l_function_output_item.put('type', 'function_call_output');
                   l_function_output_item.put('call_id', l_call_id);
-                  l_function_output_item.put('output', 'Error executing tool: ' || sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+                  l_function_output_item.put('output', l_tool_result);
+                  
+                  -- Add to items array
                   l_current_items.append(l_function_output_item);
-              end;
+                  
+                  -- Create tool_result content for normalized message
+                  l_tool_result_content := uc_ai_message_api.create_tool_result_content(
+                    p_tool_call_id => l_call_id,
+                    p_tool_name    => l_tool_name,
+                    p_result       => l_tool_result
+                  );
+                  l_tool_content.append(l_tool_result_content);
+                  
+                  l_tool_calls_count := l_tool_calls_count + 1;
+                  g_tool_calls := g_tool_calls + 1;
+                exception
+                  when others then
+                    uc_ai_logger.log_error('Error executing tool: ' || l_tool_name, l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+                    raise;
+                end;
+              end if;
+            end loop execute_function_calls;
+            
+            -- Add user message with tool results to normalized messages
+            if l_tool_content.get_size > 0 then
+              l_tool_message := uc_ai_message_api.create_tool_message(
+                p_content => l_tool_content
+              );
+              g_normalized_messages.append(l_tool_message);
             end if;
-          end loop execute_function_calls;
+          end;
           
           -- Make another API call with updated items
           l_input_obj.put('input', l_current_items);
@@ -737,42 +816,32 @@ create or replace package body uc_ai_responses_api as
         l_api_response := l_current_response;
       end;
       
-      -- Pass response_id to conversion function
+      -- Convert final output to normalized messages and add to global array
       if l_curr_response_id is not null then
         l_normalized_messages := convert_output_to_lm_messages(l_output, l_curr_response_id);
       else
         l_normalized_messages := convert_output_to_lm_messages(l_output);
       end if;
       
+      -- Add final output messages to global normalized messages
+      <<add_final_messages>>
+      for i in 0 .. l_normalized_messages.get_size - 1
+      loop
+        g_normalized_messages.append(l_normalized_messages.get(i));
+      end loop add_final_messages;
+      
       -- Extract output text for simple usage
       l_output_text := extract_output_text(l_output);
       if l_output_text is not null then
         l_result.put('final_message', l_output_text);
+        g_final_message := l_output_text;
       end if;
     else
       l_normalized_messages := json_array_t();
     end if;
     
-    -- Combine input messages with output messages to create full conversation history
-    declare
-      l_all_messages json_array_t := json_array_t();
-    begin
-      -- Add input messages
-      <<input_messages>>
-      for i in 0 .. p_messages.get_size - 1
-      loop
-        l_all_messages.append(p_messages.get(i));
-      end loop input_messages;
-      
-      -- Add output messages
-      <<output_messages>>
-      for i in 0 .. l_normalized_messages.get_size - 1
-      loop
-        l_all_messages.append(l_normalized_messages.get(i));
-      end loop output_messages;
-      
-      l_result.put('messages', l_all_messages);
-    end;
+    -- Use global normalized messages array (already contains full conversation history)
+    l_result.put('messages', g_normalized_messages);
     
     -- Add finish_reason (Responses API uses 'stop_reason')
     if l_api_response.has('stop_reason') then

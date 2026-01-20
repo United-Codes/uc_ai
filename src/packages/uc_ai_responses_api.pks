@@ -18,7 +18,7 @@ create or replace package uc_ai_responses_api as
   g_reasoning_effort varchar2(32 char); -- 'none', 'low', 'medium', 'high', 'xhigh'
   
   -- Reasoning summary verbosity
-  g_reasoning_summary varchar2(32 char); -- 'concise', 'detailed', 'auto'
+  g_reasoning_summary varchar2(32 char); -- 'concise', 'detailed', 'auto', null for off
 
   -- Text verbosity level
   g_text_verbosity varchar2(32 char) := 'medium'; -- 'low', 'medium', 'high'
