@@ -49,6 +49,7 @@ create or replace package body uc_ai_responses_api as
     l_content_item json_object_t;
     l_content_type varchar2(255 char);
     l_system_instructions varchar2(32767 char);
+    l_media_type varchar2(255 char);
   begin
     uc_ai_logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to Responses API items', l_scope);
 
@@ -83,14 +84,32 @@ create or replace package body uc_ai_responses_api as
             declare
               l_resp_content_item json_object_t;
             begin
-              l_resp_content_item := treat(l_content.get(j) as json_object_t);
+              l_content_item := treat(l_content.get(j) as json_object_t);
+              l_resp_content_item := json_object_t();
 
-              case l_resp_content_item.get_string('type')
+              case l_content_item.get_string('type')
                 when 'text' then
                   l_resp_content_item.put('type', 'input_text');
+                  l_resp_content_item.put('text', l_content_item.get_clob('text'));
+                when 'file' then
+                  l_media_type := l_content_item.get_string('mediaType');
+
+                  if lower(l_media_type) like 'image/%' then
+                    l_resp_content_item.put('type', 'input_image');
+                    l_resp_content_item.put('image_url', 'data:' || l_media_type || ';base64,' || l_content_item.get_clob('data'));
+                    l_resp_content_item.put('detail', 'auto');
+                  elsif lower(l_media_type) = 'application/pdf' then
+                    l_resp_content_item.put('type', 'input_file');
+                    l_resp_content_item.put('filename', l_content_item.get_string('filename'));
+                    l_resp_content_item.put('file_data', 'data:application/pdf;base64,' || l_content_item.get_clob('data'));
+                  else
+                    uc_ai_logger.log_warn('Unsupported file media type: ' || l_media_type, l_scope);
+                    raise uc_ai.e_unhandled_format;
+                  end if;
+
                 else
-                  -- For other content types, copy as-is (could extend for more types)
-                  l_resp_content_item := treat(l_content.get(j) as json_object_t);
+                  uc_ai_logger.log_warn('Unknown user content type: ' || l_content_item.get_string('type'), l_scope);
+                  raise uc_ai.e_unhandled_format;
               end case;
 
               l_new_content.append(l_resp_content_item);

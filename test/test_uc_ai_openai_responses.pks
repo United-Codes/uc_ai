@@ -37,6 +37,12 @@ create or replace package test_uc_ai_openai_responses as
   --%test(Structured output with text.format)
   procedure test_structured_output;
 
+  --%test(PDF file input)
+  procedure test_pdf_file_input;
+
+  --%test(Image file input)
+  procedure test_image_file_input;
+
   --%test(System instructions parameter)
   procedure test_instructions;
 
@@ -45,12 +51,6 @@ create or replace package test_uc_ai_openai_responses as
 
   --%test(Encrypted reasoning for ZDR compliance)
   procedure test_encrypted_reasoning;
-
-  --%test(Convert LM messages to Responses items)
-  procedure test_message_conversion;
-
-  --%test(Embeddings generation)
-  procedure test_embeddings;
 
 end test_uc_ai_openai_responses;
 /

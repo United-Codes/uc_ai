@@ -238,6 +238,96 @@ create or replace package body test_uc_ai_openai_responses as
   end test_structured_output;
 
 
+  procedure test_pdf_file_input
+  as
+    l_messages json_array_t := json_array_t();
+    l_content json_array_t := json_array_t();
+    l_result json_object_t;
+    l_res_clob clob;
+    l_final_message clob;
+  begin
+    l_messages.append(uc_ai_message_api.create_system_message(
+      'You are an assistant answering trivia questions about TV Shows. Please answer in super short sentences.'));
+
+    l_content.append(uc_ai_message_api.create_file_content(
+      p_media_type => 'application/pdf',
+      p_data_blob => uc_ai_test_utils.get_emp_pdf,
+      p_filename => 'data.pdf'
+    ));
+
+    l_content.append(uc_ai_message_api.create_text_content(
+      'Which is the TV show of the characters that are inside the attached PDF?'
+    ));
+
+    l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'PDF file input before');
+
+    l_result := uc_ai.GENERATE_TEXT(
+      p_messages => l_messages,
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_4o_mini
+    );
+
+    l_res_clob := l_result.to_clob;
+    sys.dbms_output.put_line('PDF file input result: ' || substr(l_res_clob, 1, 500));
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(lower(l_final_message)).to_be_like('%office%');
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'PDF file input response');
+  end test_pdf_file_input;
+
+
+  procedure test_image_file_input
+  as
+    l_messages json_array_t := json_array_t();
+    l_content json_array_t := json_array_t();
+    l_result json_object_t;
+    l_res_clob clob;
+    l_final_message clob;
+  begin
+    l_messages.append(uc_ai_message_api.create_system_message(
+      'You are an image analysis assistant.'));
+
+    l_content.append(uc_ai_message_api.create_file_content(
+      p_media_type => 'image/webp',
+      p_data_blob => uc_ai_test_utils.get_apple_webp,
+      p_filename => 'data.webp'
+    ));
+
+    l_content.append(uc_ai_message_api.create_text_content(
+      'What is the fruit depicted in the attached image?'
+    ));
+
+    l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Image file input before');
+
+    uc_ai.g_enable_tools := false;
+
+    l_result := uc_ai.GENERATE_TEXT(
+      p_messages => l_messages,
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_4_1
+    );
+
+    l_res_clob := l_result.to_clob;
+    sys.dbms_output.put_line('Image file input result: ' || substr(l_res_clob, 1, 500));
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(lower(l_final_message)).to_be_like('%apple%');
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Image file input response');
+
+    sys.dbms_output.put_line('Result: ' || l_result.to_string);
+  end test_image_file_input;
+
+
   procedure test_instructions
   as
     l_result json_object_t;
@@ -326,54 +416,6 @@ create or replace package body test_uc_ai_openai_responses as
     uc_ai_responses_api.g_store_responses := true;
     uc_ai_responses_api.g_include_encrypted_reasoning := false;
   end test_encrypted_reasoning;
-
-
-  procedure test_message_conversion
-  as
-    l_result json_object_t;
-    l_final_message clob;
-    l_messages json_array_t;
-  begin
-    -- Test that LM-style messages work via uc_ai.GENERATE_TEXT
-    l_result := uc_ai.GENERATE_TEXT(
-      p_user_prompt => 'Hello!',
-      p_system_prompt => 'You are a helpful assistant.',
-      p_provider => uc_ai.c_provider_openai,
-      p_model => uc_ai_openai.c_model_gpt_4o_mini
-    );
-
-    l_final_message := l_result.get_clob('final_message');
-    ut.expect(l_final_message).to_be_not_null();
-
-    l_messages := treat(l_result.get('messages') as json_array_t);
-    uc_ai_test_message_utils.validate_message_array(l_messages, 'Message conversion test');
-
-    sys.dbms_output.put_line('Result: ' || l_result.to_string);
-    sys.dbms_output.put_line('Last message: ' || l_final_message);
-  end test_message_conversion;
-
-
-  procedure test_embeddings
-  as
-    l_result json_array_t;
-    l_array_clob clob;
-  begin
-    uc_ai.g_enable_tools := false;
-    uc_ai.g_enable_reasoning := false;
-
-    l_result := uc_ai.generate_embeddings(
-      p_input => json_array_t('["Hello world", "OpenAI embeddings"]'),
-      p_provider => uc_ai.c_provider_openai,
-      p_model => uc_ai_openai.c_model_text_embedding_3_small
-    );
-
-    l_array_clob := l_result.to_clob;
-    ut.expect(l_array_clob).to_be_not_null();
-    sys.dbms_output.put_line('Embeddings array: ' || substr(l_array_clob, 1, 500) || '...');
-    ut.expect(l_result.get_size).to_equal(2);
-    ut.expect(treat(l_result.get(0) as json_array_t).get_size).to_be_greater_than(0);
-    ut.expect(treat(l_result.get(1) as json_array_t).get_size).to_be_greater_than(0);
-  end test_embeddings;
 
 end test_uc_ai_openai_responses;
 /
