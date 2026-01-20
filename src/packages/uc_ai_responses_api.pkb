@@ -214,7 +214,6 @@ create or replace package body uc_ai_responses_api as
     -- For collecting assistant message content
     l_assistant_content json_array_t;
     l_has_text boolean := false;
-    l_has_tool_calls boolean := false;
   begin
     uc_ai_logger.log('Converting ' || p_output.get_size || ' output items to LM messages', l_scope);
     
@@ -224,7 +223,7 @@ create or replace package body uc_ai_responses_api as
     for i in 0 .. p_output.get_size - 1
     loop
       l_output_item := treat(p_output.get(i) as json_object_t);
-      uc_ai_logger.log('Processing output item: ' || l_output_item.stringify, l_scope);
+      uc_ai_logger.log('Processing output item', l_scope, l_output_item.to_clob);
       l_item_type := l_output_item.get_string('type');
       
       case l_item_type
@@ -239,7 +238,7 @@ create or replace package body uc_ai_responses_api as
             for j in 0 .. l_content.get_size - 1
             loop
               l_content_item := treat(l_content.get(j) as json_object_t);
-              uc_ai_logger.log('Processing output item content: ' || l_content_item.stringify, l_scope);
+              uc_ai_logger.log('Processing output item content', l_scope, l_content_item.to_clob);
               
               if l_content_item.get_string('type') = 'output_text' then
                 -- Convert to standardized text content
@@ -293,7 +292,6 @@ create or replace package body uc_ai_responses_api as
             end if;
             
             l_assistant_content.append(l_tool_use);
-            l_has_tool_calls := true;
           end;
           
         when 'function_call_output' then
@@ -324,7 +322,6 @@ create or replace package body uc_ai_responses_api as
                 -- Reset for next assistant message
                 l_assistant_content := json_array_t();
                 l_has_text := false;
-                l_has_tool_calls := false;
               end;
             end if;
             
@@ -400,7 +397,7 @@ create or replace package body uc_ai_responses_api as
     return l_text;
   exception
     when others then
-      uc_ai_logger.log_error('Error extracting output text', l_scope, sqlerrm);
+      uc_ai_logger.log_error('Error extracting output text', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end extract_output_text;
 
@@ -595,7 +592,7 @@ create or replace package body uc_ai_responses_api as
 
     -- Get all available tools formatted for Responses API (if tools are enabled)
     if uc_ai.g_enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_openai, uc_ai.g_provider_override);
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_responses_api, uc_ai.g_provider_override);
       l_input_obj.put('tools', l_tools);
     end if;
 
@@ -633,10 +630,115 @@ create or replace package body uc_ai_responses_api as
 
     -- Initialize unified result object
     l_result := json_object_t();
+    l_result.put('tool_calls_count', 0);
     
     -- Convert output to normalized LM messages (with response_id embedded)
     if l_api_response.has('output') then
       l_output := l_api_response.get_array('output');
+      
+      -- Check if output contains function calls that need execution
+      declare
+        l_has_function_calls boolean := false;
+        l_output_item json_object_t;
+        l_tool_calls_count pls_integer := 0;
+        l_current_items json_array_t := l_items.clone;
+        l_current_response json_object_t := l_api_response;
+        l_current_output json_array_t;
+      begin
+        -- Loop to handle tool calling
+        <<tool_execution_loop>>
+        loop
+          l_has_function_calls := false;
+          l_current_output := l_current_response.get_array('output');
+          
+          -- Check for function calls in output
+          <<check_function_calls>>
+          for i in 0 .. l_current_output.get_size - 1
+          loop
+            l_output_item := treat(l_current_output.get(i) as json_object_t);
+            if l_output_item.get_string('type') = 'function_call' then
+              l_has_function_calls := true;
+              exit check_function_calls;
+            end if;
+          end loop check_function_calls;
+          
+          -- If no function calls or max tool calls exceeded, exit loop
+          exit tool_execution_loop when not l_has_function_calls or l_tool_calls_count >= p_max_tool_calls;
+          
+          uc_ai_logger.log('Found function calls in output, executing tools', l_scope);
+          
+          -- Add current output items to the items array
+          <<add_output_items>>
+          for i in 0 .. l_current_output.get_size - 1
+          loop
+            l_current_items.append(l_current_output.get(i));
+          end loop add_output_items;
+          
+          -- Execute each function call and add results
+          <<execute_function_calls>>
+          for i in 0 .. l_current_output.get_size - 1
+          loop
+            l_output_item := treat(l_current_output.get(i) as json_object_t);
+            
+            if l_output_item.get_string('type') = 'function_call' then
+              declare
+                l_call_id varchar2(255 char);
+                l_tool_name varchar2(255 char);
+                l_arguments_str clob;
+                l_tool_result clob;
+                l_function_output_item json_object_t;
+              begin
+                l_call_id := l_output_item.get_string('call_id');
+                l_tool_name := l_output_item.get_string('name');
+                l_arguments_str := l_output_item.get_clob('arguments');
+                
+                uc_ai_logger.log('Executing tool: ' || l_tool_name, l_scope, 'Arguments: ' || l_arguments_str);
+                
+                -- Execute the tool
+                l_tool_result := uc_ai_tools_api.execute_tool(
+                  p_tool_code => l_tool_name,
+                  p_arguments => json_object_t(l_arguments_str)
+                );
+                
+                uc_ai_logger.log('Tool result for ' || l_tool_name, l_scope, l_tool_result);
+                
+                -- Create function_call_output item
+                l_function_output_item := json_object_t();
+                l_function_output_item.put('type', 'function_call_output');
+                l_function_output_item.put('call_id', l_call_id);
+                l_function_output_item.put('output', l_tool_result);
+                
+                -- Add to items array
+                l_current_items.append(l_function_output_item);
+                
+                l_tool_calls_count := l_tool_calls_count + 1;
+              exception
+                when others then
+                  uc_ai_logger.log_error('Error executing tool: ' || l_tool_name, l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+                  -- Add error as tool result
+                  l_function_output_item := json_object_t();
+                  l_function_output_item.put('type', 'function_call_output');
+                  l_function_output_item.put('call_id', l_call_id);
+                  l_function_output_item.put('output', 'Error executing tool: ' || sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+                  l_current_items.append(l_function_output_item);
+              end;
+            end if;
+          end loop execute_function_calls;
+          
+          -- Make another API call with updated items
+          l_input_obj.put('input', l_current_items);
+          l_current_response := internal_generate_text(l_input_obj);
+          
+          uc_ai_logger.log('Made follow-up API call after tool execution', l_scope);
+        end loop tool_execution_loop;
+        
+        -- Store final tool calls count
+        l_result.put('tool_calls_count', l_tool_calls_count);
+        
+        -- Use the final response output for conversion
+        l_output := l_current_response.get_array('output');
+        l_api_response := l_current_response;
+      end;
       
       -- Pass response_id to conversion function
       if l_api_response.has('id') then

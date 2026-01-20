@@ -1,0 +1,78 @@
+{
+  "id": "resp_0afbe53f3b4f3dc400696f38889af88192b483048bc0597c93",
+  "object": "response",
+  "created_at": 1768896648,
+  "status": "completed",
+  "background": false,
+  "billing": {
+    "payer": "openai"
+  },
+  "completed_at": 1768896649,
+  "error": null,
+  "frequency_penalty": 0.0,
+  "incomplete_details": null,
+  "instructions": "You are an assistant to a time tracking system. Your tools give you access to user information.",
+  "max_output_tokens": null,
+  "max_tool_calls": 10,
+  "model": "gpt-4o-mini-2024-07-18",
+  "output": [
+    {
+      "id": "fc_0afbe53f3b4f3dc400696f3889518c8192bac5f30c8def1c74",
+      "type": "function_call",
+      "status": "completed",
+      "arguments": "{}",
+      "call_id": "call_ppkiuvnvCWgt1ZmZdPNLhzJd",
+      "name": "TT_GET_USERS"
+    }
+  ],
+  "parallel_tool_calls": true,
+  "presence_penalty": 0.0,
+  "previous_response_id": null,
+  "prompt_cache_key": null,
+  "prompt_cache_retention": null,
+  "reasoning": {
+    "effort": null,
+    "summary": null
+  },
+  "safety_identifier": null,
+  "service_tier": "default",
+  "store": true,
+  "temperature": 1.0,
+  "text": {
+    "format": {
+      "type": "text"
+    },
+    "verbosity": "medium"
+  },
+  "tool_choice": "auto",
+  "tools": [
+    {
+      "type": "function",
+      "description": "Get information on all the users in the system",
+      "name": "TT_GET_USERS",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "strict": true
+    }
+  ],
+  "top_logprobs": 0,
+  "top_p": 1.0,
+  "truncation": "disabled",
+  "usage": {
+    "input_tokens": 67,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 13,
+    "output_tokens_details": {
+      "reasoning_tokens": 0
+    },
+    "total_tokens": 80
+  },
+  "user": null,
+  "metadata": {}
+}

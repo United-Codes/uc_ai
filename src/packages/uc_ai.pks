@@ -21,6 +21,9 @@ create or replace package uc_ai as
   c_provider_oci        constant provider_type := 'oci';
   c_provider_xai        constant provider_type := 'xai';
   c_provider_openrouter constant provider_type := 'openrouter';
+  
+  -- not a real provider, but usable for any provider that supports Responses API
+  c_provider_responses_api constant provider_type := 'responses_api';
 
   subtype model_type is varchar2(128 char);
 
