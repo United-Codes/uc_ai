@@ -31,6 +31,9 @@ create or replace package test_uc_ai_openai_responses as
   --%test(Function calling with Responses API)
   procedure test_function_calling;
 
+  --%test(Function calling - clock in user)
+  procedure test_tool_clock_in_user;
+
   --%test(Structured output with text.format)
   procedure test_structured_output;
 

@@ -2,9 +2,12 @@ create or replace package body uc_ai_test_message_utils as
   -- @dblinter ignore(g-5010): allow logger in test packages
   -- @dblinter ignore(g-2160): allow initialzing variables in declare in test packages
 
+  g_has_reasoning_content boolean := false;
+
   procedure validate_message_array(
     p_messages in json_array_t,
-    p_test_name in varchar2 default 'Message Array Validation'
+    p_test_name in varchar2 default 'Message Array Validation',
+    p_should_have_reasoning in boolean default false
   )
   as
     l_message json_object_t;
@@ -12,6 +15,7 @@ create or replace package body uc_ai_test_message_utils as
     l_content json_array_t;
     l_message_count pls_integer;
   begin
+    g_has_reasoning_content := false;
     -- Check if messages array is not null
     --ut.expect(p_messages, p_test_name || ': Messages array should not be null').to_be_not_null();
     
@@ -85,6 +89,11 @@ create or replace package body uc_ai_test_message_utils as
           end;
       end case;
     end loop message_loop;
+
+    if p_should_have_reasoning then
+      ut.expect(g_has_reasoning_content, p_test_name || ': Messages should include reasoning content').to_be_true();
+    end if;
+
   end validate_message_array;
 
   procedure validate_content_array(
@@ -137,6 +146,7 @@ create or replace package body uc_ai_test_message_utils as
           validate_file_content(l_content_item, j, p_message_index, p_test_name);
         when 'reasoning' then
           validate_reasoning_content(l_content_item, j, p_message_index, p_test_name);
+          g_has_reasoning_content := true;
         when 'tool_call' then
           validate_tool_call_content(l_content_item, j, p_message_index, p_test_name);
         when 'tool_result' then
@@ -199,14 +209,26 @@ create or replace package body uc_ai_test_message_utils as
   )
   as
     l_text varchar2(32767 char);
+    l_provider_options json_object_t;
+    l_has_encrypted_content boolean := false;
   begin
     -- Reasoning content should have 'text' field
     ut.expect(p_content_item.has('text'), 
              p_test_name || ': Reasoning content ' || p_content_index || ' in message ' || p_message_index || ' should have text field').to_be_true();
     
-    l_text := p_content_item.get_string('text');
-    ut.expect(l_text, 
-             p_test_name || ': Reasoning content ' || p_content_index || ' in message ' || p_message_index || ' text should not be null').to_be_not_null();
+
+    if p_content_item.has('providerOptions') then
+      l_provider_options := treat(p_content_item.get('providerOptions') as json_object_t);
+      if l_provider_options.has('encrypted_content') and not l_provider_options.get('encrypted_content').is_null then
+        l_has_encrypted_content := true;
+      end if;
+    end if;
+
+    if not l_has_encrypted_content then
+      l_text := p_content_item.get_string('text');
+      ut.expect(l_text, 
+              p_test_name || ': Reasoning content ' || p_content_index || ' in message ' || p_message_index || ' text should not be null').to_be_not_null();
+    end if;
   end validate_reasoning_content;
 
   procedure validate_tool_call_content(

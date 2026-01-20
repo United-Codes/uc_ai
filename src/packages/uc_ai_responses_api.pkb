@@ -136,6 +136,26 @@ create or replace package body uc_ai_responses_api as
                 
                 l_items.append(l_item);
                 
+              when 'reasoning' then
+                -- Reasoning item (for multi-turn conversations with reasoning)
+                l_item := json_object_t();
+                l_item.put('type', 'reasoning');
+                l_item.put('text', l_content_item.get_clob('text'));
+                
+                -- Extract providerOptions if present
+                if l_content_item.has('providerOptions') and not l_content_item.get('providerOptions').is_null then
+                  declare
+                    l_provider_options json_object_t := l_content_item.get_object('providerOptions');
+                  begin
+                    -- Add encrypted_content if present
+                    if l_provider_options.has('encrypted_content') and not l_provider_options.get('encrypted_content').is_null then
+                      l_item.put('encrypted_content', l_provider_options.get_clob('encrypted_content'));
+                    end if;
+                  end;
+                end if;
+                
+                l_items.append(l_item);
+                
               else
                 uc_ai_logger.log_warn('Unknown assistant content type: ' || l_content_type, l_scope);
             end case;
@@ -323,8 +343,47 @@ create or replace package body uc_ai_responses_api as
           end;
           
         when 'reasoning' then
-          -- Skip reasoning items - they're internal to the model
-          uc_ai_logger.log('Skipping reasoning item', l_scope);
+          declare
+            l_encrypted_content clob;
+            l_summary_arr json_array_t;
+            l_summary_text clob;
+
+            l_provider_options json_object_t := json_object_t();
+            l_reasoning_content json_object_t;
+          begin
+            if l_output_item.has('encrypted_content') and not l_output_item.get('encrypted_content').is_null then
+              l_encrypted_content := l_output_item.get_clob('encrypted_content');
+            end if;
+
+            if l_output_item.has('summary') and not l_output_item.get('summary').is_null then
+              l_summary_arr := l_output_item.get_array('summary');
+            end if;
+
+            if l_summary_arr is not null and l_summary_arr.get_size > 0 then
+              <<summary_loop>>
+              for i in 0 .. l_summary_arr.get_size - 1 loop
+                declare
+                  l_summary_item json_object_t;
+                begin
+                  l_summary_item := treat(l_summary_arr.get(i) as json_object_t);
+                  if l_summary_text is not null then
+                    l_summary_text := l_summary_text || chr(10);
+                  end if;
+
+                  l_summary_text := l_summary_text || l_summary_item.get_clob('text');
+                end;
+              end loop summary_loop;
+            end if;
+
+            l_provider_options.put('encrypted_content', l_encrypted_content);
+
+            l_reasoning_content := uc_ai_message_api.create_reasoning_content(
+              p_text => l_output_item.get_clob('text'),
+              p_provider_options => l_provider_options
+            );
+
+            l_assistant_content.append(l_reasoning_content);
+          end;
           
         else
           uc_ai_logger.log_warn('Unknown output item type: ' || l_item_type, l_scope);
