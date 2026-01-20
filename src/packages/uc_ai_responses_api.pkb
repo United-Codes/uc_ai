@@ -50,6 +50,8 @@ create or replace package body uc_ai_responses_api as
     l_content_type varchar2(255 char);
     l_system_instructions varchar2(32767 char);
     l_media_type varchar2(255 char);
+    l_has_reasoning_content boolean := false;
+    l_reasoning_text clob;
   begin
     uc_ai_logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to Responses API items', l_scope);
 
@@ -156,10 +158,17 @@ create or replace package body uc_ai_responses_api as
                 l_items.append(l_item);
                 
               when 'reasoning' then
+                l_has_reasoning_content := false;
+
                 -- Reasoning item (for multi-turn conversations with reasoning)
                 l_item := json_object_t();
                 l_item.put('type', 'reasoning');
-                l_item.put('text', l_content_item.get_clob('text'));
+                l_reasoning_text := l_content_item.get_clob('text');
+                l_item.put('text', l_reasoning_text);
+
+                if l_reasoning_text is not null then
+                  l_has_reasoning_content := true;
+                end if;
                 
                 -- Extract providerOptions if present
                 if l_content_item.has('providerOptions') and not l_content_item.get('providerOptions').is_null then
@@ -169,11 +178,14 @@ create or replace package body uc_ai_responses_api as
                     -- Add encrypted_content if present
                     if l_provider_options.has('encrypted_content') and not l_provider_options.get('encrypted_content').is_null then
                       l_item.put('encrypted_content', l_provider_options.get_clob('encrypted_content'));
+                      l_has_reasoning_content := true;
                     end if;
                   end;
                 end if;
                 
-                l_items.append(l_item);
+                if l_has_reasoning_content then
+                  l_items.append(l_item);
+                end if;
                 
               else
                 uc_ai_logger.log_warn('Unknown assistant content type: ' || l_content_type, l_scope);
@@ -394,14 +406,19 @@ create or replace package body uc_ai_responses_api as
               end loop summary_loop;
             end if;
 
-            l_provider_options.put('encrypted_content', l_encrypted_content);
+            if l_encrypted_content is not null or l_summary_text is not null then
+              l_provider_options.put('encrypted_content', l_encrypted_content);
+              l_provider_options.put('text', l_summary_text);
 
-            l_reasoning_content := uc_ai_message_api.create_reasoning_content(
-              p_text => l_output_item.get_clob('text'),
-              p_provider_options => l_provider_options
-            );
+              l_reasoning_content := uc_ai_message_api.create_reasoning_content(
+                p_text => l_output_item.get_clob('text'),
+                p_provider_options => l_provider_options
+              );
 
-            l_assistant_content.append(l_reasoning_content);
+              l_assistant_content.append(l_reasoning_content);
+            end if;
+
+
           end;
           
         else
