@@ -3,6 +3,8 @@ create or replace package body uc_ai_responses_api as
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_api_generate_text_path constant varchar2(255 char) := '/responses';
 
+  g_previous_response_id varchar2(255 char);
+
   -- Responses API reference: https://www.openresponses.org/reference
   
   
@@ -248,16 +250,6 @@ create or replace package body uc_ai_responses_api as
                   l_text_content.put('type', 'text');
                   l_text_content.put('text', l_content_item.get_string('text'));
 
-                   if p_response_id is not null then
-                     -- Add providerOptions with response_id
-                     declare
-                       l_provider_options json_object_t := json_object_t();
-                     begin
-                       l_provider_options.put('response_id', p_response_id);
-                       l_text_content.put('providerOptions', l_provider_options);
-                     end;
-                   end if;
-
                   l_assistant_content.append(l_text_content);
                   l_has_text := true;
                 end;
@@ -292,8 +284,7 @@ create or replace package body uc_ai_responses_api as
             end if;
             
             l_assistant_content.append(l_tool_use);
-          end;
-          
+          end; 
         when 'function_call_output' then
           -- Convert to tool result message
           declare
@@ -342,6 +333,12 @@ create or replace package body uc_ai_responses_api as
       l_message := json_object_t();
       l_message.put('role', 'assistant');
       l_message.put('content', l_assistant_content);
+
+      -- Add response_id to assistant message if provided
+      if p_response_id is not null then
+        l_message.put('response_id', p_response_id);
+      end if;
+
       l_messages.append(l_message);
     end if;
     
@@ -416,8 +413,22 @@ create or replace package body uc_ai_responses_api as
     l_resp_json    json_object_t;
     l_temp_obj     json_object_t;
     l_web_credential varchar2(255 char);
+    l_input_copy json_object_t;
   begin
-    uc_ai_logger.log('Request body', l_scope, p_input_obj.to_clob);
+
+    l_input_copy := p_input_obj.clone();
+
+    -- Currently don't use previous_response_id.
+    -- We handle our state internally and when we would use it we are not allowed to send history
+    -- This can be quite tricky for multi-provider conversations as 
+    -- they can't handle the same response_id across different providers
+
+    -- Add previous_response_id for multi-turn conversations
+    -- if g_previous_response_id is not null then
+    --   l_input_copy.put('previous_response_id', g_previous_response_id);
+    -- end if;
+
+    uc_ai_logger.log('Request body', l_scope, l_input_copy.to_clob);
 
     apex_web_service.clear_request_headers;
     apex_web_service.g_request_headers(1).name := 'Content-Type';
@@ -443,7 +454,7 @@ create or replace package body uc_ai_responses_api as
     l_resp := apex_web_service.make_rest_request(
       p_url => l_url,
       p_http_method => 'POST',
-      p_body => p_input_obj.to_clob,
+      p_body => l_input_copy.to_clob,
       p_credential_static_id => l_web_credential
     );
 
@@ -511,45 +522,34 @@ create or replace package body uc_ai_responses_api as
     l_reasoning_config json_object_t;
     l_include_array    json_array_t;
     l_instructions     varchar2(32767 char);
-    l_previous_response_id varchar2(255 char);
     l_message          json_object_t;
-    l_content          json_array_t;
-    l_content_item     json_object_t;
-    l_provider_options json_object_t;
     l_output           json_array_t;
     l_output_text      clob;
     l_normalized_messages json_array_t;
+    l_curr_response_id varchar2(255 char);
   begin
     uc_ai_logger.log('Starting generate_text with Responses API', l_scope);
+    g_previous_response_id := null;
     
     l_input_obj.put('model', p_model);
 
-    -- Extract previous_response_id from providerOptions if present
+    -- Extract previous response_id from assistant message if present
     <<extract_provider_options_loop>>
     for i in 0 .. p_messages.get_size - 1
     loop
       l_message := treat(p_messages.get(i) as json_object_t);
-      
-      -- Check if message has content array with providerOptions
-      if l_message.has('content') and l_message.get('content').is_array then
-        l_content := l_message.get_array('content');
-        
-        <<content_loop>>
-        for j in 0 .. l_content.get_size - 1
-        loop
-          l_content_item := treat(l_content.get(j) as json_object_t);
-          
-          if l_content_item.has('providerOptions') then
-            l_provider_options := l_content_item.get_object('providerOptions');
-            
-            if l_provider_options.has('response_id') then
-              l_previous_response_id := l_provider_options.get_string('response_id');
-              uc_ai_logger.log('Found previous_response_id in providerOptions', l_scope, l_previous_response_id);
-              exit extract_provider_options_loop;
-            end if;
-          end if;
-        end loop content_loop;
+
+      continue when l_message.has('role') and l_message.get_string('role') != 'assistant';
+
+      if l_message.has('response_id') then
+        g_previous_response_id := l_message.get_string('response_id');
+        uc_ai_logger.log('Found previous_response_id in assistant message', l_scope, g_previous_response_id);
+        exit extract_provider_options_loop;
       end if;
+
+      -- exit when we found an assistant message but no response_id
+      -- @dblinter ignore (g-4365): safe to exit here unconditionally
+      exit extract_provider_options_loop;
     end loop extract_provider_options_loop;
 
     -- Convert LM messages to Responses items (extracts system messages as instructions)
@@ -559,11 +559,6 @@ create or replace package body uc_ai_responses_api as
     -- Add instructions (extracted from system messages)
     if l_instructions is not null then
       l_input_obj.put('instructions', l_instructions);
-    end if;
-
-    -- Add previous_response_id for multi-turn conversations
-    if l_previous_response_id is not null then
-      l_input_obj.put('previous_response_id', l_previous_response_id);
     end if;
 
     -- Configure structured output via text.format (not response_format)
@@ -650,6 +645,8 @@ create or replace package body uc_ai_responses_api as
         loop
           l_has_function_calls := false;
           l_current_output := l_current_response.get_array('output');
+          l_curr_response_id := l_api_response.get_string('id');
+          g_previous_response_id := l_curr_response_id;
           
           -- Check for function calls in output
           <<check_function_calls>>
@@ -665,7 +662,7 @@ create or replace package body uc_ai_responses_api as
           -- If no function calls or max tool calls exceeded, exit loop
           exit tool_execution_loop when not l_has_function_calls or l_tool_calls_count >= p_max_tool_calls;
           
-          uc_ai_logger.log('Found function calls in output, executing tools', l_scope);
+          uc_ai_logger.log('Found function calls in output, executing tools', l_scope, 'Previous response_id: ' || g_previous_response_id);
           
           -- Add current output items to the items array
           <<add_output_items>>
@@ -741,8 +738,8 @@ create or replace package body uc_ai_responses_api as
       end;
       
       -- Pass response_id to conversion function
-      if l_api_response.has('id') then
-        l_normalized_messages := convert_output_to_lm_messages(l_output, l_api_response.get_string('id'));
+      if l_curr_response_id is not null then
+        l_normalized_messages := convert_output_to_lm_messages(l_output, l_curr_response_id);
       else
         l_normalized_messages := convert_output_to_lm_messages(l_output);
       end if;

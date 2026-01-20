@@ -1,13 +1,13 @@
 {
-  "id": "resp_0afbe53f3b4f3dc400696f38889af88192b483048bc0597c93",
+  "id": "resp_06c49e2c695a187f00696f479784788196a9c6be65686884f9",
   "object": "response",
-  "created_at": 1768896648,
+  "created_at": 1768900503,
   "status": "completed",
   "background": false,
   "billing": {
     "payer": "openai"
   },
-  "completed_at": 1768896649,
+  "completed_at": 1768900504,
   "error": null,
   "frequency_penalty": 0.0,
   "incomplete_details": null,
@@ -17,11 +17,11 @@
   "model": "gpt-4o-mini-2024-07-18",
   "output": [
     {
-      "id": "fc_0afbe53f3b4f3dc400696f3889518c8192bac5f30c8def1c74",
+      "id": "fc_06c49e2c695a187f00696f47985fd48196b67249a790397108",
       "type": "function_call",
       "status": "completed",
       "arguments": "{}",
-      "call_id": "call_ppkiuvnvCWgt1ZmZdPNLhzJd",
+      "call_id": "call_cEZABEuC74mCGgvDTdpmEqPn",
       "name": "TT_GET_USERS"
     }
   ],

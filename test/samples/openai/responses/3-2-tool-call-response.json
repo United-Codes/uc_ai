@@ -1,13 +1,13 @@
 {
-  "id": "resp_0f1dc28b303c502a00696f3d8e9348819582e61588284c4f7a",
+  "id": "resp_06c49e2c695a187f00696f479950e08196bc0c637162fa07d2",
   "object": "response",
-  "created_at": 1768897934,
+  "created_at": 1768900505,
   "status": "completed",
   "background": false,
   "billing": {
     "payer": "openai"
   },
-  "completed_at": 1768897938,
+  "completed_at": 1768900506,
   "error": null,
   "frequency_penalty": 0.0,
   "incomplete_details": null,
@@ -17,7 +17,7 @@
   "model": "gpt-4o-mini-2024-07-18",
   "output": [
     {
-      "id": "msg_0f1dc28b303c502a00696f3d91e50c81958cc0c0191daa94e1",
+      "id": "msg_06c49e2c695a187f00696f4799ffd88196a77237be9d3f2c18",
       "type": "message",
       "status": "completed",
       "content": [
@@ -25,7 +25,7 @@
           "type": "output_text",
           "annotations": [],
           "logprobs": [],
-          "text": "The email address of Jim Halpert is **jim.halpert@dundermifflin.com**."
+          "text": "Jim's email address is **jim.halpert@dundermifflin.com**."
         }
       ],
       "role": "assistant"
@@ -73,11 +73,11 @@
     "input_tokens_details": {
       "cached_tokens": 0
     },
-    "output_tokens": 25,
+    "output_tokens": 22,
     "output_tokens_details": {
       "reasoning_tokens": 0
     },
-    "total_tokens": 397
+    "total_tokens": 394
   },
   "user": null,
   "metadata": {}
