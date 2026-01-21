@@ -8,6 +8,10 @@ create or replace package body uc_ai_openai as
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
   g_final_message clob;
+  g_input_tokens number := 0;  -- Global counter for input tokens (prompt_tokens)
+  g_output_tokens number := 0;  -- Global counter for output tokens (completion_tokens)
+  g_reasoning_tokens number := 0;  -- Global counter for reasoning tokens
+  g_total_tokens number := 0;  -- Global counter for total tokens
 
   -- Chat API reference: https://platform.openai.com/docs/api-reference/chat/create
   
@@ -343,22 +347,20 @@ create or replace package body uc_ai_openai as
       raise uc_ai.e_error_response;
     end if;
 
-    -- Extract and store usage information
+    -- Extract and accumulate usage information in global counters
     if l_resp_json.has('usage') then
       l_usage := l_resp_json.get_object('usage');
-      -- Accumulate usage if it already exists, otherwise create new
-      if pio_result.has('usage') then
+      g_input_tokens := g_input_tokens + nvl(l_usage.get_number('prompt_tokens'), 0);
+      g_output_tokens := g_output_tokens + nvl(l_usage.get_number('completion_tokens'), 0);
+      g_total_tokens := g_total_tokens + nvl(l_usage.get_number('total_tokens'), 0);
+      
+      -- Extract reasoning tokens from completion_tokens_details if available
+      if l_usage.has('completion_tokens_details') then
         declare
-          l_existing_usage json_object_t := pio_result.get_object('usage');
-          l_prompt_tokens number := nvl(l_existing_usage.get_number('prompt_tokens'), 0) + nvl(l_usage.get_number('prompt_tokens'), 0);
-          l_completion_tokens number := nvl(l_existing_usage.get_number('completion_tokens'), 0) + nvl(l_usage.get_number('completion_tokens'), 0);
+          l_completion_details json_object_t := l_usage.get_object('completion_tokens_details');
         begin
-          l_existing_usage.put('prompt_tokens', l_prompt_tokens);
-          l_existing_usage.put('completion_tokens', l_completion_tokens);
-          l_existing_usage.put('total_tokens', l_prompt_tokens + l_completion_tokens);
+          g_reasoning_tokens := g_reasoning_tokens + nvl(l_completion_details.get_number('reasoning_tokens'), 0);
         end;
-      else
-        pio_result.put('usage', l_usage);
       end if;
     end if;
 
@@ -547,6 +549,10 @@ create or replace package body uc_ai_openai as
     g_tool_calls := 0;
     g_final_message := null;
     g_normalized_messages := json_array_t();
+    g_input_tokens := 0;
+    g_output_tokens := 0;
+    g_reasoning_tokens := 0;
+    g_total_tokens := 0;
     
     -- Copy input messages to global normalized messages array
     <<copy_messages_loop>>
@@ -630,6 +636,17 @@ create or replace package body uc_ai_openai as
     
     -- Add final message (only the text)
     l_result.put('final_message', g_final_message);
+ 
+    -- Add usage information from global counters
+    declare
+      l_usage_obj json_object_t := json_object_t();
+    begin
+      l_usage_obj.put('prompt_tokens', g_input_tokens);
+      l_usage_obj.put('completion_tokens', g_output_tokens);
+      l_usage_obj.put('reasoning_tokens', g_reasoning_tokens);
+      l_usage_obj.put('total_tokens', g_total_tokens);
+      l_result.put('usage', l_usage_obj);
+    end;
  
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_openai);
