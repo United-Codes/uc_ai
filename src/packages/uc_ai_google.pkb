@@ -6,6 +6,10 @@ create or replace package body uc_ai_google as
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
   g_final_message clob;
+  g_input_tokens number := 0;  -- Global counter for input tokens
+  g_output_tokens number := 0;  -- Global counter for output tokens
+  g_reasoning_tokens number := 0;  -- Global counter for reasoning tokens
+  g_total_tokens number := 0;  -- Global counter for total tokens
 
   -- Chat API reference: https://ai.google.dev/api/generate-content
 
@@ -97,8 +101,8 @@ create or replace package body uc_ai_google as
    */
   procedure convert_lm_messages_to_google(
     p_lm_messages in json_array_t,
-    po_system_prompt out clob,
-    po_google_messages out json_array_t
+    po_system_prompt out nocopy clob,
+    po_google_messages out nocopy json_array_t
   )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_lm_messages_to_google';
@@ -272,11 +276,11 @@ create or replace package body uc_ai_google as
 
 
   procedure internal_generate_text (
-    pio_messages         in out json_array_t
+    pio_messages         in out nocopy json_array_t
   , p_system_prompt      in clob
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
-  , pio_result           in out json_object_t
+  , pio_result           in out nocopy json_object_t
   )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'internal_generate_text';
@@ -344,38 +348,13 @@ create or replace package body uc_ai_google as
       raise uc_ai.e_error_response;
     end if;
 
-    -- Extract and store usage information
+    -- Extract and accumulate usage information in global counters
     if l_resp_json.has('usageMetadata') then
       l_usage_metadata := l_resp_json.get_object('usageMetadata');
-      -- Accumulate usage if it already exists, otherwise create new
-      if pio_result.has('usage') then
-        declare
-          l_existing_usage json_object_t := pio_result.get_object('usage');
-          l_input_tokens number := nvl(l_existing_usage.get_number('input_tokens'), 0) + nvl(l_usage_metadata.get_number('promptTokenCount'), 0);
-          l_output_tokens number := nvl(l_existing_usage.get_number('output_tokens'), 0) + nvl(l_usage_metadata.get_number('candidatesTokenCount'), 0);
-        begin
-          l_existing_usage.put('input_tokens', l_input_tokens);
-          l_existing_usage.put('output_tokens', l_output_tokens);
-          l_existing_usage.put('total_tokens', l_input_tokens + l_output_tokens);
-          -- Add OpenAI compatible names for consistency
-          l_existing_usage.put('prompt_tokens', l_input_tokens);
-          l_existing_usage.put('completion_tokens', l_output_tokens);
-        end;
-      else
-        -- Create usage object with Google naming and OpenAI compatible names
-        declare
-          l_usage json_object_t := json_object_t();
-          l_input_tokens number := nvl(l_usage_metadata.get_number('promptTokenCount'), 0);
-          l_output_tokens number := nvl(l_usage_metadata.get_number('candidatesTokenCount'), 0);
-        begin
-          l_usage.put('input_tokens', l_input_tokens);
-          l_usage.put('output_tokens', l_output_tokens);
-          l_usage.put('total_tokens', l_input_tokens + l_output_tokens);
-          l_usage.put('prompt_tokens', l_input_tokens);
-          l_usage.put('completion_tokens', l_output_tokens);
-          pio_result.put('usage', l_usage);
-        end;
-      end if;
+      g_input_tokens := g_input_tokens + nvl(l_usage_metadata.get_number('promptTokenCount'), 0);
+      g_output_tokens := g_output_tokens + nvl(l_usage_metadata.get_number('candidatesTokenCount'), 0);
+      g_reasoning_tokens := g_reasoning_tokens + nvl(l_usage_metadata.get_number('thoughtsTokenCount'), 0);
+      g_total_tokens := g_total_tokens + nvl(l_usage_metadata.get_number('totalTokenCount'), 0);
     end if;
 
     -- Extract model information (Google returns it in response)
@@ -585,6 +564,10 @@ create or replace package body uc_ai_google as
     g_tool_calls := 0;
     g_final_message := null;
     g_normalized_messages := json_array_t();
+    g_input_tokens := 0;
+    g_output_tokens := 0;
+    g_reasoning_tokens := 0;
+    g_total_tokens := 0;
     
     -- Copy input messages to global normalized messages array
     <<copy_messages_loop>>
@@ -686,6 +669,17 @@ create or replace package body uc_ai_google as
     
     -- Add final message (only the text)
     l_result.put('final_message', g_final_message);
+
+    -- Add usage information from global counters
+    declare
+      l_usage_obj json_object_t := json_object_t();
+    begin
+      l_usage_obj.put('prompt_tokens', g_input_tokens);
+      l_usage_obj.put('completion_tokens', g_output_tokens);
+      l_usage_obj.put('reasoning_tokens', g_reasoning_tokens);
+      l_usage_obj.put('total_tokens', g_total_tokens);
+      l_result.put('usage', l_usage_obj);
+    end;
 
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_google);
