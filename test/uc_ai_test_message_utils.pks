@@ -2,7 +2,8 @@ create or replace package uc_ai_test_message_utils as
 
   procedure validate_message_array(
     p_messages in json_array_t,
-    p_test_name in varchar2 default 'Message Array Validation'
+    p_test_name in varchar2 default 'Message Array Validation',
+    p_should_have_reasoning in boolean default false
   );
 
   procedure validate_content_array(

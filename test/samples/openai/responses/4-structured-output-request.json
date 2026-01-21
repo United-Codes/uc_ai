@@ -3,17 +3,16 @@
   "response_format": {
     "type": "json_schema",
     "json_schema": {
-      "name": "structured_output",
+      "name": "Response_with_confidence_score",
       "schema": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "response": {
-            "type": "string",
-            "description": "The generated response text"
+            "type": "string"
           },
           "confidence": {
             "type": "number",
-            "description": "Confidence score between 0 and 1",
             "minimum": 0,
             "maximum": 1
           }
@@ -21,8 +20,7 @@
         "required": [
           "response",
           "confidence"
-        ],
-        "additionalProperties": false
+        ]
       },
       "strict": true
     }

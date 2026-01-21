@@ -525,16 +525,14 @@ create or replace package body uc_ai_openai as
    * - tool_calls_count: total number of tool calls executed
    * - model: OpenAI model used
    */
-  function generate_text (
+  function generate_text_chat_api (
     p_messages       in json_array_t
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
-  , p_schema_name    in varchar2 default 'structured_output'
-  , p_strict         in boolean default true
   ) return json_object_t
   as
-    l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_with_messages';
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_chat_api';
     l_input_obj        json_object_t := json_object_t();
     l_openai_messages  json_array_t;
     l_tools            json_array_t;
@@ -543,7 +541,7 @@ create or replace package body uc_ai_openai as
     l_response_format  json_object_t;
   begin
     l_result := json_object_t();
-    uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
+    uc_ai_logger.log('Starting generate_text_chat_api with ' || p_messages.get_size || ' input messages', l_scope);
     
     -- Reset global variables
     g_tool_calls := 0;
@@ -573,8 +571,7 @@ create or replace package body uc_ai_openai as
     if p_schema is not null then
       l_response_format := uc_ai_structured_output.to_openai_format(
         p_schema => p_schema,
-        p_name => p_schema_name,
-        p_strict => p_strict
+        p_strict => true
       );
       l_input_obj.put('response_format', l_response_format);
     end if;
@@ -637,9 +634,42 @@ create or replace package body uc_ai_openai as
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_openai);
     
-    uc_ai_logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
+    uc_ai_logger.log('Completed generate_text_chat_api with final message count: ' || g_normalized_messages.get_size, l_scope);
     
     return l_result;
+  end generate_text_chat_api;
+
+
+  function generate_text (
+    p_messages       in json_array_t
+  , p_model          in uc_ai.model_type
+  , p_max_tool_calls in pls_integer
+  , p_schema         in json_object_t default null
+  ) return json_object_t
+  as
+  begin
+    if g_use_responses_api then
+      -- Set base URL for Responses API to use OpenAI endpoint
+      uc_ai_responses_api.g_base_url := 'https://api.openai.com/v1';
+      uc_ai_responses_api.g_apex_web_credential := g_apex_web_credential;
+      uc_ai.g_provider_override := uc_ai.c_provider_openai;
+
+      -- Pass messages directly - Responses API will convert them
+      return uc_ai_responses_api.generate_text(
+        p_messages       => p_messages
+      , p_model          => p_model
+      , p_max_tool_calls => p_max_tool_calls
+      , p_schema         => p_schema
+      );
+    else
+      return generate_text_chat_api(
+        p_messages       => p_messages
+      , p_model          => p_model
+      , p_max_tool_calls => p_max_tool_calls
+      , p_schema         => p_schema
+      );
+    end if;
+
   end generate_text;
 
 

@@ -1,0 +1,47 @@
+{
+  "model": "gpt-4o-mini",
+  "instructions": "You are an assistant to a time tracking system. Your tools give you access to user information.",
+  "text": {
+    "verbosity": "medium"
+  },
+  "tools": [
+    {
+      "type": "function",
+      "name": "TT_GET_USERS",
+      "description": "Get information on all the users in the system",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "$schema": "http://json-schema.org/draft-07/schema#"
+      }
+    }
+  ],
+  "max_tool_calls": 10,
+  "store": true,
+  "input": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": [
+        {
+          "text": "What is the email address of Jim?",
+          "type": "input_text"
+        }
+      ]
+    },
+    {
+      "id": "fc_06c49e2c695a187f00696f47985fd48196b67249a790397108",
+      "type": "function_call",
+      "status": "completed",
+      "arguments": "{}",
+      "call_id": "call_cEZABEuC74mCGgvDTdpmEqPn",
+      "name": "TT_GET_USERS"
+    },
+    {
+      "type": "function_call_output",
+      "call_id": "call_cEZABEuC74mCGgvDTdpmEqPn",
+      "output": "[{\"user_id\":2,\"first_name\":\"Pam\",\"last_name\":\"Beesly\",\"email\":\"pam.beesly@dundermifflin.com\",\"hire_date\":\"2024-11-01\",\"is_active\":\"Y\"},{\"user_id\":4,\"first_name\":\"Jim\",\"last_name\":\"Halpert\",\"email\":\"jim.halpert@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":6,\"first_name\":\"Kevin\",\"last_name\":\"Malone\",\"email\":\"kevin.malone@dundermifflin.com\",\"hire_date\":\"2024-10-01\",\"is_active\":\"N\"},{\"user_id\":5,\"first_name\":\"Angela\",\"last_name\":\"Martin\",\"email\":\"angela.martin@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"},{\"user_id\":3,\"first_name\":\"Dwight\",\"last_name\":\"Schrute\",\"email\":\"dwight.schrute@dundermifflin.com\",\"hire_date\":\"2024-02-01\",\"is_active\":\"Y\"},{\"user_id\":1,\"first_name\":\"Michael\",\"last_name\":\"Scott\",\"email\":\"michael.scott@dundermifflin.com\",\"hire_date\":\"2024-05-01\",\"is_active\":\"Y\"}]"
+    }
+  ]
+}

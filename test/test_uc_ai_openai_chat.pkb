@@ -1,7 +1,15 @@
-create or replace package body test_uc_ai_openai as
+create or replace package body test_uc_ai_openai_chat as
   -- @dblinter ignore(g-5010): allow logger in test packages
   -- @dblinter ignore(g-2160): allow initialzing variables in declare in test packages
   
+  procedure setup_tests
+  as
+  begin
+    uc_ai_openai.g_use_responses_api := false; -- to ensure the chat API is used disable Responses API
+  end setup_tests;
+
+
+
   procedure basic_recipe
   as
     l_result json_object_t;
@@ -15,6 +23,7 @@ create or replace package body test_uc_ai_openai as
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini
     );
+
 
     l_final_message := l_result.get_clob('final_message');
     ut.expect(l_final_message).to_be_not_null();
@@ -540,5 +549,5 @@ procedure reasoning_gpt5
     ut.expect(treat(l_result.get(2) as json_array_t).get_size).to_be_greater_than(0);
   end embeddings_multi;
 
-end test_uc_ai_openai;
+end test_uc_ai_openai_chat;
 /

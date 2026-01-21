@@ -13,14 +13,12 @@ create or replace package uc_ai_structured_output as
    * Convert a standard JSON schema to OpenAI format for structured output
    * 
    * p_schema: Standard JSON schema as json_object_t
-   * p_name: Optional name for the schema (required for OpenAI)
    * p_strict: Whether to use strict mode (OpenAI-specific)
    * 
    * Returns: OpenAI-formatted response_format object
    */
   function to_openai_format(
     p_schema in json_object_t,
-    p_name in varchar2 default 'structured_output',
     p_strict in boolean default true
   ) return json_object_t;
 
@@ -47,11 +45,24 @@ create or replace package uc_ai_structured_output as
   ) return json_object_t;
 
   /*
+   * Convert a standard JSON schema to Responses API format for structured output
+   * 
+   * p_schema: Standard JSON schema as json_object_t
+   * p_strict: Whether to use strict mode (OpenAI-specific)
+   * 
+   * Returns: Responses API-formatted response_format object
+   */
+  function to_responses_api_format(
+    p_schema in json_object_t,
+    p_strict in boolean default true
+  ) return json_object_t;
+
+
+  /*
    * Generic function to convert schema based on provider
    * 
    * p_schema: Standard JSON schema as json_object_t
    * p_provider: AI provider ('openai', 'google', 'ollama')
-   * p_name: Optional name for the schema (used by OpenAI)
    * p_strict: Whether to use strict mode (OpenAI-specific)
    * 
    * Returns: Provider-specific formatted schema
@@ -59,7 +70,6 @@ create or replace package uc_ai_structured_output as
   function format_schema(
     p_schema in json_object_t,
     p_provider in uc_ai.provider_type,
-    p_name in varchar2 default 'structured_output',
     p_strict in boolean default true
   ) return json_object_t;
 

@@ -22,8 +22,6 @@ create or replace package body uc_ai as
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
-        , p_schema_name    => 'structured_output'
-        , p_strict         => true
         );
       when c_provider_anthropic then
         if p_response_json_schema is not null then
@@ -68,8 +66,6 @@ create or replace package body uc_ai as
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
-        , p_schema_name    => 'structured_output'
-        , p_strict         => true
         );
       when c_provider_openrouter then
         g_base_url := 'https://openrouter.ai/api/v1';
@@ -80,8 +76,6 @@ create or replace package body uc_ai as
         , p_model          => p_model
         , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
-        , p_schema_name    => 'structured_output'
-        , p_strict         => true
         );
       else
         raise e_unknown_provider;

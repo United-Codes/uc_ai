@@ -10,6 +10,7 @@ create or replace package uc_ai_openai as
   * https://www.united-codes.com
   */
 
+  g_use_responses_api boolean := false;
 
   -- get from https://platform.openai.com/docs/pricing
   c_model_gpt_5_1 constant uc_ai.model_type := 'gpt-5.1';
@@ -62,8 +63,6 @@ create or replace package uc_ai_openai as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
-  , p_schema_name    in varchar2 default 'structured_output'
-  , p_strict         in boolean default true
   ) return json_object_t;
 
   /*

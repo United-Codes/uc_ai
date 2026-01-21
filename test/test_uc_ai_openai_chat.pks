@@ -1,6 +1,9 @@
-create or replace package test_uc_ai_openai as
+create or replace package test_uc_ai_openai_chat as
 
   --%suite(OpenAI AI tests)
+
+  --%beforeall
+  procedure setup_tests;
 
   --%test(Basic recipe assistant - system prompt and user prompt)
   procedure basic_recipe;
@@ -41,5 +44,5 @@ create or replace package test_uc_ai_openai as
   --%test(Embeddings generation with multiple inputs)
   procedure embeddings_multi;
 
-end test_uc_ai_openai;
+end test_uc_ai_openai_chat;
 /
