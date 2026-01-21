@@ -8,6 +8,8 @@ create or replace package body uc_ai_anthropic as
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
   g_final_message clob;
+  g_input_tokens number := 0;  -- Global counter for input tokens
+  g_output_tokens number := 0;  -- Global counter for output tokens
 
   -- Chat API reference: https://docs.anthropic.com/en/api/messages
 
@@ -73,8 +75,8 @@ create or replace package body uc_ai_anthropic as
    */
   procedure convert_lm_messages_to_anthropic(
     p_lm_messages in json_array_t,
-    po_system_prompt out clob,
-    po_anthropic_messages out json_array_t
+    po_system_prompt out nocopy clob,
+    po_anthropic_messages out nocopy json_array_t
   )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_lm_messages_to_anthropic';
@@ -262,11 +264,11 @@ create or replace package body uc_ai_anthropic as
 
 
   procedure internal_generate_text (
-    pio_messages         in out json_array_t
+    pio_messages         in out nocopy json_array_t
   , p_system_prompt      in clob
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
-  , pio_result           in out json_object_t
+  , pio_result           in out nocopy json_object_t
   )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'internal_generate_text';
@@ -331,30 +333,11 @@ create or replace package body uc_ai_anthropic as
       raise uc_ai.e_error_response;
     end if;
 
-    -- Extract and store usage information
+    -- Extract and accumulate usage information in global counters
     if l_resp_json.has('usage') then
       l_usage := l_resp_json.get_object('usage');
-      -- Accumulate usage if it already exists, otherwise create new
-      if pio_result.has('usage') then
-        declare
-          l_existing_usage json_object_t := pio_result.get_object('usage');
-          l_input_tokens number := nvl(l_existing_usage.get_number('input_tokens'), 0) + nvl(l_usage.get_number('input_tokens'), 0);
-          l_output_tokens number := nvl(l_existing_usage.get_number('output_tokens'), 0) + nvl(l_usage.get_number('output_tokens'), 0);
-        begin
-          l_existing_usage.put('input_tokens', l_input_tokens);
-          l_existing_usage.put('output_tokens', l_output_tokens);
-          l_existing_usage.put('total_tokens', l_input_tokens + l_output_tokens);
-          -- Keep Anthropic naming but add OpenAI compatible names for consistency
-          l_existing_usage.put('prompt_tokens', l_input_tokens);
-          l_existing_usage.put('completion_tokens', l_output_tokens);
-        end;
-      else
-        -- Add OpenAI compatible naming for consistency
-        l_usage.put('prompt_tokens', nvl(l_usage.get_number('input_tokens'), 0));
-        l_usage.put('completion_tokens', nvl(l_usage.get_number('output_tokens'), 0));
-        l_usage.put('total_tokens', nvl(l_usage.get_number('input_tokens'), 0) + nvl(l_usage.get_number('output_tokens'), 0));
-        pio_result.put('usage', l_usage);
-      end if;
+      g_input_tokens := g_input_tokens + nvl(l_usage.get_number('input_tokens'), 0);
+      g_output_tokens := g_output_tokens + nvl(l_usage.get_number('output_tokens'), 0);
     end if;
 
     -- Extract model information
@@ -595,6 +578,8 @@ create or replace package body uc_ai_anthropic as
     g_tool_calls := 0;
     g_final_message := null;
     g_normalized_messages := json_array_t();
+    g_input_tokens := 0;
+    g_output_tokens := 0;
     
     -- Copy input messages to global normalized messages array
     <<copy_messages_loop>>
@@ -661,6 +646,17 @@ create or replace package body uc_ai_anthropic as
     
     -- Add final message (only the text)
     l_result.put('final_message', g_final_message);
+ 
+    -- Add usage information from global counters
+    declare
+      l_usage_obj json_object_t := json_object_t();
+    begin
+      l_usage_obj.put('prompt_tokens', g_input_tokens);
+      l_usage_obj.put('completion_tokens', g_output_tokens);
+      l_usage_obj.put('reasoning_tokens', cast(null as number)); -- anthropic does not provide separate reasoning token count
+      l_usage_obj.put('total_tokens', g_input_tokens + g_output_tokens);
+      l_result.put('usage', l_usage_obj);
+    end;
  
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_anthropic);
