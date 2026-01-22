@@ -44,6 +44,15 @@ create or replace package uc_ai_agents_api as
   c_exec_timeout   constant varchar2(50 char) := 'timeout';
 
   -- ============================================================================
+  -- Types
+  -- ============================================================================
+
+  type t_validation_result is record (
+    is_valid     boolean,
+    error_reason varchar2(4000 char)
+  );
+
+  -- ============================================================================
   -- Session Management
   -- ============================================================================
 
@@ -252,11 +261,11 @@ create or replace package uc_ai_agents_api as
    * 
    * @param p_workflow_definition  The JSON workflow definition to validate
    * 
-   * @return  TRUE if valid, raises exception otherwise
+   * @return  Validation result with is_valid flag and error_reason (if invalid)
    */
   function validate_workflow_definition(
     p_workflow_definition in clob
-  ) return boolean;
+  ) return t_validation_result;
 
 
   /*
@@ -264,11 +273,11 @@ create or replace package uc_ai_agents_api as
    * 
    * @param p_orchestration_config  The JSON orchestration config to validate
    * 
-   * @return  TRUE if valid, raises exception otherwise
+   * @return  Validation result with is_valid flag and error_reason (if invalid)
    */
   function validate_orchestration_config(
     p_orchestration_config in clob
-  ) return boolean;
+  ) return t_validation_result;
 
 
   -- ============================================================================
