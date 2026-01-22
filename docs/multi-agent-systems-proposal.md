@@ -55,14 +55,15 @@ Extend the concept of prompt profiles to full **agents**:
 ```sql
 CREATE TABLE uc_ai_agents (
   id                     NUMBER PRIMARY KEY,
-  code                   VARCHAR2(255) UNIQUE NOT NULL,
+  code                   VARCHAR2(255) NOT NULL,
   version                NUMBER DEFAULT 1 NOT NULL,
   status                 VARCHAR2(50) DEFAULT 'draft' NOT NULL,
   description            VARCHAR2(4000) NOT NULL,
   agent_type             VARCHAR2(50) NOT NULL, -- 'profile', 'workflow', 'orchestrator', 'handoff', 'conversation'
   
   -- For agent_type = 'profile'
-  prompt_profile_id      NUMBER,  -- FK to uc_ai_prompt_profiles
+  prompt_profile_code    VARCHAR2(255),  -- References code, not ID (uses latest active version)
+  prompt_profile_version NUMBER,         -- Optional: NULL = always use latest active version
   
   -- For agent_type = 'workflow'
   workflow_definition    CLOB,    -- JSON workflow definition
@@ -75,6 +76,7 @@ CREATE TABLE uc_ai_agents (
   output_schema          CLOB,    -- JSON schema for output validation
   timeout_seconds        NUMBER,
   max_iterations         NUMBER,
+  max_history_messages   NUMBER,  -- For conversation patterns: sliding window size
   
   created_by             VARCHAR2(255) NOT NULL,
   created_at             TIMESTAMP NOT NULL,
@@ -87,35 +89,41 @@ CREATE TABLE uc_ai_agents (
     ('profile', 'workflow', 'orchestrator', 'handoff', 'conversation'))
 );
 
+-- Note: Only one version of an agent can be 'active' at a time per code
+-- This mirrors the prompt_profiles versioning pattern
+CREATE UNIQUE INDEX uc_ai_agents_active_uk ON uc_ai_agents(code) 
+  WHERE status = 'active';
+
 CREATE INDEX uc_ai_agents_code_idx ON uc_ai_agents(code, version, status);
 ```
 
-#### 1.2 Agent Relationships Table
+#### 1.2 Agent Relationships (JSON-Based)
 
-Track which agents can call which other agents:
+Agent relationships (workflow steps, delegates, handoff targets, conversation participants) are stored **within the JSON configuration** (`workflow_definition` or `orchestration_config`) rather than a separate table.
+
+**Rationale**:
+- Simpler data model without sync issues
+- JSON is the natural format for these nested configurations
+- Relationships are always accessed in context of the parent agent
+
+**Referential Integrity via Validation**:
+- On `create_agent`: Validate all referenced agent codes exist
+- On `delete_agent`: Check if agent is referenced by other agents and raise error if so
+- References use `agent_code` (not ID) - always resolves to latest active version
 
 ```sql
-CREATE TABLE uc_ai_agent_relationships (
-  id                     NUMBER PRIMARY KEY,
-  parent_agent_id        NUMBER NOT NULL,  -- FK to uc_ai_agents
-  child_agent_id         NUMBER NOT NULL,  -- FK to uc_ai_agents
-  relationship_type      VARCHAR2(50) NOT NULL, -- 'workflow_step', 'delegates_to', 'hands_off_to'
-  execution_order        NUMBER,  -- For sequential workflows
-  condition_expr         VARCHAR2(4000),  -- For conditional routing
-  tags                   VARCHAR2(4000),  -- Space-separated tags for filtering
-  
-  created_by             VARCHAR2(255) NOT NULL,
-  created_at             TIMESTAMP NOT NULL,
-  
-  CONSTRAINT uc_ai_agent_rel_parent_fk FOREIGN KEY (parent_agent_id) 
-    REFERENCES uc_ai_agents(id) ON DELETE CASCADE,
-  CONSTRAINT uc_ai_agent_rel_child_fk FOREIGN KEY (child_agent_id) 
-    REFERENCES uc_ai_agents(id),
-  CONSTRAINT uc_ai_agent_rel_type_ck CHECK (relationship_type IN 
-    ('workflow_step', 'delegates_to', 'hands_off_to', 'conversation_participant'))
-);
+-- Validation happens in uc_ai_agents_api package:
+-- 1. On create/update: parse JSON, extract agent_code references, verify they exist
+-- 2. On delete: query all agents' JSON configs to check for references
 
-CREATE INDEX uc_ai_agent_rel_parent_idx ON uc_ai_agent_relationships(parent_agent_id);
+FUNCTION validate_agent_references(
+  p_workflow_definition   IN CLOB,
+  p_orchestration_config  IN CLOB
+) RETURN BOOLEAN;
+
+PROCEDURE check_agent_not_referenced(
+  p_agent_code IN VARCHAR2
+);  -- Raises exception if referenced
 ```
 
 #### 1.3 Execution Context Table
@@ -127,7 +135,7 @@ CREATE TABLE uc_ai_agent_executions (
   id                     NUMBER PRIMARY KEY,
   agent_id               NUMBER NOT NULL,
   parent_execution_id    NUMBER,  -- For nested agent calls
-  session_id             VARCHAR2(255),  -- Group related executions
+  session_id             VARCHAR2(255),  -- Group related executions (use SYS_GUID())
   
   input_parameters       CLOB,  -- JSON input
   current_state          CLOB,  -- JSON state during execution
@@ -137,8 +145,12 @@ CREATE TABLE uc_ai_agent_executions (
   iteration_count        NUMBER DEFAULT 0,
   tool_calls_count       NUMBER DEFAULT 0,
   
-  started_at             TIMESTAMP NOT NULL,
-  completed_at           TIMESTAMP,
+  -- Token and cost tracking (critical for multi-agent systems)
+  total_input_tokens     NUMBER DEFAULT 0,
+  total_output_tokens    NUMBER DEFAULT 0,
+  
+  started_at             TIMESTAMP WITH TIME ZONE NOT NULL,
+  completed_at           TIMESTAMP WITH TIME ZONE,
   error_message          VARCHAR2(4000),
   
   CONSTRAINT uc_ai_agent_exec_agent_fk FOREIGN KEY (agent_id) 
@@ -165,8 +177,7 @@ For `agent_type = 'workflow'`, the `workflow_definition` CLOB contains:
   "steps": [
     {
       "step_id": "step_1",
-      "agent_code": "data_analyzer",
-      "agent_version": 1,
+      "agent_code": "data_analyzer",  // Always uses latest active version
       "input_mapping": {
         "agent_param": "${workflow_input.field}"
       },
@@ -175,7 +186,7 @@ For `agent_type = 'workflow'`, the `workflow_definition` CLOB contains:
       },
       "condition": {
         "type": "json_path|plsql",
-        "expression": "$.priority == 'high'"
+        "expression": "$.priority == 'high'"  // PL/SQL evaluated via APEX_PLUGIN_UTIL
       },
       "timeout_seconds": 30,
       "on_error": "continue|stop|retry"
@@ -233,22 +244,80 @@ FOR step IN (SELECT * FROM workflow_steps) LOOP
 END LOOP;
 ```
 
+**Condition Expression Evaluation**:
+```sql
+-- Use APEX_PLUGIN_UTIL for safe PL/SQL expression evaluation with bind variable support
+FUNCTION evaluate_condition(
+  p_condition      IN JSON_OBJECT_T,
+  p_workflow_state IN JSON_OBJECT_T
+) RETURN BOOLEAN
+IS
+  l_type       VARCHAR2(50) := p_condition.get_string('type');
+  l_expression VARCHAR2(4000) := p_condition.get_string('expression');
+  l_bind_list  apex_plugin_util.t_bind_list;
+BEGIN
+  IF l_type = 'json_path' THEN
+    -- Use Oracle JSON_EXISTS for JSON path expressions
+    RETURN JSON_EXISTS(p_workflow_state.to_clob, l_expression);
+    
+  ELSIF l_type = 'plsql' THEN
+    -- Safely evaluate PL/SQL expression using APEX_PLUGIN_UTIL
+    -- This handles bind variable binding and prevents SQL injection
+    -- Bind workflow state values as :VARNAME
+    populate_bind_list(l_bind_list, p_workflow_state);
+    
+    RETURN apex_plugin_util.get_plsql_expr_result_boolean(
+      p_plsql_expression => l_expression,
+      p_auto_bind_items  => FALSE,  -- Don't auto-bind APEX items
+      p_bind_list        => l_bind_list
+    );
+  ELSE
+    RAISE_APPLICATION_ERROR(-20001, 'Unknown condition type: ' || l_type);
+  END IF;
+END;
+```
+
 **Parallel Workflows**:
 ```sql
--- Use DBMS_SCHEDULER for parallel execution
-FOR step IN (SELECT * FROM workflow_steps WHERE parallel_group = 1) LOOP
-  DBMS_SCHEDULER.create_job(
-    job_name => 'AGENT_' || step.step_id,
-    job_type => 'PLSQL_BLOCK',
-    job_action => 'BEGIN execute_agent_job(' || step.id || '); END;',
-    enabled => TRUE
+-- Use DBMS_PARALLEL_EXECUTE for parallel execution with synchronous waiting
+DECLARE
+  l_task_name VARCHAR2(255) := 'AGENT_PARALLEL_' || SYS_GUID();
+  l_sql_stmt  CLOB;
+BEGIN
+  -- Create the parallel task
+  DBMS_PARALLEL_EXECUTE.create_task(task_name => l_task_name);
+  
+  -- Create chunks for each parallel step
+  DBMS_PARALLEL_EXECUTE.create_chunks_by_sql(
+    task_name => l_task_name,
+    sql_stmt  => 'SELECT step_id FROM workflow_steps WHERE parallel_group = 1',
+    by_rowid  => FALSE
   );
-END LOOP;
-
--- Wait for all jobs to complete
-wait_for_completion(l_job_list);
-l_aggregated := aggregate_results(l_results, p_strategy);
+  
+  -- Execute all chunks in parallel (synchronous - waits for completion)
+  l_sql_stmt := 'BEGIN execute_agent_step(:start_id, :end_id); END;';
+  DBMS_PARALLEL_EXECUTE.run_task(
+    task_name      => l_task_name,
+    sql_stmt       => l_sql_stmt,
+    language_flag  => DBMS_SQL.NATIVE,
+    parallel_level => 4  -- Configurable parallelism
+  );
+  
+  -- Check for failures and handle retries
+  IF DBMS_PARALLEL_EXECUTE.task_status(l_task_name) = DBMS_PARALLEL_EXECUTE.FINISHED_WITH_ERROR THEN
+    -- Retry failed chunks (built-in retry support)
+    DBMS_PARALLEL_EXECUTE.resume_task(l_task_name);
+  END IF;
+  
+  -- Aggregate results from execution table
+  l_aggregated := aggregate_results(l_task_name, p_strategy);
+  
+  -- Cleanup
+  DBMS_PARALLEL_EXECUTE.drop_task(l_task_name);
+END;
 ```
+
+**Note**: `DBMS_PARALLEL_EXECUTE` provides built-in synchronous waiting (`run_task` blocks until complete) and native retry support via `resume_task`.
 
 **Loop Workflows**:
 ```sql
@@ -333,11 +402,10 @@ The orchestrator pattern uses a **central AI agent** to delegate tasks to specia
 ```json
 {
   "pattern_type": "orchestrator",
-  "orchestrator_profile_id": 123,
+  "orchestrator_profile_code": "research_coordinator_prompt",  // Uses latest active version
   "delegate_agents": [
     {
-      "agent_code": "sql_expert",
-      "agent_version": 1,
+      "agent_code": "sql_expert",  // Always uses latest active version
       "tags": ["database", "query"],
       "tool_name": "consult_sql_expert",
       "tool_description": "Get help with SQL queries and database optimization"
@@ -353,6 +421,8 @@ The orchestrator pattern uses a **central AI agent** to delegate tasks to specia
 }
 ```
 
+**Note**: All `agent_code` references resolve to the **latest active version** of that agent. This ensures workflows automatically use updated agent versions without reconfiguration.
+
 **Implementation**:
 ```sql
 FUNCTION execute_orchestrator_agent(
@@ -363,6 +433,8 @@ IS
   l_config JSON_OBJECT_T;
   l_delegates JSON_ARRAY_T;
   l_tool_id NUMBER;
+  l_tool_id_list apex_t_number := apex_t_number();
+  l_result JSON_OBJECT_T;
 BEGIN
   -- Get orchestration config
   SELECT orchestration_config INTO l_config_clob
@@ -376,20 +448,29 @@ BEGIN
     l_delegate := JSON_OBJECT_T(l_delegates.get(i));
     
     l_tool_id := register_agent_as_tool(
-      p_agent_code => l_delegate.get_string('agent_code'),
+      p_agent_code => l_delegate.get_string('agent_code'),  -- Uses latest active
       p_tool_name => l_delegate.get_string('tool_name'),
       p_tool_description => l_delegate.get_string('tool_description')
     );
+    l_tool_id_list.extend;
+    l_tool_id_list(l_tool_id_list.count) := l_tool_id;
   END LOOP;
   
-  -- Execute orchestrator with tools enabled
-  uc_ai.g_enable_tools := TRUE;
-  l_result := uc_ai_prompt_profiles_api.execute_profile(
-    p_id => l_config.get_number('orchestrator_profile_id'),
-    p_parameters => p_input_parameters
-  );
+  -- Execute orchestrator with tools enabled (with proper cleanup on error)
+  BEGIN
+    uc_ai.g_enable_tools := TRUE;
+    l_result := uc_ai_prompt_profiles_api.execute_profile(
+      p_code => l_config.get_string('orchestrator_profile_code'),  -- Uses latest active version
+      p_parameters => p_input_parameters
+    );
+  EXCEPTION
+    WHEN OTHERS THEN
+      -- Always cleanup temporary tools, even on error
+      cleanup_agent_tools(l_tool_id_list);
+      RAISE;
+  END;
   
-  -- Cleanup temporary tools
+  -- Cleanup temporary tools on success
   cleanup_agent_tools(l_tool_id_list);
   
   RETURN l_result;
@@ -562,7 +643,7 @@ Multiple agents collaborate in a dialogue, either round-robin or AI-driven.
   "conversation_mode": "round_robin|ai_driven",
   "participant_agents": [
     {
-      "agent_code": "architect",
+      "agent_code": "architect",  // Uses latest active version
       "role": "Design software architecture",
       "speaks_first": true
     },
@@ -575,8 +656,14 @@ Multiple agents collaborate in a dialogue, either round-robin or AI-driven.
       "role": "Identify bugs and issues"
     }
   ],
-  "moderator_agent_code": "project_manager",  -- For ai_driven mode
+  "moderator_agent_code": "project_manager",  // For ai_driven mode
   "max_turns": 10,
+  "history_management": {
+    "strategy": "sliding_window|summarize|full",
+    "max_messages": 20,           // For sliding_window: keep last N messages
+    "summarize_after": 10,        // For summarize: summarize after N messages
+    "summarizer_agent_code": "conversation_summarizer"  // Agent to create summaries
+  },
   "completion_criteria": {
     "type": "structured_output",
     "schema": {
@@ -589,6 +676,11 @@ Multiple agents collaborate in a dialogue, either round-robin or AI-driven.
   }
 }
 ```
+
+**History Management Strategies**:
+- `full`: Keep all messages (default, watch for context limits)
+- `sliding_window`: Keep only the last N messages
+- `summarize`: Periodically summarize older messages using a summarizer agent
 
 **Round-Robin Implementation**:
 ```sql
@@ -699,7 +791,7 @@ BEGIN
     p_code => 'data_orchestrator',
     p_agent_type => 'orchestrator',
     p_orchestration_config => '{
-      "orchestrator_profile_id": 456,
+      "orchestrator_profile_code": "data_orchestrator_prompt",
       "delegate_agents": [
         {
           "agent_code": "data_processing_pipeline",
@@ -715,6 +807,7 @@ BEGIN
   );
 END;
 /
+-- Note: All agent_code references use latest active version automatically
 ```
 
 The orchestrator AI can now decide: "I need to process this data, let me use the `process_data` tool" → which executes the entire sequential workflow.
@@ -729,17 +822,20 @@ The orchestrator AI can now decide: "I need to process this data, let me use the
 -- ============================================================================
 
 FUNCTION create_agent(
-  p_code                  IN VARCHAR2,
-  p_description           IN VARCHAR2,
-  p_agent_type            IN VARCHAR2,  -- 'profile', 'workflow', 'orchestrator', etc.
-  p_prompt_profile_id     IN NUMBER DEFAULT NULL,
-  p_workflow_definition   IN CLOB DEFAULT NULL,
-  p_orchestration_config  IN CLOB DEFAULT NULL,
-  p_input_schema          IN CLOB DEFAULT NULL,
-  p_output_schema         IN CLOB DEFAULT NULL,
-  p_version               IN NUMBER DEFAULT 1,
-  p_status                IN VARCHAR2 DEFAULT 'draft'
+  p_code                   IN VARCHAR2,
+  p_description            IN VARCHAR2,
+  p_agent_type             IN VARCHAR2,  -- 'profile', 'workflow', 'orchestrator', etc.
+  p_prompt_profile_code    IN VARCHAR2 DEFAULT NULL,  -- References by code, not ID
+  p_prompt_profile_version IN NUMBER DEFAULT NULL,    -- NULL = always use latest active
+  p_workflow_definition    IN CLOB DEFAULT NULL,
+  p_orchestration_config   IN CLOB DEFAULT NULL,
+  p_input_schema           IN CLOB DEFAULT NULL,
+  p_output_schema          IN CLOB DEFAULT NULL,
+  p_max_history_messages   IN NUMBER DEFAULT NULL,    -- For conversation patterns
+  p_version                IN NUMBER DEFAULT 1,
+  p_status                 IN VARCHAR2 DEFAULT 'draft'
 ) RETURN NUMBER;
+-- Note: On create, validates all referenced agent_codes in workflow/orchestration configs exist
 
 PROCEDURE update_agent(
   p_agent_id              IN NUMBER,
@@ -784,21 +880,26 @@ FUNCTION execute_agent(
 ) RETURN JSON_OBJECT_T;
 
 -- ============================================================================
--- Agent Relationships
+-- Session Management
 -- ============================================================================
 
-PROCEDURE add_agent_relationship(
-  p_parent_agent_code IN VARCHAR2,
-  p_child_agent_code  IN VARCHAR2,
-  p_relationship_type IN VARCHAR2,
-  p_execution_order   IN NUMBER DEFAULT NULL,
-  p_condition_expr    IN VARCHAR2 DEFAULT NULL
-);
+FUNCTION generate_session_id RETURN VARCHAR2;
+-- Returns: SYS_GUID() formatted as VARCHAR2 for grouping related executions
 
-PROCEDURE remove_agent_relationship(
-  p_parent_agent_code IN VARCHAR2,
-  p_child_agent_code  IN VARCHAR2
+-- ============================================================================
+-- Validation Functions
+-- ============================================================================
+
+FUNCTION validate_agent_references(
+  p_workflow_definition   IN CLOB DEFAULT NULL,
+  p_orchestration_config  IN CLOB DEFAULT NULL
+) RETURN BOOLEAN;
+-- Validates all agent_code references in configs exist as active agents
+
+PROCEDURE check_agent_not_referenced(
+  p_agent_code IN VARCHAR2
 );
+-- Raises exception if agent is referenced by other agents (call before delete)
 
 -- ============================================================================
 -- Execution History
@@ -934,7 +1035,7 @@ BEGIN
     p_code => 'research_coordinator',
     p_agent_type => 'orchestrator',
     p_orchestration_config => '{
-      "orchestrator_profile_id": 789,
+      "orchestrator_profile_code": "research_coordinator_prompt",
       "delegate_agents": [
         {
           "agent_code": "literature_reviewer",
@@ -1109,15 +1210,16 @@ END;
 - Session-based grouping for multi-turn interactions
 
 ### 7. **Oracle-Native Parallelism**
-**Decision**: Use DBMS_SCHEDULER for parallel workflows
+**Decision**: Use DBMS_PARALLEL_EXECUTE for parallel workflows
 
 **Rationale**:
-- Leverages Oracle's built-in job scheduler
-- Proper resource management
-- Timeout and error handling built-in
-- No external dependencies
+- Built-in synchronous waiting (`run_task` blocks until completion)
+- Native retry support via `resume_task` for failed chunks
+- Configurable parallelism level
+- Proper resource management with chunk-based execution
+- No need for polling or complex job tracking
 
-**Alternative Considered**: DBMS_PARALLEL_EXECUTE (rejected - more complex API)
+**Alternative Considered**: DBMS_SCHEDULER (rejected - requires async polling for completion)
 
 ---
 
@@ -1160,7 +1262,7 @@ All existing prompt profiles remain functional. Users can:
    l_agent_id := uc_ai_agents_api.create_agent(
      p_code => 'my_profile_agent',
      p_agent_type => 'profile',
-     p_prompt_profile_id => l_existing_profile_id
+     p_prompt_profile_code => 'my_existing_profile'  -- Uses latest active version
    );
    ```
 3. **Gradually adopt agent patterns** as needed
@@ -1214,3 +1316,35 @@ The phased implementation approach allows for **incremental delivery** and **ear
 - Should we support APEX integration hooks for UI progress indicators?
 - Do we need a visual workflow builder, or is JSON config sufficient?
 - Should agent versioning be independent or tied to prompt profile versions?
+
+---
+
+## Review Feedback
+
+> **Review Status**: ✅ All items addressed (January 22, 2026)
+
+### Resolved Items
+
+| #   | Issue                                               | Resolution                                                                                                                      |
+| --- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `prompt_profile_id` should be `prompt_profile_code` | ✅ Changed to `prompt_profile_code` + optional `prompt_profile_version`                                                          |
+| 2   | `orchestrator_profile_id` in JSON config            | ✅ Changed to `orchestrator_profile_code` throughout                                                                             |
+| 3   | DBMS_SCHEDULER permission issues                    | ✅ Switched to `DBMS_PARALLEL_EXECUTE` (built-in sync waiting + retry support)                                                   |
+| 4   | Dynamic tool cleanup on error                       | ✅ Added exception handling with cleanup in EXCEPTION block                                                                      |
+| 5   | Missing token/cost tracking                         | ✅ Added `total_input_tokens`, `total_output_tokens`, `total_cost_usd` to executions table                                       |
+| 6   | Agent version in JSON unclear                       | ✅ Removed from JSON; all `agent_code` refs use latest active. Version stored as table column with status (like prompt_profiles) |
+| 7   | Condition expression security                       | ✅ Using `APEX_PLUGIN_UTIL.GET_PLSQL_EXPR_RESULT_BOOLEAN` for safe PL/SQL evaluation with bind variables                         |
+| 8   | Redundant relationships table                       | ✅ Removed table; JSON-only with validation on create/delete for referential integrity                                           |
+| 9   | Missing FK constraint                               | ✅ N/A - using code reference instead of FK (prompt_profile_code)                                                                |
+| 10  | execution_order validation                          | ✅ Will validate uniqueness/contiguity in `validate_workflow_definition`                                                         |
+| 11  | get_agent return type                               | ✅ Kept as `%ROWTYPE` (acceptable)                                                                                               |
+| 12  | Session ID generation                               | ✅ Added `generate_session_id` function using `SYS_GUID()`                                                                       |
+| 13  | Conversation history size                           | ✅ Added `history_management` config with `sliding_window`, `summarize`, and `full` strategies                                   |
+
+### Clarified Questions
+
+| Question                                | Decision                                                                                   |
+| --------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Tool Inheritance (nested orchestrators) | Inner orchestrator starts fresh, does NOT inherit outer's tools                            |
+| Cross-Version Agent Relationships       | References always use `agent_code` only → resolves to latest active version                |
+| Async Execution Status                  | `DBMS_PARALLEL_EXECUTE.run_task` is synchronous (blocks until complete), no polling needed |
