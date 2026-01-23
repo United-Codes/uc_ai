@@ -24,6 +24,11 @@ create or replace package uc_ai_agent_workflow_api as
   -- Workflow Helper Functions
   -- ============================================================================
 
+  function evaluate_final_message(
+    p_final_message in json_element_t,
+    p_workflow_state in json_object_t
+  ) return varchar2;
+
   /*
    * Evaluates a condition expression against workflow state
    *
@@ -32,13 +37,27 @@ create or replace package uc_ai_agent_workflow_api as
    * @return Boolean result of condition evaluation
    */
   function evaluate_condition(
-    p_condition      in json_object_t,
+    p_condition      in varchar2,
     p_workflow_state in json_object_t
   ) return boolean;
 
 
   /*
    * Maps input parameters based on input_mapping configuration
+   *
+   * Supports two syntax styles:
+   * 1. Simple syntax (string): "param": "$.steps.step1.output"
+   * 2. Extended syntax (object): "param": {"path": "$.steps.step1.output", "optional": true, "default": "value"}
+   *
+   * Extended syntax options:
+   * - path (required): JSONPath expression to resolve
+   * - optional (boolean): If true, omits parameter when path doesn't exist. Default: false
+   * - default (any): Default value to use when path doesn't exist. Takes precedence over optional.
+   *
+   * Use cases:
+   * - Loop workflows where feedback from previous iteration may not exist in first iteration
+   * - Conditional workflows where certain inputs may not always be available
+   * - Workflows with progressive enhancement of data
    *
    * @param p_input_mapping  JSON object defining input mappings
    * @param p_workflow_state Current workflow state
@@ -47,20 +66,19 @@ create or replace package uc_ai_agent_workflow_api as
    */
   function map_inputs(
     p_input_mapping  in json_object_t,
-    p_workflow_state in json_object_t,
-    p_original_input in json_object_t
+    p_workflow_state in json_object_t
   ) return json_object_t;
 
 
   /*
    * Merges step output into workflow state based on output_mapping
    *
-   * @param p_output_mapping   JSON object defining output mappings
+   * @param p_step             JSON object defining the current step
    * @param p_step_output      Output from the current step
    * @param pio_workflow_state Workflow state to merge into (in/out)
    */
-  procedure merge_outputs(
-    p_output_mapping   in json_object_t,
+  procedure add_result_to_workflow_state(
+    p_step             in json_object_t,
     p_step_output      in json_object_t,
     pio_workflow_state in out nocopy json_object_t
   );

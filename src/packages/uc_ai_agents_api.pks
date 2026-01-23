@@ -237,12 +237,12 @@ create or replace package uc_ai_agents_api as
    * @param p_workflow_definition   JSON workflow definition
    * @param p_orchestration_config  JSON orchestration config
    * 
-   * @return  TRUE if all references are valid
+   * @return  t_validation_result with is_valid flag and error_reason if invalid
    */
   function validate_agent_references(
     p_workflow_definition  in clob default null,
     p_orchestration_config in clob default null
-  ) return boolean;
+  ) return t_validation_result;
 
 
   /*

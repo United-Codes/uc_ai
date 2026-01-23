@@ -153,8 +153,7 @@ create or replace package body uc_ai_agents_api as
     p_iteration_count   in number default 0,
     p_tool_calls_count  in number default 0,
     p_input_tokens      in number default 0,
-    p_output_tokens     in number default 0,
-    p_cost_usd          in number default 0
+    p_output_tokens     in number default 0
   )
   as
     l_output_result clob;
@@ -169,8 +168,7 @@ create or replace package body uc_ai_agents_api as
         iteration_count     = p_iteration_count,
         tool_calls_count    = p_tool_calls_count,
         total_input_tokens  = p_input_tokens,
-        total_output_tokens = p_output_tokens,
-        total_cost_usd      = p_cost_usd
+        total_output_tokens = p_output_tokens
     where id = p_exec_id;
   end complete_execution;
 
@@ -258,9 +256,14 @@ create or replace package body uc_ai_agents_api as
     end case;
     
     -- Validate agent references in configs
-    if not validate_agent_references(p_workflow_definition, p_orchestration_config) then
-      raise_application_error(-20001, 'Invalid agent references in configuration');
-    end if;
+    declare
+      l_validation t_validation_result;
+    begin
+      l_validation := validate_agent_references(p_workflow_definition, p_orchestration_config);
+      if not l_validation.is_valid then
+        raise_application_error(-20001, 'Invalid agent references in configuration: ' || l_validation.error_reason);
+      end if;
+    end;
     
     insert into uc_ai_agents (
       code,
@@ -324,9 +327,14 @@ create or replace package body uc_ai_agents_api as
   begin
     -- Validate agent references if configs are being updated
     if p_workflow_definition is not null or p_orchestration_config is not null then
-      if not validate_agent_references(p_workflow_definition, p_orchestration_config) then
-        raise_application_error(-20001, 'Invalid agent references in configuration');
-      end if;
+      declare
+        l_validation t_validation_result;
+      begin
+        l_validation := validate_agent_references(p_workflow_definition, p_orchestration_config);
+        if not l_validation.is_valid then
+          raise_application_error(-20001, 'Invalid agent references in configuration: ' || l_validation.error_reason);
+        end if;
+      end;
     end if;
 
     update uc_ai_agents
@@ -633,12 +641,16 @@ create or replace package body uc_ai_agents_api as
   function validate_agent_references(
     p_workflow_definition  in clob default null,
     p_orchestration_config in clob default null
-  ) return boolean
+  ) return t_validation_result
   as
     l_scope     uc_ai_logger.scope := gc_scope_prefix || 'validate_agent_references';
+    l_result    t_validation_result;
     l_codes_arr t_agent_code_list := t_agent_code_list();
     l_json      json_element_t;
   begin
+    l_result.is_valid := true;
+    l_result.error_reason := null;
+    
     -- Extract codes from workflow definition
     if p_workflow_definition is not null then
       l_json := json_element_t.parse(p_workflow_definition);
@@ -655,12 +667,14 @@ create or replace package body uc_ai_agents_api as
     <<code_loop>>
     for i in 1 .. l_codes_arr.count loop
       if not agent_exists(l_codes_arr(i)) then
-        uc_ai_logger.log_error('Referenced agent does not exist: ' || l_codes_arr(i), l_scope);
-        return false;
+        l_result.is_valid := false;
+        l_result.error_reason := 'Referenced agent or profile does not exist: ' || l_codes_arr(i);
+        uc_ai_logger.log_error(l_result.error_reason, l_scope);
+        return l_result;
       end if;
     end loop code_loop;
     
-    return true;
+    return l_result;
   exception
     when others then
       uc_ai_logger.log_error('Error validating agent references', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
@@ -988,6 +1002,8 @@ create or replace package body uc_ai_agents_api as
     l_result     json_object_t;
   begin
     uc_ai_logger.log('Executing agent: ' || p_agent_code, l_scope);
+
+    uc_ai_agent_exec_api.create_apex_session_if_needed;
     
     -- Get agent
     l_agent := get_agent(p_agent_code, p_agent_version);
@@ -998,6 +1014,7 @@ create or replace package body uc_ai_agents_api as
     -- Create execution record
     l_exec_id := create_execution(l_agent.id, l_session_id, p_parent_exec_id, p_input_parameters);
     
+
     begin
       -- Execute based on agent type (delegating to sub-package)
       case l_agent.agent_type
@@ -1020,6 +1037,14 @@ create or replace package body uc_ai_agents_api as
           uc_ai_logger.log_error('Unknown agent type: ' || l_agent.agent_type, l_scope);
           raise_application_error(-20010, 'Unknown agent type: ' || l_agent.agent_type);
       end case;
+
+      l_result.put('execution_id', l_exec_id);
+      l_result.put('agent_code', p_agent_code);
+      l_result.put('agent_version', l_agent.version);
+      l_result.put('session_id', l_session_id);
+      l_result.put('status', c_exec_completed);
+
+      logger.log('Agent execution completed: ' || p_agent_code, l_scope, l_result.to_clob);
       
       -- Update execution as completed
       complete_execution(
@@ -1103,7 +1128,6 @@ create or replace package body uc_ai_agents_api as
              e.tool_calls_count,
              e.total_input_tokens,
              e.total_output_tokens,
-             e.total_cost_usd,
              e.started_at,
              e.completed_at,
              e.error_message
@@ -1158,7 +1182,6 @@ create or replace package body uc_ai_agents_api as
     l_result.put('tool_calls_count', l_exec.tool_calls_count);
     l_result.put('total_input_tokens', l_exec.total_input_tokens);
     l_result.put('total_output_tokens', l_exec.total_output_tokens);
-    l_result.put('total_cost_usd', l_exec.total_cost_usd);
     l_result.put('started_at', to_char(l_exec.started_at, 'YYYY-MM-DD"T"HH24:MI:SS'));
     l_result.put('completed_at', to_char(l_exec.completed_at, 'YYYY-MM-DD"T"HH24:MI:SS'));
     l_result.put('error_message', l_exec.error_message);

@@ -28,9 +28,10 @@ create or replace package body uc_ai_agent_exec_api as
     l_steps_state    json_object_t := json_object_t();
     l_input_mapping  json_object_t;
     l_output_key     varchar2(255 char);
-    l_condition      json_object_t;
+    l_condition      varchar2(32676 char);
     l_iteration      number := 0;
     l_last_output    json_object_t;
+    l_condition_result boolean;
   begin
     uc_ai_logger.log('Executing sequential workflow: ' || p_agent.code, l_scope);
     
@@ -38,7 +39,8 @@ create or replace package body uc_ai_agent_exec_api as
     l_steps := l_workflow_def.get_array('steps');
     
     -- Initialize workflow state with _steps container
-    l_workflow_state.put('_steps', l_steps_state);
+    l_workflow_state.put('steps', l_steps_state);
+    l_workflow_state.put('input', p_input_params);
     
     -- Execute steps in order
     <<step_loop>>
@@ -48,7 +50,7 @@ create or replace package body uc_ai_agent_exec_api as
       
       -- Check condition if present
       if l_step.has('condition') then
-        l_condition := treat(l_step.get('condition') as json_object_t);
+        l_condition := l_step.get_string('condition');
         l_condition_result := uc_ai_agent_workflow_api.evaluate_condition(l_condition, l_workflow_state);
         uc_ai_logger.log('Evaluating condition for step ' || l_step_agent || ': ' || case when l_condition_result then 'TRUE' else 'FALSE' end, l_scope);
         if not l_condition_result then
@@ -63,7 +65,7 @@ create or replace package body uc_ai_agent_exec_api as
       else
         l_input_mapping := null;
       end if;
-      l_step_input := uc_ai_agent_workflow_api.map_inputs(l_input_mapping, l_workflow_state, p_input_params);
+      l_step_input := uc_ai_agent_workflow_api.map_inputs(l_input_mapping, l_workflow_state);
       
       -- Execute step agent
       uc_ai_logger.log('Executing step: ' || l_step_agent || ' with input: ' || case when l_step_input is not null then l_step_input.to_string else 'null' end, l_scope);
@@ -73,23 +75,19 @@ create or replace package body uc_ai_agent_exec_api as
         p_session_id       => p_session_id,
         p_parent_exec_id   => p_exec_id
       );
+
+      uc_ai_logger.log('Step ' || l_step_agent || ' completed with output:', l_scope, l_step_output.to_clob);
       
-      -- Store step output using output_key
-      if l_step.has('output_key') then
-        l_output_key := l_step.get_string('output_key');
-      else
-        l_output_key := 'step_' || i;
-      end if;
-      
-      -- Update _steps in workflow state
-      l_steps_state := treat(l_workflow_state.get('_steps') as json_object_t);
-      l_steps_state.put(l_output_key, l_step_output);
-      l_workflow_state.put('_steps', l_steps_state);
+      uc_ai_agent_workflow_api.add_result_to_workflow_state(
+        p_step             => l_step,
+        p_step_output      => l_step_output,
+        pio_workflow_state => l_workflow_state
+      );
       
       l_last_output := l_step_output;
       l_iteration := l_iteration + 1;
       
-      uc_ai_logger.log('Step ' || l_output_key || ' completed with output: ' || case when l_step_output is not null then substr(l_step_output.to_string, 1, 500) else 'null' end, l_scope);
+      uc_ai_logger.log('Step ' || l_output_key || ' completed with output: ' || case when l_step_output is not null then substr(l_step_output.to_string, 1, 500) else 'null' end, l_scope, l_workflow_state.to_clob);
     end loop step_loop;
     
     -- Build final result
@@ -123,12 +121,16 @@ create or replace package body uc_ai_agent_exec_api as
     l_loop_config    json_object_t;
     l_steps          json_array_t;
     l_max_iterations number;
-    l_exit_condition json_object_t;
+    l_exit_condition varchar2(32676 char);
     l_iteration      number := 0;
     l_workflow_state json_object_t;
     l_step           json_object_t;
     l_step_agent     varchar2(255 char);
     l_step_output    json_object_t;
+    l_max_it_json    number;
+    l_iteration_array json_array_t := json_array_t();
+    l_step_state      json_object_t;
+    l_final_msg  varchar2(32676 char);
   begin
     uc_ai_logger.log('Executing loop workflow: ' || p_agent.code, l_scope);
     
@@ -137,21 +139,23 @@ create or replace package body uc_ai_agent_exec_api as
     
     -- Get loop configuration
     l_loop_config := l_workflow_def.get_object('loop_config');
+    if l_loop_config is not null and l_loop_config.has('max_iterations') then
+      l_max_it_json := l_loop_config.get_number('max_iterations');
+    end if;
+
     l_max_iterations := coalesce(
-      l_loop_config.get_number('max_iterations'),
+      l_max_it_json,
       p_agent.max_iterations,
       10
     );
     
     if l_loop_config.has('exit_condition') then
-      l_exit_condition := l_loop_config.get_object('exit_condition');
+      l_exit_condition := l_loop_config.get_string('exit_condition');
     end if;
     
     -- Initialize state with input
-    l_workflow_state := p_input_params;
-    if l_workflow_state is null then
-      l_workflow_state := json_object_t();
-    end if;
+    l_workflow_state := json_object_t();
+    l_workflow_state.put('input', p_input_params);
     
     -- Loop until exit condition or max iterations
     <<iteration_loop>>
@@ -162,18 +166,39 @@ create or replace package body uc_ai_agent_exec_api as
         l_step := treat(l_steps.get(i) as json_object_t);
         l_step_agent := l_step.get_string('agent_code');
         
-        l_step_output := uc_ai_agents_api.execute_agent(
-          p_agent_code       => l_step_agent,
-          p_input_parameters => l_workflow_state,
-          p_session_id       => p_session_id,
-          p_parent_exec_id   => p_exec_id
+        -- Map inputs
+        declare
+          l_input_mapping json_object_t;
+          l_step_input    json_object_t;
+        begin
+          if l_step.has('input_mapping') then
+            l_input_mapping := treat(l_step.get('input_mapping') as json_object_t);
+          else
+            l_input_mapping := null;
+          end if;
+          l_step_input := uc_ai_agent_workflow_api.map_inputs(l_input_mapping, l_workflow_state);
+          
+          uc_ai_logger.log('Iteration ' || l_iteration || ', executing step: ' || l_step_agent || ' with input:', l_scope, l_step_input.to_clob);
+
+          l_step_output := uc_ai_agents_api.execute_agent(
+            p_agent_code       => l_step_agent,
+            p_input_parameters => l_step_input,
+            p_session_id       => p_session_id,
+            p_parent_exec_id   => p_exec_id
+          );
+        end;
+
+        uc_ai_agent_workflow_api.add_result_to_workflow_state(
+          p_step             => l_step,
+          p_step_output      => l_step_output,
+          pio_workflow_state => l_workflow_state
         );
-        
-        -- Merge output into state (feedback loop)
-        uc_ai_agent_workflow_api.merge_outputs(null, l_step_output, l_workflow_state);
       end loop step_loop;
       
       l_iteration := l_iteration + 1;
+
+      l_step_state := l_workflow_state.get_object('steps');
+      l_iteration_array.append(l_step_state);
       
       -- Check exit condition
       if l_exit_condition is not null then
@@ -185,6 +210,18 @@ create or replace package body uc_ai_agent_exec_api as
     end loop iteration_loop;
     
     l_workflow_state.put('_loop_iterations', l_iteration);
+    l_workflow_state.put('_loop_iteration_state', l_iteration_array);
+
+    if l_workflow_def.has('final_message') then
+      l_final_msg := uc_ai_agent_workflow_api.evaluate_final_message(
+        p_final_message => l_workflow_def.get('final_message'),
+        p_workflow_state => l_workflow_state
+      );
+      l_workflow_state.put('final_message', l_final_msg);
+    else
+      -- Default final message from last step
+      l_workflow_state.put('final_message', l_step_output.get_clob('final_message'));
+    end if;
     
     return l_workflow_state;
   exception
@@ -209,6 +246,8 @@ create or replace package body uc_ai_agent_exec_api as
   as
     l_scope  uc_ai_logger.scope := gc_scope_prefix || 'execute_profile_agent';
     l_result json_object_t;
+    l_has_schema number;
+    l_final_message clob;
   begin
     uc_ai_logger.log('Executing profile agent: ' || p_agent.code, l_scope);
     
@@ -217,6 +256,17 @@ create or replace package body uc_ai_agent_exec_api as
       p_version    => p_agent.prompt_profile_version,
       p_parameters => p_input_params
     );
+
+    select case when response_schema is not null then 1 else 0 end as has_schema
+      into l_has_schema
+      from uc_ai_prompt_profiles
+     where code = p_agent.prompt_profile_code
+       and (p_agent.prompt_profile_version is null or version = p_agent.prompt_profile_version);
+
+    if l_has_schema = 1 then
+      l_final_message := l_result.get_clob('final_message');
+      l_result.put('final_message', json_object_t.parse(l_final_message));
+    end if;
     
     return l_result;
   exception
@@ -752,6 +802,31 @@ end;';
       uc_ai_logger.log_error('Error executing conversation agent', l_scope);
       raise;
   end execute_conversation_agent;
+
+
+  procedure create_apex_session_if_needed
+  as
+    l_ws_id  number;
+    l_app_id number;
+  begin
+    if apex_application.g_instance is null then
+      begin
+        select workspace_id, application_id
+          into l_ws_id, l_app_id
+          from apex_applications
+         fetch first 1 row only;
+      exception
+        when no_data_found then
+          raise_application_error(-20020, 'Cannot create APEX session: no applications found. In order to use UC AI Agents features the DB schema must have an APEX Workspace with at least one application. This is required as UC AI uses APEX util functions that unfortunately depend on an active APEX session.');
+      end;
+
+      apex_session.create_session(
+        p_app_id       => l_app_id,
+        p_page_id      => 0,
+        p_username     => 'UC_AI_AGENT_EXEC'
+      );
+    end if;
+  end create_apex_session_if_needed;
 
 end uc_ai_agent_exec_api;
 /
