@@ -404,7 +404,7 @@ create or replace package body uc_ai_prompt_profiles_api as
 
 
   /*
-   * Replaces placeholders (#placeholder#) in a template with values from parameters JSON
+   * Replaces placeholders ({placeholder}) in a template with values from parameters JSON
    * Case-insensitive replacement
    */
   function replace_placeholders(
@@ -442,7 +442,7 @@ create or replace package body uc_ai_prompt_profiles_api as
       -- Replace placeholder (case-insensitive)
       l_result := regexp_replace(
         l_result,
-        '#' || l_key || '#',
+        '\{' || l_key || '\}',
         l_value,
         1, 0, 'i'
       );
@@ -479,10 +479,10 @@ create or replace package body uc_ai_prompt_profiles_api as
     -- Find all placeholders in templates (only alphanumeric and underscore allowed)
     <<placeholder_loop>>
     loop
-      l_placeholder := regexp_substr(l_combined_template, '#[A-Za-z0-9_]+#', l_position);
+      l_placeholder := regexp_substr(l_combined_template, '\{[A-Za-z0-9_]+\}', l_position);
       exit placeholder_loop when l_placeholder is null;
       
-      -- Extract placeholder name (without the # symbols)
+      -- Extract placeholder name (without the { } symbols)
       l_placeholder_name := substr(l_placeholder, 2, length(l_placeholder) - 2);
       
       -- Check if parameter exists (case-insensitive)
@@ -499,12 +499,12 @@ create or replace package body uc_ai_prompt_profiles_api as
       end if;
       
       if not l_found then
-        uc_ai_logger.log_error('Missing parameter for placeholder: ' || l_placeholder, l_scope);
+        uc_ai_logger.log_error('Missing parameter for placeholder: ' || l_placeholder, l_scope, p_parameters.to_clob);
         raise_application_error(-20003, 'Missing parameter for placeholder: ' || l_placeholder);
       end if;
       
       -- Move to next placeholder
-      l_position := regexp_instr(l_combined_template, '#[A-Za-z0-9_]+#', l_position) + length(l_placeholder);
+      l_position := regexp_instr(l_combined_template, '\{[A-Za-z0-9_]+\}', l_position) + length(l_placeholder);
     end loop placeholder_loop;
   end validate_parameters;
 
