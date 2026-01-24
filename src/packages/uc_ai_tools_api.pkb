@@ -581,7 +581,7 @@ create or replace package body uc_ai_tools_api as
     );
 
     -- use apex_plugin_util.get_plsql_func_result_clob if apex_session is available
-    if sys_context('APEX$SESSION', 'APP_SESSION') is not null then
+    if apex_application.g_instance is not null then
 
       uc_ai_logger.log('Executing tool with apex_plugin_util.get_plsql_func_result_clob', l_scope, l_fc_code);
 
