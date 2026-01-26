@@ -729,6 +729,17 @@ create or replace package body uc_ai_prompt_profiles_api as
       else
         uc_ai_logger.log_warn('Unknown provider in model config: ' || p_provider, l_scope);
     end case;
+
+    uc_ai_logger.log('Applied model config successfully', l_scope, p_config.to_clob);
+    uc_ai_logger.log('Global variables after applying model config:', l_scope,
+      'g_base_url=' || uc_ai.g_base_url || ', ' ||
+      'g_enable_reasoning=' || case when uc_ai.g_enable_reasoning then 'true' else 'false' end || ', ' ||
+      'g_reasoning_level=' || uc_ai.g_reasoning_level || ', ' ||
+      'g_enable_tools=' || case when uc_ai.g_enable_tools then 'true' else 'false' end || ', ' ||
+      'g_max_tool_calls=' || to_char(uc_ai.g_max_tool_calls) || ', ' ||
+      'g_apex_web_credential=' || uc_ai.g_apex_web_credential || ', ' ||
+      'g_tool_tags=' || apex_string.join(uc_ai.g_tool_tags, ':')
+    );
   exception
     when others then
       uc_ai_logger.log_error('Error applying model config', l_scope);

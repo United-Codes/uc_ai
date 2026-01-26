@@ -192,7 +192,7 @@ create or replace package body uc_ai_agent_exec_api as
 
     if l_workflow_def.has('pre_steps') then
       l_steps := l_workflow_def.get_array('pre_steps');
-      <<step_loop>>
+      <<pre_step_loop>>
       for i in 0 .. l_steps.get_size - 1 loop
         l_step := treat(l_steps.get(i) as json_object_t);
 
@@ -206,7 +206,7 @@ create or replace package body uc_ai_agent_exec_api as
           po_step_output     => l_step_output
         );
 
-      end loop step_loop;
+      end loop pre_step_loop;
     end if;
 
     l_steps := l_workflow_def.get_array('steps');
@@ -250,7 +250,7 @@ create or replace package body uc_ai_agent_exec_api as
 
     if l_workflow_def.has('post_steps') then
       l_steps := l_workflow_def.get_array('post_steps');
-      <<step_loop>>
+      <<post_step_loop>>
       for i in 0 .. l_steps.get_size - 1 loop
         l_step := treat(l_steps.get(i) as json_object_t);
 
@@ -264,7 +264,7 @@ create or replace package body uc_ai_agent_exec_api as
           po_step_output     => l_step_output
         );
 
-      end loop step_loop;
+      end loop post_step_loop;
     end if;
 
 
@@ -384,76 +384,58 @@ create or replace package body uc_ai_agent_exec_api as
    */
   function register_agent_as_tool(
     p_agent_code       in varchar2,
-    p_tool_name        in varchar2,
-    p_tool_description in varchar2,
-    p_exec_id          in uc_ai_agent_executions.id%type
+    p_exec_id          in uc_ai_agent_executions.id%type,
+    p_tool_tag         in varchar2
   ) return uc_ai_tools.id%type
   as
     l_scope         uc_ai_logger.scope := gc_scope_prefix || 'register_agent_as_tool';
     l_tool_id       uc_ai_tools.id%type;
     l_function_call clob;
-    l_json_schema   json_object_t;
-    l_params_obj    json_object_t;
     l_agent         uc_ai_agents%rowtype;
   begin
-    uc_ai_logger.log('Registering agent as tool: ' || p_agent_code || ' -> ' || p_tool_name, l_scope);
+    uc_ai_logger.log('Registering agent as tool: ' || p_agent_code, l_scope);
     
     -- Get the agent to check for input schema
     begin
       l_agent := uc_ai_agents_api.get_agent(p_agent_code);
     exception
       when others then
-        -- Agent might be a prompt profile
-        null;
+        uc_ai_logger.log_error('Error retrieving agent for tool registration: ' || p_agent_code, l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+        raise_application_error(-20012, 'Error retrieving agent for tool registration: ' || p_agent_code);
     end;
     
     -- Create function call that executes the agent
-    l_function_call := '
+    l_function_call := q'!
 declare
-  l_input json_object_t := json_object_t();
+  l_input_clob clob;
+  l_input json_object_t;
   l_result json_object_t;
-  l_args json_object_t := json_object_t(:arguments);
-  l_keys json_key_list;
 begin
-  -- Pass all arguments to agent
-  l_keys := l_args.get_keys;
-  for i in 1 .. l_keys.count loop
-    l_input.put(l_keys(i), l_args.get(l_keys(i)));
-  end loop;
+  l_input_clob := :arguments;
+  l_input := json_object_t(l_input_clob);
   
   l_result := uc_ai_agents_api.execute_agent(
-    p_agent_code       => ''' || p_agent_code || ''',
+    p_agent_code       => '!' || p_agent_code || q'!',
     p_input_parameters => l_input
   );
   
-  :result := l_result.get_string(''final_message'');
+  return l_result.get_string('final_message');
 exception
   when others then
-    :result := ''Error executing agent: '' || sqlerrm;
-end;';
+    return 'Error executing agent: ' || sqlerrm;
+end;!';
 
-    -- Create JSON schema for tool parameters
-    l_json_schema := json_object_t();
-    l_json_schema.put('type', 'object');
-    
-    l_params_obj := json_object_t();
-    l_params_obj.put('type', 'object');
-    l_params_obj.put('description', 'Input parameters for the agent');
-    
-    -- If agent has input schema, use it
-    if l_agent.input_schema is not null then
-      l_params_obj := json_object_t.parse(l_agent.input_schema);
-    end if;
-    
-    l_json_schema.put('properties', json_object_t('{"parameters": ' || l_params_obj.to_clob || '}'));
-    
+    uc_ai_logger.log('Creating tool for agent: ' || p_agent_code, l_scope, l_function_call);
+
     -- Create the tool
     l_tool_id := uc_ai_tools_api.create_tool_from_schema(
-      p_tool_code    => p_tool_name,
-      p_description  => p_tool_description,
+      p_tool_code    => p_agent_code || '_TOOL_' || sys_guid(),
+      p_description  => l_agent.description,
       p_function_call => l_function_call,
-      p_json_schema  => l_json_schema,
-      p_active       => 1
+      p_json_schema  => json_object_t(l_agent.input_schema),
+      p_active       => 1,
+      p_tags         => apex_t_varchar2(p_tool_tag),
+      p_created_by   => 'UC_AI_AGENT_EXEC_API'
     );
     
     -- Track temporary tool for cleanup
@@ -463,7 +445,7 @@ end;';
     return l_tool_id;
   exception
     when others then
-      uc_ai_logger.log_error('Error registering agent as tool', l_scope);
+      uc_ai_logger.log_error('Error registering agent as tool', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end register_agent_as_tool;
 
@@ -490,8 +472,8 @@ end;';
     -- Temp tools records will be deleted by cascade
   exception
     when others then
-      uc_ai_logger.log_error('Error cleaning up agent tools', l_scope);
-      -- Don't re-raise, cleanup errors shouldn't fail the main operation
+      uc_ai_logger.log_error('Error cleaning up agent tools', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+      raise;
   end cleanup_agent_tools;
 
 
@@ -508,56 +490,75 @@ end;';
     l_scope            uc_ai_logger.scope := gc_scope_prefix || 'execute_orchestrator_agent';
     l_config           json_object_t;
     l_delegates        json_array_t;
-    l_delegate         json_object_t;
+    l_delegate         varchar2(4000 char);
     l_tool_ids         apex_t_number := apex_t_number();
     l_tool_id          uc_ai_tools.id%type;
     l_result           json_object_t;
     l_profile_code     varchar2(255 char);
     l_original_tools   boolean;
     l_original_tags    apex_t_varchar2;
+    l_tool_tag         varchar2(255 char);
+    l_prompt_profile   uc_ai_prompt_profiles%rowtype;
+    l_tool_arr         json_array_t := json_array_t();
+    l_profile_config   json_object_t;
   begin
     uc_ai_logger.log('Executing orchestrator agent: ' || p_agent.code, l_scope);
     
     l_config := json_object_t.parse(p_agent.orchestration_config);
     l_delegates := l_config.get_array('delegate_agents');
     l_profile_code := l_config.get_string('orchestrator_profile_code');
+    l_tool_tag := lower('orchestrator_' || p_agent.code || '_' || sys_guid());
+
+    l_prompt_profile := uc_ai_prompt_profiles_api.get_prompt_profile(
+      p_code    => l_profile_code
+    );
     
     -- Save original tool settings
-    l_original_tools := uc_ai.g_enable_tools;
-    l_original_tags := uc_ai.g_tool_tags;
+    --l_original_tools := uc_ai.g_enable_tools;
+    --l_original_tags := uc_ai.g_tool_tags;
     
     begin
       -- Register delegate agents as tools
       <<delegate_loop>>
       for i in 0 .. l_delegates.get_size - 1 loop
-        l_delegate := treat(l_delegates.get(i) as json_object_t);
+        l_delegate := l_delegates.get_string(i);
         
         l_tool_id := register_agent_as_tool(
-          p_agent_code       => l_delegate.get_string('agent_code'),
-          p_tool_name        => l_delegate.get_string('tool_name'),
-          p_tool_description => l_delegate.get_string('tool_description'),
-          p_exec_id          => p_exec_id
+          p_agent_code       => l_delegate,
+          p_exec_id          => p_exec_id,
+          p_tool_tag         => l_tool_tag
         );
         
         l_tool_ids.extend;
         l_tool_ids(l_tool_ids.count) := l_tool_id;
       end loop delegate_loop;
+
+      uc_ai_logger.log('Overwriting existing model config JSON', l_scope, l_prompt_profile.model_config_json);
+
+      l_profile_config := json_object_t.parse(coalesce(l_prompt_profile.model_config_json, '{}'));
+      l_profile_config.put('g_enable_tools', true);
+      l_tool_arr.append(l_tool_tag);
+      l_profile_config.put('g_tool_tags', l_tool_arr);
+      l_profile_config.put('g_max_tool_calls', l_config.get_number('max_delegations'));
       
       -- Enable tools for orchestrator
       uc_ai.g_enable_tools := true;
+      uc_ai.g_tool_tags := apex_t_varchar2(l_tool_tag);
       
       -- Execute orchestrator profile
       l_result := uc_ai_prompt_profiles_api.execute_profile(
-        p_code       => l_profile_code,
-        p_parameters => p_input_params
+        p_code              => l_profile_code,
+        p_parameters        => p_input_params,
+        p_config_override   => l_profile_config
       );
       
     exception
       when others then
         -- Always cleanup, even on error
+        uc_ai_logger.log_error('Error during orchestrator execution', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
         cleanup_agent_tools(p_exec_id);
-        uc_ai.g_enable_tools := l_original_tools;
-        uc_ai.g_tool_tags := l_original_tags;
+        --uc_ai.g_enable_tools := l_original_tools;
+        --uc_ai.g_tool_tags := l_original_tags;
         raise;
     end;
     
@@ -571,7 +572,7 @@ end;';
     return l_result;
   exception
     when others then
-      uc_ai_logger.log_error('Error executing orchestrator agent', l_scope);
+      uc_ai_logger.log_error('Error executing orchestrator agent', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end execute_orchestrator_agent;
 

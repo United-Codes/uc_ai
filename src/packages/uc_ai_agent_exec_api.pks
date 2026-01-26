@@ -128,16 +128,14 @@ create or replace package uc_ai_agent_exec_api as
    * Registers a child agent as a temporary tool for orchestration
    *
    * @param p_agent_code       Code of the agent to register
-   * @param p_tool_name        Name to use for the tool
-   * @param p_tool_description Description for the tool
    * @param p_exec_id          Execution ID for cleanup tracking
+   * @param p_tool_tag         Tag to assign to the tool for identification
    * @return Tool ID of the created tool
    */
   function register_agent_as_tool(
     p_agent_code       in varchar2,
-    p_tool_name        in varchar2,
-    p_tool_description in varchar2,
-    p_exec_id          in uc_ai_agent_executions.id%type
+    p_exec_id          in uc_ai_agent_executions.id%type,
+    p_tool_tag         in varchar2
   ) return uc_ai_tools.id%type;
 
 
