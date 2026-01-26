@@ -28,6 +28,11 @@ create or replace package body uc_ai_agent_workflow_api as
                      p_subexpression => '1'
                    );
 
+    if l_expr_arr is null or l_expr_arr.count = 0 then
+      -- No expressions to resolve
+      return p_expression;
+    end if;
+
     apex_json.parse(l_apex_json, p_workflow_state.to_clob);
     l_res := p_expression;
 
@@ -145,6 +150,8 @@ create or replace package body uc_ai_agent_workflow_api as
     end if;
 
     l_tmp := resolve_jsonpath_values(l_expr, p_workflow_state);
+
+    uc_ai_logger.log('Evaluating final_message. Expression: ' || l_expr || ' Resolved: ' || l_tmp, l_scope, p_workflow_state.to_clob);
 
     if not l_is_plsqlsql then
       return l_tmp;
