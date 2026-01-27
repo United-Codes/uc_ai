@@ -426,7 +426,25 @@ Be realistic and picky. Reference history.',
 Estimate total cost. Check if ready to end.
 Structure: "Combined Plan: 1. [activity] ($X). 2. [food] ($Y). Total: $Z. Agree?"
 Only finalize if budget ok and no major critiques left. If you finalize, say "Final Plan: ..."',
-      p_user_prompt_template  => 'Chat history: {prompt}',
+      p_user_prompt_template  => 'Chat history: {prompt}. Your role: {role}.',
+      p_provider              => gc_main_provider,
+      p_model                 => gc_main_model,
+      p_status                => 'active'
+    );
+
+    -- party moderator
+    delete from uc_ai_prompt_profiles 
+     where code = 'party_moderator_profile';
+
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code                  => 'party_moderator_profile',
+      p_description           => 'Oversees party planning conversation, delegates who speaks next.',
+      p_system_prompt_template => 'You are Moderator. Oversee the party planning conversation. Delegate who speaks next based on chat history.]
+      
+      If you think there is a solid plan ready, you can finalize the conversation.
+      
+      If the conversation is done please summarize the conversation for the user.',
+      p_user_prompt_template  => '{prompt}',
       p_provider              => gc_main_provider,
       p_model                 => gc_main_model,
       p_status                => 'active'

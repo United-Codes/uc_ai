@@ -77,66 +77,45 @@ create or replace package body test_uc_ai_agent_orchestrator as
       },
       "required": ["prompt"]
     }');
+
+    delete from uc_ai_agents where code in ('calendar_agent', 'flight_booking_agent', 'hotel_booking_agent', 'finance_agent');
     
-    -- Calendar Agent
-    begin
-      select id into l_agent_id from uc_ai_agents where code = 'calendar_agent' and status = 'active';
-    exception
-      when no_data_found then
-        l_agent_id := uc_ai_agents_api.create_agent(
-          p_code                => 'calendar_agent',
-          p_description         => 'Provides calendar and scheduling information',
-          p_agent_type          => uc_ai_agents_api.c_type_profile,
-          p_prompt_profile_code => 'calendar_agent_profile',
-          p_status              => uc_ai_agents_api.c_status_active,
-          p_input_schema        => l_input_schema.to_clob
-        );
-    end;
 
-    -- Flight Booking Agent
-    begin
-      select id into l_agent_id from uc_ai_agents where code = 'flight_booking_agent' and status = 'active';
-    exception
-      when no_data_found then
-        l_agent_id := uc_ai_agents_api.create_agent(
-          p_code                => 'flight_booking_agent',
-          p_description         => 'Provides flight booking options',
-          p_agent_type          => uc_ai_agents_api.c_type_profile,
-          p_prompt_profile_code => 'flight_booking_agent_profile',
-          p_status              => uc_ai_agents_api.c_status_active,
-          p_input_schema        => l_input_schema.to_clob
-        );
-    end;
+    l_agent_id := uc_ai_agents_api.create_agent(
+      p_code                => 'calendar_agent',
+      p_description         => 'Provides calendar and scheduling information',
+      p_agent_type          => uc_ai_agents_api.c_type_profile,
+      p_prompt_profile_code => 'calendar_agent_profile',
+      p_status              => uc_ai_agents_api.c_status_active,
+      p_input_schema        => l_input_schema.to_clob
+    );
 
-    -- Hotel Booking Agent
-    begin
-      select id into l_agent_id from uc_ai_agents where code = 'hotel_booking_agent' and status = 'active';
-    exception
-      when no_data_found then
-        l_agent_id := uc_ai_agents_api.create_agent(
-          p_code                => 'hotel_booking_agent',
-          p_description         => 'Provides hotel accommodation options',
-          p_agent_type          => uc_ai_agents_api.c_type_profile,
-          p_prompt_profile_code => 'hotel_booking_agent_profile',
-          p_status              => uc_ai_agents_api.c_status_active,
-          p_input_schema        => l_input_schema.to_clob
-        );
-    end;
+    l_agent_id := uc_ai_agents_api.create_agent(
+      p_code                => 'flight_booking_agent',
+      p_description         => 'Provides flight booking options',
+      p_agent_type          => uc_ai_agents_api.c_type_profile,
+      p_prompt_profile_code => 'flight_booking_agent_profile',
+      p_status              => uc_ai_agents_api.c_status_active,
+      p_input_schema        => l_input_schema.to_clob
+    );
 
-    -- Finance Agent
-    begin
-      select id into l_agent_id from uc_ai_agents where code = 'finance_agent' and status = 'active';
-    exception
-      when no_data_found then
-        l_agent_id := uc_ai_agents_api.create_agent(
-          p_code                => 'finance_agent',
-          p_description         => 'Reviews and approves travel budgets',
-          p_agent_type          => uc_ai_agents_api.c_type_profile,
-          p_prompt_profile_code => 'finance_agent_profile',
-          p_status              => uc_ai_agents_api.c_status_active,
-          p_input_schema        => l_input_schema.to_clob
-        );
-    end;
+    l_agent_id := uc_ai_agents_api.create_agent(
+      p_code                => 'hotel_booking_agent',
+      p_description         => 'Provides hotel accommodation options',
+      p_agent_type          => uc_ai_agents_api.c_type_profile,
+      p_prompt_profile_code => 'hotel_booking_agent_profile',
+      p_status              => uc_ai_agents_api.c_status_active,
+      p_input_schema        => l_input_schema.to_clob
+    );
+
+    l_agent_id := uc_ai_agents_api.create_agent(
+      p_code                => 'finance_agent',
+      p_description         => 'Reviews and approves travel budgets',
+      p_agent_type          => uc_ai_agents_api.c_type_profile,
+      p_prompt_profile_code => 'finance_agent_profile',
+      p_status              => uc_ai_agents_api.c_status_active,
+      p_input_schema        => l_input_schema.to_clob
+    );
 
     -- Create orchestrator config
     l_orch_config := '{

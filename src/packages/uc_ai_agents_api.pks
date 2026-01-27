@@ -334,6 +334,7 @@ create or replace package uc_ai_agents_api as
    * @param p_input_parameters JSON input parameters
    * @param p_session_id       Optional session ID for grouping executions
    * @param p_parent_exec_id   Optional parent execution ID for nested calls
+   * @param p_response_schema  Optional JSON schema for response validation (profile agents only)
    * 
    * @return                   JSON result object
    */
@@ -342,7 +343,8 @@ create or replace package uc_ai_agents_api as
     p_agent_version    in uc_ai_agents.version%type default null,
     p_input_parameters in json_object_t default null,
     p_session_id       in varchar2 default null,
-    p_parent_exec_id   in uc_ai_agent_executions.id%type default null
+    p_parent_exec_id   in uc_ai_agent_executions.id%type default null,
+    p_response_schema  in json_object_t default null
   ) return json_object_t;
 
 
@@ -353,6 +355,7 @@ create or replace package uc_ai_agents_api as
    * @param p_input_parameters JSON input parameters
    * @param p_session_id       Optional session ID for grouping executions
    * @param p_parent_exec_id   Optional parent execution ID for nested calls
+   * @param p_response_schema  Optional JSON schema for response validation (profile agents only)
    * 
    * @return                   JSON result object
    */
@@ -360,7 +363,8 @@ create or replace package uc_ai_agents_api as
     p_agent_id         in uc_ai_agents.id%type,
     p_input_parameters in json_object_t default null,
     p_session_id       in varchar2 default null,
-    p_parent_exec_id   in uc_ai_agent_executions.id%type default null
+    p_parent_exec_id   in uc_ai_agent_executions.id%type default null,
+    p_response_schema  in json_object_t default null
   ) return json_object_t;
 
 

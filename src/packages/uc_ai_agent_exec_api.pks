@@ -42,13 +42,15 @@ create or replace package uc_ai_agent_exec_api as
    *
    * @param p_agent        Agent rowtype record
    * @param p_input_params Input parameters for the agent
-   * @param p_exec_id      Execution ID for tracking
+   * @param p_exec_id         Execution ID for tracking
+   * @param p_response_schema Optional JSON schema for response validation
    * @return JSON result from prompt profile execution
    */
   function execute_profile_agent(
     p_agent          in uc_ai_agents%rowtype,
     p_input_params   in json_object_t,
-    p_exec_id        in uc_ai_agent_executions.id%type
+    p_exec_id        in uc_ai_agent_executions.id%type,
+    p_response_schema in json_object_t default null
   ) return json_object_t;
 
 

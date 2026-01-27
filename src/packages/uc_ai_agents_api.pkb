@@ -659,7 +659,15 @@ create or replace package body uc_ai_agents_api as
     
     -- Extract codes from orchestration config
     if p_orchestration_config is not null then
-      l_json := json_element_t.parse(p_orchestration_config);
+      begin
+        l_json := json_element_t.parse(p_orchestration_config);
+      exception
+        when others then
+          l_result.is_valid := false;
+          l_result.error_reason := 'Invalid JSON in orchestration_config: ' || sqlerrm;
+          uc_ai_logger.log_error('Invalid JSON in orchestration_config.', l_scope, 'json:' || p_orchestration_config || ' | ' || sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+          return l_result;
+      end;
       extract_agent_codes(l_json, l_codes_arr);
     end if;
     
@@ -992,7 +1000,8 @@ create or replace package body uc_ai_agents_api as
     p_agent_version    in uc_ai_agents.version%type default null,
     p_input_parameters in json_object_t default null,
     p_session_id       in varchar2 default null,
-    p_parent_exec_id   in uc_ai_agent_executions.id%type default null
+    p_parent_exec_id   in uc_ai_agent_executions.id%type default null,
+    p_response_schema  in json_object_t default null
   ) return json_object_t
   as
     l_scope      uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -1008,6 +1017,12 @@ create or replace package body uc_ai_agents_api as
     -- Get agent
     l_agent := get_agent(p_agent_code, p_agent_version);
     
+    -- Validate response_schema usage
+    if p_response_schema is not null and l_agent.agent_type != c_type_profile then
+      uc_ai_logger.log_error('response_schema can only be used with profile agents, not: ' || l_agent.agent_type, l_scope);
+      raise_application_error(-20011, 'response_schema can only be used with profile agents');
+    end if;
+    
     -- Generate session ID if not provided
     l_session_id := coalesce(p_session_id, generate_session_id());
     
@@ -1019,7 +1034,7 @@ create or replace package body uc_ai_agents_api as
       -- Execute based on agent type (delegating to sub-package)
       case l_agent.agent_type
         when c_type_profile then
-          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id);
+          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema);
           
         when c_type_workflow then
           l_result := uc_ai_agent_exec_api.execute_workflow_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
@@ -1079,7 +1094,8 @@ create or replace package body uc_ai_agents_api as
     p_agent_id         in uc_ai_agents.id%type,
     p_input_parameters in json_object_t default null,
     p_session_id       in varchar2 default null,
-    p_parent_exec_id   in uc_ai_agent_executions.id%type default null
+    p_parent_exec_id   in uc_ai_agent_executions.id%type default null,
+    p_response_schema  in json_object_t default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -1092,7 +1108,8 @@ create or replace package body uc_ai_agents_api as
       p_agent_version    => l_agent.version,
       p_input_parameters => p_input_parameters,
       p_session_id       => p_session_id,
-      p_parent_exec_id   => p_parent_exec_id
+      p_parent_exec_id   => p_parent_exec_id,
+      p_response_schema  => p_response_schema
     );
   exception
     when others then

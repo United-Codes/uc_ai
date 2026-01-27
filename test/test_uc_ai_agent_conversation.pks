@@ -13,8 +13,8 @@ create or replace package test_uc_ai_agent_conversation as
   --%test(Execute round-robin conversation between two agents)
   procedure execute_round_robin_conversation;
 
-  --%test(Conversation terminates after max turns)
-  procedure execute_max_turns_conversation;
+  --%test(Execute AI-driven conversation between multiple agents)
+  procedure execute_ai_driven_conversation;
 
 end test_uc_ai_agent_conversation;
 /

@@ -52,20 +52,20 @@ create or replace package body test_uc_ai_agent_conversation as
     uc_ai_test_agent_utils.cleanup_test_data;
   end teardown;
 
-  procedure execute_round_robin_conversation
+  procedure birthday_agents
   as
-    l_conv_id     number;
-    l_session_id  varchar2(100 char);
-    l_result      json_object_t;
-    l_final_msg   clob;
-    l_status      varchar2(50 char);
-    l_conv_config clob;
     l_agent_id    number;
   begin
+    delete from uc_ai_agents where code in (
+      'party_brainstormer_agent',
+      'party_critic_agent',
+      'party_synthesizer_agent',
+      'party_moderator_agent'
+    );
 
     l_agent_id := uc_ai_agents_api.create_agent(
       p_code                => 'party_brainstormer_agent',
-      p_description         => 'Reviews and approves travel budgets',
+      p_description         => 'Brainstorms party ideas',
       p_agent_type          => uc_ai_agents_api.c_type_profile,
       p_prompt_profile_code => 'party_brainstormer_profile',
       p_status              => uc_ai_agents_api.c_status_active,
@@ -74,7 +74,7 @@ create or replace package body test_uc_ai_agent_conversation as
 
     l_agent_id := uc_ai_agents_api.create_agent(
       p_code                => 'party_critic_agent',
-      p_description         => 'Reviews and approves travel budgets',
+      p_description         => 'Critiques party ideas',
       p_agent_type          => uc_ai_agents_api.c_type_profile,
       p_prompt_profile_code => 'party_critic_profile',
       p_status              => uc_ai_agents_api.c_status_active,
@@ -83,12 +83,34 @@ create or replace package body test_uc_ai_agent_conversation as
 
     l_agent_id := uc_ai_agents_api.create_agent(
       p_code                => 'party_synthesizer_agent',
-      p_description         => 'Reviews and approves travel budgets',
+      p_description         => 'Synthesizes party ideas into a plan',
       p_agent_type          => uc_ai_agents_api.c_type_profile,
       p_prompt_profile_code => 'party_synthesizer_profile',
       p_status              => uc_ai_agents_api.c_status_active,
       p_input_schema        => null
     );
+
+    l_agent_id := uc_ai_agents_api.create_agent(
+      p_code                => 'party_moderator_agent',
+      p_description         => 'Moderates party planning conversation',
+      p_agent_type          => uc_ai_agents_api.c_type_profile,
+      p_prompt_profile_code => 'party_moderator_profile',
+      p_status              => uc_ai_agents_api.c_status_active,
+      p_input_schema        => null
+    );
+  end birthday_agents;
+
+  procedure execute_round_robin_conversation
+  as
+    l_conv_id     number;
+    l_session_id  varchar2(100 char);
+    l_result      json_object_t;
+    l_final_msg   clob;
+    l_status      varchar2(50 char);
+    l_conv_config clob;
+    
+  begin
+    birthday_agents;
 
     -- Create conversation config (round robin, 2 turns max)
     l_conv_config := '{
@@ -148,7 +170,7 @@ create or replace package body test_uc_ai_agent_conversation as
     ut.expect(l_final_msg).to_be_not_null();
   end execute_round_robin_conversation;
 
-  procedure execute_max_turns_conversation
+  procedure execute_ai_driven_conversation
   as
     l_conv_id     number;
     l_session_id  varchar2(100 char);
@@ -157,54 +179,59 @@ create or replace package body test_uc_ai_agent_conversation as
     l_exec_count  number;
     l_conv_config clob;
   begin
-    -- Create a shorter conversation (1 turn only)
+    birthday_agents;
+
     l_conv_config := '{
-      "mode": "round_robin",
-      "max_turns": 1,
+      "pattern_type": "conversation",
+      "conversation_mode": "ai_driven",
+      "moderator_agent": {
+        "agent_code": "party_moderator_agent",
+        "input_mapping": {"prompt": "Chat history: {$.chat_history} | available agents: {$.available_agents}" },
+        "summary_mapping": {"prompt": "The conversation was ended. Now please outline the final plan for the user. Max 2 sentences. | Chat history: {$.chat_history}" }
+      },
+      "max_turns": 6,
       "agents": [
         {
-          "code": "' || gc_agent_a_code || '",
-          "role": "Math Expert",
-          "input_mapping": {"question": "$.input.question"}
+          "agent_code": "party_brainstormer_agent",
+          "input_mapping": {"prompt": "{$.chat_history}", "role": "{$.agent_description} | Why you where picked to speak next: {$.moderator_rationale}" }
+        },
+        {
+          "agent_code": "party_critic_agent",
+          "input_mapping": {"prompt": "{$.chat_history}", "role": "{$.agent_description} | Why you where picked to speak next: {$.moderator_rationale}" }
+        },
+        {
+          "agent_code": "party_synthesizer_agent",
+          "input_mapping": {"prompt": "{$.chat_history}", "role": "{$.agent_description} | Why you where picked to speak next: {$.moderator_rationale}" }
         }
-      ],
-      "termination_condition": "$.turn >= 1"
+      ]
     }';
 
-    -- Create the conversation agent with max 1 turn
-    begin
-      select id into l_conv_id
-        from uc_ai_agents
-       where code = gc_conversation_code || '_SHORT'
-         and status = 'active';
-    exception
-      when no_data_found then
-        l_conv_id := uc_ai_agents_api.create_agent(
-          p_code                 => gc_conversation_code || '_SHORT',
-          p_description          => 'Short conversation agent',
-          p_agent_type           => uc_ai_agents_api.c_type_conversation,
-          p_orchestration_config => l_conv_config,
-          p_max_iterations       => 1,
-          p_status               => uc_ai_agents_api.c_status_active
-        );
-    end;
+    delete from UC_AI_AGENTS where code = 'test_ai_driven_conversation';
+
+    l_conv_id := uc_ai_agents_api.create_agent(
+      p_code                 => 'test_ai_driven_conversation',
+      p_description          => 'Short conversation agent',
+      p_agent_type           => uc_ai_agents_api.c_type_conversation,
+      p_orchestration_config => l_conv_config,
+      p_max_iterations       => 1,
+      p_status               => uc_ai_agents_api.c_status_active
+    );
 
     -- Execute the conversation
     l_session_id := uc_ai_agents_api.generate_session_id;
     l_result := uc_ai_agents_api.execute_agent(
-      p_agent_code       => gc_conversation_code || '_SHORT',
-      p_input_parameters => json_object_t('{"question": "9 * 9"}'),
+      p_agent_code       => 'test_ai_driven_conversation',
+      p_input_parameters => json_object_t('{"prompt": "I need to throw a party for my 12 year old boy. He loves pirates and football. Can you help me plan an exciting and educational party that he and his friends (14 attendees max) will enjoy? Max budget is $200."}'),
       p_session_id       => l_session_id
     );
 
+    sys.dbms_output.put_line('Full AI driven conversation result: ' || l_result.to_clob());
+
     -- Validate result
-    uc_ai_test_agent_utils.validate_agent_result(l_result, 'Max Turns Conversation');
+    uc_ai_test_agent_utils.validate_agent_result(l_result, 'AI Driven Conversation');
 
     l_final_msg := l_result.get_clob('final_message');
-    sys.dbms_output.put_line('Short conversation result: ' || l_final_msg);
-    
-    -- Should contain 81 (9 * 9)
-    ut.expect(l_final_msg).to_be_like('%81%');
+    sys.dbms_output.put_line('AI driven conversation result: ' || l_final_msg);
 
     -- Verify limited executions
     select count(*) into l_exec_count
@@ -212,8 +239,8 @@ create or replace package body test_uc_ai_agent_conversation as
      where session_id = l_session_id;
     
     -- Should be just 2 (conversation wrapper + one agent)
-    ut.expect(l_exec_count, 'Limited turns should limit executions').to_be_less_or_equal(3);
-  end execute_max_turns_conversation;
+    ut.expect(l_exec_count, 'Limited turns should limit executions').to_be_greater_than(3);
+  end execute_ai_driven_conversation;
 
 end test_uc_ai_agent_conversation;
 /

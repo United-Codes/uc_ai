@@ -295,29 +295,41 @@ create or replace package body uc_ai_agent_exec_api as
    * Executes a profile-type agent (wrapper around prompt profile)
    */
   function execute_profile_agent(
-    p_agent          in uc_ai_agents%rowtype,
-    p_input_params   in json_object_t,
-    p_exec_id        in uc_ai_agent_executions.id%type
+    p_agent            in uc_ai_agents%rowtype,
+    p_input_params     in json_object_t,
+    p_exec_id          in uc_ai_agent_executions.id%type,
+    p_response_schema  in json_object_t default null
   ) return json_object_t
   as
     l_scope  uc_ai_logger.scope := gc_scope_prefix || 'execute_profile_agent';
     l_result json_object_t;
+    l_config json_object_t;
     l_has_schema number;
     l_final_message clob;
   begin
     uc_ai_logger.log('Executing profile agent: ' || p_agent.code, l_scope);
+
+    if p_response_schema is not null then
+      l_config := json_object_t();
+      l_config.put('response_schema', p_response_schema);
+    end if;
     
     l_result := uc_ai_prompt_profiles_api.execute_profile(
-      p_code       => p_agent.prompt_profile_code,
-      p_version    => p_agent.prompt_profile_version,
-      p_parameters => p_input_params
+      p_code            => p_agent.prompt_profile_code,
+      p_version         => p_agent.prompt_profile_version,
+      p_parameters      => p_input_params,
+      p_config_override => l_config
     );
 
-    select case when response_schema is not null then 1 else 0 end as has_schema
-      into l_has_schema
-      from uc_ai_prompt_profiles
-     where code = p_agent.prompt_profile_code
-       and (p_agent.prompt_profile_version is null or version = p_agent.prompt_profile_version);
+    if p_response_schema is not null then
+      l_has_schema := 1;
+    else
+      select case when response_schema is not null then 1 else 0 end as has_schema
+        into l_has_schema
+        from uc_ai_prompt_profiles
+       where code = p_agent.prompt_profile_code
+         and (p_agent.prompt_profile_version is null or version = p_agent.prompt_profile_version);
+    end if;
 
     if l_has_schema = 1 then
       l_final_message := l_result.get_clob('final_message');
@@ -709,13 +721,17 @@ end;!';
     l_term_type       varchar2(255 char);
     l_term_keyword    varchar2(4000 char);
     l_history_mgmt    json_object_t;
-    l_moderator       varchar2(255 char);
+    l_moderator       json_object_t;
+    l_moderator_code  varchar2(255 char);
+    l_moderator_input json_object_t;
+    l_moderator_summary_input json_object_t;
     l_mod_result      json_object_t;
     l_next_speaker    json_object_t;
     l_return          json_object_t;
     l_input_mapping   json_object_t;
     l_agent_descr_map json_object_t := json_object_t();
     l_agent           uc_ai_agents%rowtype;
+    l_participant_info clob;
 
   begin
     uc_ai_logger.log('Executing conversation agent: ' || p_agent.code, l_scope);
@@ -808,23 +824,67 @@ end;!';
         
       when c_conversation_ai_driven then
         -- AI-driven (moderator) conversation
-        l_moderator := l_config.get_string('moderator_agent_code');
+        l_moderator := l_config.get_object('moderator_agent');
+        l_moderator_code := l_moderator.get_string('agent_code');
+        l_moderator_input := l_moderator.get_object('input_mapping');
+        l_moderator_summary_input := l_moderator.get_object('summary_mapping');
+
+        <<participant_info_loop>>
+        for i in 0 .. l_participants.get_size - 1 loop
+          l_participant := treat(l_participants.get(i) as json_object_t);
+
+          l_participant_info := l_participant_info || 'Agent Code: ' || l_participant.get_string('agent_code') || ' - Description: ' ||
+            uc_ai_agents_api.get_agent(p_code => l_participant.get_string('agent_code')).description || chr(10);
+        end loop participant_info_loop;
+
+         l_current_state.put('available_agents', l_participant_info);
         
         <<ai_turn_loop>>
         while l_turn_count < l_max_turns loop
+          l_current_state.put('chat_history', uc_ai_toon.to_toon(l_conversation));
           -- Ask moderator who should speak next
-          l_agent_input := json_object_t();
-          l_agent_input.put('conversation_history', l_conversation);
-          l_agent_input.put('available_agents', l_participants);
-          l_agent_input.put('task', 'Decide which agent should speak next and what they should address');
-          l_agent_input.put('original_request', p_input_params);
+          l_agent_input := uc_ai_agent_workflow_api.map_inputs(l_moderator_input, l_current_state);
           
           l_mod_result := uc_ai_agents_api.execute_agent(
-            p_agent_code       => l_moderator,
+            p_agent_code       => l_moderator_code,
             p_input_parameters => l_agent_input,
             p_session_id       => p_session_id,
-            p_parent_exec_id   => p_exec_id
+            p_parent_exec_id   => p_exec_id,
+            p_response_schema  => json_object_t(
+             '{
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "next_speaker": {
+                    "type": "object",
+                    "properties": {
+                      "agent_code": {
+                        "type": "string",
+                        "description": "Code of the agent which should speak next"
+                      },
+                      "moderator_rationale": {
+                        "type": "string",
+                        "description": "Your reasoning on why you picked this agent. One sentence."
+                      }
+                    },
+                    "required": [
+                      "agent_code",
+                      "moderator_rationale"
+                    ]
+                  },
+                  "discussion_complete": {
+                    "type": "boolean",
+                    "description": "Set to true if you think the discussion should end as a decision has been reached or sufficient information has been gathered."
+                  }
+                },
+                "required": [
+                  "next_speaker",
+                  "discussion_complete"
+                ]
+              }'
+            )
           );
+          l_mod_result := l_mod_result.get_object('final_message');
           
           -- Check if moderator says we're done
           if l_mod_result.has('discussion_complete') and l_mod_result.get_boolean('discussion_complete') then
@@ -832,16 +892,35 @@ end;!';
           end if;
           
           -- Get next speaker from moderator
-          l_next_speaker := l_mod_result.get_object('next_speaker');
-          if l_next_speaker is null then
+          if not l_mod_result.has('next_speaker') or l_mod_result.get_object('next_speaker') is null then
             uc_ai_logger.log_warn('Moderator did not specify next speaker, ending conversation', l_scope);
             exit ai_turn_loop;
           end if;
-          
-          -- Execute the chosen agent
-          l_agent_input := l_current_state.clone;
-          l_agent_input.put('conversation_history', l_conversation);
-          l_agent_input.put('directive', l_next_speaker.get_string('directive'));
+
+          l_next_speaker := l_mod_result.get_object('next_speaker');
+          <<find_participant_loop>>
+          for i in 0 .. l_participants.get_size - 1 loop 
+            l_participant := treat(l_participants.get(i) as json_object_t);
+            if l_participant.get_string('agent_code') = l_next_speaker.get_string('agent_code') then
+              exit find_participant_loop;
+            else
+              l_participant := null;
+            end if;
+          end loop find_participant_loop;
+
+          if l_participant is null then
+            uc_ai_logger.log_error('Next speaker agent code "' || l_next_speaker.get_string('agent_code') || '" not found among participants, ending conversation', l_scope);
+            raise_application_error(-20013, 'Next speaker agent code "' || l_next_speaker.get_string('agent_code') || '" not found among participants');
+          end if;
+
+          l_current_state.put('agent_description', l_agent_descr_map.get_string(l_participant.get_string('agent_code')));
+          l_current_state.put('chat_history', uc_ai_toon.to_toon(l_conversation));
+          l_current_state.put('role', l_participant.get_string('role'));
+          l_current_state.put('moderator_rationale', l_next_speaker.get_string('moderator_rationale'));
+
+          l_input_mapping := l_participant.get_object('input_mapping');
+          -- Prepare input with conversation history
+          l_agent_input := uc_ai_agent_workflow_api.map_inputs(l_input_mapping, l_current_state);
           
           l_result := uc_ai_agents_api.execute_agent(
             p_agent_code       => l_next_speaker.get_string('agent_code'),
@@ -850,15 +929,16 @@ end;!';
             p_parent_exec_id   => p_exec_id
           );
           
+
+          l_conv_obj := json_object_t();
+          l_conv_obj.put('agent', l_next_speaker.get_string('agent_code'));
+          l_conv_obj.put('role', l_agent_input.get_string('role'));
+          l_conv_obj.put('message', l_result.get_string('final_message'));
+          l_conv_obj.put('turn', l_turn_count);
           -- Add to conversation
-          l_conversation.append(json_object_t(
-            json_object(
-              'agent' value l_next_speaker.get_string('agent_code'),
-              'directive' value l_next_speaker.get_string('directive'),
-              'message' value l_result.get_string('final_message'),
-              'turn' value l_turn_count
-            )
-          ));
+          l_conversation.append(l_conv_obj);
+
+          uc_ai_logger.log('Turn ' || l_turn_count || ' - Agent ' || l_next_speaker.get_string('agent_code') || ' spoke.', l_scope, 'Conversation:' || l_conversation.to_clob);
           
           -- Manage history
           l_conversation := uc_ai_agent_workflow_api.manage_history(
@@ -867,6 +947,15 @@ end;!';
           
           l_turn_count := l_turn_count + 1;
         end loop ai_turn_loop;
+
+        l_agent_input := uc_ai_agent_workflow_api.map_inputs(l_moderator_summary_input, l_current_state);
+        -- Get final summary from moderator
+        l_mod_result := uc_ai_agents_api.execute_agent(
+          p_agent_code       => l_moderator_code,
+          p_input_parameters => l_agent_input,
+          p_session_id       => p_session_id,
+          p_parent_exec_id   => p_exec_id
+        );
         
       else
         uc_ai_logger.log_error('Unknown conversation mode: ' || l_mode, l_scope);
@@ -878,7 +967,7 @@ end;!';
     l_return.put('conversation', l_conversation);
     l_return.put('turns', l_turn_count);
     l_return.put('completed', true);
-    l_return.put('final_message', l_result.get_string('final_message'));
+    l_return.put('final_message', l_mod_result.get_string('final_message'));
 
     return l_return;
   exception

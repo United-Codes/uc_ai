@@ -797,7 +797,11 @@ create or replace package body uc_ai_prompt_profiles_api as
     apply_model_config(l_config, l_provider);
     
     -- Parse response schema if provided
-    if l_profile.response_schema is not null then
+    -- Agents can override the response schema in the config JSON
+    -- this is not documented for normal use as the column should be used
+    if l_config is not null and l_config.has('response_schema') and l_config.get('response_schema').is_object then
+      l_response_schema := treat(l_config.get('response_schema') as json_object_t);
+    elsif l_profile.response_schema is not null then
       l_response_schema := json_object_t.parse(l_profile.response_schema);
     end if;
     
