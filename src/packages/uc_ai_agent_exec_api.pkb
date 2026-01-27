@@ -698,38 +698,66 @@ end;!';
     l_mode            varchar2(50 char);
     l_participants    json_array_t;
     l_participant     json_object_t;
+    l_conv_obj        json_object_t;
     l_conversation    json_array_t := json_array_t();
     l_turn_count      number := 0;
     l_max_turns       number;
     l_current_state   json_object_t;
     l_agent_input     json_object_t;
     l_result          json_object_t;
-    l_completion      json_object_t;
+    l_termination     json_object_t;
+    l_term_type       varchar2(255 char);
+    l_term_keyword    varchar2(4000 char);
     l_history_mgmt    json_object_t;
     l_moderator       varchar2(255 char);
     l_mod_result      json_object_t;
     l_next_speaker    json_object_t;
     l_return          json_object_t;
+    l_input_mapping   json_object_t;
+    l_agent_descr_map json_object_t := json_object_t();
+    l_agent           uc_ai_agents%rowtype;
+
   begin
     uc_ai_logger.log('Executing conversation agent: ' || p_agent.code, l_scope);
     
     l_config := json_object_t.parse(p_agent.orchestration_config);
     l_mode := l_config.get_string('conversation_mode');
-    l_participants := l_config.get_array('participant_agents');
+    l_participants := l_config.get_array('agents');
     l_max_turns := coalesce(l_config.get_number('max_turns'), 10);
     
     if l_config.has('history_management') then
       l_history_mgmt := l_config.get_object('history_management');
     end if;
     
-    if l_config.has('completion_criteria') then
-      l_completion := l_config.get_object('completion_criteria');
+    if l_config.has('termination_condition') then
+      l_termination := l_config.get_object('termination_condition');
+      l_term_type := l_termination.get_string('type');
+
+      if l_term_type = 'keyword' then
+        l_term_keyword := l_termination.get_string('keyword');  
+      else
+        uc_ai_logger.log_warn('Unknown termination condition type: ' || l_term_type, l_scope);
+      end if;
     end if;
     
-    l_current_state := p_input_params;
-    if l_current_state is null then
-      l_current_state := json_object_t();
-    end if;
+    l_current_state := json_object_t();
+    l_current_state.put('input', p_input_params);
+
+    -- fill map of agent descriptions
+    -- so input mapping can be used with "$.agent_description"
+    <<fill_agent_descr_loop>>
+    for i in 0 .. l_participants.get_size - 1 loop
+      l_agent := uc_ai_agents_api.get_agent(
+        p_code => treat(l_participants.get(i) as json_object_t).get_string('agent_code')
+      );
+      l_agent_descr_map.put(l_agent.code, l_agent.description);
+    end loop fill_agent_descr_loop;
+
+    l_conv_obj := json_object_t();
+    l_conv_obj.put('agent', 'system');
+    l_conv_obj.put('message', p_input_params);
+    l_conv_obj.put('turn', l_turn_count);
+    l_conversation.append(l_conv_obj);
     
     case l_mode
       when c_conversation_round_robin then
@@ -739,11 +767,13 @@ end;!';
           <<participant_loop>>
           for i in 0 .. l_participants.get_size - 1 loop
             l_participant := treat(l_participants.get(i) as json_object_t);
-            
+            l_input_mapping := l_participant.get_object('input_mapping');
+
+            l_current_state.put('agent_description', l_agent_descr_map.get_string(l_participant.get_string('agent_code')));
             -- Prepare input with conversation history
-            l_agent_input := l_current_state.clone;
-            l_agent_input.put('conversation_history', l_conversation);
-            l_agent_input.put('your_role', l_participant.get_string('role'));
+            l_current_state.put('chat_history', uc_ai_toon.to_toon(l_conversation));
+            l_current_state.put('role', l_participant.get_string('role'));
+            l_agent_input := uc_ai_agent_workflow_api.map_inputs(l_input_mapping, l_current_state);
             
             -- Execute agent
             l_result := uc_ai_agents_api.execute_agent(
@@ -753,15 +783,13 @@ end;!';
               p_parent_exec_id   => p_exec_id
             );
             
+            l_conv_obj := json_object_t();
+            l_conv_obj.put('agent', l_participant.get_string('agent_code'));
+            l_conv_obj.put('role', l_agent_input.get_string('role'));
+            l_conv_obj.put('message', l_result.get_string('final_message'));
+            l_conv_obj.put('turn', l_turn_count);
             -- Add to conversation
-            l_conversation.append(json_object_t(
-              json_object(
-                'agent' value l_participant.get_string('agent_code'),
-                'role' value l_participant.get_string('role'),
-                'message' value l_result.get_string('final_message'),
-                'turn' value l_turn_count
-              )
-            ));
+            l_conversation.append(l_conv_obj);
             
             -- Manage history
             l_conversation := uc_ai_agent_workflow_api.manage_history(
@@ -769,10 +797,9 @@ end;!';
             );
             
             -- Check completion criteria
-            if l_completion is not null then
-              if l_result.has('discussion_complete') and l_result.get_boolean('discussion_complete') then
-                exit turn_loop;
-              end if;
+            if l_term_keyword is not null and l_conv_obj.get_string('message') like '%' || l_term_keyword || '%' then
+              uc_ai_logger.log('Termination keyword "' || l_term_keyword || '" found in agent response, ending conversation', l_scope);
+              exit turn_loop;
             end if;
           end loop participant_loop;
           
