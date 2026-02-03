@@ -1,7 +1,32 @@
 -- ============================================================================
 -- UC AI Migration: v25.7 to v26.1
--- Multi-Agent Systems Support
 -- ============================================================================
+
+create sequence uc_ai_prompt_profiles_seq;
+
+create table uc_ai_prompt_profiles (
+  id                     number default on null uc_ai_prompt_profiles_seq.nextval not null,
+  code                   varchar2(255 char)  not null,
+  version                number default on null 1 not null,
+  status                 varchar2(50 char) default on null 'draft' not null,
+  description            varchar2(4000 char) not null,
+
+  system_prompt_template clob not null,
+  user_prompt_template   clob not null,
+  provider               varchar2(512 char) not null,
+  model                  varchar2(512 char) not null,
+  model_config_json      clob,
+  response_schema        clob,
+  parameters_schema      clob,
+
+  created_by             varchar2(255 char) not null,
+  created_at             timestamp not null,
+  updated_by             varchar2(255 char) not null,
+  updated_at             timestamp not null,
+  constraint uc_ai_prompt_profiles_pk primary key (id),
+  constraint uc_ai_prompt_profiles_uk unique (code, version),
+  constraint uc_ai_prompt_profiles_status_ck check (status in ('draft', 'active', 'archived'))
+);
 
 -- ============================================================================
 -- AGENTS TABLE
@@ -101,7 +126,6 @@ create table uc_ai_agent_executions (
   -- Token and cost tracking
   total_input_tokens     number default on null 0 not null,
   total_output_tokens    number default on null 0 not null,
-  total_cost_usd         number(10,6) default on null 0 not null,
   
   started_at             timestamp not null,
   completed_at           timestamp,
@@ -124,7 +148,6 @@ comment on table uc_ai_agent_executions is 'Execution history and state for agen
 comment on column uc_ai_agent_executions.session_id is 'Groups related executions (use SYS_GUID)';
 comment on column uc_ai_agent_executions.total_input_tokens is 'Total input tokens across all AI calls';
 comment on column uc_ai_agent_executions.total_output_tokens is 'Total output tokens across all AI calls';
-comment on column uc_ai_agent_executions.total_cost_usd is 'Accumulated cost in USD across all AI calls';
 
 create or replace trigger uc_ai_agent_executions_bi
   before insert on uc_ai_agent_executions
@@ -133,27 +156,3 @@ begin
   :new.started_at := systimestamp;
 end uc_ai_agent_executions_bi;
 /
-
--- ============================================================================
--- TEMPORARY TOOLS TABLE (for orchestrator pattern)
--- ============================================================================
-
-create sequence uc_ai_temp_tools_seq;
-
-create table uc_ai_temp_tools (
-  id                     number default on null uc_ai_temp_tools_seq.nextval not null,
-  execution_id           number not null,
-  tool_id                number not null,
-  created_at             timestamp default on null systimestamp not null,
-  
-  constraint uc_ai_temp_tools_pk primary key (id),
-  constraint uc_ai_temp_tools_exec_fk foreign key (execution_id)
-    references uc_ai_agent_executions(id) on delete cascade,
-  constraint uc_ai_temp_tools_tool_fk foreign key (tool_id)
-    references uc_ai_tools(id) on delete cascade
-);
-
-create index uc_ai_temp_tools_exec_idx on uc_ai_temp_tools(execution_id);
-
-comment on table uc_ai_temp_tools is 'Tracks temporary tools created for orchestrator agent executions';
-

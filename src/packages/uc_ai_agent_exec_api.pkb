@@ -449,11 +449,7 @@ end;!';
       p_tags         => apex_t_varchar2(p_tool_tag),
       p_created_by   => 'UC_AI_AGENT_EXEC_API'
     );
-    
-    -- Track temporary tool for cleanup
-    insert into uc_ai_temp_tools (execution_id, tool_id)
-    values (p_exec_id, l_tool_id);
-    
+
     return l_tool_id;
   exception
     when others then

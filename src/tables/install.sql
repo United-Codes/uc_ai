@@ -234,7 +234,6 @@ create table uc_ai_agent_executions (
   -- Token and cost tracking
   total_input_tokens     number default on null 0 not null,
   total_output_tokens    number default on null 0 not null,
-  total_cost_usd         number(10,6) default on null 0 not null,
   
   started_at             timestamp not null,
   completed_at           timestamp,
@@ -252,25 +251,3 @@ create table uc_ai_agent_executions (
 create index uc_ai_agent_exec_session_idx on uc_ai_agent_executions(session_id);
 create index uc_ai_agent_exec_status_idx on uc_ai_agent_executions(status, started_at);
 create index uc_ai_agent_exec_agent_idx on uc_ai_agent_executions(agent_id);
-
-
--- ============================================================================
--- TEMPORARY TOOLS TABLE (for orchestrator pattern)
--- ============================================================================
-
-create sequence uc_ai_temp_tools_seq;
-
-create table uc_ai_temp_tools (
-  id                     number default on null uc_ai_temp_tools_seq.nextval not null,
-  execution_id           number not null,
-  tool_id                number not null,
-  created_at             timestamp default on null systimestamp not null,
-  
-  constraint uc_ai_temp_tools_pk primary key (id),
-  constraint uc_ai_temp_tools_exec_fk foreign key (execution_id)
-    references uc_ai_agent_executions(id) on delete cascade,
-  constraint uc_ai_temp_tools_tool_fk foreign key (tool_id)
-    references uc_ai_tools(id) on delete cascade
-);
-
-create index uc_ai_temp_tools_exec_idx on uc_ai_temp_tools(execution_id);
