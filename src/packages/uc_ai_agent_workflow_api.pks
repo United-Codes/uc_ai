@@ -45,15 +45,6 @@ create or replace package uc_ai_agent_workflow_api as
   /*
    * Maps input parameters based on input_mapping configuration
    *
-   * Supports two syntax styles:
-   * 1. Simple syntax (string): "param": "$.steps.step1.output"
-   * 2. Extended syntax (object): "param": {"path": "$.steps.step1.output", "optional": true, "default": "value"}
-   *
-   * Extended syntax options:
-   * - path (required): JSONPath expression to resolve
-   * - optional (boolean): If true, omits parameter when path doesn't exist. Default: false
-   * - default (any): Default value to use when path doesn't exist. Takes precedence over optional.
-   *
    * Use cases:
    * - Loop workflows where feedback from previous iteration may not exist in first iteration
    * - Conditional workflows where certain inputs may not always be available
