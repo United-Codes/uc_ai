@@ -14,6 +14,7 @@ create or replace package test_uc_ai_agent_workflow as
   procedure execute_sequential_workflow;
 
   --%test(Execute a loop workflow with max iterations)
+  -- currently not working/ check if it makes sense to fix
   procedure execute_loop_workflow;
 
   --%test(Execute a loop workflow with pre step)

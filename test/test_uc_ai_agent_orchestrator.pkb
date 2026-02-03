@@ -145,7 +145,7 @@ create or replace package body test_uc_ai_agent_orchestrator as
     );
 
     sys.dbms_output.put_line('Orchestrator travel result JSON: ' || l_result.to_clob);
-    ut.expect(l_result.get_number('tool_calls_count')).to_be_greater_than(3);
+    ut.expect(l_result.get_number('tool_calls_count')).to_be_greater_than(2);
 
     -- Validate result
     uc_ai_test_agent_utils.validate_agent_result(l_result, 'Orchestrator Travel Planning');

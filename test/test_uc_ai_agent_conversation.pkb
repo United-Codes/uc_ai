@@ -49,7 +49,8 @@ create or replace package body test_uc_ai_agent_conversation as
   procedure teardown
   as
   begin
-    uc_ai_test_agent_utils.cleanup_test_data;
+    null;
+    --uc_ai_test_agent_utils.cleanup_test_data;
   end teardown;
 
   procedure birthday_agents
@@ -147,7 +148,7 @@ create or replace package body test_uc_ai_agent_conversation as
       p_status               => uc_ai_agents_api.c_status_active
     );
 
-    ut.expect(l_conv_id).to_be_not_null();
+    ut.expect(l_conv_id, 'Conversation agent should have been created').to_be_not_null();
 
     -- Execute the conversation
     l_session_id := uc_ai_agents_api.generate_session_id;
@@ -163,11 +164,11 @@ create or replace package body test_uc_ai_agent_conversation as
     uc_ai_test_agent_utils.validate_agent_result(l_result, 'Round Robin Conversation');
 
     l_status := l_result.get_string('status');
-    ut.expect(l_status).to_equal(uc_ai_agents_api.c_exec_completed);
+    ut.expect(l_status, 'Execution status should be completed').to_equal(uc_ai_agents_api.c_exec_completed);
 
     l_final_msg := l_result.get_clob('final_message');
     sys.dbms_output.put_line('Conversation result: ' || l_final_msg);
-    ut.expect(l_final_msg).to_be_not_null();
+    ut.expect(l_final_msg, 'Final message should not be null').to_be_not_null();
   end execute_round_robin_conversation;
 
   procedure execute_ai_driven_conversation

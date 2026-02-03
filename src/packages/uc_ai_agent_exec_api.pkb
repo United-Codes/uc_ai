@@ -817,6 +817,12 @@ end;!';
           
           l_turn_count := l_turn_count + 1;
         end loop turn_loop;
+
+        l_return := json_object_t();
+        l_return.put('conversation', l_conversation);
+        l_return.put('turns', l_turn_count);
+        l_return.put('completed', true);
+        l_return.put('final_message', l_result.get_string('final_message'));
         
       when c_conversation_ai_driven then
         -- AI-driven (moderator) conversation
@@ -952,23 +958,26 @@ end;!';
           p_session_id       => p_session_id,
           p_parent_exec_id   => p_exec_id
         );
-        
+
+        uc_ai_logger.log('mod result - turn ' || l_turn_count, l_scope, l_mod_result.to_clob);
+
+        l_return := json_object_t();
+        l_return.put('conversation', l_conversation);
+        l_return.put('turns', l_turn_count);
+        l_return.put('completed', true);
+        l_return.put('final_message', l_mod_result.get_string('final_message'));
       else
         uc_ai_logger.log_error('Unknown conversation mode: ' || l_mode, l_scope);
         raise_application_error(-20012, 'Unknown conversation mode: ' || l_mode);
     end case;
     
     -- conversation_complete
-    l_return := json_object_t();
-    l_return.put('conversation', l_conversation);
-    l_return.put('turns', l_turn_count);
-    l_return.put('completed', true);
-    l_return.put('final_message', l_mod_result.get_string('final_message'));
+   
 
     return l_return;
   exception
     when others then
-      uc_ai_logger.log_error('Error executing conversation agent', l_scope);
+      uc_ai_logger.log_error('Error executing conversation agent', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end execute_conversation_agent;
 

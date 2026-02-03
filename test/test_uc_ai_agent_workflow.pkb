@@ -105,16 +105,17 @@ create or replace package body test_uc_ai_agent_workflow as
       "workflow_type": "sequential",
       "steps": [
         {
-          "agent_code": "' || gc_step1_agent_code || '",
+          "agent_code": "' || gc_haiku_creator_agent_code || '",
           "input_mapping": {
-            "question": "$.input.question"
+            "topic": "{$.input.topic}"
           },
           "output_key": "step1_result"
         },
         {
-          "agent_code": "' || gc_step2_agent_code || '",
+          "agent_code": "' || gc_haiku_translator_agent_code || '",
           "input_mapping": {
-            "text": "$.steps.step1_result"
+            "haiku": "{$.steps.step1_result}",
+            "language": "{$.input.language}"
           },
           "output_key": "step2_result"
         }
@@ -136,7 +137,7 @@ create or replace package body test_uc_ai_agent_workflow as
     l_session_id := uc_ai_agents_api.generate_session_id;
     l_result := uc_ai_agents_api.execute_agent(
       p_agent_code       => gc_seq_workflow_code,
-      p_input_parameters => json_object_t('{"question": "What is 7 + 8?"}'),
+      p_input_parameters => json_object_t('{"topic": "Nature", "language": "french"}'),
       p_session_id       => l_session_id
     );
 
@@ -158,13 +159,6 @@ create or replace package body test_uc_ai_agent_workflow as
      where session_id = l_session_id;
     
     ut.expect(l_exec_count, 'Should have recorded multiple executions').to_be_greater_than(1);
-
-    SELECT JSON_ARRAYAGG(JSON_OBJECT(*)) AS json_data 
-      into l_agent_data 
-      from uc_ai_agent_executions 
-     where session_id = l_session_id;
-
-    sys.dbms_output.put_line('Agent execution data: ' || json_serialize(l_agent_data));
   end execute_sequential_workflow;
 
   procedure execute_loop_workflow
