@@ -1,0 +1,242 @@
+---
+title: Orchestrator (Autonomous)
+description: Use a central AI agent to autonomously delegate tasks to specialized agents
+sidebar:
+  order: 30
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**The orchestrator pattern uses a central AI agent that autonomously decides which specialized agents to delegate to and in what order.**
+
+Delegate agents are exposed as [tools](/products/uc-ai/docs/guides/tools/) that the orchestrator can call. This is the most flexible pattern - the AI itself decides the execution flow based on the task.
+
+## How it works
+
+1. UC AI registers each delegate agent as a temporary tool for the orchestrator
+2. The orchestrator's prompt profile provides instructions on how to coordinate the delegates
+3. The orchestrator AI decides which agents to call, in what order, and with what parameters
+4. Each delegation executes the referenced agent and returns its result
+5. The orchestrator synthesizes the results into a final answer
+6. Temporary tools are cleaned up after execution
+
+## Example: travel planner
+
+This example shows an orchestrator that coordinates calendar, flight, and hotel agents to plan a business trip.
+
+### Step 1: Create prompt profiles
+
+Each agent needs a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/) with instructions, provider, and model configuration.
+
+Note that in real life the agents would have access to some external data source or API. Here we hardcode the data in the system prompt for simplicity.
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+BEGIN
+  -- Calendar agent: knows the user's schedule
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'calendar_agent_profile',
+    p_description           => 'Provides calendar and scheduling information',
+    p_system_prompt_template => 'You have access to the users calendar.
+Schedule:
+- Monday 12.01: 8-11 AM Board Meeting (New York, non-reschedulable), 1-2 PM team lunch
+- Tuesday 13.01: 9 AM-12 PM Tech Conference (San Francisco, mandatory)
+- Wednesday 14.01: Free all day
+- Thursday 15.01: Free until 3 PM, 3-5 PM client call (remote, mandatory)
+Note: User is in New York, needs ~6 hours for cross-country travel to SF.
+Answer shortly and precisely.',
+    p_user_prompt_template  => 'Calendar query: {prompt}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  -- Flight booking agent: knows available flights
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'flight_booking_agent_profile',
+    p_description           => 'Provides flight booking options',
+    p_system_prompt_template => 'You are a flight booking assistant.
+Available flights JFK to SFO:
+1. AA123: 12 PM-3 PM, $450, Economy, American Airlines
+2. UA456: 2 PM-5 PM, $385, Economy, aisle, United Airlines
+3. DL789: 5 PM-8 PM, $520, Business, Delta
+4. B6999: 7 PM-10 PM, $340, Economy, Budget Air
+Return flights available 2 hours later same day.
+Return 3 best options based on preferences. No additional text.',
+    p_user_prompt_template  => 'Flight search: {prompt}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  -- Hotel booking agent: knows available hotels
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'hotel_booking_agent_profile',
+    p_description           => 'Provides hotel accommodation options',
+    p_system_prompt_template => 'You are a hotel booking assistant.
+Available hotels near SF Tech Conference:
+1. Grand Hyatt: 0.2 mi, $320/night, 4.5 stars
+2. Holiday Inn: 0.8 mi, $180/night, 3.8 stars
+3. Marriott Marquis: 0.5 mi, $280/night, 4.3 stars
+4. Airport Hotel Express: 15 mi, $120/night, 3.5 stars
+Return 3 best options based on preferences. No additional text.',
+    p_user_prompt_template  => 'Hotel search: {prompt}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  -- Orchestrator: coordinates the other agents
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'travel_planner_orchestrator',
+    p_description           => 'Orchestrates travel planning',
+    p_system_prompt_template => 'You are a travel planning coordinator.
+You have access to calendar, flight, and hotel booking agents.
+First check the calendar for constraints, then find flights and hotels that fit.
+Provide a recommended travel plan with reasoning.',
+    p_user_prompt_template  => '{prompt}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_5_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+<Aside type="tip">
+  Use a more capable model for the orchestrator (here GPT-5 Mini) since it needs
+  to reason about which agents to call. Delegate agents can use cheaper models
+  since they have narrower tasks.
+</Aside>
+
+### Step 2: Create delegate agents
+
+Each delegate agent wraps a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/) and needs an `input_schema` so the orchestrator knows what parameters to pass.
+
+```sql
+DECLARE
+  l_agent_id     NUMBER;
+  l_input_schema json_object_t;
+BEGIN
+  l_input_schema := json_object_t('{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "prompt": {
+        "type": "string",
+        "description": "The query or context for the agent"
+      }
+    },
+    "required": ["prompt"]
+  }');
+
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'calendar_agent',
+    p_description         => 'Provides calendar and scheduling information. Call this to check availability and scheduling constraints.',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'calendar_agent_profile',
+    p_status              => uc_ai_agents_api.c_status_active,
+    p_input_schema        => l_input_schema.to_clob
+  );
+
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'flight_booking_agent',
+    p_description         => 'Provides flight booking options between cities. Call this to search for available flights.',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'flight_booking_agent_profile',
+    p_status              => uc_ai_agents_api.c_status_active,
+    p_input_schema        => l_input_schema.to_clob
+  );
+
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'hotel_booking_agent',
+    p_description         => 'Provides hotel accommodation options near destinations. Call this to search for hotels.',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'hotel_booking_agent_profile',
+    p_status              => uc_ai_agents_api.c_status_active,
+    p_input_schema        => l_input_schema.to_clob
+  );
+END;
+/
+```
+
+<Aside type="note">
+  The `p_description` of each delegate agent is what the orchestrator AI sees
+  when deciding which agent to call. Write clear, specific descriptions - they
+  directly affect delegation accuracy.
+</Aside>
+
+### Step 3: Create the orchestrator
+
+```sql
+DECLARE
+  l_orchestrator_id NUMBER;
+  l_orch_config     CLOB;
+BEGIN
+  l_orch_config := '{
+    "pattern_type": "orchestrator",
+    "orchestrator_profile_code": "travel_planner_orchestrator",
+    "delegate_agents": [
+      "calendar_agent",
+      "flight_booking_agent",
+      "hotel_booking_agent"
+    ],
+    "max_delegations": 8
+  }';
+
+  l_orchestrator_id := uc_ai_agents_api.create_agent(
+    p_code                 => 'travel_planner',
+    p_description          => 'Plans travel by coordinating calendar, flights, and hotels',
+    p_agent_type           => uc_ai_agents_api.c_type_orchestrator,
+    p_orchestration_config => l_orch_config,
+    p_status               => uc_ai_agents_api.c_status_active
+  );
+END;
+/
+```
+
+### Step 4: Execute
+
+```sql
+DECLARE
+  l_result json_object_t;
+BEGIN
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'travel_planner',
+    p_input_parameters => json_object_t('{
+      "prompt": "I need to travel from New York to San Francisco for a tech conference on Tuesday. I have a board meeting Monday until 11 AM."
+    }'),
+    p_session_id       => uc_ai_agents_api.generate_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Plan: ' || l_result.get_clob('final_message'));
+  DBMS_OUTPUT.PUT_LINE('Agents called: ' || l_result.get_number('tool_calls_count'));
+END;
+/
+```
+
+The orchestrator AI will autonomously:
+
+1. Check the calendar for scheduling constraints
+2. Search for flights that fit after the Monday meeting
+3. Find hotels near the conference venue
+4. Synthesize everything into a recommended travel plan
+
+## Config reference
+
+| Field                       | Type   | Description                                   |
+| --------------------------- | ------ | --------------------------------------------- |
+| `pattern_type`              | String | Must be `"orchestrator"`                      |
+| `orchestrator_profile_code` | String | Prompt profile code for the orchestrator AI   |
+| `delegate_agents`           | Array  | List of agent codes the orchestrator can call |
+| `max_delegations`           | Number | Maximum number of agent calls allowed         |
+
+## Tips
+
+- **Give the orchestrator a plan**: In the orchestrator's system prompt, describe the strategy for using delegates. For example: "First check calendar constraints, then search flights, then hotels."
+- **Limit delegations**: Set `max_delegations` to prevent excessive calls. The orchestrator needs enough room to call all relevant agents but shouldn't loop endlessly.
+- **Use structured output on the orchestrator**: If you need the final answer in a specific format, add a response schema to the orchestrator's prompt profile.
+- **Input schemas matter**: The `input_schema` on delegate agents defines how the orchestrator calls them. A clear schema with good `description` fields helps the AI pass the right parameters.

@@ -1,0 +1,263 @@
+---
+title: Workflows
+description: Sequential and loop workflow patterns for deterministic multi-step agent pipelines
+sidebar:
+  order: 20
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**Workflows execute agents in a defined structure. The execution order is deterministic - you control exactly what happens and when.**
+
+Workflows reference [profile agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/) by their `agent_code` to create deterministic pipelines.
+
+## Sequential workflow
+
+Agents run one after another. The output of each step is stored under its `output_key` and available to subsequent steps via the `{$.steps.<output_key>}` syntax.
+
+```sql
+DECLARE
+  l_workflow_id  NUMBER;
+  l_session_id   VARCHAR2(100);
+  l_result       json_object_t;
+  l_workflow_def CLOB;
+BEGIN
+  -- Define the workflow
+  l_workflow_def := '{
+    "workflow_type": "sequential",
+    "steps": [
+      {
+        "agent_code": "math_agent",
+        "input_mapping": {
+          "question": "{$.input.question}"
+        },
+        "output_key": "step1_result"
+      },
+      {
+        "agent_code": "summarizer_agent",
+        "input_mapping": {
+          "text": "{$.steps.step1_result}"
+        },
+        "output_key": "step2_result"
+      }
+    ]
+  }';
+
+  -- Create the workflow agent
+  l_workflow_id := uc_ai_agents_api.create_agent(
+    p_code                => 'math_summary_pipeline',
+    p_description         => 'Solves a math question then summarizes the answer',
+    p_agent_type          => uc_ai_agents_api.c_type_workflow,
+    p_workflow_definition => l_workflow_def,
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+
+  -- Execute
+  l_session_id := uc_ai_agents_api.generate_session_id;
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'math_summary_pipeline',
+    p_input_parameters => json_object_t('{"question": "What is 7 + 8?"}'),
+    p_session_id       => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Result: ' || l_result.get_clob('final_message'));
+END;
+/
+```
+
+**How it works:**
+
+1. `math_agent` receives `{"question": "What is 7 + 8?"}` from the input
+2. Its output is stored under `step1_result`
+3. `summarizer_agent` receives `{"text": "<math agent's response>"}` from the previous step's output
+4. The final result is the output of the last step
+
+## Loop workflow
+
+Agents run in a loop until an exit condition is met or the maximum number of iterations is reached. This is useful for iterative refinement where you want to keep improving output until it meets a quality bar.
+
+```sql
+DECLARE
+  l_workflow_id  NUMBER;
+  l_result       json_object_t;
+  l_workflow_def CLOB;
+BEGIN
+  l_workflow_def := '{
+    "workflow_type": "loop",
+    "pre_steps": [
+      {
+        "agent_code": "haiku_creator_agent",
+        "input_mapping": {
+          "topic": "{$.input.topic}"
+        },
+        "output_key": "current_haiku"
+      }
+    ],
+    "steps": [
+      {
+        "agent_code": "haiku_rater_agent",
+        "input_mapping": {
+          "haiku": "{$.steps.current_haiku}",
+          "topic": "{$.input.topic}"
+        },
+        "output_key": "haiku_rating"
+      },
+      {
+        "agent_code": "haiku_improver_agent",
+        "input_mapping": {
+          "topic": "{$.input.topic}",
+          "feedback": "{$.steps.haiku_rating.rating_feedback}",
+          "haiku": "{$.steps.current_haiku}"
+        },
+        "output_key": "current_haiku"
+      }
+    ],
+    "post_steps": [
+      {
+        "agent_code": "haiku_translator_agent",
+        "input_mapping": {
+          "language": "german",
+          "haiku": "{$.steps.current_haiku}"
+        },
+        "output_key": "translated_haiku"
+      }
+    ],
+    "loop_config": {
+      "max_iterations": 3,
+      "exit_condition": "{$.steps.haiku_rating.quality} >= 8"
+    },
+    "final_message": "{$.steps.translated_haiku}"
+  }';
+
+  l_workflow_id := uc_ai_agents_api.create_agent(
+    p_code                => 'haiku_refinement',
+    p_description         => 'Creates, refines, and translates a haiku',
+    p_agent_type          => uc_ai_agents_api.c_type_workflow,
+    p_workflow_definition => l_workflow_def,
+    p_max_iterations      => 3,
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'haiku_refinement',
+    p_input_parameters => json_object_t('{"topic": "Star Wars"}'),
+    p_session_id       => uc_ai_agents_api.generate_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Final haiku: ' || l_result.get_clob('final_message'));
+END;
+/
+```
+
+**How it works:**
+
+1. **Pre-steps** run once before the loop: the haiku creator generates an initial haiku
+2. **Loop steps** repeat: the rater scores the haiku, then the improver refines it based on feedback
+3. The loop exits when `quality >= 8` or after 3 iterations
+4. **Post-steps** run once after the loop: the translator converts the final haiku to German
+5. `final_message` defines which step output becomes the overall result
+
+<Aside type="tip">
+  Use `pre_steps` to generate an initial artifact and `post_steps` for final
+  processing. The loop `steps` then focus purely on the evaluate-and-improve
+  cycle.
+</Aside>
+
+### Using structured output for exit conditions
+
+Loop exit conditions typically depend on a structured value from an agent's response. The haiku rater above returns a JSON object with `quality` and `rating_feedback` fields via a [response schema](/products/uc-ai/docs/guides/structured_output/):
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+  l_schema CLOB := '{
+    "type": "object",
+    "properties": {
+      "quality": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 10,
+        "description": "Quality rating from 1 to 10"
+      },
+      "rating_feedback": {
+        "type": "string",
+        "description": "One-sentence feedback for improvement"
+      }
+    },
+    "required": ["quality", "rating_feedback"]
+  }';
+BEGIN
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'haiku_rater_profile',
+    p_description           => 'Rates haikus on a 1-10 scale',
+    p_system_prompt_template => 'You are a haiku critic. Rate haikus based on form, imagery, and emotional impact.',
+    p_user_prompt_template  => 'Rate this haiku about "{topic}": {haiku}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_response_schema       => l_schema,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+The workflow references the structured fields directly:
+
+```json
+"exit_condition": "{$.steps.haiku_rating.quality} >= 8"
+```
+
+### Loop without pre/post steps
+
+For simpler loops, you can put everything in `steps` and use the `optional` flag to handle the first iteration where feedback doesn't exist yet:
+
+```json
+{
+  "workflow_type": "loop",
+  "steps": [
+    {
+      "agent_code": "haiku_creator_agent",
+      "input_mapping": {
+        "topic": "{$.input.topic}",
+        "feedback": {
+          "path": "{$.steps.haiku_rating.rating_feedback}",
+          "optional": true
+        }
+      },
+      "output_key": "haiku_result"
+    },
+    {
+      "agent_code": "haiku_rater_agent",
+      "input_mapping": {
+        "haiku": "{$.steps.haiku_result}",
+        "topic": "{$.input.topic}"
+      },
+      "output_key": "haiku_rating"
+    }
+  ],
+  "loop_config": {
+    "max_iterations": 3,
+    "exit_condition": "{$.steps.haiku_rating.quality} >= 8"
+  }
+}
+```
+
+In the first iteration, `feedback` doesn't exist yet so it is omitted. From the second iteration onwards, the rater's feedback is passed to the creator.
+
+## Input mapping reference
+
+A string value that resolves a path from the workflow state:
+
+```json
+"question": "{$.input.question}"
+```
+
+### Available paths
+
+| Path                             | Description                                      |
+| -------------------------------- | ------------------------------------------------ |
+| `{$.input.*}`                    | Original input parameters passed to the workflow |
+| `{$.steps.<output_key>}`         | Full output of a previous step                   |
+| `{$.steps.<output_key>.<field>}` | Specific field from a step's structured output   |

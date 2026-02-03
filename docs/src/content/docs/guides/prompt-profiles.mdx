@@ -185,9 +185,7 @@ DECLARE
   l_profile_id NUMBER;
   l_config CLOB := '{
     "g_enable_reasoning": true,
-    "g_reasoning_level": "high",
-    "g_temperature": 0.7,
-    "g_max_tokens": 1000
+    "g_reasoning_level": "high"
   }';
 BEGIN
   l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
@@ -255,7 +253,6 @@ Example with provider-specific settings:
 ```json
 {
   "g_enable_reasoning": true,
-  "g_reasoning_level": "high",
   "anthropic": {
     "g_max_tokens": 2000,
     "g_reasoning_budget_tokens": 5000
@@ -465,7 +462,6 @@ BEGIN
   l_params.put('text', 'Some text');
 
   -- Override configuration
-  l_override_config.put('g_temperature', 0.9);
   l_override_config.put('g_max_tokens', 2000);
 
   l_result := uc_ai_prompt_profiles_api.execute_profile(
