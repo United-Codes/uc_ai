@@ -45,11 +45,22 @@ create or replace package uc_ai_structured_output as
   ) return json_object_t;
 
   /*
+   * Convert a standard JSON schema to Anthropic format for structured output
+   *
+   * p_schema: Standard JSON schema as json_object_t
+   *
+   * Returns: Anthropic output_config object with format.type = 'json_schema'
+   */
+  function to_anthropic_format(
+    p_schema in json_object_t
+  ) return json_object_t;
+
+  /*
    * Convert a standard JSON schema to Responses API format for structured output
-   * 
+   *
    * p_schema: Standard JSON schema as json_object_t
    * p_strict: Whether to use strict mode (OpenAI-specific)
-   * 
+   *
    * Returns: Responses API-formatted response_format object
    */
   function to_responses_api_format(

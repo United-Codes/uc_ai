@@ -9,6 +9,7 @@ The UC AI Anthropic package provides integration with Anthropic's Claude models,
 
 - Support for latest Claude models (Opus, Sonnet, Haiku)
 - Full function calling (tools) support
+- Structured output (JSON schema-based responses)
 - Advanced reasoning capabilities with Extended Thinking
 - Multi-modal support (text, images, PDFs)
 - Streaming responses
@@ -107,6 +108,53 @@ uc_ai_anthropic.g_max_tokens := 32768;
 All Claude models support tools/function calling. You can define tools in your application and Claude will call them as needed.
 
 See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to set up and use tools.
+
+### Structured Output
+
+Claude models support structured output, allowing you to constrain responses to a specific JSON schema. UC AI automatically converts your schema to the format required by Anthropic's API. See Anthropic's [structured output documentation](https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs) for model support and best practices.
+
+```sql
+declare
+  l_result json_object_t;
+  l_schema json_object_t;
+  l_structured_output json_object_t;
+begin
+  l_schema := json_object_t(q'#{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "title": "Simple AI Response",
+    "properties": {
+      "response": {
+        "type": "string",
+        "description": "The generated response text"
+      },
+      "confidence": {
+        "type": "number",
+        "description": "Confidence score between 0 and 1"
+      }
+    },
+    "required": ["response", "confidence"]
+  }#');
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'What is the capital of France? Please respond with confidence.',
+    p_system_prompt => 'You are a helpful assistant that provides accurate information.',
+    p_provider => uc_ai.c_provider_anthropic,
+    p_model => uc_ai_anthropic.c_model_claude_4_5_haiku,
+    p_response_json_schema => l_schema
+  );
+
+  l_structured_output := json_object_t(l_result.get_clob('final_message'));
+
+  dbms_output.put_line('Response: ' || l_structured_output.get_string('response'));
+  dbms_output.put_line('Confidence: ' || l_structured_output.get_number('confidence'));
+  -- Response: The capital of France is Paris.
+  -- Confidence: 1
+end;
+/
+```
+
+See the [structured output guide](/products/uc-ai/docs/guides/structured_output/) for more details.
 
 ### Multi-modal Analysis
 

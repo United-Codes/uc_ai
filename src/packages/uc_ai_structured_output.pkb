@@ -228,6 +228,90 @@ create or replace package body uc_ai_structured_output as
     return l_schema_copy;
   end to_ollama_format;
 
+  /*
+   * Recursively remove unsupported constraints from a schema for Anthropic.
+   * Anthropic does not support: minimum, maximum, exclusiveMinimum, exclusiveMaximum,
+   * multipleOf, minLength, maxLength, minItems, maxItems, uniqueItems
+   */
+  function strip_unsupported_constraints(p_schema in json_object_t) return json_object_t
+  as
+    l_result json_object_t := json_object_t(p_schema.to_clob);
+    l_properties json_object_t;
+    l_processed_properties json_object_t := json_object_t();
+    l_items json_object_t;
+    l_property_name_arr json_key_list;
+    l_property_name varchar2(4000 char);
+    l_property_value json_object_t;
+  begin
+    -- Remove numerical constraints
+    l_result.remove('minimum');
+    l_result.remove('maximum');
+    l_result.remove('exclusiveMinimum');
+    l_result.remove('exclusiveMaximum');
+    l_result.remove('multipleOf');
+
+    -- Remove string constraints
+    l_result.remove('minLength');
+    l_result.remove('maxLength');
+
+    -- Remove array constraints
+    l_result.remove('maxItems');
+    l_result.remove('uniqueItems');
+
+    -- Recursively process nested properties
+    if l_result.has('properties') then
+      l_properties := l_result.get_object('properties');
+      l_property_name_arr := l_properties.get_keys();
+
+      <<property_loop>>
+      for i in 1 .. l_property_name_arr.count loop
+        l_property_name := l_property_name_arr(i);
+        l_property_value := l_properties.get_object(l_property_name);
+        l_processed_properties.put(l_property_name, strip_unsupported_constraints(l_property_value));
+      end loop property_loop;
+
+      l_result.put('properties', l_processed_properties);
+    end if;
+
+    -- Recursively process array items
+    if l_result.has('items') then
+      l_items := l_result.get_object('items');
+      l_result.put('items', strip_unsupported_constraints(l_items));
+    end if;
+
+    return l_result;
+  end strip_unsupported_constraints;
+
+  /*
+   * Convert a standard JSON schema to Anthropic format for structured output
+   * Anthropic uses output_config: { format: { type: "json_schema", schema: {...} } }
+   */
+  function to_anthropic_format(
+    p_schema in json_object_t
+  ) return json_object_t
+  as
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'to_anthropic_format';
+    l_output_config json_object_t := json_object_t();
+    l_format json_object_t := json_object_t();
+    l_schema_copy json_object_t;
+  begin
+    uc_ai_logger.log('Converting schema to Anthropic format', l_scope);
+
+    -- Process schema for strict mode (additionalProperties false, remove $schema/title/description)
+    l_schema_copy := process_openai_strict_schema(p_schema);
+
+    -- Additionally strip constraints unsupported by Anthropic (minimum, maximum, minLength, etc.)
+    l_schema_copy := strip_unsupported_constraints(l_schema_copy);
+
+    l_format.put('type', 'json_schema');
+    l_format.put('schema', l_schema_copy);
+
+    l_output_config.put('format', l_format);
+
+    uc_ai_logger.log('Anthropic format conversion complete', l_scope, l_output_config.to_clob);
+    return l_output_config;
+  end to_anthropic_format;
+
  /*
    * Convert a standard JSON schema to Responses API format for structured output
    */
@@ -288,6 +372,8 @@ create or replace package body uc_ai_structured_output as
         l_result := to_google_format(p_schema);
       when uc_ai.c_provider_ollama then
         l_result := to_ollama_format(p_schema);
+      when uc_ai.c_provider_anthropic then
+        l_result := to_anthropic_format(p_schema);
       else
         uc_ai_logger.log_error('Unsupported provider for structured output: ' || p_provider, l_scope);
         raise_application_error(-20999, 'Provider ' || p_provider || ' does not support structured output');

@@ -559,6 +559,7 @@ create or replace package body uc_ai_anthropic as
     p_messages       in json_array_t
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
+  , p_schema         in json_object_t default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_with_messages';
@@ -570,6 +571,7 @@ create or replace package body uc_ai_anthropic as
     l_result             json_object_t;
     l_message            json_object_t;
     l_reasoning_tokens   pls_integer;
+    l_output_config      json_object_t;
   begin
     l_result := json_object_t();
     uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
@@ -625,6 +627,14 @@ create or replace package body uc_ai_anthropic as
       uc_ai_logger.log_info('Using reasoning with budget tokens: ' || l_reasoning_tokens, l_scope);
       l_reasoning.put('budget_tokens', l_reasoning_tokens);
       l_input_obj.put('thinking', l_reasoning);
+    end if;
+
+    -- Add structured output format if schema is provided
+    if p_schema is not null then
+      l_output_config := uc_ai_structured_output.to_anthropic_format(
+        p_schema => p_schema
+      );
+      l_input_obj.put('output_config', l_output_config);
     end if;
 
     if g_max_tokens < l_reasoning_tokens then
