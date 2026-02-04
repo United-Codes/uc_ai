@@ -30,6 +30,9 @@ PROMPT - Installing API package specifications...
 @@src/packages/uc_ai_structured_output.pks
 @@src/packages/uc_ai_logger.pks
 @@src/packages/uc_ai_toon.pks
+@@src/packages/uc_ai_agents_api.pks
+@@src/packages/uc_ai_agent_exec_api.pks
+@@src/packages/uc_ai_agent_workflow_api.pks
 
 PROMPT - Installing AI provider package specifications...
 @@src/packages/uc_ai_anthropic.pks
@@ -39,6 +42,7 @@ PROMPT - Installing AI provider package specifications...
 @@src/packages/uc_ai_openai.pks
 @@src/packages/uc_ai_xai.pks
 @@src/packages/uc_ai_openrouter.pks
+@@src/packages/uc_ai_responses_api.pks
 
 PROMPT Installing package bodies (implementations)...
 PROMPT - Installing API package bodies...
@@ -48,12 +52,16 @@ PROMPT - Installing API package bodies...
 @@src/packages/uc_ai_structured_output.pkb
 @@src/packages/uc_ai_logger.pkb
 @@src/packages/uc_ai_toon.pkb
+@@src/packages/uc_ai_agents_api.pkb
+@@src/packages/uc_ai_agent_exec_api.pkb
+@@src/packages/uc_ai_agent_workflow_api.pkb
 PROMPT - Installing AI provider package bodies...
 @@src/packages/uc_ai_anthropic.pkb
 @@src/packages/uc_ai_google.pkb
 @@src/packages/uc_ai_oci.pkb
 @@src/packages/uc_ai_ollama.pkb
 @@src/packages/uc_ai_openai.pkb
+@@src/packages/uc_ai_responses_api.pkb
 PROMPT - Installing core UC AI package body...
 @@src/packages/uc_ai.pkb
 
