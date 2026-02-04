@@ -24,15 +24,12 @@ create or replace package body uc_ai as
         , p_schema         => p_response_json_schema
         );
       when c_provider_anthropic then
-        if p_response_json_schema is not null then
-          raise_application_error(-20001, 'Provider ' || p_provider || ' does not support structured output');
-        else
-          l_result := uc_ai_anthropic.generate_text(
-            p_messages       => p_messages
-          , p_model          => p_model
-          , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
-          );
-        end if;
+        l_result := uc_ai_anthropic.generate_text(
+          p_messages       => p_messages
+        , p_model          => p_model
+        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+        , p_schema         => p_response_json_schema
+        );
       when c_provider_google then
         l_result := uc_ai_google.generate_text(
           p_messages       => p_messages
