@@ -465,22 +465,18 @@ end;!';
    * Cleans up temporary tools created for an execution
    */
   procedure cleanup_agent_tools(
-    p_exec_id in uc_ai_agent_executions.id%type
+    p_tool_ids in apex_t_number
   )
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'cleanup_agent_tools';
   begin
-    uc_ai_logger.log('Cleaning up temporary tools for execution: ' || p_exec_id, l_scope);
-    
+    uc_ai_logger.log('Cleaning up ' || p_tool_ids.count || ' temporary tools', l_scope);
+
     -- Delete tools (cascade will handle parameters and tags)
     delete from uc_ai_tools
     where id in (
-      select t.tool_id
-      from uc_ai_temp_tools t
-      where t.execution_id = p_exec_id
+      select t.column_value from table(p_tool_ids) t
     );
-    
-    -- Temp tools records will be deleted by cascade
   exception
     when others then
       uc_ai_logger.log_error('Error cleaning up agent tools', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
@@ -568,14 +564,14 @@ end;!';
       when others then
         -- Always cleanup, even on error
         uc_ai_logger.log_error('Error during orchestrator execution', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
-        cleanup_agent_tools(p_exec_id);
+        cleanup_agent_tools(l_tool_ids);
         --uc_ai.g_enable_tools := l_original_tools;
         --uc_ai.g_tool_tags := l_original_tags;
         raise;
     end;
-    
+
     -- Cleanup temporary tools
-    cleanup_agent_tools(p_exec_id);
+    cleanup_agent_tools(l_tool_ids);
     
     -- Restore original settings
     uc_ai.g_enable_tools := l_original_tools;

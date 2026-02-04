@@ -142,16 +142,6 @@ create or replace package uc_ai_agent_exec_api as
   ) return uc_ai_tools.id%type;
 
 
-  /*
-   * Cleans up temporary tools created for an execution
-   *
-   * @param p_exec_id Execution ID to clean up tools for
-   */
-  procedure cleanup_agent_tools(
-    p_exec_id in uc_ai_agent_executions.id%type
-  );
-
-
   procedure create_apex_session_if_needed;
 
 end uc_ai_agent_exec_api;
