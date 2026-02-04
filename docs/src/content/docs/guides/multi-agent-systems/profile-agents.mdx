@@ -1,0 +1,159 @@
+---
+title: Profile Agents
+description: Wrap prompt profiles as trackable, composable agents
+sidebar:
+  order: 10
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**A profile agent is the simplest agent type. It wraps a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/) and executes it when called.**
+
+On the surface, running a profile agent produces the same AI response as calling `uc_ai_prompt_profiles_api.execute_profile` directly. The difference is what happens around the call:
+
+- **Execution tracking**: Every call is logged in the `uc_ai_agent_executions` table with status, token counts, and timing. This gives you an audit trail and makes debugging straightforward.
+- **Session grouping**: Use a session ID to group related agent calls together, so you can trace an entire multi-step process as one unit.
+- **Composability**: Profile agents can be referenced by [workflows](/products/uc-ai/docs/guides/multi-agent-systems/workflows/), [orchestrators](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/), and [conversations](/products/uc-ai/docs/guides/multi-agent-systems/conversations/). They are the building blocks that all other patterns compose.
+
+## Creating a profile agent
+
+First, create a prompt profile (or use an existing one):
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+BEGIN
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'GEO_ASSISTANT',
+    p_description           => 'Answers geography questions',
+    p_system_prompt_template => 'You are a geography assistant. Answer in one short sentence.',
+    p_user_prompt_template  => '{question}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+Then wrap it in an agent:
+
+```sql
+DECLARE
+  l_agent_id NUMBER;
+BEGIN
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'geo_agent',
+    p_description         => 'Answers geography questions in one sentence',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'GEO_ASSISTANT',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+END;
+/
+```
+
+<Aside type="note">
+  By default, the agent uses the **latest active version** of the referenced
+  prompt profile. You can pin it to a specific version with
+  `p_prompt_profile_version`.
+</Aside>
+
+## Executing a profile agent
+
+```sql
+DECLARE
+  l_result     json_object_t;
+  l_params     json_object_t := json_object_t();
+  l_session_id VARCHAR2(100);
+BEGIN
+  l_session_id := uc_ai_agents_api.generate_session_id;
+  l_params.put('question', 'What is the capital of France?');
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'geo_agent',
+    p_input_parameters => l_params,
+    p_session_id       => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Answer: ' || l_result.get_clob('final_message'));
+END;
+/
+```
+
+The `p_input_parameters` are passed as prompt profile parameters - each key maps to a `{placeholder}` in the profile templates.
+
+## Execution tracking
+
+Every call to `execute_agent` creates a row in `uc_ai_agent_executions`. You can query this table to see what happened:
+
+```sql
+SELECT ae.id,
+       a.code AS agent_code,
+       ae.status,
+       ae.total_input_tokens,
+       ae.total_output_tokens,
+       ae.started_at,
+       ae.completed_at
+  FROM uc_ai_agent_executions ae
+  JOIN uc_ai_agents a ON a.id = ae.agent_id
+ WHERE ae.session_id = :session_id
+ ORDER BY ae.started_at;
+```
+
+This is especially useful when profile agents are composed into larger patterns. A workflow with three profile agent steps produces three execution rows under the same session, so you can see exactly which step took the most tokens or failed.
+
+## Profile agents as building blocks
+
+Profile agents become powerful when composed into other patterns. Every [workflow step](/products/uc-ai/docs/guides/multi-agent-systems/workflows/), [orchestrator delegate](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/), and [conversation participant](/products/uc-ai/docs/guides/multi-agent-systems/conversations/) is ultimately a profile agent.
+
+For example, a sequential workflow references profile agents by their agent code:
+
+```json
+{
+  "workflow_type": "sequential",
+  "steps": [
+    {
+      "agent_code": "geo_agent",
+      "input_mapping": { "question": "{$.input.question}" },
+      "output_key": "geo_result"
+    },
+    {
+      "agent_code": "summarizer_agent",
+      "input_mapping": { "text": "{$.steps.geo_result}" },
+      "output_key": "summary"
+    }
+  ]
+}
+```
+
+An orchestrator lists them as delegates that the AI can call as tools:
+
+```json
+{
+  "delegate_agents": ["geo_agent", "math_agent", "history_agent"]
+}
+```
+
+And conversations list them as participants:
+
+```json
+{
+  "agents": [
+    { "agent_code": "brainstormer_agent", "input_mapping": { ... } },
+    { "agent_code": "critic_agent", "input_mapping": { ... } }
+  ]
+}
+```
+
+In all cases, the profile agent's execution is tracked individually, giving you full visibility into every AI call in the chain.
+
+## When to use profile agents directly
+
+You don't always need workflows or conversations. Use a profile agent on its own when:
+
+- You have a **single AI task** but want execution tracking (token usage, timing, success/failure)
+- You want to **gradually adopt** the agent framework - start by wrapping existing prompt profiles, then compose them later
+- You need a **consistent API** across your application - `execute_agent` works the same regardless of agent type, so switching from a single profile agent to a workflow later requires no changes to calling code

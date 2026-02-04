@@ -1,0 +1,357 @@
+---
+title: Conversations (Autonomous)
+description: Multiple agents collaborate in round-robin or AI-moderated dialogue
+sidebar:
+  order: 40
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**Conversation agents enable multiple agents to collaborate in a dialogue. Each agent takes turns contributing to a shared chat history.**
+
+Two modes are available:
+
+- **Round-robin**: agents take turns in a fixed order
+- **AI-driven**: a moderator agent decides who speaks next
+
+## Round-robin conversation
+
+Agents speak in the order they are listed. Each agent sees the full conversation history and contributes its perspective. The conversation continues until a termination condition is met or the maximum number of turns is reached.
+
+### Example: party planning
+
+Three agents collaborate to plan a party - a brainstormer proposes ideas, a critic evaluates feasibility, and a synthesizer merges the best ideas into a plan.
+
+**Step 1:** Create [prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/) for each participant:
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+BEGIN
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'party_brainstormer_profile',
+    p_description           => 'Brainstorms creative party ideas',
+    p_system_prompt_template => 'You are Brainstormer. Propose 2-3 creative party ideas based on the task and chat history. Be enthusiastic! Structure: "Idea 1: [desc]. Idea 2: [desc]." Reference recent messages.',
+    p_user_prompt_template  => 'Generate or refine party ideas: {prompt}. Your role: {role}.',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'party_critic_profile',
+    p_description           => 'Critiques party ideas for budget, safety, and feasibility',
+    p_system_prompt_template => 'You are Critic. Analyze previous ideas: check budget, safety, and practical limits. Suggest fixes or reject bad ideas. Structure: "Critique: [idea] is [good/bad because...]. Fix: [suggestion]." Be realistic.',
+    p_user_prompt_template  => 'Chat history: {prompt}. Your role: {role}.',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'party_synthesizer_profile',
+    p_description           => 'Synthesizes ideas into a cohesive party plan with cost estimates',
+    p_system_prompt_template => 'You are Synthesizer. Merge good ideas from history into 1 polished plan. Estimate total cost. Structure: "Combined Plan: 1. [activity] ($X). 2. [food] ($Y). Total: $Z." If you finalize, say "Final Plan: ..."',
+    p_user_prompt_template  => 'Chat history: {prompt}. Your role: {role}.',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+**Step 2:** Create [profile agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/) for each participant:
+
+```sql
+DECLARE
+  l_agent_id NUMBER;
+BEGIN
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'brainstormer_agent',
+    p_description         => 'Creative brainstormer who proposes party ideas',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'party_brainstormer_profile',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'critic_agent',
+    p_description         => 'Practical critic who checks feasibility and budget',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'party_critic_profile',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'synthesizer_agent',
+    p_description         => 'Synthesizer who merges ideas into a final plan',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'party_synthesizer_profile',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+END;
+/
+```
+
+**Step 3:** Create the conversation agent:
+
+```sql
+DECLARE
+  l_conv_id     NUMBER;
+  l_conv_config CLOB;
+BEGIN
+  l_conv_config := '{
+    "pattern_type": "conversation",
+    "conversation_mode": "round_robin",
+    "agents": [
+      {
+        "agent_code": "brainstormer_agent",
+        "input_mapping": {
+          "prompt": "{$.chat_history}",
+          "role": "{$.agent_description}"
+        }
+      },
+      {
+        "agent_code": "critic_agent",
+        "input_mapping": {
+          "prompt": "{$.chat_history}",
+          "role": "{$.agent_description}"
+        }
+      },
+      {
+        "agent_code": "synthesizer_agent",
+        "input_mapping": {
+          "prompt": "{$.chat_history}",
+          "role": "{$.agent_description}"
+        }
+      }
+    ],
+    "max_turns": 3,
+    "termination_condition": {
+      "type": "keyword_in_response",
+      "keyword": "Final Plan"
+    }
+  }';
+
+  l_conv_id := uc_ai_agents_api.create_agent(
+    p_code                 => 'party_planning_roundrobin',
+    p_description          => 'Party planning with brainstormer, critic, and synthesizer',
+    p_agent_type           => uc_ai_agents_api.c_type_conversation,
+    p_orchestration_config => l_conv_config,
+    p_max_iterations       => 2,
+    p_status               => uc_ai_agents_api.c_status_active
+  );
+END;
+/
+```
+
+**Step 4:** Execute:
+
+```sql
+DECLARE
+  l_result json_object_t;
+BEGIN
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'party_planning_roundrobin',
+    p_input_parameters => json_object_t('{
+      "prompt": "Plan a birthday party for a 12 year old who loves pirates and football. Max 14 kids, $200 budget."
+    }'),
+    p_session_id       => uc_ai_agents_api.generate_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Result: ' || l_result.get_clob('final_message'));
+END;
+/
+```
+
+**How it works:**
+
+1. Each turn, agents speak in order: brainstormer, critic, synthesizer
+2. Each agent receives the full conversation history via `{$.chat_history}` and its own role description via `{$.agent_description}`
+3. The conversation ends when an agent includes "Final Plan" in its response or `max_turns` is reached
+
+---
+
+## AI-driven conversation
+
+A moderator agent decides who speaks next. This produces more natural conversations where the moderator can direct the discussion based on what's needed at each point.
+
+### Example: moderated party planning
+
+Using the same participant agents from above, add a moderator that steers the conversation:
+
+**Step 1:** Create the moderator [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/):
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+BEGIN
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'party_moderator_profile',
+    p_description           => 'Moderates the party planning conversation',
+    p_system_prompt_template => 'You are the Moderator. Oversee the party planning conversation. Decide who speaks next based on the chat history. If you think there is a solid plan ready, you can finalize the conversation. When done, summarize the final plan for the user.',
+    p_user_prompt_template  => '{prompt}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+Then create the moderator [profile agent](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/):
+
+```sql
+DECLARE
+  l_agent_id NUMBER;
+BEGIN
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'moderator_agent',
+    p_description         => 'Moderator who decides which agent speaks next',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'party_moderator_profile',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+END;
+/
+```
+
+**Step 2:** Create the AI-driven conversation agent:
+
+```sql
+DECLARE
+  l_conv_id     NUMBER;
+  l_conv_config CLOB;
+BEGIN
+  l_conv_config := '{
+    "pattern_type": "conversation",
+    "conversation_mode": "ai_driven",
+    "moderator_agent": {
+      "agent_code": "moderator_agent",
+      "input_mapping": {
+        "prompt": "Chat history: {$.chat_history} | Available agents: {$.available_agents}"
+      },
+      "summary_mapping": {
+        "prompt": "The conversation was ended. Please outline the final plan for the user. Max 2 sentences. | Chat history: {$.chat_history}"
+      }
+    },
+    "max_turns": 6,
+    "agents": [
+      {
+        "agent_code": "brainstormer_agent",
+        "input_mapping": {
+          "prompt": "{$.chat_history}",
+          "role": "{$.agent_description} | Why you were picked: {$.moderator_rationale}"
+        }
+      },
+      {
+        "agent_code": "critic_agent",
+        "input_mapping": {
+          "prompt": "{$.chat_history}",
+          "role": "{$.agent_description} | Why you were picked: {$.moderator_rationale}"
+        }
+      },
+      {
+        "agent_code": "synthesizer_agent",
+        "input_mapping": {
+          "prompt": "{$.chat_history}",
+          "role": "{$.agent_description} | Why you were picked: {$.moderator_rationale}"
+        }
+      }
+    ]
+  }';
+
+  l_conv_id := uc_ai_agents_api.create_agent(
+    p_code                 => 'party_planning_ai_driven',
+    p_description          => 'AI-moderated party planning discussion',
+    p_agent_type           => uc_ai_agents_api.c_type_conversation,
+    p_orchestration_config => l_conv_config,
+    p_max_iterations       => 1,
+    p_status               => uc_ai_agents_api.c_status_active
+  );
+END;
+/
+```
+
+**Step 3:** Execute:
+
+```sql
+DECLARE
+  l_result json_object_t;
+BEGIN
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'party_planning_ai_driven',
+    p_input_parameters => json_object_t('{
+      "prompt": "Plan a birthday party for a 12 year old who loves pirates and football. Max 14 kids, $200 budget."
+    }'),
+    p_session_id       => uc_ai_agents_api.generate_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Final plan: ' || l_result.get_clob('final_message'));
+END;
+/
+```
+
+**How it works:**
+
+1. The moderator receives the chat history and the list of available agents via `{$.available_agents}`
+2. It decides which agent should speak next and provides a rationale
+3. The selected agent speaks, receiving the chat history and the moderator's rationale via `{$.moderator_rationale}`
+4. When the moderator decides the conversation is done, the `summary_mapping` is used to generate a final summary
+5. The conversation ends after `max_turns` or when the moderator finalizes
+
+---
+
+## Config reference
+
+| Field                             | Type   | Description                                                |
+| --------------------------------- | ------ | ---------------------------------------------------------- |
+| `pattern_type`                    | String | Must be `"conversation"`                                   |
+| `conversation_mode`               | String | `"round_robin"` or `"ai_driven"`                           |
+| `agents`                          | Array  | Participant agents with their input mappings               |
+| `max_turns`                       | Number | Maximum conversation turns                                 |
+| `termination_condition`           | Object | (Round-robin) When to stop early                           |
+| `moderator_agent`                 | Object | (AI-driven) The moderator agent config                     |
+| `moderator_agent.summary_mapping` | Object | (AI-driven) Input mapping for generating the final summary |
+
+### Termination condition (round-robin)
+
+```json
+"termination_condition": {
+  "type": "keyword_in_response",
+  "keyword": "Final Plan"
+}
+```
+
+The conversation stops early when any agent's response contains the keyword.
+
+### Moderator agent (AI-driven)
+
+The moderator has two input mappings:
+
+- `input_mapping`: used each turn to decide who speaks next
+- `summary_mapping`: used once at the end to generate the final summary
+
+## Template variables
+
+These variables are automatically available in input mappings for conversation agents:
+
+| Variable                  | Description                        | Available to                   |
+| ------------------------- | ---------------------------------- | ------------------------------ |
+| `{$.chat_history}`        | Full conversation history          | All participants               |
+| `{$.agent_description}`   | The current agent's description    | All participants               |
+| `{$.available_agents}`    | List of agents with descriptions   | Moderator only                 |
+| `{$.moderator_rationale}` | Why this agent was picked to speak | Participants in AI-driven mode |
+
+## Tips
+
+- **Give agents distinct personalities**: Each agent should have a clear role in its system prompt. Overlap leads to redundant responses.
+- **Use the agent description as context**: Pass `{$.agent_description}` to agents so they know their role in the conversation. This is especially useful when the same prompt template handles multiple roles.
+- **Keep max_turns reasonable**: Each turn calls an AI model. A 3-agent round-robin with `max_turns: 5` means up to 15 AI calls.
+- **Termination keywords**: In round-robin mode, instruct the synthesizer/final agent to include a keyword like "Final Plan" when the discussion is ready to conclude.
+- **Moderator instructions**: For AI-driven mode, tell the moderator when to finalize. Otherwise it may keep the conversation going indefinitely up to `max_turns`.

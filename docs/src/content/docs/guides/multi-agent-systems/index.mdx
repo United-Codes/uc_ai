@@ -1,0 +1,274 @@
+---
+title: About multi-agent systems
+description: Coordinate multiple AI agents using workflow, conversation, and orchestrator patterns
+sidebar:
+  order: 1
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+**Multi-agent systems let you coordinate multiple specialized AI agents to solve complex tasks that are too much for a single prompt.**
+
+Instead of writing one monolithic prompt, you break the problem into smaller steps handled by specialized agents. Each agent is backed by a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/) and can have its own model, provider, and instructions. UC AI then orchestrates the execution across agents, handling data flow, conversation history, and termination logic.
+
+## Patterns
+
+<CardGrid>
+  <LinkCard
+    title="Profile Agents"
+    description="The building block: wrap a prompt profile as a trackable, composable agent"
+    href="/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/"
+  />
+  <LinkCard
+    title="Workflows"
+    description="Sequential and loop patterns for deterministic multi-step pipelines"
+    href="/products/uc-ai/docs/guides/multi-agent-systems/workflows/"
+  />
+  <LinkCard
+    title="Orchestrator"
+    description="A central AI delegates to specialized agents via tool calling"
+    href="/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/"
+  />
+  <LinkCard
+    title="Conversations"
+    description="Multiple agents collaborate in round-robin or AI-moderated dialogue"
+    href="/products/uc-ai/docs/guides/multi-agent-systems/conversations/"
+  />
+</CardGrid>
+
+## When to use which pattern
+
+| Pattern                      | Use when...                                                       | Example                                                             |
+| ---------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **Profile agent**            | A single AI call with execution tracking and composability        | Classify a support ticket, answer a question                        |
+| **Sequential workflow**      | Steps must run in a fixed order, each building on the previous    | Classify text, then summarize based on category                     |
+| **Loop workflow**            | You need iterative refinement until a quality threshold is met    | Generate a haiku, rate it, improve it, repeat                       |
+| **Orchestrator**             | A central AI should decide which agents to call and in what order | Travel planner delegating to calendar, flight, and hotel agents     |
+| **Round-robin conversation** | Multiple perspectives should take turns in a fixed order          | Brainstormer, critic, and synthesizer collaborate on a plan         |
+| **AI-driven conversation**   | A moderator should dynamically decide who speaks next             | Panel discussion where the moderator picks the most relevant expert |
+
+## Core concepts
+
+### Agents
+
+An **agent** is a reusable unit of AI work. The simplest agent wraps a prompt profile:
+
+```sql
+DECLARE
+  l_agent_id NUMBER;
+BEGIN
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'text_classifier',
+    p_description         => 'Classifies text into categories',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'TEXT_CLASSIFIER_PROFILE',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+END;
+/
+```
+
+Profile agents execute the referenced prompt profile when called. You can then compose these agents into higher-level patterns.
+
+### Agent types
+
+| Type         | Constant              | Purpose                                    |
+| ------------ | --------------------- | ------------------------------------------ |
+| Profile      | `c_type_profile`      | Wraps a prompt profile                     |
+| Workflow     | `c_type_workflow`     | Sequential or loop execution of steps      |
+| Orchestrator | `c_type_orchestrator` | AI-driven delegation to specialized agents |
+| Conversation | `c_type_conversation` | Multiple agents collaborate in dialogue    |
+
+### Executing agents
+
+All agent types share the same execution API:
+
+```sql
+DECLARE
+  l_result     json_object_t;
+  l_session_id VARCHAR2(100);
+BEGIN
+  l_session_id := uc_ai_agents_api.generate_session_id;
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'my_agent',
+    p_input_parameters => json_object_t('{"prompt": "Hello"}'),
+    p_session_id       => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+The `p_session_id` groups related executions together, useful for debugging and tracking token usage across all agents in a run.
+
+### Input mapping
+
+Input mappings define how data flows between agents. They use a path syntax wrapped in curly braces to reference values from the workflow state:
+
+- `{$.input.*}` - original input parameters
+- `{$.steps.<output_key>}` - output from a previous step
+- `{$.chat_history}` - conversation history (for conversation patterns)
+- `{$.agent_description}` - the current agent's description
+
+**Simple syntax** maps a value directly:
+
+```json
+{
+  "input_mapping": {
+    "question": "{$.input.question}",
+    "context": "{$.steps.step1_result}"
+  }
+}
+```
+
+**Extended syntax** handles optional values and defaults:
+
+```json
+{
+  "input_mapping": {
+    "feedback": {
+      "path": "{$.steps.reviewer.feedback}",
+      "optional": true
+    },
+    "temperature": {
+      "path": "{$.input.temperature}",
+      "default": "0.7"
+    }
+  }
+}
+```
+
+---
+
+## Setting up prompt profiles
+
+All agent patterns build on [prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/). Each agent that calls an AI needs a prompt profile that defines its instructions, provider, and model.
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+BEGIN
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'my_agent_profile',
+    p_description           => 'Agent that does X',
+    p_system_prompt_template => 'You are an assistant that does X.',
+    p_user_prompt_template  => 'Do X with this input: {prompt}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+Then wrap the profile in an agent:
+
+```sql
+DECLARE
+  l_agent_id NUMBER;
+BEGIN
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'my_agent',
+    p_description         => 'Agent that does X',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'my_agent_profile',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+END;
+/
+```
+
+<Aside type="tip">
+  See the [prompt profiles guide](/products/uc-ai/docs/guides/prompt-profiles/)
+  for details on templates, placeholders, model configuration, and structured
+  output.
+</Aside>
+
+## Structured output in agents
+
+Agents can return structured JSON responses using prompt profile response schemas. This is useful when other agents or workflow logic needs to parse the output - for example, a rating agent that returns a numeric score used in a loop exit condition.
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+  l_schema CLOB := '{
+    "type": "object",
+    "properties": {
+      "quality": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 10
+      },
+      "feedback": {
+        "type": "string"
+      }
+    },
+    "required": ["quality", "feedback"]
+  }';
+BEGIN
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'rater_profile',
+    p_description           => 'Rates content on a 1-10 scale',
+    p_system_prompt_template => 'You are a critic. Rate the given content.',
+    p_user_prompt_template  => 'Rate this: {text}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_response_schema       => l_schema,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+A workflow can then reference the structured fields, for example in an exit condition:
+
+```json
+"exit_condition": "{$.steps.haiku_rating.quality} >= 8"
+```
+
+See the [structured output guide](/products/uc-ai/docs/guides/structured_output/) for more on response schemas.
+
+## Session tracking and debugging
+
+Every agent execution is recorded in the `uc_ai_agent_executions` table. Use the session ID to inspect the full execution trace:
+
+```sql
+SELECT agent_id,
+       status,
+       iteration_count,
+       tool_calls_count,
+       total_input_tokens,
+       total_output_tokens,
+       started_at,
+       completed_at
+  FROM uc_ai_agent_executions
+ WHERE session_id = :session_id
+ ORDER BY started_at;
+```
+
+You can also use the API:
+
+```sql
+DECLARE
+  l_details json_object_t;
+BEGIN
+  l_details := uc_ai_agents_api.get_execution_details(p_execution_id => 42);
+  DBMS_OUTPUT.PUT_LINE(l_details.to_clob);
+END;
+/
+```
+
+## Best practices
+
+- **Start simple**: Begin with a profile agent, then compose into workflows or conversations as the task grows
+- **Use descriptive agent descriptions**: Orchestrators use agent descriptions to decide which agent to call. Clear descriptions improve delegation accuracy
+- **Set appropriate limits**: Always set `max_turns`, `max_iterations`, and `max_delegations` to prevent runaway executions
+- **Use structured output for decision points**: When exit conditions or routing logic depends on agent output, use response schemas to get reliable, parseable values
+- **Match model capability to task complexity**: Use capable models for orchestrators and moderators that need to make decisions. Use faster models for leaf agents that have narrow, well-defined tasks
+- **Test with small limits first**: Start with `max_turns: 2` or `max_iterations: 2` to validate the flow before increasing limits

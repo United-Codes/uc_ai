@@ -459,7 +459,10 @@ create or replace package body uc_ai_tools_api as
     l_tool_obj     json_object_t;
     l_tool_cpy_obj json_object_t;
     l_enable_tool_filter number(1) := 0; -- @dbLinter ignore(G-2410) used in SQL 
+    l_found_tools number := 0;
   begin
+    uc_ai_logger.log('Building tools array for provider: ' || p_provider, l_scope, 'uc_ai.g_enable_tools=' || case when uc_ai.g_enable_tools then 'true' else 'false' end || ', g_tool_tags=' || apex_string.join(uc_ai.g_tool_tags, ', '));
+
     if not uc_ai.g_enable_tools then
       return l_tools_array;
     end if;
@@ -484,6 +487,7 @@ create or replace package body uc_ai_tools_api as
          and active = 1
     )
     loop
+      l_found_tools := l_found_tools + 1;
       l_tool_obj := get_tool_schema(rec.id, p_provider, p_additional_info);
 
       -- openai has an additional object wrapper for function calls
@@ -524,6 +528,8 @@ create or replace package body uc_ai_tools_api as
 
       l_tools_array.append(l_tool_obj);
     end loop fetch_tools;
+
+    uc_ai_logger.log('Total tools found: ' || l_found_tools, l_scope);
 
     return l_tools_array;
   exception
@@ -581,7 +587,7 @@ create or replace package body uc_ai_tools_api as
     );
 
     -- use apex_plugin_util.get_plsql_func_result_clob if apex_session is available
-    if sys_context('APEX$SESSION', 'APP_SESSION') is not null then
+    if apex_application.g_instance is not null then
 
       uc_ai_logger.log('Executing tool with apex_plugin_util.get_plsql_func_result_clob', l_scope, l_fc_code);
 

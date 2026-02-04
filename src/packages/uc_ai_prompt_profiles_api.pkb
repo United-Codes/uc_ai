@@ -404,7 +404,7 @@ create or replace package body uc_ai_prompt_profiles_api as
 
 
   /*
-   * Replaces placeholders (#placeholder#) in a template with values from parameters JSON
+   * Replaces placeholders ({placeholder}) in a template with values from parameters JSON
    * Case-insensitive replacement
    */
   function replace_placeholders(
@@ -442,7 +442,7 @@ create or replace package body uc_ai_prompt_profiles_api as
       -- Replace placeholder (case-insensitive)
       l_result := regexp_replace(
         l_result,
-        '#' || l_key || '#',
+        '\{' || l_key || '\}',
         l_value,
         1, 0, 'i'
       );
@@ -479,10 +479,10 @@ create or replace package body uc_ai_prompt_profiles_api as
     -- Find all placeholders in templates (only alphanumeric and underscore allowed)
     <<placeholder_loop>>
     loop
-      l_placeholder := regexp_substr(l_combined_template, '#[A-Za-z0-9_]+#', l_position);
+      l_placeholder := regexp_substr(l_combined_template, '\{[A-Za-z0-9_]+\}', l_position);
       exit placeholder_loop when l_placeholder is null;
       
-      -- Extract placeholder name (without the # symbols)
+      -- Extract placeholder name (without the { } symbols)
       l_placeholder_name := substr(l_placeholder, 2, length(l_placeholder) - 2);
       
       -- Check if parameter exists (case-insensitive)
@@ -499,12 +499,12 @@ create or replace package body uc_ai_prompt_profiles_api as
       end if;
       
       if not l_found then
-        uc_ai_logger.log_error('Missing parameter for placeholder: ' || l_placeholder, l_scope);
+        uc_ai_logger.log_error('Missing parameter for placeholder: ' || l_placeholder, l_scope, p_parameters.to_clob);
         raise_application_error(-20003, 'Missing parameter for placeholder: ' || l_placeholder);
       end if;
       
       -- Move to next placeholder
-      l_position := regexp_instr(l_combined_template, '#[A-Za-z0-9_]+#', l_position) + length(l_placeholder);
+      l_position := regexp_instr(l_combined_template, '\{[A-Za-z0-9_]+\}', l_position) + length(l_placeholder);
     end loop placeholder_loop;
   end validate_parameters;
 
@@ -729,6 +729,17 @@ create or replace package body uc_ai_prompt_profiles_api as
       else
         uc_ai_logger.log_warn('Unknown provider in model config: ' || p_provider, l_scope);
     end case;
+
+    uc_ai_logger.log('Applied model config successfully', l_scope, p_config.to_clob);
+    uc_ai_logger.log('Global variables after applying model config:', l_scope,
+      'g_base_url=' || uc_ai.g_base_url || ', ' ||
+      'g_enable_reasoning=' || case when uc_ai.g_enable_reasoning then 'true' else 'false' end || ', ' ||
+      'g_reasoning_level=' || uc_ai.g_reasoning_level || ', ' ||
+      'g_enable_tools=' || case when uc_ai.g_enable_tools then 'true' else 'false' end || ', ' ||
+      'g_max_tool_calls=' || to_char(uc_ai.g_max_tool_calls) || ', ' ||
+      'g_apex_web_credential=' || uc_ai.g_apex_web_credential || ', ' ||
+      'g_tool_tags=' || apex_string.join(uc_ai.g_tool_tags, ':')
+    );
   exception
     when others then
       uc_ai_logger.log_error('Error applying model config', l_scope);
@@ -786,7 +797,11 @@ create or replace package body uc_ai_prompt_profiles_api as
     apply_model_config(l_config, l_provider);
     
     -- Parse response schema if provided
-    if l_profile.response_schema is not null then
+    -- Agents can override the response schema in the config JSON
+    -- this is not documented for normal use as the column should be used
+    if l_config is not null and l_config.has('response_schema') and l_config.get('response_schema').is_object then
+      l_response_schema := treat(l_config.get('response_schema') as json_object_t);
+    elsif l_profile.response_schema is not null then
       l_response_schema := json_object_t.parse(l_profile.response_schema);
     end if;
     

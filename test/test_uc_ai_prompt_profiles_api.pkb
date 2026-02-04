@@ -29,7 +29,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code,
       p_description => 'Test profile for basic creation',
       p_system_prompt_template => 'You are a helpful assistant.',
-      p_user_prompt_template => 'Answer this question: #question#',
+      p_user_prompt_template => 'Answer this question: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini,
       p_version => 1,
@@ -78,7 +78,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_CONFIG',
       p_description => 'Test profile with configuration',
       p_system_prompt_template => 'You are a helpful assistant.',
-      p_user_prompt_template => 'Answer: #question#',
+      p_user_prompt_template => 'Answer: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini,
       p_model_config_json => l_config,
@@ -106,7 +106,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_UPDATE',
       p_description => 'Original description',
       p_system_prompt_template => 'You are a helpful assistant.',
-      p_user_prompt_template => 'Question: #question#',
+      p_user_prompt_template => 'Question: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini
     );
@@ -116,7 +116,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_id => l_id,
       p_description => l_new_description,
       p_system_prompt_template => 'You are a very helpful assistant.',
-      p_user_prompt_template => 'Please answer: #question#',
+      p_user_prompt_template => 'Please answer: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o
     );
@@ -142,7 +142,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_UPDATE2',
       p_description => 'Original description',
       p_system_prompt_template => 'You are a helpful assistant.',
-      p_user_prompt_template => 'Question: #question#',
+      p_user_prompt_template => 'Question: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini,
       p_version => 1
@@ -154,7 +154,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_version => 1,
       p_description => l_new_description,
       p_system_prompt_template => 'You are a very helpful assistant.',
-      p_user_prompt_template => 'Please answer: #question#',
+      p_user_prompt_template => 'Please answer: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o
     );
@@ -182,7 +182,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_DELETE',
       p_description => 'Profile to delete',
       p_system_prompt_template => 'You are a helpful assistant.',
-      p_user_prompt_template => 'Question: #question#',
+      p_user_prompt_template => 'Question: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini
     );
@@ -213,7 +213,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_DELETE2',
       p_description => 'Profile to delete',
       p_system_prompt_template => 'You are a helpful assistant.',
-      p_user_prompt_template => 'Question: #question#',
+      p_user_prompt_template => 'Question: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini,
       p_version => 1
@@ -251,7 +251,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_STATUS',
       p_description => 'Status test profile',
       p_system_prompt_template => 'You are a helpful assistant.',
-      p_user_prompt_template => 'Question: #question#',
+      p_user_prompt_template => 'Question: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini,
       p_status => 'draft'
@@ -291,7 +291,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_VERSION',
       p_description => 'Version 1',
       p_system_prompt_template => 'You are a helpful assistant.',
-      p_user_prompt_template => 'Question: #question#',
+      p_user_prompt_template => 'Question: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini,
       p_version => 1,
@@ -333,7 +333,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_GET',
       p_description => 'Get test profile',
       p_system_prompt_template => 'You are a helpful assistant.',
-      p_user_prompt_template => 'Question: #question#',
+      p_user_prompt_template => 'Question: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini
     );
@@ -359,7 +359,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_LATEST',
       p_description => 'Version 1',
       p_system_prompt_template => 'You are a helpful assistant v1.',
-      p_user_prompt_template => 'Question: #question#',
+      p_user_prompt_template => 'Question: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini,
       p_version => 1,
@@ -370,7 +370,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_LATEST',
       p_description => 'Version 2',
       p_system_prompt_template => 'You are a helpful assistant v2.',
-      p_user_prompt_template => 'Question: #question#',
+      p_user_prompt_template => 'Question: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini,
       p_version => 2,
@@ -381,7 +381,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_LATEST',
       p_description => 'Version 3',
       p_system_prompt_template => 'You are a helpful assistant v3.',
-      p_user_prompt_template => 'Question: #question#',
+      p_user_prompt_template => 'Question: {question}',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini,
       p_version => 3,
@@ -455,8 +455,8 @@ create or replace package body test_uc_ai_prompt_profiles_api as
     l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
       p_code => gc_test_code || '_PLACEHOLDERS',
       p_description => 'Profile with placeholders',
-      p_system_prompt_template => 'You are a #role# assistant.',
-      p_user_prompt_template => 'What is the capital of #country#?',
+      p_system_prompt_template => 'You are a {role} assistant.',
+      p_user_prompt_template => 'What is the capital of {country}?',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini,
       p_status => 'active'
@@ -660,7 +660,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       p_code => gc_test_code || '_TOOLS',
       p_description => 'Profile with tool usage',
       p_system_prompt_template => 'You are an assistant with access to user information. Answer concisely.',
-      p_user_prompt_template => 'What is the email of #user_name#?',
+      p_user_prompt_template => 'What is the email of {user_name}?',
       p_provider => uc_ai.c_provider_openai,
       p_model => uc_ai_openai.c_model_gpt_4o_mini,
       p_status => 'active',
