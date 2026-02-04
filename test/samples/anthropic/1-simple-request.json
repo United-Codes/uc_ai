@@ -1,0 +1,16 @@
+{
+  "model": "claude-3-5-haiku-latest",
+  "max_tokens": 8192,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?"
+        }
+      ]
+    }
+  ],
+  "system": "You are an assistant helping users to get recipes. Please just list 3 possible dishe names without instructions."
+}

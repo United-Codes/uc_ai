@@ -1,0 +1,25 @@
+{
+  "model": "claude-3-5-haiku-20241022",
+  "id": "msg_018m7e2uNqHh3zZ7GxHLTBXX",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "Here are three possible dishes you could make with those ingredients:\n\n1. Greek Salad with Potato Croutons\n2. Mediterranean Potato and Tomato Bake\n3. Cheesy Olive and Potato Salad"
+    }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 54,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation": {
+      "ephemeral_5m_input_tokens": 0,
+      "ephemeral_1h_input_tokens": 0
+    },
+    "output_tokens": 56,
+    "service_tier": "standard"
+  }
+}

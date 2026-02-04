@@ -1,0 +1,21 @@
+{
+  "model": "gemini-2.5-flash",
+  "systemInstruction": {
+    "role": "user",
+    "parts": [
+      {
+        "text": "You are an assistant helping users to get recipes. Please answer in short sentences."
+      }
+    ]
+  },
+  "contents": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "text": "I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?"
+        }
+      ]
+    }
+  ]
+}

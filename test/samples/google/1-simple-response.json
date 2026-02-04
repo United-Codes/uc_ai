@@ -1,0 +1,30 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "Make a roasted potato salad. Roast the potatoes. Mix them with tomatoes, olives, and cheese. Serve it over the salad greens."
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 38,
+    "candidatesTokenCount": 27,
+    "totalTokenCount": 553,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 38
+      }
+    ],
+    "thoughtsTokenCount": 488
+  },
+  "modelVersion": "gemini-2.5-flash",
+  "responseId": "3vJwabaHD5OYkdUP4unW4AU"
+}
