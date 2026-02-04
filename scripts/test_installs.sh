@@ -53,13 +53,13 @@ test_script() {
         return 1
     fi
     
-    echo "Running: local-23ai.sh test-script-install ./$script_name -y"
+    echo "Running: local-26ai.sh test-script-install ./$script_name -y"
     
     # Change to root directory so relative paths work
     cd "$ROOT_DIR"
     
     # Run the test command and capture output
-    if output=$(local-23ai.sh test-script-install "./$script_name" -y 2>&1); then
+    if output=$(local-26ai.sh test-script-install "./$script_name" -y 2>&1); then
         echo "Script executed successfully!"
         
         # Check if the output contains the expected success message
@@ -87,14 +87,3 @@ for script in "${SCRIPTS_TO_TEST[@]}"; do
         exit 1
     fi
 done
-
-echo ""
-echo "=========================================="
-echo "✅ ALL TESTS COMPLETED SUCCESSFULLY!"
-echo "=========================================="
-echo ""
-echo "Summary:"
-echo "- Generated 3 install scripts"
-echo "- Successfully tested 4 install scripts"
-echo "- All scripts passed validation"
-echo "=========================================="
