@@ -19,7 +19,13 @@ create or replace package uc_ai_logger authid definer as
 
   subtype scope is varchar2(100 char); -- @dblinter ignore(g-9115): compliant with real logger
 
-  gc_empty_tab_param constant tab_param;
+  gc_empty_tab_param tab_param;
+
+ -- $if sys.dbms_db_version.version > 12 $then
+ --   gc_empty_tab_param constant tab_param := tab_param();
+ -- $else
+ --   gc_empty_tab_param constant tab_param;
+ -- $end
 
   /**
    * Log error message
