@@ -28,6 +28,21 @@ create table uc_ai_prompt_profiles (
   constraint uc_ai_prompt_profiles_status_ck check (status in ('draft', 'active', 'archived'))
 );
 
+create or replace trigger uc_ai_prompt_profiles_biu
+    before insert or update on uc_ai_prompt_profiles
+    for each row
+begin
+    if inserting
+    then
+        :new.created_at := systimestamp;
+        :new.created_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+    end if;
+
+    :new.updated_at := systimestamp;
+    :new.updated_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+end uc_ai_prompt_profiles_biu;
+/
+
 -- ============================================================================
 -- AGENTS TABLE
 -- ============================================================================
