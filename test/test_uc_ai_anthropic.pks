@@ -2,6 +2,9 @@ create or replace package test_uc_ai_anthropic as
 
   --%suite(Anthropic AI tests)
 
+  --%beforeall
+  procedure setup;
+
   --%test(Basic recipe assistant - system prompt and user prompt)
   procedure basic_recipe;
 
@@ -25,6 +28,9 @@ create or replace package test_uc_ai_anthropic as
 
   --%test(reasoning from main package)
   procedure reasoning_main;
+
+  --%test(Structured output)
+  procedure structured_output;
 
   --%test(Basic text generation with APEX web credential)
   procedure basic_web_credential;

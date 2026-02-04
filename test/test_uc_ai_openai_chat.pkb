@@ -35,7 +35,7 @@ create or replace package body test_uc_ai_openai_chat as
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
     sys.dbms_output.put_line('Last message: ' || l_final_message);
 
-    uc_ai_test_message_utils.validate_message_array(l_messages, 'Basic recipe test');
+    uc_ai_test_message_utils.valididate_return_object(l_result, 'Basic recipe test');
 
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
   end basic_recipe;

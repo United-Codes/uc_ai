@@ -327,9 +327,10 @@ The return object contains the following properties:
   "structured_output": {...},  -- Parsed JSON object (only when p_response_json_schema provided)
   "finish_reason": "stop",     -- How the conversation ended (VARCHAR2)
   "usage": {                   -- Token usage statistics (JSON_OBJECT_T)
-    "prompt_tokens": 45,
-    "completion_tokens": 23,
-    "total_tokens": 68
+    "prompt_tokens": 45,       -- input tokens used (NUMBER)
+    "completion_tokens": 23,   -- output tokens used (NUMBER)
+    "reasoning_tokens": 15     -- amount of output tokens used for reasoning (NUMBER)
+    "total_tokens": 68,        -- total tokens used (NUMBER)
   },
   "tool_calls_count": 2,       -- Number of tools executed (NUMBER)
   "model": "gpt-4o-mini",      -- AI model used (VARCHAR2)

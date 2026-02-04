@@ -16,7 +16,7 @@ create or replace package body test_uc_ai_google as
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
       p_system_prompt => 'You are an assistant helping users to get recipes. Please answer in short sentences.',
       p_provider => uc_ai.c_provider_google,
-      p_model => uc_ai_google.c_model_gemini_1_5_flash
+      p_model => uc_ai_google.c_model_gemini_2_5_flash
     );
 
     l_final_message := l_result.get_clob('final_message');
@@ -30,7 +30,7 @@ create or replace package body test_uc_ai_google as
     sys.dbms_output.put_line('Last message: ' || l_final_message);
 
     -- Validate message array structure against spec
-    uc_ai_test_message_utils.validate_message_array(l_messages, 'Basic recipe Test');
+    uc_ai_test_message_utils.valididate_return_object(l_result, 'Basic recipe Test');
 
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
   end basic_recipe;
@@ -458,7 +458,7 @@ create or replace package body test_uc_ai_google as
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
       p_system_prompt => 'You are an assistant helping users to get recipes. Please answer in short sentences.',
       p_provider => uc_ai.c_provider_google,
-      p_model => uc_ai_google.c_model_gemini_1_5_flash
+      p_model => uc_ai_google.c_model_gemini_2_5_flash
     );
 
     l_final_message := l_result.get_clob('final_message');

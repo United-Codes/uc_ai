@@ -31,7 +31,7 @@ create or replace package body test_uc_ai_oci as
     sys.dbms_output.put_line('Last message: ' || l_final_message);
 
     -- Validate message array structure against spec
-    uc_ai_test_message_utils.validate_message_array(l_messages, 'Basic recipe Test');
+    uc_ai_test_message_utils.valididate_return_object(l_result, 'Basic recipe Test');
 
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
   end basic_recipe_generic;
