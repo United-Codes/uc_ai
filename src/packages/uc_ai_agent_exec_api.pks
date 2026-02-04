@@ -137,7 +137,8 @@ create or replace package uc_ai_agent_exec_api as
   function register_agent_as_tool(
     p_agent_code       in varchar2,
     p_exec_id          in uc_ai_agent_executions.id%type,
-    p_tool_tag         in varchar2
+    p_tool_tag         in varchar2,
+    p_session_id       in varchar2
   ) return uc_ai_tools.id%type;
 
 

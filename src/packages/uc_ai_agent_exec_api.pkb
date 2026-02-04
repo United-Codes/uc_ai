@@ -397,7 +397,8 @@ create or replace package body uc_ai_agent_exec_api as
   function register_agent_as_tool(
     p_agent_code       in varchar2,
     p_exec_id          in uc_ai_agent_executions.id%type,
-    p_tool_tag         in varchar2
+    p_tool_tag         in varchar2,
+    p_session_id       in varchar2
   ) return uc_ai_tools.id%type
   as
     l_scope         uc_ai_logger.scope := gc_scope_prefix || 'register_agent_as_tool';
@@ -425,12 +426,14 @@ declare
 begin
   l_input_clob := :arguments;
   l_input := json_object_t(l_input_clob);
-  
+
   l_result := uc_ai_agents_api.execute_agent(
     p_agent_code       => '!' || p_agent_code || q'!',
-    p_input_parameters => l_input
+    p_input_parameters => l_input,
+    p_session_id       => '!' || p_session_id || q'!',
+    p_parent_exec_id   => !' || p_exec_id || q'!
   );
-  
+
   return l_result.get_string('final_message');
 exception
   when others then
@@ -534,7 +537,8 @@ end;!';
         l_tool_id := register_agent_as_tool(
           p_agent_code       => l_delegate,
           p_exec_id          => p_exec_id,
-          p_tool_tag         => l_tool_tag
+          p_tool_tag         => l_tool_tag,
+          p_session_id       => p_session_id
         );
         
         l_tool_ids.extend;
