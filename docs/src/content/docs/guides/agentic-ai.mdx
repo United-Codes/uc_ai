@@ -6,6 +6,8 @@ sidebar:
 
 ---
 
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
 ## AI Agents with UC AI
 
 Agentic AI has many definitions, but in essence you give LLMs additional capabilities that the model can decide to use based on their autonomous decisions. Importantly, these capabilities are not executed within the LLM itself – instead, you inform the LLM that it can perform X, and it requests execution externally. Thus, the agent's core logic resides not in the LLM, but in the calling mechanism: your database's PL/SQL code with UC AI.
@@ -13,13 +15,24 @@ Agentic AI has many definitions, but in essence you give LLMs additional capabil
 You can build agents in UC AI through these techniques:
 
 - Prompt engineering: give the right instructions with system prompts and context
+- [Prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/): Manage reusable prompt templates with parameter substitution, model configuration, and version control — so you can iterate on prompts without changing code.
 - [Tools](/products/uc-ai/docs/guides/tools/): Allow the LLM to request PL/SQL function executions to let the agent ad hoc request additional context (like triggering a RAG search) or run data-manipulating processes.
-- [Reasoning](/products/uc-ai/docs/guides/tools/): Allow the LLM to think before acting by using reasoning models and configuring reasoning preferences.
-- Call orchestration: instead of overwhelming an LLM by giving it a big task, break it down into steps and call AIs (maybe different models and providers) sequentially or in parallel.
+- [Reasoning](/products/uc-ai/docs/guides/reasoning/): Allow the LLM to think before acting by using reasoning models and configuring reasoning preferences.
+- [Multi-agent systems](/products/uc-ai/docs/guides/multi-agent-systems/): Instead of overwhelming an LLM by giving it a big task, break it down into steps handled by specialized agents. UC AI provides built-in patterns for sequential workflows, loops, orchestrator delegation, and multi-agent conversations.
 
-All of this can be achieved through your own compiled PL/SQL procedures with calls to UC AI. 
+## From manual calls to managed agents
 
-## Example
+You can start building agents with direct `uc_ai.generate_text` calls and global variable configuration. As your agents grow in complexity, UC AI offers higher-level abstractions to reduce boilerplate and add structure:
+
+| Approach | Best for |
+|----------|----------|
+| Direct `generate_text` calls | Simple, one-off AI calls with full control |
+| [Prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/) | Reusable prompt templates with versioning and centralized configuration |
+| [Multi-agent systems](/products/uc-ai/docs/guides/multi-agent-systems/) | Coordinating multiple specialized agents with workflows, orchestrators, or conversations |
+
+You can mix these approaches freely — for example, use prompt profiles for individual agent definitions while orchestrating them with the multi-agent system.
+
+## Example: direct approach
 
 Consider building a **Customer Insights Agent** that autonomously analyzes support tickets and recommends actions.
 
@@ -41,7 +54,7 @@ In the end what you would need to do to achieve this:
 
 - Write PL/SQL functions that power the tools
 - [Register the tools with UC AI](/products/uc-ai/docs/guides/tools/#registering-a-tool)
-- Create procedure that gets triggered an new ticket and calls UC AI with the correct parameters:
+- Create a procedure that gets triggered on a new ticket and calls UC AI with the correct parameters:
 
 ```sql
 declare
@@ -50,7 +63,7 @@ begin
   -- allow model to reason
   uc_ai.g_enable_reasoning := true;
   uc_ai_openai.g_reasoning_effort := 'medium';
-  
+
   -- allow model to use tools
   uc_ai.g_enable_tools := true;
   -- only pass tools created for this task
@@ -67,4 +80,86 @@ begin
 end;
 /
 ```
+
+## Example: prompt profile approach
+
+The same agent can be built with a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/), moving configuration out of your PL/SQL code and into a versioned, reusable template:
+
+```sql
+-- Create the profile once
+DECLARE
+  l_profile_id NUMBER;
+  l_config CLOB := '{
+    "g_enable_reasoning": true,
+    "g_enable_tools": true,
+    "g_tool_tags": ["customer_insight_agent"],
+    "openai": {
+      "g_reasoning_effort": "medium"
+    }
+  }';
+BEGIN
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'CUSTOMER_INSIGHTS',
+    p_description           => 'Analyzes support tickets and recommends actions',
+    p_system_prompt_template => 'You are an... First analyze the ticket and think of actions that make sense from the given tools...',
+    p_user_prompt_template  => '{ticket_text}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_o4_mini,
+    p_model_config_json     => l_config,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+Then execute it with a single call:
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_params json_object_t := json_object_t();
+BEGIN
+  l_params.put('ticket_text', 'Ticket #1243: ...');
+
+  l_result := uc_ai_prompt_profiles_api.execute_profile(
+    p_code       => 'CUSTOMER_INSIGHTS',
+    p_parameters => l_params
+  );
+
+  DBMS_OUTPUT.PUT_LINE('AI Response: ' || l_result.get_clob('final_message'));
+END;
+/
+```
+
+The advantage here is that you can update prompts, switch models, or adjust reasoning settings without modifying your application code.
+
+## Scaling up: multi-agent systems
+
+When a single agent is not enough, UC AI lets you compose multiple agents into coordinated systems. Each agent wraps a prompt profile and can have its own model, tools, and instructions.
+
+<CardGrid>
+  <LinkCard
+    title="Workflows"
+    description="Sequential and loop patterns for deterministic multi-step pipelines"
+    href="/products/uc-ai/docs/guides/multi-agent-systems/workflows/"
+  />
+  <LinkCard
+    title="Orchestrator"
+    description="A central AI delegates to specialized agents via tool calling"
+    href="/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/"
+  />
+  <LinkCard
+    title="Conversations"
+    description="Multiple agents collaborate in round-robin or AI-moderated dialogue"
+    href="/products/uc-ai/docs/guides/multi-agent-systems/conversations/"
+  />
+</CardGrid>
+
+For example, the Customer Insights Agent could be broken into a multi-agent workflow where a **classifier** categorizes the ticket, a **researcher** retrieves relevant context, and a **responder** drafts the final recommendation — each as a separate agent with its own optimized model and prompt.
+
+<Aside type="tip">
+  See the [multi-agent systems guide](/products/uc-ai/docs/guides/multi-agent-systems/) for a full overview of patterns and when to use each one.
+</Aside>
 
