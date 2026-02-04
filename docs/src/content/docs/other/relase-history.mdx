@@ -5,6 +5,48 @@ sidebar:
   order: 3
 ---
 
+## v26.1
+
+To upgrade first run `v25.7_to_v26.1.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.1).
+
+For new installations follow [this guide](https://www.united-codes.com/products/uc-ai/docs/guides/installation/).
+
+**Features**:
+
+Multi-Agent Systems (v1):
+
+- Build sophisticated AI systems by composing multiple specialized agents
+- [Profile Agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/): Wrap prompt profiles with execution tracking and session grouping
+- [Workflows](/products/uc-ai/docs/guides/multi-agent-systems/workflows/): Sequential, conditional, parallel, and loop-based deterministic pipelines with structured data flow between steps
+- [Orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/): Central AI agent autonomously delegates to specialized agents via tool calling
+- [Conversations](/products/uc-ai/docs/guides/multi-agent-systems/conversations/): Multiple agents collaborate in round-robin or AI-moderated dialogue
+- Input mapping syntax for data flow between agents (`{$.input.*}`, `{$.steps.<output_key>}`, `{$.chat_history}`)
+- Execution tracking with token usage aggregation via `uc_ai_agent_executions` table
+- See the [multi-agent systems documentation](/products/uc-ai/docs/guides/multi-agent-systems/) to get started
+- More patterns and features coming soon!
+
+[Prompt Profiles](/products/uc-ai/docs/guides/prompt-profiles/):
+
+- Centralized, versioned prompt template management
+- Store reusable AI prompt templates (system + user prompts) with `{placeholder}` substitution
+- Version profiles and manage status (draft, active, archived)
+- Configure model settings, providers, structured output schemas and tool calling directly in the profile
+
+(OpenAI) Responses API:
+
+- OpenAI announced that they are focusing on their [Responses API](https://platform.openai.com/docs/api-reference/responses) for all new features and models
+- New `uc_ai_responses_api` package for native integration with OpenAI's Responses API
+- Currently it's opt-in by setting `uc_ai.g_use_responses_api` to TRUE
+- In the future Ollama, Openrouter, and other providers who might adopt it will use that package as well
+
+Other:
+
+- [Anthropic structured output](/products/uc-ai/docs/providers/anthropic/) support
+- New global variable `uc_ai.g_max_tool_calls` to control the maximum number of tool calls allowed in a single AI request
+- Improved token usage reporting across all providers
+- Bug fixes
+- Added constants for new models
+
 ## v25.7
 
 To upgrade run `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v25.7).
@@ -15,7 +57,7 @@ For new installations follow [this guide](https://www.united-codes.com/products/
 
 - New providers: [xAI](/products/uc-ai/docs/providers/xai/) and [OpenRouer](/products/uc-ai/docs/providers/openrouter/)
 - Support [generate embeddings](/products/uc-ai/docs/api/generate_embeddings/) for all providers
-- Support [Toon](/products/uc-ai/docs/guides/toon/) for token efficient token representation 
+- Support [Toon](/products/uc-ai/docs/guides/toon/) for token efficient token representation
 - [Support providers which have OpenAI compliant APIs](/products/uc-ai/docs/providers/openai/#using-openai-api-compliant-providers)
 - Overrride base URL for all provider via `uc_ai.g_base_url`. This makes it possible to use hosted models on other URLs (Amazon Bedrock, Azure, etc.) as long as they have the same API structure.
 - Global APEX web credential variable ` uc_ai.g_apex_web_credential` which will be used as fallback when no provider specific one is provided
