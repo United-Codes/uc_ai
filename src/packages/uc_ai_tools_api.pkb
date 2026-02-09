@@ -977,7 +977,10 @@ create or replace package body uc_ai_tools_api as
   end create_parameters_recursive;
 
   /*
-   * Creates a new tool definition from a JSON schema
+   * Creates or updates a tool definition from a JSON schema
+   * 
+   * If a tool with the same code already exists, it will be updated.
+   * Parameters and tags are replaced (deleted and recreated) on update.
    */
   function create_tool_from_schema(
     p_tool_code             in uc_ai_tools.code%type,
@@ -994,43 +997,81 @@ create or replace package body uc_ai_tools_api as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'create_tool_from_schema';
     
     l_tool_id uc_ai_tools.id%type;
+    l_existing_tool_id uc_ai_tools.id%type;
     l_properties json_object_t;
     l_required_arr json_array_t;
     l_required_keys_arr json_key_list := json_key_list();
     l_schema_clob clob;
   begin
-    uc_ai_logger.log('Creating tool from schema', l_scope, 'Tool: ' || p_tool_code);
+    uc_ai_logger.log('Creating/updating tool from schema', l_scope, 'Tool: ' || p_tool_code);
 
     l_schema_clob := case when p_json_schema is not null then p_json_schema.to_clob else null end;
 
-    -- Create the tool record
-    insert into uc_ai_tools (
-      code,
-      description,
-      active,
-      response_schema,
-      version,
-      function_call,
-      authorization_schema,
-      created_by,
-      created_at,
-      updated_by,
-      updated_at
-    ) values (
-      p_tool_code,
-      p_description,
-      p_active,
-      l_schema_clob, -- Store the original schema for reference
-      p_version,
-      p_function_call,
-      p_authorization_schema,
-      p_created_by,
-      systimestamp,
-      p_created_by,
-      systimestamp
-    ) returning id into l_tool_id;
-    
-    uc_ai_logger.log('Created tool with ID: ' || l_tool_id, l_scope);
+    -- Check if tool already exists
+    begin
+      select id
+        into l_existing_tool_id
+        from uc_ai_tools
+       where code = p_tool_code;
+    exception
+      when no_data_found then
+        l_existing_tool_id := null;
+    end;
+
+    if l_existing_tool_id is not null then
+      -- Update existing tool
+      update uc_ai_tools
+         set description          = p_description,
+             active               = p_active,
+             response_schema      = l_schema_clob,
+             version              = p_version,
+             function_call        = p_function_call,
+             authorization_schema = p_authorization_schema,
+             updated_by           = p_created_by,
+             updated_at           = systimestamp
+       where id = l_existing_tool_id;
+      
+      l_tool_id := l_existing_tool_id;
+      
+      uc_ai_logger.log('Updated existing tool with ID: ' || l_tool_id, l_scope);
+      
+      -- Delete existing parameters (cascade will handle nested params)
+      delete from uc_ai_tool_parameters
+       where tool_id = l_tool_id;
+      
+      -- Delete existing tags
+      delete from uc_ai_tool_tags
+       where tool_id = l_tool_id;
+    else
+      -- Create new tool record
+      insert into uc_ai_tools (
+        code,
+        description,
+        active,
+        response_schema,
+        version,
+        function_call,
+        authorization_schema,
+        created_by,
+        created_at,
+        updated_by,
+        updated_at
+      ) values (
+        p_tool_code,
+        p_description,
+        p_active,
+        l_schema_clob, -- Store the original schema for reference
+        p_version,
+        p_function_call,
+        p_authorization_schema,
+        p_created_by,
+        systimestamp,
+        p_created_by,
+        systimestamp
+      ) returning id into l_tool_id;
+      
+      uc_ai_logger.log('Created new tool with ID: ' || l_tool_id, l_scope);
+    end if;
 
     if l_schema_clob is null then
       return l_tool_id;
@@ -1078,7 +1119,7 @@ create or replace package body uc_ai_tools_api as
         );
     end if;
     
-    uc_ai_logger.log('Successfully created tool with schema', l_scope, 'Tool ID: ' || l_tool_id);
+    uc_ai_logger.log('Successfully created/updated tool with schema', l_scope, 'Tool ID: ' || l_tool_id);
     
     return l_tool_id;
     

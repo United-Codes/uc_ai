@@ -44,10 +44,12 @@ create or replace package uc_ai_tools_api as
   ) return uc_ai_tool_parameters.name%type result_cache;
 
   /*
-   * Creates a new tool definition from a JSON schema
+   * Creates or updates a tool definition from a JSON schema
    * 
-   * Takes a JSON schema input and creates the corresponding records in
-   * uc_ai_tools and uc_ai_tool_parameters tables.
+   * Takes a JSON schema input and creates or updates the corresponding records in
+   * uc_ai_tools, uc_ai_tool_parameters, and uc_ai_tool_tags tables.
+   * If a tool with the same code already exists, it will be updated and its
+   * parameters and tags will be replaced.
    * 
    * @param p_tool_code          Unique code for the tool
    * @param p_description        Description of what the tool does
@@ -59,7 +61,7 @@ create or replace package uc_ai_tools_api as
    * @param p_created_by         User creating the tool
    * @param p_tags               Array of tags to associate with the tool
    * 
-   * @return tool_id             The ID of the created tool
+   * @return tool_id             The ID of the created or updated tool
    */
   function create_tool_from_schema(
     p_tool_code             in uc_ai_tools.code%type,
