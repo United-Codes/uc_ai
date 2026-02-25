@@ -1059,7 +1059,7 @@ create or replace package body uc_ai_agents_api as
       l_result.put('session_id', l_session_id);
       l_result.put('status', c_exec_completed);
 
-      logger.log('Agent execution completed: ' || p_agent_code, l_scope, l_result.to_clob);
+      uc_ai_logger.log('Agent execution completed: ' || p_agent_code, l_scope, l_result.to_clob);
       
       -- Update execution as completed
       complete_execution(
