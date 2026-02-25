@@ -26,6 +26,25 @@ add_file_content() {
     local output_file="${3:-$OUTPUT_FILE}"
     
     if [ -f "$file_path" ]; then
+        # Check for direct logger. calls in PL/SQL files (only uc_ai_logger may reference logger directly)
+        local basename_file
+        basename_file=$(basename "$file_path")
+        if [[ "$basename_file" == *.pks || "$basename_file" == *.pkb || "$basename_file" == *.sql ]] \
+            && [[ "$basename_file" != uc_ai_logger.* ]] \
+            && [[ "$file_path" != */dependencies/* ]]; then
+            # Find lines with logger. that are not uc_ai_logger. and not comments
+            local bad_lines
+            bad_lines=$(grep -in 'logger\.' "$file_path" | grep -iv 'uc_ai_logger\.' | grep -v '^\s*--' || true)
+            if [ -n "$bad_lines" ]; then
+                echo ""
+                echo "ERROR: Direct 'logger.' calls found in $file_path"
+                echo "Only the uc_ai_logger package may reference logger directly."
+                echo "Use uc_ai_logger instead. Offending lines:"
+                echo "$bad_lines"
+                exit 1
+            fi
+        fi
+
         echo "" >> "$output_file"
         echo "/* ====================================================" >> "$output_file"
         echo "   $description" >> "$output_file"
