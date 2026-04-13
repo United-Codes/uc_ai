@@ -98,7 +98,7 @@ create or replace package body uc_ai_error as
   begin
     return json_object_t.parse(p_response);
   exception
-    when others then
+    when others then -- @dblinter ignore(g-5040): error is handled in raise_error
       l_status_code := apex_web_service.g_status_code;
       l_preview := substr(p_response, 1, 500);
 

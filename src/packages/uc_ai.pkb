@@ -172,6 +172,8 @@ create or replace package body uc_ai as
   procedure reset_globals
   as
   begin
+    -- @dblinter ignore(g-2135)
+
     -- Reset uc_ai global variables
     g_base_url := null;
     g_enable_reasoning := false;

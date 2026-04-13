@@ -960,7 +960,7 @@ create or replace package body uc_ai_responses_api as
         l_usage_obj json_object_t := json_object_t();
         l_input_tokens number := nvl(l_api_usage.get_number('input_tokens'), 0);
         l_output_tokens number := nvl(l_api_usage.get_number('output_tokens'), 0);
-        l_reasoning_tokens number := null;
+        l_reasoning_tokens number;
       begin
         if l_api_usage.has('output_tokens_details') and not l_api_usage.get('output_tokens_details').is_null then
           l_reasoning_tokens := l_api_usage.get_object('output_tokens_details').get_number('reasoning_tokens');
