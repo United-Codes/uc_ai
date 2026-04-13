@@ -72,3 +72,11 @@ begin
     :new.updated_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
 end uc_ai_agents_biu;
 /
+
+create or replace trigger uc_ai_agent_executions_bi
+    before insert on uc_ai_agent_executions
+    for each row
+begin
+    :new.started_at := systimestamp;
+end uc_ai_agent_executions_bi;
+/
