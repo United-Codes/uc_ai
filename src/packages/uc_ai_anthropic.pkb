@@ -336,7 +336,7 @@ create or replace package body uc_ai_anthropic as
 
     uc_ai_logger.log('Response', l_scope, l_resp);
 
-    l_resp_json := json_object_t.parse(l_resp);
+    l_resp_json := uc_ai_error.parse_json_response(l_resp, 'Anthropic', l_scope);
 
     if l_resp_json.has('error') then
       l_temp_obj := l_resp_json.get_object('error');

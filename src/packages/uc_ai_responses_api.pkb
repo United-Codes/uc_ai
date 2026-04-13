@@ -541,7 +541,7 @@ create or replace package body uc_ai_responses_api as
 
     l_web_credential := coalesce(g_apex_web_credential, uc_ai.g_apex_web_credential);
 
-    if l_web_credential is null then
+    if l_web_credential is null and not g_skip_auth then
       apex_web_service.g_request_headers(2).name := 'Authorization';
       apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(uc_ai.g_provider_override);
     end if;
@@ -563,18 +563,7 @@ create or replace package body uc_ai_responses_api as
 
     uc_ai_logger.log('Response', l_scope, l_resp);
 
-    begin
-      l_resp_json := json_object_t.parse(l_resp);
-    exception
-      when others then
-        uc_ai_error.raise_error(
-          p_error_code => uc_ai_error.c_err_provider_response
-        , p_scope      => l_scope
-        , p0           => 'Responses API'
-        , p1           => 'Response is not JSON'
-        , p_extra      => l_resp
-        );
-    end;
+    l_resp_json := uc_ai_error.parse_json_response(l_resp, 'Responses API', l_scope);
 
     if l_resp_json.has('error') and not l_resp_json.get('error').is_null then
       if l_resp_json.get('error').is_object then

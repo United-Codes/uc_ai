@@ -87,5 +87,29 @@ create or replace package body uc_ai_error as
     raise_application_error(p_error_code, l_msg);
   end raise_error;
 
+  function parse_json_response(
+    p_response in clob
+  , p_provider in varchar2
+  , p_scope    in varchar2
+  ) return json_object_t
+  is
+    l_status_code number;
+    l_preview     varchar2(500 char);
+  begin
+    return json_object_t.parse(p_response);
+  exception
+    when others then
+      l_status_code := apex_web_service.g_status_code;
+      l_preview := substr(p_response, 1, 500);
+
+      raise_error(
+        p_error_code => c_err_provider_response
+      , p_scope      => p_scope
+      , p0           => p_provider
+      , p1           => 'Status Code from provider: ' || l_status_code || ', Provider response: ' || l_preview
+      , p_extra      => p_response
+      );
+  end parse_json_response;
+
 end uc_ai_error;
 /

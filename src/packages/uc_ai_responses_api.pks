@@ -39,6 +39,9 @@ as
   g_extra_header_name  varchar2(255 char);
   g_extra_header_value varchar2(4000 char);
 
+  -- Skip Authorization header (for providers like Ollama that don't require auth)
+  g_skip_auth boolean := false;
+
 
   /*
    * Responses API implementation for text generation

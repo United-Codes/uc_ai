@@ -516,7 +516,7 @@ create or replace package body uc_ai_oci as
 
     uc_ai_logger.log('Response', l_scope, l_resp);
 
-    l_resp_json := json_object_t.parse(l_resp);
+    l_resp_json := uc_ai_error.parse_json_response(l_resp, 'OCI', l_scope);
 
     if l_resp_json.has('error') then
       l_temp_obj := l_resp_json.get_object('error');
@@ -1086,18 +1086,7 @@ create or replace package body uc_ai_oci as
 
     uc_ai_logger.log('Response', l_scope, l_resp);
 
-    begin
-      l_resp_json := json_object_t.parse(l_resp);
-    exception
-      when others then
-        uc_ai_error.raise_error(
-          p_error_code => uc_ai_error.c_err_provider_response
-        , p_scope      => l_scope
-        , p0           => 'oci'
-        , p1           => 'Response is not JSON, probable error'
-        , p_extra      => l_resp
-        );
-    end;
+    l_resp_json := uc_ai_error.parse_json_response(l_resp, 'OCI', l_scope);
 
     -- Check for error in response
     if l_resp_json.has('code') and l_resp_json.has('message') then

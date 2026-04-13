@@ -151,5 +151,23 @@ as
   , p_log        in boolean  default true
   );
 
+  /**
+   * Parse a provider HTTP response as JSON, raising a descriptive error on failure.
+   *
+   * Replaces scattered begin/exception blocks across providers.
+   * On failure, the raised error includes the provider name,
+   * the HTTP status code, and a truncated preview of the response body.
+   *
+   * @param p_response   Raw HTTP response body (may be HTML, empty, etc.)
+   * @param p_provider   Provider name for the error message (e.g. 'Ollama', 'OCI')
+   * @param p_scope      Logger scope
+   * @return Parsed JSON object
+   */
+  function parse_json_response(
+    p_response in clob
+  , p_provider in varchar2
+  , p_scope    in varchar2
+  ) return json_object_t;
+
 end uc_ai_error;
 /
