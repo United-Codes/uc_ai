@@ -312,6 +312,50 @@ create or replace package body test_uc_ai_openai_chat as
   end image_file_input;
 
 
+  procedure reasoning_with_tools
+  as
+    l_result json_object_t;
+    l_final_message clob;
+    l_messages json_array_t;
+    l_message_count pls_integer;
+    l_tool_calls_count pls_integer;
+  begin
+    delete from UC_AI_TOOL_PARAMETERS where 1 = 1;
+    delete from UC_AI_TOOLS where 1 = 1;
+    uc_ai_test_utils.add_get_users_tool();
+
+    uc_ai.g_enable_tools := true;
+    uc_ai.g_enable_reasoning := true;
+    uc_ai_openai.g_reasoning_effort := 'low';
+
+    l_result := uc_ai.GENERATE_TEXT(
+      p_user_prompt => 'What is the email address of Jim?',
+      p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_o4_mini
+    );
+
+    sys.dbms_output.put_line('Result: ' || l_result.to_string);
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(l_final_message).to_be_not_null();
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    l_message_count := l_messages.get_size;
+    ut.expect(l_message_count).to_be_greater_than(2); -- Should have tool calls
+
+    l_tool_calls_count := l_result.get_number('tool_calls_count');
+    sys.dbms_output.put_line('Tool calls: ' || l_tool_calls_count);
+    ut.expect(l_tool_calls_count).to_be_greater_than(0);
+
+    -- Validate message array structure against spec
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Reasoning with Tools Test');
+
+    ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
+  end reasoning_with_tools;
+
+
   procedure reasoning
   as
     l_messages json_array_t := json_array_t();

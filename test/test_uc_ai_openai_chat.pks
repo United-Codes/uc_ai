@@ -23,6 +23,9 @@ create or replace package test_uc_ai_openai_chat as
   --%test(image file input)
   procedure image_file_input;
 
+  --%test(reasoning with tools)
+  procedure reasoning_with_tools;
+
   --%test(reasoning)
   procedure reasoning;
 

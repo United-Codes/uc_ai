@@ -258,6 +258,75 @@ create or replace package body test_uc_ai_google as
   end image_file_input;
 
 
+  procedure reasoning_with_tools
+  as
+    l_result json_object_t;
+    l_final_message clob;
+    l_messages json_array_t;
+    l_message_count pls_integer;
+    l_tool_calls_count pls_integer;
+    l_assistant_message json_object_t;
+    l_assistant_content json_array_t;
+    l_content json_object_t;
+    l_reasoning_message_found boolean := false;
+  begin
+    delete from UC_AI_TOOL_PARAMETERS where 1 = 1;
+    delete from UC_AI_TOOLS where 1 = 1;
+    uc_ai_test_utils.add_get_users_tool();
+
+    uc_ai.g_enable_tools := true;
+    uc_ai.g_enable_reasoning := true;
+    uc_ai_google.g_reasoning_budget := 512;
+
+    l_result := uc_ai.GENERATE_TEXT(
+      p_user_prompt => 'What is the email address of Jim?',
+      p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.',
+      p_provider => uc_ai.c_provider_google,
+      p_model => uc_ai_google.c_model_gemini_2_5_flash
+    );
+
+    sys.dbms_output.put_line('Result: ' || l_result.to_string);
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(l_final_message).to_be_not_null();
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    l_message_count := l_messages.get_size;
+    ut.expect(l_message_count).to_be_greater_than(2); -- Should have tool calls
+
+    l_tool_calls_count := l_result.get_number('tool_calls_count');
+    sys.dbms_output.put_line('Tool calls: ' || l_tool_calls_count);
+    ut.expect(l_tool_calls_count).to_be_greater_than(0);
+
+    -- Check that reasoning content is present in at least one assistant message
+    <<message_loop>>
+    for i in 0 .. l_messages.get_size - 1
+    loop
+      l_assistant_message := treat(l_messages.get(i) as json_object_t);
+      if l_assistant_message.get_string('role') = 'assistant' then
+        l_assistant_content := l_assistant_message.get_array('content');
+        <<content_loop>>
+        for j in 0 .. l_assistant_content.get_size - 1
+        loop
+          l_content := treat(l_assistant_content.get(j) as json_object_t);
+          if l_content.get_string('type') = 'reasoning' then
+            sys.dbms_output.put_line('Reasoning content: ' || l_content.get_clob('text'));
+            l_reasoning_message_found := true;
+          end if;
+        end loop content_loop;
+      end if;
+    end loop message_loop;
+
+    ut.expect(l_reasoning_message_found, 'No reasoning message found in response').to_equal(true);
+
+    -- Validate message array structure against spec
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Reasoning with Tools Test');
+
+    ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
+  end reasoning_with_tools;
+
+
   procedure reasoning
   as
     l_messages json_array_t := json_array_t();
