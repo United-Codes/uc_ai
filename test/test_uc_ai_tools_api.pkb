@@ -491,5 +491,209 @@ create or replace package body test_uc_ai_tools_api as
 
   end test_create_tool_with_tags;
 
+  /*
+   * Test that merge_tool_from_schema creates a new tool when none exists
+   */
+  procedure test_merge_tool_creates_new as
+    l_tool_id uc_ai_tools.id%type;
+    l_schema clob;
+    l_tool_count number;
+    l_param_count number;
+  begin
+    l_schema := '{
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "Search query"
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Max results"
+        }
+      },
+      "required": ["query"]
+    }';
+
+    l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+      p_tool_code => gc_test_prefix || 'MERGE_NEW',
+      p_description => 'Tool created via merge',
+      p_function_call => 'return search_function(:parameters);',
+      p_json_schema => json_object_t.parse(l_schema),
+      p_created_by => gc_test_user
+    );
+
+    ut.expect(l_tool_id).to_be_not_null();
+
+    -- Verify tool was created
+    select count(*) into l_tool_count
+    from uc_ai_tools
+    where id = l_tool_id and code = gc_test_prefix || 'MERGE_NEW';
+
+    ut.expect(l_tool_count).to_equal(1);
+
+    -- Verify parameters
+    select count(*) into l_param_count
+    from uc_ai_tool_parameters
+    where tool_id = l_tool_id;
+
+    ut.expect(l_param_count).to_equal(2);
+
+  end test_merge_tool_creates_new;
+
+  /*
+   * Test that merge_tool_from_schema updates an existing tool
+   */
+  procedure test_merge_tool_updates_existing as
+    l_tool_id_1 uc_ai_tools.id%type;
+    l_tool_id_2 uc_ai_tools.id%type;
+    l_schema clob;
+    l_description uc_ai_tools.description%type;
+    l_param_count number;
+    l_required_count number;
+  begin
+    -- Create initial tool
+    l_schema := '{
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name"
+        }
+      },
+      "required": ["name"]
+    }';
+
+    l_tool_id_1 := uc_ai_tools_api.merge_tool_from_schema(
+      p_tool_code => gc_test_prefix || 'MERGE_UPD',
+      p_description => 'Original description',
+      p_function_call => 'return original_function(:parameters);',
+      p_json_schema => json_object_t.parse(l_schema),
+      p_created_by => gc_test_user
+    );
+
+    -- Merge with updated schema and description
+    l_schema := '{
+      "type": "object",
+      "properties": {
+        "first_name": {
+          "type": "string",
+          "description": "First name"
+        },
+        "last_name": {
+          "type": "string",
+          "description": "Last name"
+        },
+        "age": {
+          "type": "integer",
+          "description": "Age"
+        }
+      },
+      "required": ["first_name", "last_name"]
+    }';
+
+    l_tool_id_2 := uc_ai_tools_api.merge_tool_from_schema(
+      p_tool_code => gc_test_prefix || 'MERGE_UPD',
+      p_description => 'Updated description',
+      p_function_call => 'return updated_function(:parameters);',
+      p_json_schema => json_object_t.parse(l_schema),
+      p_created_by => gc_test_user
+    );
+
+    -- Should return the same tool ID
+    ut.expect(l_tool_id_2).to_equal(l_tool_id_1);
+
+    -- Verify description was updated
+    select description into l_description
+    from uc_ai_tools
+    where id = l_tool_id_2;
+
+    ut.expect(l_description).to_equal('Updated description');
+
+    -- Verify old parameters were replaced with new ones
+    select count(*) into l_param_count
+    from uc_ai_tool_parameters
+    where tool_id = l_tool_id_2;
+
+    ut.expect(l_param_count).to_equal(3);
+
+    -- Verify new required parameters
+    select count(*) into l_required_count
+    from uc_ai_tool_parameters
+    where tool_id = l_tool_id_2 and required = 1;
+
+    ut.expect(l_required_count).to_equal(2);
+
+  end test_merge_tool_updates_existing;
+
+  /*
+   * Test that merge_tool_from_schema replaces tags on update
+   */
+  procedure test_merge_tool_replaces_tags as
+    l_tool_id uc_ai_tools.id%type;
+    l_schema clob;
+    l_tag_count number;
+    l_has_new_tag number;
+  begin
+    l_schema := '{
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string",
+          "description": "A value"
+        }
+      }
+    }';
+
+    -- Create tool with initial tags
+    l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+      p_tool_code => gc_test_prefix || 'MERGE_TAGS',
+      p_description => 'Tool with tags',
+      p_function_call => 'return tag_function(:parameters);',
+      p_json_schema => json_object_t.parse(l_schema),
+      p_created_by => gc_test_user,
+      p_tags => apex_t_varchar2('old-tag-1', 'old-tag-2')
+    );
+
+    -- Verify initial tags
+    select count(*) into l_tag_count
+    from uc_ai_tool_tags
+    where tool_id = l_tool_id;
+
+    ut.expect(l_tag_count).to_equal(2);
+
+    -- Merge with new tags
+    l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+      p_tool_code => gc_test_prefix || 'MERGE_TAGS',
+      p_description => 'Tool with tags',
+      p_function_call => 'return tag_function(:parameters);',
+      p_json_schema => json_object_t.parse(l_schema),
+      p_created_by => gc_test_user,
+      p_tags => apex_t_varchar2('new-tag-1', 'new-tag-2', 'new-tag-3')
+    );
+
+    -- Verify tags were replaced
+    select count(*) into l_tag_count
+    from uc_ai_tool_tags
+    where tool_id = l_tool_id;
+
+    ut.expect(l_tag_count).to_equal(3);
+
+    -- Verify old tags are gone
+    select count(*) into l_has_new_tag
+    from uc_ai_tool_tags
+    where tool_id = l_tool_id and tag_name = 'old-tag-1';
+
+    ut.expect(l_has_new_tag).to_equal(0);
+
+    -- Verify new tags exist
+    select count(*) into l_has_new_tag
+    from uc_ai_tool_tags
+    where tool_id = l_tool_id and tag_name = 'new-tag-1';
+
+    ut.expect(l_has_new_tag).to_equal(1);
+
+  end test_merge_tool_replaces_tags;
+
 end test_uc_ai_tools_api;
 /

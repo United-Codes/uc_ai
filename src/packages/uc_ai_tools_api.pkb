@@ -1004,7 +1004,7 @@ create or replace package body uc_ai_tools_api as
   ) return uc_ai_tools.id%type
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'create_tool_from_schema';
-    
+
     l_tool_id uc_ai_tools.id%type;
     l_properties json_object_t;
     l_required_arr json_array_t;
@@ -1041,17 +1041,17 @@ create or replace package body uc_ai_tools_api as
       p_created_by,
       systimestamp
     ) returning id into l_tool_id;
-    
+
     uc_ai_logger.log('Created tool with ID: ' || l_tool_id, l_scope);
 
     if l_schema_clob is null then
       return l_tool_id;
     end if;
-    
+
     -- Extract properties and required array from schema
     l_properties := treat(p_json_schema.get('properties') as json_object_t);
     l_required_arr := treat(p_json_schema.get('required') as json_array_t);
-    
+
     -- Convert required array to key list for easier processing
     if l_required_arr is not null then
       <<required_loop>>
@@ -1060,7 +1060,7 @@ create or replace package body uc_ai_tools_api as
         l_required_keys_arr(l_required_keys_arr.count) := l_required_arr.get_string(i);
       end loop required_loop;
     end if;
-    
+
     -- Create parameters from schema properties
     create_parameters_recursive(
       p_properties => l_properties
@@ -1069,7 +1069,7 @@ create or replace package body uc_ai_tools_api as
     , p_created_by => p_created_by
     , p_tool_id => l_tool_id
     );
-    
+
     -- Create tags if provided
     if p_tags is not null and p_tags.count > 0 then
       forall i in 1 .. p_tags.count
@@ -1089,16 +1089,169 @@ create or replace package body uc_ai_tools_api as
           systimestamp
         );
     end if;
-    
+
     uc_ai_logger.log('Successfully created tool with schema', l_scope, 'Tool ID: ' || l_tool_id);
-    
+
     return l_tool_id;
-    
+
   exception
     when others then
       uc_ai_logger.log_error('Error in create_tool_from_schema', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end create_tool_from_schema;
+
+  /*
+   * Creates or updates a tool definition from a JSON schema
+   *
+   * If a tool with the same code already exists, it will be updated.
+   * Parameters and tags are replaced (deleted and recreated) on update.
+   */
+  function merge_tool_from_schema(
+    p_tool_code             in uc_ai_tools.code%type,
+    p_description           in uc_ai_tools.description%type,
+    p_function_call         in uc_ai_tools.function_call%type,
+    p_json_schema           in json_object_t,
+    p_active                in uc_ai_tools.active%type default 1,
+    p_version               in uc_ai_tools.version%type default '1.0',
+    p_authorization_schema  in uc_ai_tools.authorization_schema%type default null,
+    p_created_by            in uc_ai_tools.created_by%type default coalesce(sys_context('APEX$SESSION','app_user'), sys_context('userenv', 'session_user')),
+    p_tags                  in apex_t_varchar2 default apex_t_varchar2()
+  ) return uc_ai_tools.id%type
+  as
+    l_scope uc_ai_logger.scope := gc_scope_prefix || 'merge_tool_from_schema';
+
+    l_tool_id uc_ai_tools.id%type;
+    l_existing_tool_id uc_ai_tools.id%type;
+    l_properties json_object_t;
+    l_required_arr json_array_t;
+    l_required_keys_arr json_key_list := json_key_list();
+    l_schema_clob clob;
+  begin
+    uc_ai_logger.log('Merging tool from schema', l_scope, 'Tool: ' || p_tool_code);
+
+    l_schema_clob := case when p_json_schema is not null then p_json_schema.to_clob else null end;
+
+    -- Check if tool already exists
+    begin
+      select id
+        into l_existing_tool_id
+        from uc_ai_tools
+       where code = p_tool_code;
+    exception
+      when no_data_found then
+        l_existing_tool_id := null;
+    end;
+
+    if l_existing_tool_id is not null then
+      -- Update existing tool
+      update uc_ai_tools
+         set description          = p_description,
+             active               = p_active,
+             response_schema      = l_schema_clob,
+             version              = p_version,
+             function_call        = p_function_call,
+             authorization_schema = p_authorization_schema,
+             updated_by           = p_created_by,
+             updated_at           = systimestamp
+       where id = l_existing_tool_id;
+
+      l_tool_id := l_existing_tool_id;
+
+      uc_ai_logger.log('Updated existing tool with ID: ' || l_tool_id, l_scope);
+
+      -- Delete existing parameters (cascade will handle nested params)
+      delete from uc_ai_tool_parameters
+       where tool_id = l_tool_id;
+
+      -- Delete existing tags
+      delete from uc_ai_tool_tags
+       where tool_id = l_tool_id;
+    else
+      -- Create new tool record
+      insert into uc_ai_tools (
+        code,
+        description,
+        active,
+        response_schema,
+        version,
+        function_call,
+        authorization_schema,
+        created_by,
+        created_at,
+        updated_by,
+        updated_at
+      ) values (
+        p_tool_code,
+        p_description,
+        p_active,
+        l_schema_clob,
+        p_version,
+        p_function_call,
+        p_authorization_schema,
+        p_created_by,
+        systimestamp,
+        p_created_by,
+        systimestamp
+      ) returning id into l_tool_id;
+
+      uc_ai_logger.log('Created new tool with ID: ' || l_tool_id, l_scope);
+    end if;
+
+    if l_schema_clob is null then
+      return l_tool_id;
+    end if;
+
+    -- Extract properties and required array from schema
+    l_properties := treat(p_json_schema.get('properties') as json_object_t);
+    l_required_arr := treat(p_json_schema.get('required') as json_array_t);
+
+    -- Convert required array to key list for easier processing
+    if l_required_arr is not null then
+      <<required_loop>>
+      for i in 0 .. l_required_arr.get_size - 1 loop
+        l_required_keys_arr.extend;
+        l_required_keys_arr(l_required_keys_arr.count) := l_required_arr.get_string(i);
+      end loop required_loop;
+    end if;
+
+    -- Create parameters from schema properties
+    create_parameters_recursive(
+      p_properties => l_properties
+    , p_required_keys => l_required_keys_arr
+    , p_parent_param_id => null
+    , p_created_by => p_created_by
+    , p_tool_id => l_tool_id
+    );
+
+    -- Create tags if provided
+    if p_tags is not null and p_tags.count > 0 then
+      forall i in 1 .. p_tags.count
+        insert into uc_ai_tool_tags (
+          tool_id,
+          tag_name,
+          created_by,
+          created_at,
+          updated_by,
+          updated_at
+        ) values (
+          l_tool_id,
+          lower(p_tags(i)),
+          p_created_by,
+          systimestamp,
+          p_created_by,
+          systimestamp
+        );
+    end if;
+
+    uc_ai_logger.log('Successfully merged tool with schema', l_scope, 'Tool ID: ' || l_tool_id);
+
+    return l_tool_id;
+
+  exception
+    when others then
+      uc_ai_logger.log_error('Error in merge_tool_from_schema', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      raise;
+  end merge_tool_from_schema;
 
 end uc_ai_tools_api;
 /
