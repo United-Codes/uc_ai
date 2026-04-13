@@ -316,17 +316,7 @@ create or replace package body uc_ai_ollama as
 
     uc_ai_logger.log('Response', l_scope, l_resp);
 
-    begin
-      l_resp_json := json_object_t.parse(l_resp);
-    exception
-      when others then
-        uc_ai_error.raise_error(
-          p_error_code => uc_ai_error.c_err_format_processing
-        , p_scope      => l_scope
-        , p0           => 'Error parsing response JSON'
-        , p_extra      => l_resp
-        );
-    end;
+    l_resp_json := uc_ai_error.parse_json_response(l_resp, 'Ollama', l_scope);
 
     if l_resp_json.has('error') then
       uc_ai_error.raise_error(
@@ -552,9 +542,36 @@ create or replace package body uc_ai_ollama as
     l_message            json_object_t;
     l_format             json_object_t;
   begin
-    l_result := json_object_t();
     uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
-    
+
+    if g_use_responses_api then
+      declare
+        l_base varchar2(500 char) := coalesce(uc_ai.g_base_url, c_api_url);
+      begin
+        -- Replace /api suffix with /v1 for OpenAI-compatible endpoint
+        if l_base like '%/api' then
+          l_base := substr(l_base, 1, length(l_base) - 4) || '/v1';
+        else
+          l_base := rtrim(l_base, '/') || '/v1';
+        end if;
+        uc_ai_responses_api.g_base_url := l_base;
+        uc_ai_responses_api.g_apex_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+        uc_ai_responses_api.g_skip_auth := uc_ai_responses_api.g_apex_web_credential is null;
+        uc_ai.g_provider_override := uc_ai.c_provider_ollama;
+        -- Clear g_base_url so responses API uses its own g_base_url
+        uc_ai.g_base_url := null;
+
+        return uc_ai_responses_api.generate_text(
+          p_messages       => p_messages
+        , p_model          => p_model
+        , p_max_tool_calls => p_max_tool_calls
+        , p_schema         => p_schema
+        );
+      end;
+    end if;
+
+    l_result := json_object_t();
+
     -- Reset global variables
     g_tool_calls := 0;
     g_final_message := null;
@@ -655,13 +672,13 @@ create or replace package body uc_ai_ollama as
 
     uc_ai_logger.log('Response', l_scope, l_resp);
 
-    l_resp_json := json_object_t.parse(l_resp);
+    l_resp_json := uc_ai_error.parse_json_response(l_resp, 'Ollama', l_scope);
 
     if l_resp_json.has('error') then
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_provider_response
       , p_scope      => l_scope
-      , p0           => 'ollama'
+      , p0           => 'Ollama'
       , p1           => l_resp_json.get_clob('error')
       , p_extra      => l_resp
       );
