@@ -474,8 +474,13 @@ create or replace package body uc_ai_anthropic as
               l_normalized_tool_results.append(l_new_msg);
             when 'text' then
               uc_ai_logger.log('Text content block found', l_scope, l_content_prompt.to_clob);
-   
+
               l_new_msg := get_text_content(l_content_prompt);
+              l_normalized_messages.append(l_new_msg);
+            when 'thinking' then
+              uc_ai_logger.log('Thinking content block found', l_scope, l_content_prompt.to_clob);
+
+              l_new_msg := get_reasoning_content(l_content_prompt);
               l_normalized_messages.append(l_new_msg);
             else
               uc_ai_error.raise_error(
