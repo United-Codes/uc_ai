@@ -546,6 +546,11 @@ create or replace package body uc_ai_responses_api as
       apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(uc_ai.g_provider_override);
     end if;
 
+    if g_extra_header_name is not null then
+      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count + 1).name := g_extra_header_name;
+      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count).value := g_extra_header_value;
+    end if;
+
     l_url := get_generate_text_url;
     uc_ai_logger.log('Calling Responses API at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null'), l_scope);
 
@@ -959,9 +964,24 @@ create or replace package body uc_ai_responses_api as
       l_result.put('finish_reason', 'stop');
     end if;
     
-    -- Add usage information
+    -- Add normalized usage information
     if l_api_response.has('usage') then
-      l_result.put('usage', l_api_response.get_object('usage'));
+      declare
+        l_api_usage json_object_t := l_api_response.get_object('usage');
+        l_usage_obj json_object_t := json_object_t();
+        l_input_tokens number := nvl(l_api_usage.get_number('input_tokens'), 0);
+        l_output_tokens number := nvl(l_api_usage.get_number('output_tokens'), 0);
+        l_reasoning_tokens number := null;
+      begin
+        if l_api_usage.has('output_tokens_details') and not l_api_usage.get('output_tokens_details').is_null then
+          l_reasoning_tokens := l_api_usage.get_object('output_tokens_details').get_number('reasoning_tokens');
+        end if;
+        l_usage_obj.put('prompt_tokens', l_input_tokens);
+        l_usage_obj.put('completion_tokens', l_output_tokens);
+        l_usage_obj.put('reasoning_tokens', l_reasoning_tokens);
+        l_usage_obj.put('total_tokens', nvl(l_api_usage.get_number('total_tokens'), l_input_tokens + l_output_tokens));
+        l_result.put('usage', l_usage_obj);
+      end;
     end if;
     
     -- Add model information
@@ -970,7 +990,7 @@ create or replace package body uc_ai_responses_api as
     end if;
     
     -- Add provider info
-    l_result.put('provider', uc_ai.c_provider_openai);
+    l_result.put('provider', coalesce(uc_ai.g_provider_override, uc_ai.c_provider_openai));
     
     uc_ai_logger.log('Completed generate_text with Responses API', l_scope);
     

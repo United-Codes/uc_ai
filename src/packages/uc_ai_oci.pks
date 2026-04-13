@@ -62,6 +62,7 @@ as
   g_serving_type varchar2(64 char) := 'ON_DEMAND'; -- ON_DEMAND or DEDICATED
   g_region varchar2(64 char) := 'us-ashburn-1'; -- OCI region for API endpoint
   g_apex_web_credential varchar2(255 char);
+  g_use_responses_api boolean := false;
 
   /*
    * Oracle Cloud Infrastructure (OCI) Generative AI implementation for text generation 

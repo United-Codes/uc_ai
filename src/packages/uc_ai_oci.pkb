@@ -17,6 +17,9 @@ create or replace package body uc_ai_oci as
   g_cohere_system_prompt clob;
   g_cohere_user_message clob;
 
+  g_input_tokens number := 0;
+  g_output_tokens number := 0;
+
   -- OCI Generative AI reference: https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/
   function get_text_content_generic (
     p_message in json_object_t
@@ -565,6 +568,12 @@ create or replace package body uc_ai_oci as
     if l_resp_json.has('chatResponse') then
       l_chat_response := l_resp_json.get_object('chatResponse');
 
+      -- Extract and accumulate usage information
+      if l_chat_response.has('usage') then
+        l_temp_obj := l_chat_response.get_object('usage');
+        g_input_tokens := g_input_tokens + nvl(l_temp_obj.get_number('promptTokens'), 0);
+        g_output_tokens := g_output_tokens + nvl(l_temp_obj.get_number('completionTokens'), 0);
+      end if;
 
       if g_mode = gc_mode_generic then
         -- OCI response structure is different from OpenAI/Google
@@ -856,6 +865,7 @@ create or replace package body uc_ai_oci as
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_with_messages';
+    l_region varchar2(64 char) := coalesce(g_region, 'us-ashburn-1');
     l_input_obj          json_object_t := json_object_t();
     l_oci_messages       json_array_t;
     l_result             json_object_t;
@@ -864,8 +874,23 @@ create or replace package body uc_ai_oci as
     l_chat_request       json_object_t;
     l_tools              json_array_t;
   begin
-    l_result := json_object_t();
     uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
+
+    if g_use_responses_api then
+      uc_ai_responses_api.g_base_url := c_api_url_base || l_region || '.oci.oraclecloud.com/openai/v1';
+      uc_ai_responses_api.g_apex_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+      uc_ai_responses_api.g_extra_header_name := 'opc-compartment-id';
+      uc_ai_responses_api.g_extra_header_value := g_compartment_id;
+      uc_ai.g_provider_override := uc_ai.c_provider_oci;
+
+      return uc_ai_responses_api.generate_text(
+        p_messages       => p_messages
+      , p_model          => p_model
+      , p_max_tool_calls => p_max_tool_calls
+      );
+    end if;
+
+    l_result := json_object_t();
 
     if p_model like 'cohere.%' then
       g_mode := gc_mode_cohere;
@@ -877,6 +902,8 @@ create or replace package body uc_ai_oci as
     g_tool_calls := 0;
     g_final_message := null;
     g_normalized_messages := json_array_t();
+    g_input_tokens := 0;
+    g_output_tokens := 0;
     
     -- Copy input messages to global normalized messages array
     <<copy_messages_loop>>
@@ -980,9 +1007,20 @@ create or replace package body uc_ai_oci as
  
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_oci);
-    
+
+    -- Add usage information
+    declare
+      l_usage_obj json_object_t := json_object_t();
+    begin
+      l_usage_obj.put('prompt_tokens', g_input_tokens);
+      l_usage_obj.put('completion_tokens', g_output_tokens);
+      l_usage_obj.put('reasoning_tokens', cast(null as number));
+      l_usage_obj.put('total_tokens', g_input_tokens + g_output_tokens);
+      l_result.put('usage', l_usage_obj);
+    end;
+
     uc_ai_logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
-    
+
     return l_result;
   end generate_text;
 

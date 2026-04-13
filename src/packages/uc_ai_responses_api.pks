@@ -34,6 +34,11 @@ as
   -- type: HTTP-Header, credential-name: Authorization, value: Bearer <token>
   g_apex_web_credential varchar2(255 char);
 
+  -- Extra HTTP headers to send with requests (e.g., opc-compartment-id for OCI)
+  -- Set by provider packages before calling generate_text, cleared after use.
+  g_extra_header_name  varchar2(255 char);
+  g_extra_header_value varchar2(4000 char);
+
 
   /*
    * Responses API implementation for text generation

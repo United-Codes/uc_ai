@@ -352,10 +352,18 @@ create or replace package body uc_ai_test_message_utils as
     ut.expect(not p_response.get('model').is_null, 
              p_test_name || ': Return object model field should not be null').to_be_true();
 
-    validate_usage_object(
-      p_usage => treat(p_response.get('usage') as json_object_t),
-      p_test_name => p_test_name || ' - Usage Object Validation'
-    );
+    ut.expect(p_response.has('usage'),
+             p_test_name || ': Return object should have usage field').to_be_true();
+
+    if p_response.has('usage') then
+      ut.expect(not p_response.get('usage').is_null,
+               p_test_name || ': Return object usage field should not be null').to_be_true();
+
+      validate_usage_object(
+        p_usage => treat(p_response.get('usage') as json_object_t),
+        p_test_name => p_test_name || ' - Usage Object Validation'
+      );
+    end if;
 
     validate_message_array(
       p_messages => treat(p_response.get('messages') as json_array_t),
