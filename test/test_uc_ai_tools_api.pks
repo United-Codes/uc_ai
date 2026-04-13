@@ -26,7 +26,14 @@ create or replace package test_uc_ai_tools_api as
   --%test(Create tool with tags)
   procedure test_create_tool_with_tags;
 
+  --%test(Merge tool creates new tool when none exists)
+  procedure test_merge_tool_creates_new;
 
+  --%test(Merge tool updates existing tool)
+  procedure test_merge_tool_updates_existing;
+
+  --%test(Merge tool replaces tags on update)
+  procedure test_merge_tool_replaces_tags;
 
 end test_uc_ai_tools_api;
 /
