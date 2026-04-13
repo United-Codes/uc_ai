@@ -301,9 +301,12 @@ create or replace package body uc_ai_google as
     l_web_credential varchar2(255 char);
   begin
     if g_tool_calls >= p_max_tool_calls then
-      uc_ai_logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
-      raise uc_ai.e_max_calls_exceeded;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_max_calls_exceeded
+      , p_scope      => l_scope
+      , p0           => to_char(p_max_tool_calls)
+      );
     end if;
 
     l_input_obj := p_input_obj;
@@ -343,9 +346,13 @@ create or replace package body uc_ai_google as
 
     if l_resp_json.has('error') then
       l_temp_obj := l_resp_json.get_object('error');
-      uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-      uc_ai_logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
-      raise uc_ai.e_error_response;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'google'
+      , p1           => l_temp_obj.get_string('message')
+      , p_extra      => l_temp_obj.to_clob
+      );
     end if;
 
     -- Extract and accumulate usage information in global counters
@@ -525,8 +532,11 @@ create or replace package body uc_ai_google as
   
     else
       -- No candidates returned
-      uc_ai_logger.log_error('No candidates in response', l_scope);
-      pio_result.put('finish_reason', 'error');
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p_message    => 'No candidates in Google API response'
+      );
     end if;
 
     uc_ai_logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);
@@ -784,15 +794,23 @@ create or replace package body uc_ai_google as
       l_resp_json := json_object_t.parse(l_resp);
     exception
       when others then
-        uc_ai_logger.log_error('Response is not JSON, probable error', l_scope, l_resp);
-        raise uc_ai.e_error_response;
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p_message    => 'Response is not valid JSON'
+        , p_extra      => l_resp
+        );
     end;
 
     if l_resp_json.has('error') then
       l_temp_obj := l_resp_json.get_object('error');
-      uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-      uc_ai_logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
-      raise uc_ai.e_error_response;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'google'
+      , p1           => l_temp_obj.get_string('message')
+      , p_extra      => l_temp_obj.to_clob
+      );
     end if;
 
     -- Google returns embeddings in "embeddings" array, each item has "values" array

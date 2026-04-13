@@ -1,4 +1,6 @@
-create or replace package uc_ai_agent_exec_api as
+create or replace package uc_ai_agent_exec_api 
+  authid definer
+as
   /*
    * UC AI Agent Execution API
    * 

@@ -109,8 +109,13 @@ create or replace package body uc_ai_agent_workflow_api as
           );
         exception
           when others then
-            uc_ai_logger.log_error('Error evaluating PL/SQL expression for input mapping key ' || l_key || ': ' || sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace, l_scope, l_resolved);
-            raise_application_error(-20022, 'Error evaluating PL/SQL expression for input mapping key ' || l_key || ': ' || l_resolved || ' - ' || sqlerrm);
+            uc_ai_error.raise_error(
+              p_error_code => uc_ai_error.c_err_input_mapping_eval
+            , p_scope      => l_scope
+            , p0           => l_key
+            , p1           => sqlerrm
+            , p_extra      => l_resolved || chr(10) || sys.dbms_utility.format_error_backtrace
+            );
         end;
       end if;
 
@@ -167,8 +172,13 @@ create or replace package body uc_ai_agent_workflow_api as
       return l_resolved;
     exception
       when others then
-        uc_ai_logger.log_error('Error evaluating PL/SQL expression for final_message: ' || sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace, l_scope, l_tmp);
-        raise_application_error(-20023, 'Error evaluating PL/SQL expression for final_message: ' || l_tmp || ' - ' || sqlerrm );
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_final_message_eval
+        , p_scope      => l_scope
+        , p0           => l_tmp
+        , p1           => sqlerrm
+        , p_extra      => sys.dbms_utility.format_error_backtrace
+        );
     end;
   end evaluate_final_message;
 
@@ -200,8 +210,13 @@ create or replace package body uc_ai_agent_workflow_api as
       );
     exception
       when others then
-        uc_ai_logger.log_error('Error evaluating condition expression: ' || sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace, l_scope, l_expression);
-        raise_application_error(-20021, 'Error evaluating condition expression: ' || l_expression || ' - ' || sqlerrm);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_condition_eval
+        , p_scope      => l_scope
+        , p0           => l_expression
+        , p1           => sqlerrm
+        , p_extra      => sys.dbms_utility.format_error_backtrace
+        );
     end;
 
 
@@ -230,8 +245,11 @@ create or replace package body uc_ai_agent_workflow_api as
     if p_step.has('output_key') then
       l_output_key := p_step.get_string('output_key');
     else
-      uc_ai_logger.log_error('Step definition missing output_key', l_scope, p_step.to_clob);
-      raise_application_error(-20020, 'Step definition missing output_key');
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_missing_output_key
+      , p_scope      => l_scope
+      , p_extra      => p_step.to_clob
+      );
     end if;
     
     -- Update _steps in workflow state

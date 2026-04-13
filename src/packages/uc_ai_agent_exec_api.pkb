@@ -381,8 +381,11 @@ create or replace package body uc_ai_agent_exec_api as
         return execute_sequential_workflow(p_agent, p_input_params, p_session_id, p_exec_id);
         
       else
-        uc_ai_logger.log_error('Unknown workflow type: ' || l_workflow_type, l_scope);
-        raise_application_error(-20011, 'Unknown workflow type: ' || l_workflow_type);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_unknown_workflow_type
+        , p_scope      => l_scope
+        , p0           => l_workflow_type
+        );
     end case;
   exception
     when others then
@@ -413,8 +416,12 @@ create or replace package body uc_ai_agent_exec_api as
       l_agent := uc_ai_agents_api.get_agent(p_agent_code);
     exception
       when others then
-        uc_ai_logger.log_error('Error retrieving agent for tool registration: ' || p_agent_code, l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
-        raise_application_error(-20012, 'Error retrieving agent for tool registration: ' || p_agent_code);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_agent_retrieval
+        , p_scope      => l_scope
+        , p0           => p_agent_code
+        , p_extra      => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+        );
     end;
     
     -- Create function call that executes the agent
@@ -911,8 +918,11 @@ end;!';
           end loop find_participant_loop;
 
           if l_participant is null then
-            uc_ai_logger.log_error('Next speaker agent code "' || l_next_speaker.get_string('agent_code') || '" not found among participants, ending conversation', l_scope);
-            raise_application_error(-20013, 'Next speaker agent code "' || l_next_speaker.get_string('agent_code') || '" not found among participants');
+            uc_ai_error.raise_error(
+              p_error_code => uc_ai_error.c_err_speaker_not_found
+            , p_scope      => l_scope
+            , p0           => l_next_speaker.get_string('agent_code')
+            );
           end if;
 
           l_current_state.put('agent_description', l_agent_descr_map.get_string(l_participant.get_string('agent_code')));
@@ -967,8 +977,11 @@ end;!';
         l_return.put('completed', true);
         l_return.put('final_message', l_mod_result.get_string('final_message'));
       else
-        uc_ai_logger.log_error('Unknown conversation mode: ' || l_mode, l_scope);
-        raise_application_error(-20012, 'Unknown conversation mode: ' || l_mode);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_unknown_conv_mode
+        , p_scope      => l_scope
+        , p0           => l_mode
+        );
     end case;
     
     -- conversation_complete
@@ -995,7 +1008,10 @@ end;!';
          fetch first 1 row only;
       exception
         when no_data_found then
-          raise_application_error(-20020, 'Cannot create APEX session: no applications found. In order to use UC AI Agents features the DB schema must have an APEX Workspace with at least one application. This is required as UC AI uses APEX util functions that unfortunately depend on an active APEX session.');
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_apex_session
+          , p_scope      => gc_scope_prefix || 'create_apex_session_if_needed'
+          );
       end;
 
       apex_session.create_session(

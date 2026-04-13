@@ -1,4 +1,6 @@
-create or replace package uc_ai_prompt_profiles_api as
+create or replace package uc_ai_prompt_profiles_api 
+  authid definer
+as
 
   /**
   * UC AI

@@ -16,6 +16,7 @@ declare -a API_PACKAGES=(
     "uc_ai_message_api"
     "uc_ai_structured_output"
     "uc_ai_logger"
+    "uc_ai_error"
     "uc_ai_toon"
     "uc_ai_agents_api"
     "uc_ai_agent_exec_api"
@@ -77,6 +78,9 @@ get_package_description() {
             ;;
         "uc_ai_structured_output")
             echo "Structured Output Package"
+            ;;
+        "uc_ai_error")
+            echo "Error Handling Package"
             ;;
         "uc_ai_anthropic")
             echo "Anthropic AI Provider Package"

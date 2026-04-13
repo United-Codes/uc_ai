@@ -375,8 +375,11 @@ create or replace package body uc_ai_structured_output as
       when uc_ai.c_provider_anthropic then
         l_result := to_anthropic_format(p_schema);
       else
-        uc_ai_logger.log_error('Unsupported provider for structured output: ' || p_provider, l_scope);
-        raise_application_error(-20999, 'Provider ' || p_provider || ' does not support structured output');
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_structured_unsupported
+        , p_scope      => l_scope
+        , p0           => p_provider
+        );
     end case;
     
     return l_result;

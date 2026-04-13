@@ -1,4 +1,6 @@
-create or replace package uc_ai_agent_workflow_api as
+create or replace package uc_ai_agent_workflow_api 
+  authid definer
+as
   /*
    * UC AI Agent Workflow API
    * 

@@ -1,4 +1,4 @@
-create or replace package body uc_ai_anthropic as 
+create or replace package body uc_ai_anthropic as
 
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_api_url constant varchar2(255 char) := 'https://api.anthropic.com/v1';
@@ -148,15 +148,24 @@ create or replace package body uc_ai_anthropic as
                     l_file_block.put('source', json_object_t('{"type": "base64", "media_type": "' || l_mime_type || '", "data": "' || l_data || '"}'));
 
                   else
-                    uc_ai_logger.log_error('Unsupported file type: ' || l_mime_type, l_scope, l_content_item.stringify);
-                    raise uc_ai.e_unhandled_format;
+                    uc_ai_error.raise_error(
+                      p_error_code => uc_ai_error.c_err_unhandled_format
+                    , p_scope      => l_scope
+                    , p0           => 'file type'
+                    , p1           => l_mime_type
+                    , p_extra      => l_content_item.stringify
+                    );
                   end if;
                   
                   l_anthropic_content.append(l_file_block);
                 end;
               else
-                uc_ai_logger.log_error('Unknown content type in user message: ' || l_content_type, l_scope, l_content_item.stringify);
-                raise uc_ai.e_unhandled_format;
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_unsupported_content
+                , p_scope      => l_scope
+                , p0           => l_content_type
+                , p_extra      => l_content_item.stringify
+                );
             end case;
           end loop user_content_loop;
           
@@ -288,14 +297,17 @@ create or replace package body uc_ai_anthropic as
     l_has_tool_use boolean := false;
   begin
     if g_tool_calls >= p_max_tool_calls then
-      uc_ai_logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
-      raise uc_ai.e_max_calls_exceeded;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_max_calls_exceeded
+      , p_scope      => l_scope
+      , p0           => to_char(p_max_tool_calls)
+      );
     end if;
 
     l_input_obj := p_input_obj;
     l_input_obj.put('messages', pio_messages);
-    
+
     -- Add system prompt if provided (Anthropic uses separate system field)
     if p_system_prompt is not null then
       l_input_obj.put('system', p_system_prompt);
@@ -328,9 +340,13 @@ create or replace package body uc_ai_anthropic as
 
     if l_resp_json.has('error') then
       l_temp_obj := l_resp_json.get_object('error');
-      uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-      uc_ai_logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
-      raise uc_ai.e_error_response;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'anthropic'
+      , p1           => l_temp_obj.get_string('message')
+      , p_extra      => l_temp_obj.to_clob
+      );
     end if;
 
     -- Extract and accumulate usage information in global counters
@@ -462,8 +478,12 @@ create or replace package body uc_ai_anthropic as
               l_new_msg := get_text_content(l_content_prompt);
               l_normalized_messages.append(l_new_msg);
             else
-              uc_ai_logger.log_error('Unsupported content type in tool use: ' || l_content_prompt.get_string('type'), l_scope, l_content_prompt.to_clob);
-              raise_application_error(-20001, 'Unsupported content type: ' || l_content_prompt.get_string('type'));
+              uc_ai_error.raise_error(
+                p_error_code => uc_ai_error.c_err_unsupported_content
+              , p_scope      => l_scope
+              , p0           => l_content_prompt.get_string('type')
+              , p_extra      => l_content_prompt.to_clob
+              );
           end case;
         end loop tool_use_loop;
 
@@ -510,8 +530,12 @@ create or replace package body uc_ai_anthropic as
               l_content_msg := get_reasoning_content(l_content_prompt);
               l_content_array.append(l_content_msg);
             else
-              uc_ai_logger.log_error('Unknown content type: ' || l_content_type, l_scope, l_content_prompt.to_clob);
-              raise_application_error(-20001, 'Unsupported content type: ' || l_content_type);
+              uc_ai_error.raise_error(
+                p_error_code => uc_ai_error.c_err_unsupported_content
+              , p_scope      => l_scope
+              , p0           => l_content_type
+              , p_extra      => l_content_prompt.to_clob
+              );
           end case; 
 
           pio_messages.append(l_content_prompt);
@@ -638,7 +662,12 @@ create or replace package body uc_ai_anthropic as
     end if;
 
     if g_max_tokens < l_reasoning_tokens then
-      raise_application_error(-20001, 'Reasoning budget tokens (' || l_reasoning_tokens || ') exceed max tokens allowed (' || g_max_tokens || '). Set a higher max tokens value (uc_ai_anthropic.g_max_tokens).');
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_reasoning_budget
+      , p_scope      => l_scope
+      , p0           => to_char(l_reasoning_tokens)
+      , p1           => to_char(g_max_tokens)
+      );
     end if;
 
     l_input_obj.put('max_tokens', g_max_tokens); -- Anthropic requires max_tokens

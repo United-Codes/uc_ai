@@ -1,4 +1,6 @@
-create or replace package uc_ai_structured_output as
+create or replace package uc_ai_structured_output 
+  authid definer
+as
 
   /**
   * UC AI

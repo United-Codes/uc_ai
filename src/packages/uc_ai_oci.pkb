@@ -30,8 +30,12 @@ create or replace package body uc_ai_oci as
     l_message := p_message.clone();
 
     if l_message.get_string('type') != 'TEXT' then
-      uc_ai_logger.log_error('Message type is not TEXT.', c_scope_prefix || 'get_text_content_generic', l_message.to_clob);
-      raise uc_ai.e_unhandled_format;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_unsupported_content
+      , p_scope      => c_scope_prefix || 'get_text_content_generic'
+      , p0           => l_message.get_string('type')
+      , p_extra      => l_message.to_clob
+      );
     end if;
 
     l_content := l_message.get_clob('text');
@@ -58,8 +62,12 @@ create or replace package body uc_ai_oci as
     l_lm_text_content  json_object_t;
   begin
     if not p_chat_response.has('text') then
-      uc_ai_logger.log_error('Cohere response does not contain text field', c_scope_prefix || 'get_text_content_cohere');
-      raise uc_ai.e_unhandled_format;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_unhandled_format
+      , p_scope      => c_scope_prefix || 'get_text_content_cohere'
+      , p0           => 'response format'
+      , p1           => 'Cohere response does not contain text field'
+      );
     end if;
 
     l_text := p_chat_response.get_clob('text');
@@ -282,11 +290,17 @@ create or replace package body uc_ai_oci as
                 uc_ai_logger.log('Append user message', l_scope, l_oci_message.to_clob);
                 po_oci_messages.append(l_oci_message);
               when 'file' then
-                uc_ai_logger.log_error('Cohere cannot handle files', l_scope);
-                raise uc_ai.e_unhandled_format;
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_unsupported_content
+                , p_scope      => l_scope
+                , p0           => 'file (Cohere cannot handle files)'
+                );
               else
-                uc_ai_logger.log_error('Unknown content type in user message: ' || l_content_type, l_scope);
-                raise uc_ai.e_unhandled_format;
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_unsupported_content
+                , p_scope      => l_scope
+                , p0           => l_content_type
+                );
             end case;
           end loop user_content_loop;
           
@@ -332,8 +346,11 @@ create or replace package body uc_ai_oci as
 
                   l_tool_calls.append(l_tool_call);
                 else
-                  uc_ai_logger.log_error('Unknown content type in assistant message: ' || l_content_type, l_scope);
-                  raise uc_ai.e_unhandled_format;
+                  uc_ai_error.raise_error(
+                    p_error_code => uc_ai_error.c_err_unsupported_content
+                  , p_scope      => l_scope
+                  , p0           => l_content_type
+                  );
               end case;
                 l_oci_message := json_object_t();
                 l_oci_message.put('role', 'CHATBOT');
@@ -456,9 +473,12 @@ create or replace package body uc_ai_oci as
     l_code varchar2(255 char);
   begin
     if g_tool_calls >= p_max_tool_calls then
-      uc_ai_logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
-      raise uc_ai.e_max_calls_exceeded;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_max_calls_exceeded
+      , p_scope      => l_scope
+      , p0           => to_char(p_max_tool_calls)
+      );
     end if;
     l_input_obj := p_input_obj;
     l_chat_request := l_input_obj.get_object('chatRequest');
@@ -497,21 +517,40 @@ create or replace package body uc_ai_oci as
 
     if l_resp_json.has('error') then
       l_temp_obj := l_resp_json.get_object('error');
-      uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-      raise uc_ai.e_error_response;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'oci'
+      , p1           => 'Error in response'
+      , p_extra      => l_temp_obj.to_clob
+      );
     elsif l_resp_json.has('code') then
       l_code := l_resp_json.get_string('code');
       uc_ai_logger.log('API returned code: ' || l_code, l_scope);
-      case l_code 
+      case l_code
         when '400' then
-          uc_ai_logger.log_error('Bad request', l_scope);
-          raise uc_ai.e_error_response;
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_provider_response
+          , p_scope      => l_scope
+          , p0           => 'oci'
+          , p1           => 'Bad request (400)'
+          , p_extra      => l_resp
+          );
         when '401' then
-          uc_ai_logger.log_error('Authentication error', l_scope);
-          raise uc_ai.e_error_response;
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_provider_response
+          , p_scope      => l_scope
+          , p0           => 'oci'
+          , p1           => 'Authentication error (401)'
+          , p_extra      => l_resp
+          );
         when '404' then
-          uc_ai_logger.log_error('Model not found', l_scope);
-          raise uc_ai.e_model_not_found_error;
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_model_not_found
+          , p_scope      => l_scope
+          , p0           => l_resp_json.get_string('message')
+          , p_extra      => l_resp
+          );
         else
           null;
       end case;
@@ -855,8 +894,12 @@ create or replace package body uc_ai_oci as
     -- Build OCI request structure
     -- Set compartment ID (must be configured)
     if g_compartment_id is null then
-      uc_ai_logger.log_error('OCI compartment ID not configured', l_scope);
-      raise_application_error(-20001, 'OCI compartment ID (g_compartment_id) must be configured');
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_missing_config
+      , p_scope      => l_scope
+      , p0           => 'OCI provider'
+      , p1           => 'g_compartment_id to be configured'
+      );
     end if;
     
     l_input_obj.put('compartmentId', g_compartment_id);
@@ -1009,15 +1052,24 @@ create or replace package body uc_ai_oci as
       l_resp_json := json_object_t.parse(l_resp);
     exception
       when others then
-        uc_ai_logger.log_error('Response is not JSON, probable error', l_scope, l_resp);
-        raise uc_ai.e_error_response;
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p0           => 'oci'
+        , p1           => 'Response is not JSON, probable error'
+        , p_extra      => l_resp
+        );
     end;
 
     -- Check for error in response
     if l_resp_json.has('code') and l_resp_json.has('message') then
-      uc_ai_logger.log_error('Error in response', l_scope, l_resp_json.to_clob);
-      uc_ai_logger.log_error('Error message: ', l_scope, l_resp_json.get_string('message'));
-      raise uc_ai.e_error_response;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'oci'
+      , p1           => l_resp_json.get_string('message')
+      , p_extra      => l_resp_json.to_clob
+      );
     end if;
 
     -- OCI returns embeddings directly as an array of arrays

@@ -1,4 +1,6 @@
-create or replace package uc_ai_toon authid current_user as
+create or replace package uc_ai_toon 
+  authid definer 
+as
 
   /**
   * UC AI

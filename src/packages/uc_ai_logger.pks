@@ -1,4 +1,6 @@
-create or replace package uc_ai_logger authid definer as
+create or replace package uc_ai_logger 
+  authid definer 
+as
 
   /**
   * UC AI

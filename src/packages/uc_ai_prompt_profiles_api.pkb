@@ -89,8 +89,12 @@ create or replace package body uc_ai_prompt_profiles_api as
     where id = p_id;
 
     if sql%rowcount = 0 then
-      uc_ai_logger.log_error('Prompt profile not found with ID: ' || p_id, l_scope);
-      raise_application_error(-20001, 'Prompt profile not found with ID: ' || p_id);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Prompt profile'
+      , p1           => 'ID ' || p_id
+      );
     end if;
   exception
     when others then
@@ -131,8 +135,12 @@ create or replace package body uc_ai_prompt_profiles_api as
       and version = p_version;
 
     if sql%rowcount = 0 then
-      uc_ai_logger.log_error('Prompt profile not found with code: ' || p_code || ', version: ' || p_version, l_scope);
-      raise_application_error(-20001, 'Prompt profile not found with code: ' || p_code || ', version: ' || p_version);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Prompt profile'
+      , p1           => 'code ' || p_code || ', version ' || p_version
+      );
     end if;
   exception
     when others then
@@ -155,8 +163,12 @@ create or replace package body uc_ai_prompt_profiles_api as
     where id = p_id;
 
     if sql%rowcount = 0 then
-      uc_ai_logger.log_error('Prompt profile not found with ID: ' || p_id, l_scope);
-      raise_application_error(-20001, 'Prompt profile not found with ID: ' || p_id);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Prompt profile'
+      , p1           => 'ID ' || p_id
+      );
     end if;
   exception
     when others then
@@ -181,8 +193,12 @@ create or replace package body uc_ai_prompt_profiles_api as
       and version = p_version;
 
     if sql%rowcount = 0 then
-      uc_ai_logger.log_error('Prompt profile not found with code: ' || p_code || ', version: ' || p_version, l_scope);
-      raise_application_error(-20001, 'Prompt profile not found with code: ' || p_code || ', version: ' || p_version);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Prompt profile'
+      , p1           => 'code ' || p_code || ', version ' || p_version
+      );
     end if;
   exception
     when others then
@@ -204,8 +220,12 @@ create or replace package body uc_ai_prompt_profiles_api as
 
     -- Validate status value
     if p_status not in ('draft', 'active', 'archived') then
-      uc_ai_logger.log_error('Invalid status value: ' || p_status, l_scope);
-      raise_application_error(-20002, 'Invalid status. Must be: draft, active, or archived');
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_status
+      , p_scope      => l_scope
+      , p0           => p_status
+      , p1           => 'draft, active, archived'
+      );
     end if;
 
     update uc_ai_prompt_profiles
@@ -213,8 +233,12 @@ create or replace package body uc_ai_prompt_profiles_api as
     where id = p_id;
 
     if sql%rowcount = 0 then
-      uc_ai_logger.log_error('Prompt profile not found with ID: ' || p_id, l_scope);
-      raise_application_error(-20001, 'Prompt profile not found with ID: ' || p_id);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Prompt profile'
+      , p1           => 'ID ' || p_id
+      );
     end if;
   exception
     when others then
@@ -237,8 +261,12 @@ create or replace package body uc_ai_prompt_profiles_api as
 
     -- Validate status value
     if p_status not in (c_status_draft, c_status_active, c_status_archived) then
-      uc_ai_logger.log_error('Invalid status value: ' || p_status, l_scope);
-      raise_application_error(-20002, 'Invalid status. Must be: draft, active, or archived');
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_status
+      , p_scope      => l_scope
+      , p0           => p_status
+      , p1           => 'draft, active, archived'
+      );
     end if;
 
     update uc_ai_prompt_profiles
@@ -247,8 +275,12 @@ create or replace package body uc_ai_prompt_profiles_api as
       and version = p_version;
 
     if sql%rowcount = 0 then
-      uc_ai_logger.log_error('Prompt profile not found with code: ' || p_code || ', version: ' || p_version, l_scope);
-      raise_application_error(-20001, 'Prompt profile not found with code: ' || p_code || ', version: ' || p_version);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Prompt profile'
+      , p1           => 'code ' || p_code || ', version ' || p_version
+      );
     end if;
   exception
     when others then
@@ -281,8 +313,12 @@ create or replace package body uc_ai_prompt_profiles_api as
         and version = p_source_version;
     exception
       when no_data_found then
-        uc_ai_logger.log_error('Source profile not found with code: ' || p_code || ', version: ' || p_source_version, l_scope);
-        raise_application_error(-20001, 'Source profile not found with code: ' || p_code || ', version: ' || p_source_version);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_not_found
+        , p_scope      => l_scope
+        , p0           => 'Source profile'
+        , p1           => 'code ' || p_code || ', version ' || p_source_version
+        );
     end;
 
     -- Determine new version number
@@ -350,8 +386,12 @@ create or replace package body uc_ai_prompt_profiles_api as
     return l_profile;
   exception
     when no_data_found then
-      uc_ai_logger.log_error('Prompt profile not found with ID: ' || p_id, l_scope);
-      raise_application_error(-20001, 'Prompt profile not found with ID: ' || p_id);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Prompt profile'
+      , p1           => 'ID ' || p_id
+      );
     when others then
       uc_ai_logger.log_error('Error getting prompt profile', l_scope);
       raise;
@@ -391,11 +431,19 @@ create or replace package body uc_ai_prompt_profiles_api as
   exception
     when no_data_found then
       if p_version is null then
-        uc_ai_logger.log_error('No active prompt profile found with code: ' || p_code, l_scope);
-        raise_application_error(-20001, 'No active prompt profile found with code: ' || p_code);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_not_found
+        , p_scope      => l_scope
+        , p0           => 'Active prompt profile'
+        , p1           => 'code ' || p_code
+        );
       else
-        uc_ai_logger.log_error('Prompt profile not found with code: ' || p_code || ', version: ' || p_version, l_scope);
-        raise_application_error(-20001, 'Prompt profile not found with code: ' || p_code || ', version: ' || p_version);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_not_found
+        , p_scope      => l_scope
+        , p0           => 'Prompt profile'
+        , p1           => 'code ' || p_code || ', version ' || p_version
+        );
       end if;
     when others then
       uc_ai_logger.log_error('Error getting prompt profile', l_scope);
@@ -499,8 +547,12 @@ create or replace package body uc_ai_prompt_profiles_api as
       end if;
       
       if not l_found then
-        uc_ai_logger.log_error('Missing parameter for placeholder: ' || l_placeholder, l_scope, p_parameters.to_clob);
-        raise_application_error(-20003, 'Missing parameter for placeholder: ' || l_placeholder);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_missing_placeholder
+        , p_scope      => l_scope
+        , p0           => l_placeholder
+        , p_extra      => p_parameters.to_clob
+        );
       end if;
       
       -- Move to next placeholder
@@ -562,7 +614,7 @@ create or replace package body uc_ai_prompt_profiles_api as
           end if;
         when 'g_apex_web_credential' then
           if l_value.is_string then
-            uc_ai.g_apex_web_credential := p_config.get_string(l_key);
+            uc_ai.g_apex_web_credential := coalesce(p_config.get_string(l_key), uc_ai.g_apex_web_credential);
           end if;
         when 'g_tool_tags' then
           declare

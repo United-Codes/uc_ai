@@ -601,8 +601,12 @@ create or replace package body uc_ai_tools_api as
         l_bind_list(1) := l_bind;
         uc_ai_logger.log('Bind variable found', l_scope, l_bind.name || ' = ' || l_bind.value);
       else
-        uc_ai_logger.log_error('Error in execute_tool: %s', 'Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '), l_scope);
-        raise_application_error(-20001, 'You are only allowed to set one parameter bind. Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'tool function call'
+        , p1           => 'Multiple bind variables found: ' || apex_string.join(l_found_binds, ', ') || '. Only one parameter bind is allowed.'
+        );
       end if;
 
       uc_ai_logger.log('Executing tool', l_scope, l_fc_code);
@@ -618,8 +622,12 @@ create or replace package body uc_ai_tools_api as
       uc_ai_logger.log('Tool execution result', l_scope, l_return);
 
       if l_return is null then
-        uc_ai_logger.log_error('Error in execute_tool: %s', 'Tool execution returned NULL', l_scope);
-        raise_application_error(-20001, 'Tool execution returned NULL');
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'tool execution'
+        , p1           => 'Tool execution returned NULL for tool code ' || p_tool_code
+        );
       end if;
 
       return l_return;
@@ -681,8 +689,12 @@ create or replace package body uc_ai_tools_api as
         l_return := l_clob;
 
       else
-        uc_ai_logger.log_error('Error in execute_tool: %s', 'Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '), l_scope);
-        raise_application_error(-20001, 'You are only allowed to set one parameter bind. Multiple bind variables found in tool fc code: ' || apex_string.join(l_found_binds, ', '));
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'tool function call'
+        , p1           => 'Multiple bind variables found: ' || apex_string.join(l_found_binds, ', ') || '. Only one parameter bind is allowed.'
+        );
       end if;
     end if;
 

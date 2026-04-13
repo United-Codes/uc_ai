@@ -105,13 +105,20 @@ create or replace package body uc_ai_responses_api as
                     l_resp_content_item.put('filename', l_content_item.get_string('filename'));
                     l_resp_content_item.put('file_data', 'data:application/pdf;base64,' || l_content_item.get_clob('data'));
                   else
-                    uc_ai_logger.log_warn('Unsupported file media type: ' || l_media_type, l_scope);
-                    raise uc_ai.e_unhandled_format;
+                    uc_ai_error.raise_error(
+                      p_error_code => uc_ai_error.c_err_unhandled_format
+                    , p_scope      => l_scope
+                    , p0           => 'file media type'
+                    , p1           => l_media_type
+                    );
                   end if;
 
                 else
-                  uc_ai_logger.log_warn('Unknown user content type: ' || l_content_item.get_string('type'), l_scope);
-                  raise uc_ai.e_unhandled_format;
+                  uc_ai_error.raise_error(
+                    p_error_code => uc_ai_error.c_err_unsupported_content
+                  , p_scope      => l_scope
+                  , p0           => l_content_item.get_string('type')
+                  );
               end case;
 
               l_new_content.append(l_resp_content_item);
@@ -555,19 +562,33 @@ create or replace package body uc_ai_responses_api as
       l_resp_json := json_object_t.parse(l_resp);
     exception
       when others then
-        uc_ai_logger.log_error('Response is not JSON, probable error', l_scope, l_resp);
-        raise uc_ai.e_error_response;
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p0           => 'Responses API'
+        , p1           => 'Response is not JSON'
+        , p_extra      => l_resp
+        );
     end;
 
     if l_resp_json.has('error') and not l_resp_json.get('error').is_null then
       if l_resp_json.get('error').is_object then
         l_temp_obj := l_resp_json.get_object('error');
-        uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-        uc_ai_logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p0           => 'Responses API'
+        , p1           => l_temp_obj.get_string('message')
+        , p_extra      => l_temp_obj.to_clob
+        );
       else
-        uc_ai_logger.log_error('Error in response', l_scope, l_resp_json.get_string('error'));
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p0           => 'Responses API'
+        , p1           => l_resp_json.get_string('error')
+        );
       end if;
-      raise uc_ai.e_error_response;
     end if;
 
     return l_resp_json;

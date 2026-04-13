@@ -97,12 +97,12 @@ create or replace package body uc_ai_ollama as
     l_lm_reasoning_content := get_reasoning_content(p_message);
 
     if l_lm_reasoning_content is null and l_lm_text_content is null then
-      uc_ai_logger.log_error(
-        'No content to process response',
-        c_scope_prefix || 'process_llm_response',
-        p_message.to_clob
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_format_processing
+      , p_scope      => c_scope_prefix || 'process_llm_response'
+      , p0           => 'No content to process response'
+      , p_extra      => p_message.to_clob
       );
-      raise uc_ai.e_format_processing_error;
     end if;
 
     l_arr := json_array_t();
@@ -287,9 +287,12 @@ create or replace package body uc_ai_ollama as
     l_has_tool_calls boolean := false;
   begin
     if g_tool_calls >= p_max_tool_calls then
-      uc_ai_logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
-      raise uc_ai.e_max_calls_exceeded;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_max_calls_exceeded
+      , p_scope      => l_scope
+      , p0           => to_char(p_max_tool_calls)
+      );
     end if;
 
     l_input_obj := p_input_obj;
@@ -317,14 +320,22 @@ create or replace package body uc_ai_ollama as
       l_resp_json := json_object_t.parse(l_resp);
     exception
       when others then
-        uc_ai_logger.log_error('Error parsing response JSON', l_scope, l_resp);
-        raise uc_ai.e_format_processing_error;
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_format_processing
+        , p_scope      => l_scope
+        , p0           => 'Error parsing response JSON'
+        , p_extra      => l_resp
+        );
     end;
 
     if l_resp_json.has('error') then
-      l_resp := l_resp_json.get_clob('error');
-      uc_ai_logger.log_error('Error in response', l_scope, l_resp);
-      raise uc_ai.e_error_response;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'ollama'
+      , p1           => l_resp_json.get_clob('error')
+      , p_extra      => l_resp
+      );
     end if;
 
     -- Extract and store usage information (if available in Ollama response)
@@ -647,9 +658,13 @@ create or replace package body uc_ai_ollama as
     l_resp_json := json_object_t.parse(l_resp);
 
     if l_resp_json.has('error') then
-      l_resp := l_resp_json.get_clob('error');
-      uc_ai_logger.log_error('Error in response', l_scope, l_resp);
-      raise uc_ai.e_error_response;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'ollama'
+      , p1           => l_resp_json.get_clob('error')
+      , p_extra      => l_resp
+      );
     end if;
 
     l_embeddings := l_resp_json.get_array('embeddings');

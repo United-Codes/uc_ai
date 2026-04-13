@@ -1,4 +1,6 @@
-create or replace package uc_ai_openai as
+create or replace package uc_ai_openai
+  authid definer
+as
   -- @dblinter ignore(g-7230): allow use of global variables
 
   /**

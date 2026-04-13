@@ -11,8 +11,6 @@ create or replace package body uc_ai as
   , p_response_json_schema  in json_object_t default null
   ) return json_object_t
   as
-    e_unknown_provider exception;
-    
     l_result json_object_t;
   begin
     case p_provider
@@ -46,7 +44,11 @@ create or replace package body uc_ai as
         );
       when c_provider_oci then
         if p_response_json_schema is not null then
-          raise_application_error(-20001, 'Provider ' || p_provider || ' does not support structured output');
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_structured_unsupported
+          , p_scope      => c_scope_prefix || 'generate_text'
+          , p0           => p_provider
+          );
         else
           l_result := uc_ai_oci.generate_text(
             p_messages       => p_messages
@@ -75,31 +77,15 @@ create or replace package body uc_ai as
         , p_schema         => p_response_json_schema
         );
       else
-        raise e_unknown_provider;
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_unknown_provider
+        , p_scope      => c_scope_prefix || 'generate_text'
+        , p0           => p_provider
+        );
     end case;
-   
-  
+
+
     return l_result;
-  exception
-    when e_unknown_provider then
-      raise_application_error(-20001, 'Unknown AI provider: ' || p_provider);
-    when e_max_calls_exceeded then
-      raise_application_error(-20301, 'Maximum tool calls exceeded');
-    when e_error_response then
-      raise_application_error(-20302, 'Error response from AI provider. Check logs for details');
-    when e_unhandled_format then
-      raise_application_error(-20303, 'Unhandled message format encountered. Please check the message structure and logs.');
-    when e_format_processing_error then
-      raise_application_error(-20304, 'Error processing message format. Please check the logs for details.');
-    when others then
-      uc_ai_logger.log_error(
-        'Unhandled exception in uc_ai.generate_text',
-        c_scope_prefix || 'generate_text',
-        sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
-      );
-
-      raise;
-
   end generate_text;
 
   function generate_text (
@@ -140,8 +126,6 @@ create or replace package body uc_ai as
   , p_model in model_type
   ) return json_array_t
   as
-    e_unknown_provider exception;
-    
     l_result json_array_t;
   begin
     case p_provider
@@ -174,22 +158,15 @@ create or replace package body uc_ai as
         , p_model => p_model
         );
       else
-        raise e_unknown_provider;
-      
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_unknown_provider
+        , p_scope      => c_scope_prefix || 'generate_embeddings'
+        , p0           => p_provider
+        );
+
     end case;
 
     return l_result;
-  exception
-    when e_unknown_provider then
-      raise_application_error(-20001, 'Unknown AI provider: ' || p_provider);
-    when others then
-      uc_ai_logger.log_error(
-        'Unhandled exception in uc_ai.generate_embeddings',
-        c_scope_prefix || 'generate_embeddings',
-        sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
-      );
-
-      raise;
   end generate_embeddings;
 
   procedure reset_globals

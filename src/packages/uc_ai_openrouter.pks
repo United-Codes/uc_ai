@@ -1,4 +1,6 @@
-create or replace package uc_ai_openrouter as
+create or replace package uc_ai_openrouter 
+  authid definer
+as
   -- @dblinter ignore(g-7230): allow use of global variables
 
   /**

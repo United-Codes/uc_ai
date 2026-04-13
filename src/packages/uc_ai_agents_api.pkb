@@ -214,45 +214,73 @@ create or replace package body uc_ai_agents_api as
     case p_agent_type
       when c_type_profile then
         if p_prompt_profile_code is null then
-          uc_ai_logger.log_error('Profile agent requires prompt_profile_code', l_scope);
-          raise_application_error(-20001, 'Profile agent requires prompt_profile_code');
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_missing_config
+          , p_scope      => l_scope
+          , p0           => 'Profile agent'
+          , p1           => 'prompt_profile_code'
+          );
         end if;
         
       when c_type_workflow then
         if p_workflow_definition is null then
-          uc_ai_logger.log_error('Workflow agent requires workflow_definition', l_scope);
-          raise_application_error(-20001, 'Workflow agent requires workflow_definition');
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_missing_config
+          , p_scope      => l_scope
+          , p0           => 'Workflow agent'
+          , p1           => 'workflow_definition'
+          );
         end if;
         declare
           l_validation t_validation_result;
         begin
           l_validation := validate_workflow_definition(p_workflow_definition);
           if not l_validation.is_valid then
-            raise_application_error(-20001, 'Invalid workflow definition: ' || l_validation.error_reason);
+            uc_ai_error.raise_error(
+              p_error_code => uc_ai_error.c_err_invalid_config
+            , p_scope      => l_scope
+            , p0           => 'workflow definition'
+            , p1           => l_validation.error_reason
+            );
           end if;
         end;
         
       when c_type_orchestrator then
         if p_orchestration_config is null then
-          uc_ai_logger.log_error('Orchestrator agent requires orchestration_config', l_scope);
-          raise_application_error(-20001, 'Orchestrator agent requires orchestration_config');
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_missing_config
+          , p_scope      => l_scope
+          , p0           => 'Orchestrator agent'
+          , p1           => 'orchestration_config'
+          );
         end if;
         
       when c_type_handoff then
         if p_orchestration_config is null then
-          uc_ai_logger.log_error('Handoff agent requires orchestration_config', l_scope);
-          raise_application_error(-20001, 'Handoff agent requires orchestration_config');
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_missing_config
+          , p_scope      => l_scope
+          , p0           => 'Handoff agent'
+          , p1           => 'orchestration_config'
+          );
         end if;
         
       when c_type_conversation then
         if p_orchestration_config is null then
-          uc_ai_logger.log_error('Conversation agent requires orchestration_config', l_scope);
-          raise_application_error(-20001, 'Conversation agent requires orchestration_config');
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_missing_config
+          , p_scope      => l_scope
+          , p0           => 'Conversation agent'
+          , p1           => 'orchestration_config'
+          );
         end if;
         
       else
-        uc_ai_logger.log_error('Invalid agent_type: ' || p_agent_type, l_scope);
-        raise_application_error(-20001, 'Invalid agent_type: ' || p_agent_type);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_unknown_agent_type
+        , p_scope      => l_scope
+        , p0           => p_agent_type
+        );
     end case;
     
     -- Validate agent references in configs
@@ -261,10 +289,15 @@ create or replace package body uc_ai_agents_api as
     begin
       l_validation := validate_agent_references(p_workflow_definition, p_orchestration_config);
       if not l_validation.is_valid then
-        raise_application_error(-20001, 'Invalid agent references in configuration: ' || l_validation.error_reason);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'agent references in configuration'
+        , p1           => l_validation.error_reason
+        );
       end if;
     end;
-    
+
     insert into uc_ai_agents (
       code,
       version,
@@ -332,7 +365,12 @@ create or replace package body uc_ai_agents_api as
       begin
         l_validation := validate_agent_references(p_workflow_definition, p_orchestration_config);
         if not l_validation.is_valid then
-          raise_application_error(-20001, 'Invalid agent references in configuration: ' || l_validation.error_reason);
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_invalid_config
+          , p_scope      => l_scope
+          , p0           => 'agent references in configuration'
+          , p1           => l_validation.error_reason
+          );
         end if;
       end;
     end if;
@@ -351,8 +389,12 @@ create or replace package body uc_ai_agents_api as
     where id = p_id;
 
     if sql%rowcount = 0 then
-      uc_ai_logger.log_error('Agent not found with ID: ' || p_id, l_scope);
-      raise_application_error(-20001, 'Agent not found with ID: ' || p_id);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Agent'
+      , p1           => p_id
+      );
     end if;
   exception
     when others then
@@ -383,13 +425,21 @@ create or replace package body uc_ai_agents_api as
     where id = p_id;
 
     if sql%rowcount = 0 then
-      uc_ai_logger.log_error('Agent not found with ID: ' || p_id, l_scope);
-      raise_application_error(-20001, 'Agent not found with ID: ' || p_id);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Agent'
+      , p1           => p_id
+      );
     end if;
   exception
     when no_data_found then
-      uc_ai_logger.log_error('Agent not found with ID: ' || p_id, l_scope);
-      raise_application_error(-20001, 'Agent not found with ID: ' || p_id);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Agent'
+      , p1           => p_id
+      );
     when others then
       uc_ai_logger.log_error('Error deleting agent', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
       raise;
@@ -414,8 +464,12 @@ create or replace package body uc_ai_agents_api as
       and version = p_version;
 
     if sql%rowcount = 0 then
-      uc_ai_logger.log_error('Agent not found with code: ' || p_code || ', version: ' || p_version, l_scope);
-      raise_application_error(-20001, 'Agent not found with code: ' || p_code || ', version: ' || p_version);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Agent'
+      , p1           => p_code || ' v' || p_version
+      );
     end if;
   exception
     when others then
@@ -435,8 +489,12 @@ create or replace package body uc_ai_agents_api as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'change_status';
   begin
     if p_status not in (c_status_draft, c_status_active, c_status_archived) then
-      uc_ai_logger.log_error('Invalid status value: ' || p_status, l_scope);
-      raise_application_error(-20002, 'Invalid status. Must be: draft, active, or archived');
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_status
+      , p_scope      => l_scope
+      , p0           => p_status
+      , p1           => 'draft, active, archived'
+      );
     end if;
 
     update uc_ai_agents
@@ -444,8 +502,12 @@ create or replace package body uc_ai_agents_api as
     where id = p_id;
 
     if sql%rowcount = 0 then
-      uc_ai_logger.log_error('Agent not found with ID: ' || p_id, l_scope);
-      raise_application_error(-20001, 'Agent not found with ID: ' || p_id);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Agent'
+      , p1           => p_id
+      );
     end if;
   exception
     when others then
@@ -466,8 +528,12 @@ create or replace package body uc_ai_agents_api as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'change_status';
   begin
     if p_status not in (c_status_draft, c_status_active, c_status_archived) then
-      uc_ai_logger.log_error('Invalid status value: ' || p_status, l_scope);
-      raise_application_error(-20002, 'Invalid status. Must be: draft, active, or archived');
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_status
+      , p_scope      => l_scope
+      , p0           => p_status
+      , p1           => 'draft, active, archived'
+      );
     end if;
 
     update uc_ai_agents
@@ -476,8 +542,12 @@ create or replace package body uc_ai_agents_api as
       and version = p_version;
 
     if sql%rowcount = 0 then
-      uc_ai_logger.log_error('Agent not found with code: ' || p_code || ', version: ' || p_version, l_scope);
-      raise_application_error(-20001, 'Agent not found with code: ' || p_code || ', version: ' || p_version);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Agent'
+      , p1           => p_code || ' v' || p_version
+      );
     end if;
   exception
     when others then
@@ -509,8 +579,12 @@ create or replace package body uc_ai_agents_api as
         and version = p_source_version;
     exception
       when no_data_found then
-        uc_ai_logger.log_error('Source agent not found with code: ' || p_code || ', version: ' || p_source_version, l_scope);
-        raise_application_error(-20001, 'Source agent not found with code: ' || p_code || ', version: ' || p_source_version);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_not_found
+        , p_scope      => l_scope
+        , p0           => 'Source agent'
+        , p1           => p_code || ' v' || p_source_version
+        );
     end;
 
     -- Determine new version number
@@ -583,8 +657,12 @@ create or replace package body uc_ai_agents_api as
     return l_agent;
   exception
     when no_data_found then
-      uc_ai_logger.log_error('Agent not found with ID: ' || p_id, l_scope);
-      raise_application_error(-20001, 'Agent not found with ID: ' || p_id);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Agent'
+      , p1           => p_id
+      );
     when others then
       uc_ai_logger.log_error('Error getting agent', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
       raise;
@@ -623,11 +701,19 @@ create or replace package body uc_ai_agents_api as
   exception
     when no_data_found then
       if p_version is null then
-        uc_ai_logger.log_error('No active agent found with code: ' || p_code, l_scope);
-        raise_application_error(-20001, 'No active agent found with code: ' || p_code);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_not_found
+        , p_scope      => l_scope
+        , p0           => 'Active agent'
+        , p1           => p_code
+        );
       else
-        uc_ai_logger.log_error('Agent not found with code: ' || p_code || ', version: ' || p_version, l_scope);
-        raise_application_error(-20001, 'Agent not found with code: ' || p_code || ', version: ' || p_version);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_not_found
+        , p_scope      => l_scope
+        , p0           => 'Agent'
+        , p1           => p_code || ' v' || p_version
+        );
       end if;
     when others then
       uc_ai_logger.log_error('Error getting agent', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
@@ -712,8 +798,12 @@ create or replace package body uc_ai_agents_api as
        or (orchestration_config is not null and regexp_like(orchestration_config, l_search_expr));
     
     if l_ref_count > 0 then
-      uc_ai_logger.log_error('Agent is referenced by ' || l_ref_count || ' other agent(s): ' || p_agent_code, l_scope);
-      raise_application_error(-20003, 'Cannot delete agent "' || p_agent_code || '": it is referenced by ' || l_ref_count || ' other agent(s)');
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_has_references
+      , p_scope      => l_scope
+      , p0           => p_agent_code
+      , p1           => l_ref_count
+      );
     end if;
   exception
     when others then
@@ -1004,11 +1094,14 @@ create or replace package body uc_ai_agents_api as
     p_response_schema  in json_object_t default null
   ) return json_object_t
   as
-    l_scope      uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
-    l_agent      uc_ai_agents%rowtype;
-    l_exec_id    uc_ai_agent_executions.id%type;
-    l_session_id varchar2(255 char);
-    l_result     json_object_t;
+    l_scope         uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
+    l_agent         uc_ai_agents%rowtype;
+    l_exec_id       uc_ai_agent_executions.id%type;
+    l_session_id    varchar2(255 char);
+    l_result        json_object_t;
+    l_usage         json_object_t;
+    l_input_tokens  number := 0;
+    l_output_tokens number := 0;
   begin
     uc_ai_logger.log('Executing agent: ' || p_agent_code, l_scope);
 
@@ -1019,8 +1112,12 @@ create or replace package body uc_ai_agents_api as
     
     -- Validate response_schema usage
     if p_response_schema is not null and l_agent.agent_type != c_type_profile then
-      uc_ai_logger.log_error('response_schema can only be used with profile agents, not: ' || l_agent.agent_type, l_scope);
-      raise_application_error(-20011, 'response_schema can only be used with profile agents');
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'response_schema'
+      , p1           => 'can only be used with profile agents, not ' || l_agent.agent_type
+      );
     end if;
     
     -- Generate session ID if not provided
@@ -1049,8 +1146,11 @@ create or replace package body uc_ai_agents_api as
           l_result := uc_ai_agent_exec_api.execute_conversation_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
           
         else
-          uc_ai_logger.log_error('Unknown agent type: ' || l_agent.agent_type, l_scope);
-          raise_application_error(-20010, 'Unknown agent type: ' || l_agent.agent_type);
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_unknown_agent_type
+          , p_scope      => l_scope
+          , p0           => l_agent.agent_type
+          );
       end case;
 
       l_result.put('execution_id', l_exec_id);
@@ -1060,12 +1160,30 @@ create or replace package body uc_ai_agents_api as
       l_result.put('status', c_exec_completed);
 
       uc_ai_logger.log('Agent execution completed: ' || p_agent_code, l_scope, l_result.to_clob);
-      
+
+      -- Extract token usage from result
+      if l_result.has('usage') then
+        -- Profile and orchestrator agents return generate_text() result with usage object
+        l_usage := l_result.get_object('usage');
+        l_input_tokens := nvl(l_usage.get_number('prompt_tokens'), 0);
+        l_output_tokens := nvl(l_usage.get_number('completion_tokens'), 0);
+      else
+        -- Workflow, handoff, and conversation agents have child executions — aggregate their tokens
+        select nvl(sum(total_input_tokens), 0),
+               nvl(sum(total_output_tokens), 0)
+          into l_input_tokens,
+               l_output_tokens
+          from uc_ai_agent_executions
+         where parent_execution_id = l_exec_id;
+      end if;
+
       -- Update execution as completed
       complete_execution(
-        p_exec_id       => l_exec_id,
-        p_status        => c_exec_completed,
-        p_output_result => l_result
+        p_exec_id        => l_exec_id,
+        p_status         => c_exec_completed,
+        p_output_result  => l_result,
+        p_input_tokens   => l_input_tokens,
+        p_output_tokens  => l_output_tokens
       );
       
     exception
@@ -1214,8 +1332,12 @@ create or replace package body uc_ai_agents_api as
     return l_result;
   exception
     when no_data_found then
-      uc_ai_logger.log_error('Execution not found with ID: ' || p_execution_id, l_scope);
-      raise_application_error(-20001, 'Execution not found with ID: ' || p_execution_id);
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Execution'
+      , p1           => p_execution_id
+      );
     when others then
       uc_ai_logger.log_error('Error getting execution details', l_scope);
       raise;

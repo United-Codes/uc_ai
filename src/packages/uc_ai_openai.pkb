@@ -160,15 +160,24 @@ create or replace package body uc_ai_openai as
                     l_image_url.put('url', 'data:' || l_mime_type || ';base64,' || l_data);
                     l_new_content_item.put('image_url', l_image_url);
                   else
-                    uc_ai_logger.log_error('Unsupported file type: ' || l_mime_type, l_scope, l_content_item.stringify);
-                    raise uc_ai.e_unhandled_format;
+                    uc_ai_error.raise_error(
+                      p_error_code => uc_ai_error.c_err_unhandled_format
+                    , p_scope      => l_scope
+                    , p0           => 'file type'
+                    , p1           => l_mime_type
+                    , p_extra      => l_content_item.stringify
+                    );
                   end if;
 
                   l_new_content.append(l_new_content_item);
                 end;
               else
-                uc_ai_logger.log_error('Unknown content type in user message: ' || l_content_type, l_scope, l_content_item.stringify);
-                raise uc_ai.e_unhandled_format;
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_unsupported_content
+                , p_scope      => l_scope
+                , p0           => l_content_type
+                , p_extra      => l_content_item.stringify
+                );
             end case;
           end loop user_content_loop;
           
@@ -288,9 +297,12 @@ create or replace package body uc_ai_openai as
     l_web_credential varchar2(255 char);
   begin
     if g_tool_calls >= p_max_tool_calls then
-      uc_ai_logger.log_warn('Max calls reached', l_scope, 'Max calls: ' || g_tool_calls);
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
-      raise uc_ai.e_max_calls_exceeded;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_max_calls_exceeded
+      , p_scope      => l_scope
+      , p0           => to_char(p_max_tool_calls)
+      );
     end if;
 
     l_input_obj := p_input_obj.clone();
@@ -332,19 +344,32 @@ create or replace package body uc_ai_openai as
       l_resp_json := json_object_t.parse(l_resp);
     exception
       when others then
-        uc_ai_logger.log_error('Response is not JSON, probable error', l_scope, l_resp);
-        raise uc_ai.e_error_response;
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p_message    => 'Response is not valid JSON'
+        , p_extra      => l_resp
+        );
     end;
 
     if l_resp_json.has('error') then
       if l_resp_json.get('error').is_object then
         l_temp_obj := l_resp_json.get_object('error');
-        uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-        uc_ai_logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p0           => 'openai'
+        , p1           => l_temp_obj.get_string('message')
+        , p_extra      => l_temp_obj.to_clob
+        );
       else
-        uc_ai_logger.log_error('Error in response', l_scope, l_resp_json.get_string('error'));
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p0           => 'openai'
+        , p1           => l_resp_json.get_string('error')
+        );
       end if;
-      raise uc_ai.e_error_response;
     end if;
 
     -- Extract and accumulate usage information in global counters
@@ -751,19 +776,32 @@ create or replace package body uc_ai_openai as
       l_resp_json := json_object_t.parse(l_resp);
     exception
       when others then
-        uc_ai_logger.log_error('Response is not JSON, probable error', l_scope, l_resp);
-        raise uc_ai.e_error_response;
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p_message    => 'Response is not valid JSON'
+        , p_extra      => l_resp
+        );
     end;
 
     if l_resp_json.has('error') then
       if l_resp_json.get('error').is_object then
         l_temp_obj := l_resp_json.get_object('error');
-        uc_ai_logger.log_error('Error in response', l_scope, l_temp_obj.to_clob);
-        uc_ai_logger.log_error('Error message: ', l_scope, l_temp_obj.get_string('message'));
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p0           => 'openai'
+        , p1           => l_temp_obj.get_string('message')
+        , p_extra      => l_temp_obj.to_clob
+        );
       else
-        uc_ai_logger.log_error('Error in response', l_scope, l_resp_json.get_string('error'));
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p0           => 'openai'
+        , p1           => l_resp_json.get_string('error')
+        );
       end if;
-      raise uc_ai.e_error_response;
     end if;
 
     -- OpenAI returns embeddings in "data" array, each item has "embedding" array
