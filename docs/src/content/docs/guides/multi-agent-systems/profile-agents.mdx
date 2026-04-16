@@ -150,6 +150,80 @@ And conversations list them as participants:
 
 In all cases, the profile agent's execution is tracked individually, giving you full visibility into every AI call in the chain.
 
+## Conversation continuation
+
+Profile agents support multi-turn conversations across multiple `execute_agent` calls. Instead of each call being independent, you can send follow-up messages that build on the previous conversation.
+
+### How it works
+
+1. On the **first call**, the agent executes its prompt profile normally (system prompt + user prompt from template). The full conversation — including any tool call exchanges — is stored in the execution result.
+2. On **follow-up calls**, you pass `p_follow_up_message` with the same `p_session_id`. The system loads the previous conversation messages, appends your new message, and sends the full history to the LLM.
+
+```sql
+DECLARE
+  l_result     json_object_t;
+  l_session_id VARCHAR2(100);
+BEGIN
+  l_session_id := uc_ai_agents_api.generate_session_id;
+
+  -- First call: uses prompt profile template substitution as usual
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'geo_agent',
+    p_input_parameters => json_object_t('{"question": "What are the 5 largest cities in Europe?"}'),
+    p_session_id       => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+
+  -- Follow-up: the LLM sees the full previous conversation
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code        => 'geo_agent',
+    p_follow_up_message => 'Which of those have the best public transport?',
+    p_session_id        => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+
+  -- Another follow-up
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code        => 'geo_agent',
+    p_follow_up_message => 'Compare the top 2 in more detail.',
+    p_session_id        => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+Each follow-up call creates its own execution record in `uc_ai_agent_executions`, all linked by the same `session_id`.
+
+### History management
+
+As conversations grow longer, you may want to limit how much history is sent to the LLM to control token usage. Set `p_max_history_messages` when creating the agent to use a sliding window:
+
+```sql
+DECLARE
+  l_agent_id NUMBER;
+BEGIN
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                  => 'chat_agent',
+    p_description           => 'A conversational assistant',
+    p_agent_type            => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code   => 'CHAT_PROFILE',
+    p_max_history_messages  => 20,
+    p_status                => uc_ai_agents_api.c_status_active
+  );
+END;
+/
+```
+
+With `p_max_history_messages` set, the system keeps the system message (first message) plus the most recent N messages when the history exceeds the limit.
+
+<Aside type="note">
+  `p_follow_up_message` requires `p_session_id` — the system needs to know which session's conversation to continue. If no previous completed execution exists for the given session and agent, an error is raised.
+</Aside>
+
 ## When to use profile agents directly
 
 You don't always need workflows or conversations. Use a profile agent on its own when:

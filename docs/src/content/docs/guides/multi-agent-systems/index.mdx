@@ -103,6 +103,40 @@ END;
 
 The `p_session_id` groups related executions together, useful for debugging and tracking token usage across all agents in a run.
 
+### Conversation continuation
+
+Profile and orchestrator agents support multi-turn conversations. After the initial call, you can send follow-up messages using `p_follow_up_message`. The system automatically loads the previous conversation history from the session and appends your new message:
+
+```sql
+DECLARE
+  l_result     json_object_t;
+  l_session_id VARCHAR2(100);
+BEGIN
+  l_session_id := uc_ai_agents_api.generate_session_id;
+
+  -- Initial call
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'my_agent',
+    p_input_parameters => json_object_t('{"prompt": "Explain PL/SQL cursors"}'),
+    p_session_id       => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+
+  -- Follow-up (conversation continues automatically)
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code        => 'my_agent',
+    p_follow_up_message => 'Can you show an example with bulk collect?',
+    p_session_id        => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+See [profile agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/#conversation-continuation) for details on history management and configuration.
+
 ### Input mapping
 
 Input mappings define how data flows between agents. They use a path syntax wrapped in curly braces to reference values from the workflow state:

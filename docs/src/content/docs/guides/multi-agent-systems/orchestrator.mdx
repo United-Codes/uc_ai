@@ -234,6 +234,42 @@ The orchestrator AI will autonomously:
 | `delegate_agents`           | Array  | List of agent codes the orchestrator can call |
 | `max_delegations`           | Number | Maximum number of agent calls allowed         |
 
+## Conversation continuation
+
+Like profile agents, orchestrators support follow-up messages via `p_follow_up_message`. This lets you refine or extend the orchestrator's work after seeing its initial plan:
+
+```sql
+DECLARE
+  l_result     json_object_t;
+  l_session_id VARCHAR2(100);
+BEGIN
+  l_session_id := uc_ai_agents_api.generate_session_id;
+
+  -- Initial request
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'travel_planner',
+    p_input_parameters => json_object_t('{
+      "prompt": "Plan a trip from New York to San Francisco for Tuesday."
+    }'),
+    p_session_id       => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+
+  -- Follow-up: orchestrator can call delegates again
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code        => 'travel_planner',
+    p_follow_up_message => 'Actually, I prefer business class. Can you find better flight options?',
+    p_session_id        => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+On each follow-up call, the delegate agents are re-registered as temporary tools so the orchestrator can continue delegating work. The full conversation history — including previous tool calls and their results — is sent to the LLM.
+
 ## Tips
 
 - **Give the orchestrator a plan**: In the orchestrator's system prompt, describe the strategy for using delegates. For example: "First check calendar constraints, then search flights, then hotels."
