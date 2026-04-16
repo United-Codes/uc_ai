@@ -121,7 +121,9 @@ create or replace package body uc_ai_agents_api as
     l_exec_id uc_ai_agent_executions.id%type;
     l_params clob;
   begin
-    l_params := p_input_parameters.to_clob;
+    if p_input_parameters is not null then
+      l_params := p_input_parameters.to_clob;
+    end if;
 
     insert into uc_ai_agent_executions (
       agent_id,
@@ -1086,12 +1088,13 @@ create or replace package body uc_ai_agents_api as
    * Executes an agent by code
    */
   function execute_agent(
-    p_agent_code       in uc_ai_agents.code%type,
-    p_agent_version    in uc_ai_agents.version%type default null,
-    p_input_parameters in json_object_t default null,
-    p_session_id       in varchar2 default null,
-    p_parent_exec_id   in uc_ai_agent_executions.id%type default null,
-    p_response_schema  in json_object_t default null
+    p_agent_code        in uc_ai_agents.code%type,
+    p_agent_version     in uc_ai_agents.version%type default null,
+    p_input_parameters  in json_object_t default null,
+    p_follow_up_message in clob default null,
+    p_session_id        in varchar2 default null,
+    p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
+    p_response_schema   in json_object_t default null
   ) return json_object_t
   as
     l_scope         uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -1106,10 +1109,10 @@ create or replace package body uc_ai_agents_api as
     uc_ai_logger.log('Executing agent: ' || p_agent_code, l_scope);
 
     uc_ai_agent_exec_api.create_apex_session_if_needed;
-    
+
     -- Get agent
     l_agent := get_agent(p_agent_code, p_agent_version);
-    
+
     -- Validate response_schema usage
     if p_response_schema is not null and l_agent.agent_type != c_type_profile then
       uc_ai_error.raise_error(
@@ -1119,32 +1122,53 @@ create or replace package body uc_ai_agents_api as
       , p1           => 'can only be used with profile agents, not ' || l_agent.agent_type
       );
     end if;
-    
+
+    -- Validate follow_up_message usage
+    if p_follow_up_message is not null then
+      if l_agent.agent_type not in (c_type_profile, c_type_orchestrator) then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'follow_up_message'
+        , p1           => 'can only be used with profile or orchestrator agents, not ' || l_agent.agent_type
+        );
+      end if;
+
+      if p_session_id is null then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'follow_up_message'
+        , p1           => 'requires p_session_id to identify the conversation to continue'
+        );
+      end if;
+    end if;
+
     -- Generate session ID if not provided
     l_session_id := coalesce(p_session_id, generate_session_id());
-    
+
     -- Create execution record
     l_exec_id := create_execution(l_agent.id, l_session_id, p_parent_exec_id, p_input_parameters);
-    
+
 
     begin
       -- Execute based on agent type (delegating to sub-package)
       case l_agent.agent_type
         when c_type_profile then
-          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema);
-          
+          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema, p_follow_up_message, l_session_id);
+
         when c_type_workflow then
           l_result := uc_ai_agent_exec_api.execute_workflow_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
-          
+
         when c_type_orchestrator then
-          l_result := uc_ai_agent_exec_api.execute_orchestrator_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
-          
+          l_result := uc_ai_agent_exec_api.execute_orchestrator_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message);
+
         when c_type_handoff then
           l_result := uc_ai_agent_exec_api.execute_handoff_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
-          
+
         when c_type_conversation then
           l_result := uc_ai_agent_exec_api.execute_conversation_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
-          
+
         else
           uc_ai_error.raise_error(
             p_error_code => uc_ai_error.c_err_unknown_agent_type
@@ -1209,25 +1233,27 @@ create or replace package body uc_ai_agents_api as
    * Executes an agent by ID
    */
   function execute_agent(
-    p_agent_id         in uc_ai_agents.id%type,
-    p_input_parameters in json_object_t default null,
-    p_session_id       in varchar2 default null,
-    p_parent_exec_id   in uc_ai_agent_executions.id%type default null,
-    p_response_schema  in json_object_t default null
+    p_agent_id          in uc_ai_agents.id%type,
+    p_input_parameters  in json_object_t default null,
+    p_follow_up_message in clob default null,
+    p_session_id        in varchar2 default null,
+    p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
+    p_response_schema   in json_object_t default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
     l_agent uc_ai_agents%rowtype;
   begin
     l_agent := get_agent(p_agent_id);
-    
+
     return execute_agent(
-      p_agent_code       => l_agent.code,
-      p_agent_version    => l_agent.version,
-      p_input_parameters => p_input_parameters,
-      p_session_id       => p_session_id,
-      p_parent_exec_id   => p_parent_exec_id,
-      p_response_schema  => p_response_schema
+      p_agent_code        => l_agent.code,
+      p_agent_version     => l_agent.version,
+      p_input_parameters  => p_input_parameters,
+      p_follow_up_message => p_follow_up_message,
+      p_session_id        => p_session_id,
+      p_parent_exec_id    => p_parent_exec_id,
+      p_response_schema   => p_response_schema
     );
   exception
     when others then

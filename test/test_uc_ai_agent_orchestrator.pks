@@ -13,5 +13,8 @@ create or replace package test_uc_ai_agent_orchestrator as
   --%test(Execute orchestrator that routes to math or geography agent)
   procedure execute_orchestrator_routing;
 
+  --%test(Continue orchestrator conversation with follow-up message)
+  procedure execute_orchestrator_follow_up;
+
 end test_uc_ai_agent_orchestrator;
 /

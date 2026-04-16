@@ -300,18 +300,32 @@ create or replace package body uc_ai_agent_workflow_api as
         if l_max_messages is null then
           l_max_messages := 20;
         end if;
-        
+
         if p_history.get_size <= l_max_messages then
           return p_history;
         end if;
-        
-        -- Keep only last N messages
+
+        -- Keep only last N messages, preserving system message if present
         l_result := json_array_t();
-        <<window_loop>>
-        for i in (p_history.get_size - l_max_messages) .. (p_history.get_size - 1) loop
-          l_result.append(p_history.get(i));
-        end loop window_loop;
-        
+        declare
+          l_first_msg json_object_t;
+          l_start_idx number;
+        begin
+          l_first_msg := treat(p_history.get(0) as json_object_t);
+          if l_first_msg.has('role') and l_first_msg.get_string('role') = 'system' then
+            -- Preserve system message and take last N from the rest
+            l_result.append(p_history.get(0));
+            l_start_idx := greatest(p_history.get_size - l_max_messages, 1);
+          else
+            l_start_idx := p_history.get_size - l_max_messages;
+          end if;
+
+          <<window_loop>>
+          for i in l_start_idx .. (p_history.get_size - 1) loop
+            l_result.append(p_history.get(i));
+          end loop window_loop;
+        end;
+
         return l_result;
         
       when c_history_summarize then

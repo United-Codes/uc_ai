@@ -238,5 +238,29 @@ as
     p_config_override   in json_object_t default null
   ) return json_object_t;
 
+  /*
+   * Prepares a profile's context for conversation continuation
+   *
+   * Loads the profile, applies model configuration (reasoning, tools, etc.)
+   * to global variables, and returns provider/model/response_schema via OUT params.
+   * Used by agent execution to set up the environment before calling
+   * generate_text with a pre-built messages array.
+   *
+   * @param p_code              Code of the prompt profile
+   * @param p_version           Version number (if null, uses latest active version)
+   * @param p_config_override   Override the profile's model_config_json setting
+   * @param po_provider         OUT: resolved provider
+   * @param po_model            OUT: resolved model
+   * @param po_response_schema  OUT: resolved response schema (if any)
+   */
+  procedure prepare_profile_context(
+    p_code              in uc_ai_prompt_profiles.code%type,
+    p_version           in uc_ai_prompt_profiles.version%type default null,
+    p_config_override   in json_object_t default null,
+    po_provider         out uc_ai_prompt_profiles.provider%type,
+    po_model            out uc_ai_prompt_profiles.model%type,
+    po_response_schema  out json_object_t
+  );
+
 end uc_ai_prompt_profiles_api;
 /

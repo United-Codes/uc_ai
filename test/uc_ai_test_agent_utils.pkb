@@ -17,22 +17,76 @@ create or replace package body uc_ai_test_agent_utils as
   -- gc_main_provider constant varchar2(50 char) := uc_ai.c_provider_google;
   -- gc_main_model    constant varchar2(50 char) := uc_ai_google.c_model_gemini_2_5_flash;
 
+  gc_calc_tool_code constant varchar2(50 char) := 'TEST_CALC_TOOL';
+  gc_calc_tool_tag  constant varchar2(50 char) := 'test_calculator';
+
   procedure create_math_profile
   as
-    l_id number;
+    l_id      number;
+    l_tool_id number;
+    l_schema  json_object_t;
   begin
+    -- Create the calculator function via execute immediate
+    execute immediate q'!
+      create or replace function test_demo_calculate(
+        p_arguments in json_object_t
+      ) return clob
+      as
+        l_expression varchar2(4000 char);
+        l_result     number;
+      begin
+        l_expression := p_arguments.get_string('expression');
+
+        if l_expression is null then
+          return 'Error: no expression provided.';
+        end if;
+
+        if regexp_like(l_expression, '[^0-9+*/()., ROUNDCEILFLOORMODABS' || chr(10) || chr(13) || chr(9) || '-]', 'i') then
+          return 'Error: expression contains disallowed characters.';
+        end if;
+
+        execute immediate 'select ' || l_expression || ' from dual' into l_result;
+
+        return 'Result: ' || to_char(l_result);
+      exception
+        when others then
+          return 'Error evaluating expression: ' || sqlerrm;
+      end test_demo_calculate;
+    !';
+
+    -- Register the calculator tool
+    l_schema := json_object_t('{
+      "type": "object",
+      "properties": {
+        "expression": {
+          "type": "string",
+          "description": "A SQL-compatible math expression, e.g. 2+2 or ROUND(17/3,2)"
+        }
+      },
+      "required": ["expression"]
+    }');
+
+    l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+      p_tool_code     => gc_calc_tool_code,
+      p_description   => 'Evaluates a math expression in the Oracle database. Always use this tool to calculate math.',
+      p_function_call => 'return test_demo_calculate(json_object_t(:arguments));',
+      p_json_schema   => l_schema,
+      p_tags          => apex_t_varchar2(gc_calc_tool_tag)
+    );
+
     -- Delete existing profile if it exists
-    delete from uc_ai_prompt_profiles 
+    delete from uc_ai_prompt_profiles
      where code = gc_math_profile_code;
 
     l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
-      p_code                  => gc_math_profile_code,
-      p_description           => 'Simple math helper for agent testing',
-      p_system_prompt_template => 'You are a math assistant. Respond with only the numeric answer.',
-      p_user_prompt_template  => 'Calculate: {question}',
-      p_provider              => gc_main_provider, 
-      p_model                 => gc_main_model,
-      p_status                => 'active'
+      p_code                   => gc_math_profile_code,
+      p_description            => 'Math helper with calculator tool for agent testing',
+      p_system_prompt_template => 'You are a math assistant. Use the calculator tool to compute math expressions. Respond with only the numeric answer.',
+      p_user_prompt_template   => 'Calculate: {question}',
+      p_provider               => gc_main_provider,
+      p_model                  => gc_better_model,
+      p_model_config_json      => '{"g_enable_tools": true, "g_tool_tags": ["' || gc_calc_tool_tag || '"], "g_max_tool_calls": 3}',
+      p_status                 => 'active'
     );
   end create_math_profile;
 
@@ -463,9 +517,19 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
   begin
     -- Delete test agents
     delete from uc_ai_agents where code like 'TEST_%';
-    
+
     -- Delete test profiles
     delete from uc_ai_prompt_profiles where code like 'TEST_AGENT_%';
+
+    -- Delete test calculator tool
+    delete from uc_ai_tools where code = gc_calc_tool_code;
+
+    -- Drop test calculator function
+    begin
+      execute immediate 'drop function test_demo_calculate';
+    exception
+      when others then null;
+    end;
   end cleanup_test_data;
 
   procedure validate_agent_result(

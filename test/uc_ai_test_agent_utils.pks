@@ -4,6 +4,8 @@ create or replace package uc_ai_test_agent_utils as
   * Utility procedures for agent tests
   */
 
+  procedure create_math_profile;
+
   procedure create_profiles;
 
   -- Cleans up all test data

@@ -292,28 +292,185 @@ create or replace package body uc_ai_agent_exec_api as
   -- ============================================================================
 
   /*
+   * Loads previous conversation messages from the latest completed execution
+   * in the given session for the given agent.
+   *
+   * Returns null if no previous execution found.
+   */
+  function load_previous_messages(
+    p_session_id in varchar2,
+    p_agent_id   in uc_ai_agents.id%type,
+    p_exec_id    in uc_ai_agent_executions.id%type
+  ) return json_array_t
+  as
+    l_scope       uc_ai_logger.scope := gc_scope_prefix || 'load_previous_messages';
+    l_prev_output clob;
+    l_prev_result json_object_t;
+  begin
+    begin
+      select output_result
+        into l_prev_output
+        from uc_ai_agent_executions
+       where session_id = p_session_id
+         and agent_id   = p_agent_id
+         and status     = uc_ai_agents_api.c_exec_completed
+         and id        != p_exec_id
+       order by completed_at desc
+       fetch first 1 row only;
+    exception
+      when no_data_found then
+        return null;
+    end;
+
+    l_prev_result := json_object_t.parse(l_prev_output);
+
+    if not l_prev_result.has('messages') then
+      uc_ai_logger.log_warn('Previous execution has no messages array', l_scope);
+      return null;
+    end if;
+
+    return l_prev_result.get_array('messages');
+  exception
+    when others then
+      uc_ai_logger.log_error('Error loading previous messages', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+      raise;
+  end load_previous_messages;
+
+
+  /*
+   * Applies history management to a messages array based on agent configuration.
+   */
+  function apply_history_management(
+    p_messages   in json_array_t,
+    p_agent      in uc_ai_agents%rowtype,
+    p_session_id in varchar2
+  ) return json_array_t
+  as
+    l_scope        uc_ai_logger.scope := gc_scope_prefix || 'apply_history_management';
+    l_history_mgmt json_object_t;
+    l_config       json_object_t;
+  begin
+    -- Check orchestration_config for history_management
+    if p_agent.orchestration_config is not null then
+      l_config := json_object_t.parse(p_agent.orchestration_config);
+      if l_config.has('history_management') then
+        l_history_mgmt := l_config.get_object('history_management');
+      end if;
+    end if;
+
+    -- Fall back to max_history_messages as sliding_window
+    if l_history_mgmt is null and p_agent.max_history_messages is not null then
+      l_history_mgmt := json_object_t();
+      l_history_mgmt.put('strategy', 'sliding_window');
+      l_history_mgmt.put('max_messages', p_agent.max_history_messages);
+    end if;
+
+    if l_history_mgmt is null then
+      return p_messages;
+    end if;
+
+    return uc_ai_agent_workflow_api.manage_history(
+      p_history            => p_messages,
+      p_history_management => l_history_mgmt,
+      p_session_id         => p_session_id
+    );
+  exception
+    when others then
+      uc_ai_logger.log_error('Error applying history management', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+      raise;
+  end apply_history_management;
+
+
+  /*
    * Executes a profile-type agent (wrapper around prompt profile)
    */
   function execute_profile_agent(
-    p_agent            in uc_ai_agents%rowtype,
-    p_input_params     in json_object_t,
-    p_exec_id          in uc_ai_agent_executions.id%type,
-    p_response_schema  in json_object_t default null
+    p_agent             in uc_ai_agents%rowtype,
+    p_input_params      in json_object_t,
+    p_exec_id           in uc_ai_agent_executions.id%type,
+    p_response_schema   in json_object_t default null,
+    p_follow_up_message in clob default null,
+    p_session_id        in varchar2 default null
   ) return json_object_t
   as
-    l_scope  uc_ai_logger.scope := gc_scope_prefix || 'execute_profile_agent';
-    l_result json_object_t;
-    l_config json_object_t;
-    l_has_schema number;
-    l_final_message clob;
+    l_scope           uc_ai_logger.scope := gc_scope_prefix || 'execute_profile_agent';
+    l_result          json_object_t;
+    l_config          json_object_t;
+    l_has_schema      number;
+    l_final_message   clob;
+    l_messages        json_array_t;
+    l_provider        uc_ai_prompt_profiles.provider%type;
+    l_model           uc_ai_prompt_profiles.model%type;
+    l_response_schema json_object_t;
   begin
     uc_ai_logger.log('Executing profile agent: ' || p_agent.code, l_scope);
 
+    -- Conversation continuation path
+    if p_follow_up_message is not null and p_session_id is not null then
+      uc_ai_logger.log('Continuing conversation for session: ' || p_session_id, l_scope);
+
+      -- Load previous conversation messages
+      l_messages := load_previous_messages(p_session_id, p_agent.id, p_exec_id);
+
+      if l_messages is null then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'follow_up_message'
+        , p1           => 'no previous completed execution found in session ' || p_session_id
+        );
+      end if;
+
+      -- Apply history management
+      l_messages := apply_history_management(l_messages, p_agent, p_session_id);
+
+      -- Append new user message
+      l_messages.append(uc_ai_message_api.create_simple_user_message(p_follow_up_message));
+
+      -- Prepare profile context (applies model config, returns provider/model/schema)
+      if p_response_schema is not null then
+        l_config := json_object_t();
+        l_config.put('response_schema', p_response_schema);
+      end if;
+
+      uc_ai_prompt_profiles_api.prepare_profile_context(
+        p_code             => p_agent.prompt_profile_code,
+        p_version          => p_agent.prompt_profile_version,
+        p_config_override  => l_config,
+        po_provider        => l_provider,
+        po_model           => l_model,
+        po_response_schema => l_response_schema
+      );
+
+      -- Override response schema if explicitly provided
+      if p_response_schema is not null then
+        l_response_schema := p_response_schema;
+      end if;
+
+      -- Call generate_text with the full messages array
+      l_result := uc_ai.generate_text(
+        p_messages              => l_messages,
+        p_provider              => l_provider,
+        p_model                 => l_model,
+        p_max_tool_calls        => uc_ai.g_max_tool_calls,
+        p_response_json_schema  => l_response_schema
+      );
+
+      -- Parse final_message as JSON if response schema is set
+      if l_response_schema is not null then
+        l_final_message := l_result.get_clob('final_message');
+        l_result.put('final_message', json_object_t.parse(l_final_message));
+      end if;
+
+      return l_result;
+    end if;
+
+    -- Original first-call path
     if p_response_schema is not null then
       l_config := json_object_t();
       l_config.put('response_schema', p_response_schema);
     end if;
-    
+
     l_result := uc_ai_prompt_profiles_api.execute_profile(
       p_code            => p_agent.prompt_profile_code,
       p_version         => p_agent.prompt_profile_version,
@@ -335,7 +492,7 @@ create or replace package body uc_ai_agent_exec_api as
       l_final_message := l_result.get_clob('final_message');
       l_result.put('final_message', json_object_t.parse(l_final_message));
     end if;
-    
+
     return l_result;
   exception
     when others then
@@ -495,10 +652,11 @@ end;!';
    * Executes an orchestrator-type agent
    */
   function execute_orchestrator_agent(
-    p_agent          in uc_ai_agents%rowtype,
-    p_input_params   in json_object_t,
-    p_session_id     in varchar2,
-    p_exec_id        in uc_ai_agent_executions.id%type
+    p_agent             in uc_ai_agents%rowtype,
+    p_input_params      in json_object_t,
+    p_session_id        in varchar2,
+    p_exec_id           in uc_ai_agent_executions.id%type,
+    p_follow_up_message in clob default null
   ) return json_object_t
   as
     l_scope            uc_ai_logger.scope := gc_scope_prefix || 'execute_orchestrator_agent';
@@ -515,9 +673,13 @@ end;!';
     l_prompt_profile   uc_ai_prompt_profiles%rowtype;
     l_tool_arr         json_array_t := json_array_t();
     l_profile_config   json_object_t;
+    l_messages         json_array_t;
+    l_provider         uc_ai_prompt_profiles.provider%type;
+    l_model            uc_ai_prompt_profiles.model%type;
+    l_response_schema  json_object_t;
   begin
     uc_ai_logger.log('Executing orchestrator agent: ' || p_agent.code, l_scope);
-    
+
     l_config := json_object_t.parse(p_agent.orchestration_config);
     l_delegates := l_config.get_array('delegate_agents');
     l_profile_code := l_config.get_string('orchestrator_profile_code');
@@ -526,24 +688,24 @@ end;!';
     l_prompt_profile := uc_ai_prompt_profiles_api.get_prompt_profile(
       p_code    => l_profile_code
     );
-    
+
     -- Save original tool settings
     --l_original_tools := uc_ai.g_enable_tools;
     --l_original_tags := uc_ai.g_tool_tags;
-    
+
     begin
       -- Register delegate agents as tools
       <<delegate_loop>>
       for i in 0 .. l_delegates.get_size - 1 loop
         l_delegate := l_delegates.get_string(i);
-        
+
         l_tool_id := register_agent_as_tool(
           p_agent_code       => l_delegate,
           p_exec_id          => p_exec_id,
           p_tool_tag         => l_tool_tag,
           p_session_id       => p_session_id
         );
-        
+
         l_tool_ids.extend;
         l_tool_ids(l_tool_ids.count) := l_tool_id;
       end loop delegate_loop;
@@ -555,18 +717,58 @@ end;!';
       l_tool_arr.append(l_tool_tag);
       l_profile_config.put('g_tool_tags', l_tool_arr);
       l_profile_config.put('g_max_tool_calls', l_config.get_number('max_delegations'));
-      
+
       -- Enable tools for orchestrator
       uc_ai.g_enable_tools := true;
       uc_ai.g_tool_tags := apex_t_varchar2(l_tool_tag);
-      
-      -- Execute orchestrator profile
-      l_result := uc_ai_prompt_profiles_api.execute_profile(
-        p_code              => l_profile_code,
-        p_parameters        => p_input_params,
-        p_config_override   => l_profile_config
-      );
-      
+
+      -- Conversation continuation path
+      if p_follow_up_message is not null then
+        uc_ai_logger.log('Continuing orchestrator conversation for session: ' || p_session_id, l_scope);
+
+        l_messages := load_previous_messages(p_session_id, p_agent.id, p_exec_id);
+
+        if l_messages is null then
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_invalid_config
+          , p_scope      => l_scope
+          , p0           => 'follow_up_message'
+          , p1           => 'no previous completed execution found in session ' || p_session_id
+          );
+        end if;
+
+        -- Apply history management
+        l_messages := apply_history_management(l_messages, p_agent, p_session_id);
+
+        -- Append new user message
+        l_messages.append(uc_ai_message_api.create_simple_user_message(p_follow_up_message));
+
+        -- Prepare profile context
+        uc_ai_prompt_profiles_api.prepare_profile_context(
+          p_code             => l_profile_code,
+          p_config_override  => l_profile_config,
+          po_provider        => l_provider,
+          po_model           => l_model,
+          po_response_schema => l_response_schema
+        );
+
+        -- Call generate_text with messages directly
+        l_result := uc_ai.generate_text(
+          p_messages              => l_messages,
+          p_provider              => l_provider,
+          p_model                 => l_model,
+          p_max_tool_calls        => uc_ai.g_max_tool_calls,
+          p_response_json_schema  => l_response_schema
+        );
+      else
+        -- Original first-call path: execute orchestrator profile
+        l_result := uc_ai_prompt_profiles_api.execute_profile(
+          p_code              => l_profile_code,
+          p_parameters        => p_input_params,
+          p_config_override   => l_profile_config
+        );
+      end if;
+
     exception
       when others then
         -- Always cleanup, even on error
@@ -579,11 +781,11 @@ end;!';
 
     -- Cleanup temporary tools
     cleanup_agent_tools(l_tool_ids);
-    
+
     -- Restore original settings
     uc_ai.g_enable_tools := l_original_tools;
     uc_ai.g_tool_tags := l_original_tags;
-    
+
     return l_result;
   exception
     when others then

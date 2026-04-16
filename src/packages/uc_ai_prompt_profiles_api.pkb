@@ -905,5 +905,50 @@ create or replace package body uc_ai_prompt_profiles_api as
       raise;
   end execute_profile;
 
+  /*
+   * Prepares a profile's context for conversation continuation
+   */
+  procedure prepare_profile_context(
+    p_code              in uc_ai_prompt_profiles.code%type,
+    p_version           in uc_ai_prompt_profiles.version%type default null,
+    p_config_override   in json_object_t default null,
+    po_provider         out uc_ai_prompt_profiles.provider%type,
+    po_model            out uc_ai_prompt_profiles.model%type,
+    po_response_schema  out json_object_t
+  )
+  as
+    l_scope    uc_ai_logger.scope := gc_scope_prefix || 'prepare_profile_context';
+    l_profile  uc_ai_prompt_profiles%rowtype;
+    l_config   json_object_t;
+  begin
+    -- Get profile
+    l_profile := get_prompt_profile(p_code, p_version);
+
+    -- Determine final provider and model
+    po_provider := l_profile.provider;
+    po_model    := l_profile.model;
+
+    -- Determine final config
+    if p_config_override is not null then
+      l_config := p_config_override;
+    elsif l_profile.model_config_json is not null then
+      l_config := json_object_t.parse(l_profile.model_config_json);
+    end if;
+
+    -- Apply model configuration to global variables
+    apply_model_config(l_config, po_provider);
+
+    -- Resolve response schema
+    if l_config is not null and l_config.has('response_schema') and l_config.get('response_schema').is_object then
+      po_response_schema := treat(l_config.get('response_schema') as json_object_t);
+    elsif l_profile.response_schema is not null then
+      po_response_schema := json_object_t.parse(l_profile.response_schema);
+    end if;
+  exception
+    when others then
+      uc_ai_logger.log_error('Error preparing profile context', l_scope);
+      raise;
+  end prepare_profile_context;
+
 end uc_ai_prompt_profiles_api;
 /
