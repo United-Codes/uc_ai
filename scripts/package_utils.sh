@@ -21,6 +21,7 @@ declare -a API_PACKAGES=(
     "uc_ai_agents_api"
     "uc_ai_agent_exec_api"
     "uc_ai_agent_workflow_api"
+    "uc_ai_utils"
 )
 
 # Provider packages (alphabetical order)
