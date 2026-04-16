@@ -213,7 +213,7 @@ create or replace package body uc_ai_ollama as
                 
                 l_function := json_object_t();
                 l_function.put('name', l_content_item.get_string('toolName'));
-                l_function.put('arguments', l_content_item.get_clob('args'));
+                l_function.put('arguments', json_object_t(l_content_item.get_clob('args')));
                 
                 l_tool_call.put('function', l_function);
                 l_tool_calls.append(l_tool_call);
