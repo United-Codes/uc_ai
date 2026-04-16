@@ -14,12 +14,16 @@ as
 
 
   -- get from https://docs.x.ai/docs/models
-  c_model_grok_4_1_fast constant uc_ai.model_type := 'grok-4-1-fast-non-reasoning';
-  c_model_grok_4_fast constant uc_ai.model_type := 'grok-4-fast-non-reasoning';
-  c_model_grok_4 constant uc_ai.model_type := 'grok-4';
-  c_model_grok_3_mini constant uc_ai.model_type := 'grok-3-mini';
-  c_model_grok_3 constant uc_ai.model_type := 'grok-3';
-  c_model_grok_2_vision constant uc_ai.model_type := 'grok-2-vision';
+  c_model_grok_4_20_reasoning     constant uc_ai.model_type := 'grok-4.20-0309-reasoning';
+  c_model_grok_4_20_non_reasoning constant uc_ai.model_type := 'grok-4.20-0309-non-reasoning';
+  c_model_grok_4_20_multi_agent   constant uc_ai.model_type := 'grok-4.20-multi-agent-0309';
+  c_model_grok_4_1_fast_reasoning constant uc_ai.model_type := 'grok-4-1-fast-reasoning';
+  c_model_grok_4_1_fast           constant uc_ai.model_type := 'grok-4-1-fast-non-reasoning';
+  c_model_grok_4_fast             constant uc_ai.model_type := 'grok-4-fast-non-reasoning';
+  c_model_grok_4                  constant uc_ai.model_type := 'grok-4';
+  c_model_grok_3_mini             constant uc_ai.model_type := 'grok-3-mini';
+  c_model_grok_3                  constant uc_ai.model_type := 'grok-3';
+  c_model_grok_2_vision           constant uc_ai.model_type := 'grok-2-vision';
 
   c_model_grok_code_fast_1 constant uc_ai.model_type := 'grok-code-fast-1';
 

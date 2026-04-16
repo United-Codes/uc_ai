@@ -18,20 +18,29 @@ as
   -- Meta Llama models
   c_model_llama_4_maverick          constant uc_ai.model_type := 'meta.llama-4-maverick-17b-128e-instruct-fp8';
   c_model_llama_4_scout             constant uc_ai.model_type := 'meta.llama-4-scout-17b-16e-instruct';
-
   c_model_llama_3_3_70b             constant uc_ai.model_type := 'meta.llama-3.3-70b-instruct';
   c_model_llama_3_2_90b_vision      constant uc_ai.model_type := 'meta.llama-3.2-90b-vision-instruct';
   c_model_llama_3_2_11b_vision      constant uc_ai.model_type := 'meta.llama-3.2-11b-vision-instruct';
   c_model_llama_3_1_405b            constant uc_ai.model_type := 'meta.llama-3.1-405b-instruct';
-  c_model_llama_3_1_70b             constant uc_ai.model_type := 'meta.llama-3.1-70b-instruct';
-  c_model_llama_3_70b               constant uc_ai.model_type := 'meta.llama-3-70b-instruct';
   
   -- Cohere Command models
-  c_model_cohere_command_a_03_2025  constant uc_ai.model_type := 'cohere.command-a-03-2025';
-  c_model_cohere_command_r_plus     constant uc_ai.model_type := 'cohere.command-r-plus';
-  c_model_cohere_command_r          constant uc_ai.model_type := 'cohere.command-r';
+  c_model_cohere_command_a_reasoning constant uc_ai.model_type := 'cohere.command-a-reasoning';
+  c_model_cohere_command_a_vision    constant uc_ai.model_type := 'cohere.command-a-vision';
+  c_model_cohere_command_a_03_2025   constant uc_ai.model_type := 'cohere.command-a-03-2025';
+  c_model_cohere_command_r_plus      constant uc_ai.model_type := 'cohere.command-r-plus-08-2024';
+  c_model_cohere_command_r           constant uc_ai.model_type := 'cohere.command-r-08-2024';
+
+  -- Google models (on OCI)
+  c_model_google_gemini_2_5_pro        constant uc_ai.model_type := 'google.gemini-2.5-pro';
+  c_model_google_gemini_2_5_flash      constant uc_ai.model_type := 'google.gemini-2.5-flash';
+  c_model_google_gemini_2_5_flash_lite constant uc_ai.model_type := 'google.gemini-2.5-flash-lite';
 
   -- xAI Grok models
+  c_model_grok_4_20_multi_agent     constant uc_ai.model_type := 'xai.grok-4.20-multi-agent';
+  c_model_grok_4_20                 constant uc_ai.model_type := 'xai.grok-4.20';
+  c_model_grok_code_fast_1          constant uc_ai.model_type := 'xai.grok-code-fast-1';
+  c_model_grok_4_1_fast             constant uc_ai.model_type := 'xai.grok-4.1-fast';
+  c_model_grok_4_fast               constant uc_ai.model_type := 'xai.grok-4-fast';
   c_model_grok_4                    constant uc_ai.model_type := 'xai.grok-4';
   c_model_grok_3                    constant uc_ai.model_type := 'xai.grok-3';
   c_model_grok_3_mini               constant uc_ai.model_type := 'xai.grok-3-mini';
@@ -39,19 +48,16 @@ as
   c_model_grok_3_mini_fast          constant uc_ai.model_type := 'xai.grok-3-mini-fast';
 
   -- OpenAI models
-  c_model_gpt_oss_120b              constant uc_ai.model_type := 'openai.gpt-oss-120b';
-  c_model_gpt_oss_20b               constant uc_ai.model_type := 'openai.gpt-oss-20b';
-
-  -- Oracle proprietary models (if available)
-  c_model_oracle_genai              constant uc_ai.model_type := 'oracle.genai';
+  c_model_gpt_oss_120b              constant uc_ai.model_type := 'gpt-oss-120b';
+  c_model_gpt_oss_20b               constant uc_ai.model_type := 'gpt-oss-20b';
 
   -- Cohere Embedding models
   -- See https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/EmbedTextResult/EmbedText
   c_model_cohere_embed_4                          constant uc_ai.model_type := 'cohere.embed-v4.0';
   c_model_cohere_embed_english_image_3            constant uc_ai.model_type := 'cohere.embed-english-image-v3.0';
   c_model_cohere_embed_english_light_image_3      constant uc_ai.model_type := 'cohere.embed-english-light-image-v3.0';
+  c_model_cohere_embed_multi_image_3               constant uc_ai.model_type := 'cohere.embed-multilingual-image-v3.0';
   c_model_cohere_embed_multi_image_light_3        constant uc_ai.model_type := 'cohere.embed-multilingual-light-image-v3.0';
-  c_model_cohere_embed_multilingual_light_image_3 constant uc_ai.model_type := 'cohere.embed-multilingual-light-image-v3.0';
   c_model_cohere_embed_english_3                  constant uc_ai.model_type := 'cohere.embed-english-v3.0';
   c_model_cohere_embed_english_light_3            constant uc_ai.model_type := 'cohere.embed-english-light-v3.0';
   c_model_cohere_embed_multi_3                    constant uc_ai.model_type := 'cohere.embed-multilingual-v3.0';

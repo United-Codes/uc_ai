@@ -15,11 +15,14 @@ as
 
   -- Google Gemini models
   -- See https://ai.google.dev/gemini-api/docs/models/gemini
-  c_model_gemini_3_pro          constant uc_ai.model_type := 'gemini-3-pro-preview';
+  c_model_gemini_3_1_pro          constant uc_ai.model_type := 'gemini-3.1-pro-preview';
+  c_model_gemini_3_flash          constant uc_ai.model_type := 'gemini-3-flash-preview';
+  c_model_gemini_3_1_flash_lite   constant uc_ai.model_type := 'gemini-3.1-flash-lite-preview';
+  c_model_gemini_3_pro            constant uc_ai.model_type := 'gemini-3-pro-preview';
 
   c_model_gemini_2_5_pro        constant uc_ai.model_type := 'gemini-2.5-pro';
   c_model_gemini_2_5_flash      constant uc_ai.model_type := 'gemini-2.5-flash';
-  c_model_gemini_2_5_flash_lite constant uc_ai.model_type := 'gemini-2.5-flash-lite-preview-06-17';
+  c_model_gemini_2_5_flash_lite constant uc_ai.model_type := 'gemini-2.5-flash-lite';
 
   c_model_gemini_2_0_flash        constant uc_ai.model_type := 'gemini-2.0-flash';
   c_model_gemini_2_0_flash_lite   constant uc_ai.model_type := 'gemini-2.0-flash_lite';
@@ -30,6 +33,7 @@ as
 
   -- Embedding models
   -- See https://ai.google.dev/gemini-api/docs/embeddings#model-versions
+  c_model_gemini_embedding_2   constant uc_ai.model_type := 'gemini-embedding-2-preview';
   c_model_gemini_embedding_001 constant uc_ai.model_type := 'gemini-embedding-001';
 
 
