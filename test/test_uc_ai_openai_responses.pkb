@@ -11,9 +11,6 @@ create or replace package body test_uc_ai_openai_responses as
     uc_ai.g_enable_tools := false;
     uc_ai.g_enable_reasoning := false;
     
-    -- Enable Responses API for OpenAI
-    uc_ai_openai.g_use_responses_api := true;
-    
     -- Configure Responses API settings
     uc_ai_responses_api.g_store_responses := true;
     uc_ai_responses_api.g_include_encrypted_reasoning := false;

@@ -12,7 +12,7 @@ as
   * https://www.united-codes.com
   */
 
-  g_use_responses_api boolean := false;
+  g_use_responses_api boolean := true;
 
   -- get from https://platform.openai.com/docs/pricing
   c_model_gpt_5_4 constant uc_ai.model_type := 'gpt-5.4';

@@ -12,8 +12,7 @@ create or replace package test_uc_ai_openai_responses as
   /**
    * Test package for uc_ai_openai using Responses API
    * 
-   * Tests OpenAI integration via the new Responses API standard
-   * by setting g_use_responses_api flag
+   * Tests OpenAI integration via the Responses API (now the default)
    */
 
   --%suite(UC AI OpenAI Responses API Tests)

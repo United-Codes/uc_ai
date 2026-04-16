@@ -23,6 +23,7 @@ create or replace package body test_uc_ai_ollama as
   begin
     setup_ollama;
     uc_ai.g_enable_tools := false;
+    uc_ai_ollama.g_use_responses_api := false;
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
@@ -60,6 +61,7 @@ create or replace package body test_uc_ai_ollama as
 
     setup_ollama;
     uc_ai.g_enable_tools := true;
+    uc_ai_ollama.g_use_responses_api := false;
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'What is the email address of Jim?',
@@ -110,6 +112,7 @@ create or replace package body test_uc_ai_ollama as
 
     setup_ollama;
     uc_ai.g_enable_tools := true;
+    uc_ai_ollama.g_use_responses_api := false;
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'Please clock me in to the marketing project with the note "meeting".',
@@ -147,7 +150,7 @@ create or replace package body test_uc_ai_ollama as
   begin
     setup_ollama;
     uc_ai.g_enable_tools := false;
-    uc_ai_ollama.g_use_responses_api := true;
+
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
@@ -170,7 +173,7 @@ create or replace package body test_uc_ai_ollama as
 
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
 
-    uc_ai_ollama.g_use_responses_api := false;
+
   end basic_recipe_responses_api;
 
   procedure tool_user_info_responses_api
@@ -187,7 +190,7 @@ create or replace package body test_uc_ai_ollama as
 
     setup_ollama;
     uc_ai.g_enable_tools := true;
-    uc_ai_ollama.g_use_responses_api := true;
+
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'What is the email address of Jim?',
@@ -215,7 +218,7 @@ create or replace package body test_uc_ai_ollama as
 
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
 
-    uc_ai_ollama.g_use_responses_api := false;
+
   end tool_user_info_responses_api;
 
   procedure tool_clock_in_responses_api
@@ -240,7 +243,7 @@ create or replace package body test_uc_ai_ollama as
 
     setup_ollama;
     uc_ai.g_enable_tools := true;
-    uc_ai_ollama.g_use_responses_api := true;
+
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'Please clock me in to the marketing project with the note "meeting".',
@@ -268,7 +271,7 @@ create or replace package body test_uc_ai_ollama as
     -- Validate message array structure against spec
     uc_ai_test_message_utils.validate_message_array(l_messages, 'Tool Clock In User Responses API Test');
 
-    uc_ai_ollama.g_use_responses_api := false;
+
   end tool_clock_in_responses_api;
 
   procedure convert_messages

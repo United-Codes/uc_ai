@@ -12,6 +12,7 @@ create or replace package body test_uc_ai_oci as
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false;
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
@@ -47,7 +48,7 @@ create or replace package body test_uc_ai_oci as
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
-    uc_ai_oci.g_use_responses_api := true;
+
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
@@ -71,7 +72,7 @@ create or replace package body test_uc_ai_oci as
 
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
 
-    uc_ai_oci.g_use_responses_api := false;
+
   end basic_recipe_responses_api;
 
 
@@ -86,7 +87,7 @@ create or replace package body test_uc_ai_oci as
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
-    uc_ai_oci.g_use_responses_api := true;
+
 
     l_result := uc_ai.GENERATE_TEXT(
       p_system_prompt => 'Let''s count up',
@@ -139,7 +140,7 @@ create or replace package body test_uc_ai_oci as
 
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
 
-    uc_ai_oci.g_use_responses_api := false;
+
   end continue_conv_responses_api;
 
 
@@ -159,7 +160,7 @@ create or replace package body test_uc_ai_oci as
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
-    uc_ai_oci.g_use_responses_api := true;
+
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'What is the email address of Jim?',
@@ -187,7 +188,7 @@ create or replace package body test_uc_ai_oci as
 
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
 
-    uc_ai_oci.g_use_responses_api := false;
+
   end tool_user_info_responses_api;
 
 
@@ -215,7 +216,7 @@ create or replace package body test_uc_ai_oci as
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
-    uc_ai_oci.g_use_responses_api := true;
+
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'Please clock me in to the marketing project with the note "meeting".',
@@ -244,7 +245,7 @@ create or replace package body test_uc_ai_oci as
     -- Validate message array structure against spec
     uc_ai_test_message_utils.validate_message_array(l_messages, 'Tool Clock in user Responses API Test');
 
-    uc_ai_oci.g_use_responses_api := false;
+
   end tool_clock_in_responses_api;
 
 
@@ -259,6 +260,7 @@ create or replace package body test_uc_ai_oci as
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false;
 
     l_result := uc_ai.GENERATE_TEXT(
       p_system_prompt => 'Let''s count up',
@@ -329,6 +331,7 @@ create or replace package body test_uc_ai_oci as
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false;
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'What is the email address of Jim?',
@@ -383,6 +386,7 @@ create or replace package body test_uc_ai_oci as
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false;
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'Please clock me in to the marketing project with the note "meeting".',
@@ -440,6 +444,7 @@ procedure tool_clock_in_user_gpt_oss
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false;
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'Please clock me in to the marketing project with the note "meeting".',
@@ -483,6 +488,7 @@ procedure tool_clock_in_user_gpt_oss
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false;
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
@@ -519,6 +525,7 @@ procedure tool_clock_in_user_gpt_oss
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false;
     uc_ai.g_enable_tools := false;
 
     l_result := uc_ai.GENERATE_TEXT(
@@ -589,6 +596,7 @@ procedure tool_clock_in_user_gpt_oss
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false;
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'What is the email address of Jim?',
@@ -642,6 +650,7 @@ procedure tool_clock_in_user_gpt_oss
     uc_ai_oci.g_compartment_id := get_oci_compratment_id;
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false;
 
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'Please clock me in to the marketing project with the note "meeting".',

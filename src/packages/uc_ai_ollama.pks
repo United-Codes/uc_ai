@@ -15,7 +15,7 @@ as
   -- See https://ollama.com/library for available models
 
   g_apex_web_credential varchar2(255 char);
-  g_use_responses_api boolean := false;
+  g_use_responses_api boolean := true;
 
   /*
    * Ollama implementation for text generation
