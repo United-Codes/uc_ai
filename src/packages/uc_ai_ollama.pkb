@@ -547,7 +547,17 @@ create or replace package body uc_ai_ollama as
     if g_use_responses_api then
       declare
         l_base varchar2(500 char) := coalesce(uc_ai.g_base_url, c_api_url);
+        l_saved_base_url varchar2(500 char) := uc_ai.g_base_url;
+        l_resp json_object_t;
       begin
+        if l_base is null then
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_missing_config
+          , p_scope      => l_scope
+          , p0           => 'Ollama Responses API'
+          , p1           => 'a base URL (set uc_ai.g_base_url)'
+          );
+        end if;
         -- Replace /api suffix with /v1 for OpenAI-compatible endpoint
         if l_base like '%/api' then
           l_base := substr(l_base, 1, length(l_base) - 4) || '/v1';
@@ -561,12 +571,19 @@ create or replace package body uc_ai_ollama as
         -- Clear g_base_url so responses API uses its own g_base_url
         uc_ai.g_base_url := null;
 
-        return uc_ai_responses_api.generate_text(
+        l_resp := uc_ai_responses_api.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
         , p_max_tool_calls => p_max_tool_calls
         , p_schema         => p_schema
         );
+        -- Restore g_base_url so subsequent calls use the correct URL
+        uc_ai.g_base_url := l_saved_base_url;
+        return l_resp;
+      exception
+        when others then
+          uc_ai.g_base_url := l_saved_base_url;
+          raise;
       end;
     end if;
 
