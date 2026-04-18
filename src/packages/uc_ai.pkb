@@ -182,10 +182,12 @@ create or replace package body uc_ai as
     g_tool_tags := apex_t_varchar2();
     g_apex_web_credential := null;
     g_provider_override := null;
+    g_max_tool_calls := null;
 
     -- Reset OpenAI global variables
     uc_ai_openai.g_reasoning_effort := 'low';
     uc_ai_openai.g_apex_web_credential := null;
+    uc_ai_openai.g_use_responses_api := true;
 
     -- Reset Anthropic global variables
     uc_ai_anthropic.g_max_tokens := 8192;
@@ -200,12 +202,14 @@ create or replace package body uc_ai as
 
     -- Reset Ollama global variables
     uc_ai_ollama.g_apex_web_credential := null;
+    uc_ai_ollama.g_use_responses_api := true;
 
     -- Reset OCI global variables
     uc_ai_oci.g_compartment_id := null;
     uc_ai_oci.g_serving_type := 'ON_DEMAND';
     uc_ai_oci.g_region := 'us-ashburn-1';
     uc_ai_oci.g_apex_web_credential := null;
+    uc_ai_oci.g_use_responses_api := true;
 
     -- Reset xAI global variables
     uc_ai_xai.g_reasoning_effort := 'low';
