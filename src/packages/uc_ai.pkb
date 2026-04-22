@@ -13,6 +13,9 @@ create or replace package body uc_ai as
   as
     l_result json_object_t;
   begin
+    -- assign a fresh correlation id for this AI call; used by fire_event to gate emission
+    g_request_id := rawtohex(sys_guid());
+
     case p_provider
       when c_provider_openai then
         l_result := uc_ai_openai.generate_text(
@@ -84,6 +87,8 @@ create or replace package body uc_ai as
         );
     end case;
 
+    fire_event(c_event_response_complete, l_result);
+    g_request_id := null;
 
     return l_result;
   end generate_text;
@@ -183,6 +188,9 @@ create or replace package body uc_ai as
     g_apex_web_credential := null;
     g_provider_override := null;
     g_max_tool_calls := null;
+    g_request_id := null;
+    g_callback_fatal := false;
+    -- g_event_callback intentionally preserved (long-lived registration)
 
     -- Reset OpenAI global variables
     uc_ai_openai.g_reasoning_effort := 'low';
@@ -219,6 +227,55 @@ create or replace package body uc_ai as
     uc_ai_openrouter.g_reasoning_effort := 'low';
     uc_ai_openrouter.g_apex_web_credential := null;
   end reset_globals;
+
+  procedure set_event_callback(p_proc_name in varchar2)
+  as
+  begin
+    if p_proc_name is null then
+      g_event_callback := null;
+    else
+      -- validates SCHEMA.PACKAGE.PROCEDURE syntax; raises ORA-44003 on bad input
+      g_event_callback := sys.dbms_assert.qualified_sql_name(p_proc_name);
+    end if;
+  end set_event_callback;
+
+  procedure clear_event_callback
+  as
+  begin
+    g_event_callback := null;
+  end clear_event_callback;
+
+  procedure fire_event(
+    p_event_type in varchar2
+  , p_event_data in json_object_t
+  )
+  as
+    c_scope constant varchar2(60 char) := c_scope_prefix || 'fire_event';
+    l_payload clob;
+    l_stmt    varchar2(32767 char);
+  begin
+    if g_request_id is null or g_event_callback is null then
+      return;
+    end if;
+
+    -- serialize to CLOB: json_object_t is a PL/SQL type and cannot be bound via execute immediate.
+    -- The CLOB is also safe for the callback to persist or forward (no lifecycle concern).
+    l_payload := p_event_data.to_clob();
+
+    l_stmt := 'begin ' || g_event_callback || '(:1, :2, :3); end;';
+    execute immediate l_stmt
+      using in g_request_id, in p_event_type, in l_payload;
+  exception
+    when others then
+      uc_ai_logger.log_error(
+        p_text  => 'Event callback failed: ' || sqlerrm
+      , p_scope => c_scope
+      , p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+      );
+      if g_callback_fatal then
+        raise;
+      end if;
+  end fire_event;
 
 end uc_ai;
 /

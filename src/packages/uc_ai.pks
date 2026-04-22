@@ -56,6 +56,21 @@ as
   -- global settings for APEX Web Credentials
   g_apex_web_credential varchar2(255 char);
 
+  -- event callback constants
+  subtype event_type is varchar2(32 char);
+  c_event_assistant_text      constant event_type := 'assistant_text';
+  c_event_assistant_reasoning constant event_type := 'assistant_reasoning';
+  c_event_tool_call           constant event_type := 'tool_call';
+  c_event_tool_result         constant event_type := 'tool_result';
+  c_event_response_complete   constant event_type := 'response_complete';
+
+  -- event callback globals (session-scoped; persist across reset_globals)
+  g_event_callback varchar2(128 char);
+  g_callback_fatal boolean := false;
+
+  -- correlation id for an active generate_text call (set/cleared by the framework)
+  g_request_id varchar2(32 char);
+
   -- internal use only
   g_provider_override varchar2(4000 char);
 
@@ -100,9 +115,41 @@ as
   ) return json_array_t;
 
   /*
-   * Resets all global variables in uc_ai and provider packages to their default values
+   * Resets all global variables in uc_ai and provider packages to their default values.
+   * Note: g_event_callback is intentionally preserved across resets (long-lived registration).
    */
   procedure reset_globals;
+
+  /*
+   * Register a PL/SQL procedure to receive AI activity events during generate_text calls.
+   *
+   * The procedure must have the signature:
+   *   procedure <name>(
+   *     p_request_id in varchar2,
+   *     p_event_type in varchar2,
+   *     p_event_data in clob          -- JSON serialized; parse with json_object_t.parse if needed
+   *   );
+   *
+   * CLOB is used instead of json_object_t because PL/SQL object types cannot be bound via
+   * EXECUTE IMMEDIATE. The CLOB is safe to store/forward beyond the callback scope.
+   *
+   * @param p_proc_name Qualified procedure name (e.g. 'MY_PKG.ON_AI_EVENT'). Null to clear.
+   */
+  procedure set_event_callback(p_proc_name in varchar2);
+
+  /*
+   * Clear the registered event callback.
+   */
+  procedure clear_event_callback;
+
+  /*
+   * Internal: invokes the registered event callback. Called by uc_ai_message_api content
+   * builders and by generate_text on completion. Not intended for user code.
+   */
+  procedure fire_event(
+    p_event_type in varchar2
+  , p_event_data in json_object_t
+  );
 
 end uc_ai;
 /

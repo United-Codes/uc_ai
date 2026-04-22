@@ -22,6 +22,7 @@ create or replace package body uc_ai_message_api as
       l_content.put('providerOptions', p_provider_options);
     end if;
 
+    uc_ai.fire_event(uc_ai.c_event_assistant_text, l_content);
     return l_content;
   end create_text_content;
 
@@ -84,11 +85,12 @@ create or replace package body uc_ai_message_api as
     l_content := json_object_t();
     l_content.put('type', 'reasoning');
     l_content.put('text', p_text);
-    
+
     if p_provider_options is not null then
       l_content.put('providerOptions', p_provider_options);
     end if;
-    
+
+    uc_ai.fire_event(uc_ai.c_event_assistant_reasoning, l_content);
     return l_content;
   end create_reasoning_content;
 
@@ -105,11 +107,12 @@ create or replace package body uc_ai_message_api as
     l_content.put('toolCallId', p_tool_call_id);
     l_content.put('toolName', p_tool_name);
     l_content.put('args', p_args);
-    
+
     if p_provider_options is not null then
       l_content.put('providerOptions', p_provider_options);
     end if;
-    
+
+    uc_ai.fire_event(uc_ai.c_event_tool_call, l_content);
     return l_content;
   end create_tool_call_content;
 
@@ -126,11 +129,12 @@ create or replace package body uc_ai_message_api as
     l_content.put('toolCallId', p_tool_call_id);
     l_content.put('toolName', p_tool_name);
     l_content.put('result', p_result);
-    
+
     if p_provider_options is not null then
       l_content.put('providerOptions', p_provider_options);
     end if;
-    
+
+    uc_ai.fire_event(uc_ai.c_event_tool_result, l_content);
     return l_content;
   end create_tool_result_content;
 
