@@ -172,7 +172,34 @@ The reasoning effort parameter controls how many reasoning tokens are generated 
 
 Refer to OpenAI's [reasoning best practices guide](https://platform.openai.com/docs/guides/reasoning-best-practices#page-top) for advanced usage and best practices.
 
-OpenAI does not return reasoning summary messages like some other providers. It only returns the final message after reasoning is complete.
+#### Reasoning content, storage, and encryption
+
+On the Responses API, OpenAI treats reasoning as server-side state. Every turn that uses a reasoning model emits a `reasoning` output item (`rs_...`), but whether that item carries any *content* you can see or round-trip depends on two settings:
+
+```sql
+uc_ai_responses_api.g_store_responses := false;            -- default
+uc_ai_responses_api.g_include_encrypted_reasoning := false; -- default
+uc_ai_responses_api.g_reasoning_summary := null;            -- null | 'concise' | 'detailed' | 'auto'
+```
+
+- **`g_store_responses`** — when `true`, OpenAI keeps the full reasoning state on their side and UC AI only has to pass the `rs_...` id back on follow-up turns. When `false`, nothing is persisted server-side.
+- **`g_include_encrypted_reasoning`** — when `true`, OpenAI returns the reasoning inline as an encrypted blob (for [Zero Data Retention](https://platform.openai.com/docs/guides/your-data#zero-data-retention)), which UC AI stores in `providerOptions.encrypted_content` and sends back on follow-up turns.
+- **`g_reasoning_summary`** — when non-null, OpenAI includes a human-readable summary of the thinking in the reasoning item. Useful for observability even when you don't keep the full content.
+
+The combinations that matter in practice:
+
+| `store` | `encrypted_content` | Behavior |
+|---------|---------------------|----------|
+| `true`  | either              | Reasoning persisted by OpenAI, `rs_...` id round-trips. Works for multi-turn reasoning. |
+| `false` | `true`              | Encrypted blob returned inline, round-trips on follow-up turns. Required for ZDR. |
+| `false` | `false`             | **Reasoning content is lost.** See below. |
+
+When both `store=false` and `g_include_encrypted_reasoning=false`, there is no way to preserve the reasoning across turns — OpenAI doesn't keep it, and it isn't handed back to you. UC AI still surfaces a `reasoning` marker in the returned `messages` array (with the `rs_...` id in `providerOptions` for observability) so you can see that reasoning happened, but:
+
+- The marker's `text` and `providerOptions.encrypted_content` are `null`.
+- On intermediate tool-calling turns, UC AI deliberately **strips these id-only reasoning items** before the follow-up request. Otherwise OpenAI rejects the call with `"Item with id 'rs_...' not found. Items are not persisted when store is set to false."`
+
+This is an intentional trade-off: if you explicitly opt out of both storage and encryption, you get privacy at the cost of losing the reasoning trace. If you need the trace — for debugging, auditing, or simply to pass it back in a later turn — set `g_store_responses := true` or `g_include_encrypted_reasoning := true`.
 
 ## Generating Embeddings
 
