@@ -44,7 +44,9 @@ Yes! One of UC AI's key features is function calling (tools). You can register d
 
 Check out the [Installation Guide](/products/uc-ai/docs/guides/installation/) for detailed steps.
 
-## What if UC AI doesn't have a constant for a new model? {#custom-model-strings}
+<a id="custom-model-strings"></a>
+
+## What if UC AI doesn't have a constant for a new model?
 
 AI providers frequently release new models. If UC AI doesn't yet offer a constant for a model, you can simply pass the model name as a string directly to the `p_model` parameter:
 
@@ -62,7 +64,9 @@ end;
 
 The `p_model` parameter accepts any `varchar2` value, so you are not limited to the pre-defined constants. The constants are provided for convenience and to avoid typos, but any valid model identifier string that the provider accepts will work.
 
-## Why doesn't UC AI have a table of providers and models instead of constants? {#no-model-table}
+<a id="no-model-table"></a>
+
+## Why doesn't UC AI have a table of providers and models instead of constants?
 
 This is a deliberate design decision. UC AI provides package constants for common models as a convenience, but intentionally does not maintain a configuration table of providers and models. Here's why:
 
