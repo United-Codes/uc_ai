@@ -666,7 +666,7 @@ create or replace package body uc_ai_anthropic as
       l_input_obj.put('output_config', l_output_config);
     end if;
 
-    if g_max_tokens < l_reasoning_tokens then
+    if g_max_tokens <= l_reasoning_tokens then
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_reasoning_budget
       , p_scope      => l_scope
