@@ -71,15 +71,7 @@ bash scripts/generate_upgrade_script.sh
 bash scripts/generate_install_script_complete.sh
 ```
 
-Run in Oracle via SQL*Plus:
-
-```sql
--- Fresh install
-@install_uc_ai.sql
-
--- Upgrade packages only
-@upgrade_packages.sql
-```
+You can use SQLcl with `sql -name local-23ai-uc_ai` to connect to the dev database to run queries, compile packages, and execute tests.
 
 Installation order is dependency-aware: tables -> triggers -> specs (core first, then API, then providers) -> bodies -> post-scripts. See `install_uc_ai.sql` for exact order.
 
