@@ -236,6 +236,11 @@ create or replace package body uc_ai as
     uc_ai_openai.g_apex_web_credential := null;
     uc_ai_openai.g_use_responses_api := true;
 
+    -- Reset shared Responses API global variables
+    uc_ai_responses_api.g_store_responses := false;
+    uc_ai_responses_api.g_include_encrypted_reasoning := false;
+    uc_ai_responses_api.g_reasoning_summary := null;
+
     -- Reset Anthropic global variables
     uc_ai_anthropic.g_max_tokens := 8192;
     uc_ai_anthropic.g_reasoning_budget_tokens := null;

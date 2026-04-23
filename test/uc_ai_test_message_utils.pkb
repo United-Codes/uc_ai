@@ -60,22 +60,29 @@ create or replace package body uc_ai_test_message_utils as
     l_text varchar2(32767 char);
     l_provider_options json_object_t;
     l_has_encrypted_content boolean := false;
+    l_has_id boolean := false;
   begin
     -- Reasoning content should have 'text' field
-    ut.expect(p_content_item.has('text'), 
+    ut.expect(p_content_item.has('text'),
              p_test_name || ': Reasoning content ' || p_content_index || ' in message ' || p_message_index || ' should have text field').to_be_true();
-    
+
 
     if p_content_item.has('providerOptions') then
       l_provider_options := treat(p_content_item.get('providerOptions') as json_object_t);
       if l_provider_options.has('encrypted_content') and not l_provider_options.get('encrypted_content').is_null then
         l_has_encrypted_content := true;
       end if;
+      if l_provider_options.has('id') and not l_provider_options.get('id').is_null then
+        l_has_id := true;
+      end if;
     end if;
 
-    if not l_has_encrypted_content then
+    -- Reasoning items returned by the Responses API with store=false and no encrypted_content
+    -- are content-less stubs (just an id). Accept those as long as we still carry the id for
+    -- round-trip/observability; otherwise require meaningful text.
+    if not l_has_encrypted_content and not l_has_id then
       l_text := p_content_item.get_string('text');
-      ut.expect(l_text, 
+      ut.expect(l_text,
               p_test_name || ': Reasoning content ' || p_content_index || ' in message ' || p_message_index || ' text should not be null').to_be_not_null();
     end if;
   end validate_reasoning_content;

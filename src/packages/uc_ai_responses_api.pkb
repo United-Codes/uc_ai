@@ -142,26 +142,29 @@ create or replace package body uc_ai_responses_api as
             case l_content_type
               when 'text' then
                 -- Text message item
-                l_item := json_object_t();
-                l_item.put('type', 'message');
-                l_item.put('role', 'assistant');
-                l_item.put('content', json_array_t('[{"type":"output_text","text":"' || l_content_item.get_string('text') || '"}]'));
-                l_items.append(l_item);
+                declare
+                  l_text_arr json_array_t := json_array_t();
+                  l_text_obj json_object_t := json_object_t();
+                begin
+                  l_text_obj.put('type', 'output_text');
+                  l_text_obj.put('text', l_content_item.get_clob('text'));
+                  l_text_arr.append(l_text_obj);
+
+                  l_item := json_object_t();
+                  l_item.put('type', 'message');
+                  l_item.put('role', 'assistant');
+                  l_item.put('content', l_text_arr);
+                  l_items.append(l_item);
+                end;
                 
-              when 'tool_use' then
+              when 'tool_call' then
                 -- Function call item (separate from message in Responses API)
                 l_item := json_object_t();
                 l_item.put('type', 'function_call');
-                l_item.put('call_id', l_content_item.get_string('id'));
-                l_item.put('name', l_content_item.get_string('name'));
-                
-                -- Convert input object to JSON string for arguments
-                declare
-                  l_input_obj json_object_t := l_content_item.get_object('input');
-                begin
-                  l_item.put('arguments', l_input_obj.to_clob);
-                end;
-                
+                l_item.put('call_id', l_content_item.get_string('toolCallId'));
+                l_item.put('name', l_content_item.get_string('toolName'));
+                l_item.put('arguments', coalesce(l_content_item.get_clob('args'), '{}'));
+
                 l_items.append(l_item);
                 
               when 'reasoning' then
@@ -212,21 +215,20 @@ create or replace package body uc_ai_responses_api as
             if l_content_type = 'tool_result' then
               l_item := json_object_t();
               l_item.put('type', 'function_call_output');
-              l_item.put('call_id', l_content_item.get_string('tool_use_id'));
-              
-              -- Output can be string or structured content
-              if l_content_item.has('content') then
+              l_item.put('call_id', l_content_item.get_string('toolCallId'));
+
+              if l_content_item.has('result') then
                 declare
-                  l_result_content json_element_t := l_content_item.get('content');
+                  l_result_value json_element_t := l_content_item.get('result');
                 begin
-                  if l_result_content.is_string then
-                    l_item.put('output', l_content_item.get_string('content'));
+                  if l_result_value.is_string then
+                    l_item.put('output', l_content_item.get_string('result'));
                   else
-                    l_item.put('output', l_content_item.get_clob('content'));
+                    l_item.put('output', l_content_item.get_clob('result'));
                   end if;
                 end;
               end if;
-              
+
               l_items.append(l_item);
             end if;
           end loop tool_content_loop;
@@ -279,9 +281,9 @@ create or replace package body uc_ai_responses_api as
     l_has_text boolean := false;
   begin
     uc_ai_logger.log('Converting ' || p_output.get_size || ' output items to LM messages', l_scope);
-    
+
     l_assistant_content := json_array_t();
-    
+
     <<output_loop>>
     for i in 0 .. p_output.get_size - 1
     loop
@@ -410,19 +412,18 @@ create or replace package body uc_ai_responses_api as
               end loop summary_loop;
             end if;
 
-            if l_encrypted_content is not null or l_summary_text is not null then
-              l_provider_options.put('encrypted_content', l_encrypted_content);
-              l_provider_options.put('text', l_summary_text);
-
-              l_reasoning_content := uc_ai_message_api.create_reasoning_content(
-                p_text => l_output_item.get_clob('text'),
-                p_provider_options => l_provider_options
-              );
-
-              l_assistant_content.append(l_reasoning_content);
+            l_provider_options.put('encrypted_content', l_encrypted_content);
+            l_provider_options.put('text', l_summary_text);
+            if l_output_item.has('id') and not l_output_item.get('id').is_null then
+              l_provider_options.put('id', l_output_item.get_string('id'));
             end if;
 
+            l_reasoning_content := uc_ai_message_api.create_reasoning_content(
+              p_text => l_output_item.get_clob('text'),
+              p_provider_options => l_provider_options
+            );
 
+            l_assistant_content.append(l_reasoning_content);
           end;
           
         else
@@ -728,7 +729,7 @@ create or replace package body uc_ai_responses_api as
     end if;
 
     -- Configure storage and encrypted reasoning
-    l_input_obj.put('store', case when coalesce(g_store_responses, false) then true else false end);
+    l_input_obj.put('store', coalesce(g_store_responses, false));
     
     if g_include_encrypted_reasoning then
       l_include_array := json_array_t();
@@ -779,7 +780,7 @@ create or replace package body uc_ai_responses_api as
           exit tool_execution_loop when not l_has_function_calls or l_tool_calls_count >= p_max_tool_calls;
           
           uc_ai_logger.log('Found function calls in output, executing tools', l_scope, 'Previous response_id: ' || g_previous_response_id);
-          
+
           -- Convert function calls to normalized assistant message and add to global array
           declare
             l_assistant_content json_array_t := json_array_t();
@@ -791,19 +792,69 @@ create or replace package body uc_ai_responses_api as
             for i in 0 .. l_current_output.get_size - 1
             loop
               l_output_item := treat(l_current_output.get(i) as json_object_t);
-              
-              if l_output_item.get_string('type') = 'function_call' then
-                l_has_tool_calls := true;
-                
-                -- Create tool_use content item
-                l_tool_use_content := uc_ai_message_api.create_tool_call_content(
-                  p_tool_call_id => l_output_item.get_string('call_id'),
-                  p_tool_name    => l_output_item.get_string('name'),
-                  p_args         => l_output_item.get_clob('arguments')
-                );
-                
-                l_assistant_content.append(l_tool_use_content);
-              end if;
+
+              case l_output_item.get_string('type')
+                when 'function_call' then
+                  l_has_tool_calls := true;
+
+                  -- Create tool_use content item
+                  l_tool_use_content := uc_ai_message_api.create_tool_call_content(
+                    p_tool_call_id => l_output_item.get_string('call_id'),
+                    p_tool_name    => l_output_item.get_string('name'),
+                    p_args         => l_output_item.get_clob('arguments')
+                  );
+
+                  l_assistant_content.append(l_tool_use_content);
+
+                when 'reasoning' then
+                  declare
+                    l_encrypted_content clob;
+                    l_summary_arr json_array_t;
+                    l_summary_text clob;
+                    l_provider_options json_object_t := json_object_t();
+                    l_reasoning_content json_object_t;
+                  begin
+                    if l_output_item.has('encrypted_content') and not l_output_item.get('encrypted_content').is_null then
+                      l_encrypted_content := l_output_item.get_clob('encrypted_content');
+                    end if;
+
+                    if l_output_item.has('summary') and not l_output_item.get('summary').is_null then
+                      l_summary_arr := l_output_item.get_array('summary');
+                    end if;
+
+                    if l_summary_arr is not null and l_summary_arr.get_size > 0 then
+                      <<reasoning_summary_loop>>
+                      for j in 0 .. l_summary_arr.get_size - 1 loop
+                        declare
+                          l_summary_item json_object_t;
+                        begin
+                          l_summary_item := treat(l_summary_arr.get(j) as json_object_t);
+                          if l_summary_text is not null then
+                            l_summary_text := l_summary_text || chr(10);
+                          end if;
+
+                          l_summary_text := l_summary_text || l_summary_item.get_clob('text');
+                        end;
+                      end loop reasoning_summary_loop;
+                    end if;
+
+                    l_provider_options.put('encrypted_content', l_encrypted_content);
+                    l_provider_options.put('text', l_summary_text);
+                    if l_output_item.has('id') and not l_output_item.get('id').is_null then
+                      l_provider_options.put('id', l_output_item.get_string('id'));
+                    end if;
+
+                    l_reasoning_content := uc_ai_message_api.create_reasoning_content(
+                      p_text => l_output_item.get_clob('text'),
+                      p_provider_options => l_provider_options
+                    );
+
+                    l_assistant_content.append(l_reasoning_content);
+                  end;
+
+                else
+                  null;
+              end case;
             end loop convert_function_calls;
             
             -- Add assistant message with tool_use content to normalized messages
@@ -815,11 +866,27 @@ create or replace package body uc_ai_responses_api as
             end if;
           end;
           
-          -- Add current output items to the items array
+          -- Add current output items to the items array.
+          -- Skip reasoning items that have no encrypted_content when store=false — OpenAI
+          -- rejects their ids because nothing is persisted server-side to reconstitute them.
           <<add_output_items>>
           for i in 0 .. l_current_output.get_size - 1
           loop
-            l_current_items.append(l_current_output.get(i));
+            declare
+              l_item json_object_t := treat(l_current_output.get(i) as json_object_t);
+              l_skip boolean := false;
+            begin
+              if l_item.get_string('type') = 'reasoning'
+                 and not g_store_responses
+                 and (not l_item.has('encrypted_content')
+                      or l_item.get('encrypted_content').is_null) then
+                l_skip := true;
+              end if;
+
+              if not l_skip then
+                l_current_items.append(l_item);
+              end if;
+            end;
           end loop add_output_items;
           
           -- Execute each function call and add results

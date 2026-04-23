@@ -25,8 +25,8 @@ as
   -- Text verbosity level
   g_text_verbosity varchar2(32 char) := 'medium'; -- 'low', 'medium', 'high'
 
-  -- Whether to store responses for retrieval later (default: true)
-  g_store_responses boolean;
+  -- Whether to store responses for retrieval later (default: false)
+  g_store_responses boolean := false;
 
   -- Whether to include encrypted reasoning content for ZDR compliance
   g_include_encrypted_reasoning boolean := false;

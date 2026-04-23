@@ -51,5 +51,8 @@ create or replace package test_uc_ai_openai_responses as
   --%test(Encrypted reasoning for ZDR compliance)
   procedure test_encrypted_reasoning;
 
+  --%test(Function calling with reasoning model, store=false, no encrypted reasoning)
+  procedure test_function_calling_reasoning;
+
 end test_uc_ai_openai_responses;
 /
