@@ -29,10 +29,12 @@ PROMPT - Installing API package specifications...
 @@src/packages/uc_ai_message_api.pks
 @@src/packages/uc_ai_structured_output.pks
 @@src/packages/uc_ai_logger.pks
+@@src/packages/uc_ai_error.pks
 @@src/packages/uc_ai_toon.pks
 @@src/packages/uc_ai_agents_api.pks
 @@src/packages/uc_ai_agent_exec_api.pks
 @@src/packages/uc_ai_agent_workflow_api.pks
+@@src/packages/uc_ai_utils.pks
 
 PROMPT - Installing AI provider package specifications...
 @@src/packages/uc_ai_anthropic.pks
@@ -51,10 +53,12 @@ PROMPT - Installing API package bodies...
 @@src/packages/uc_ai_message_api.pkb
 @@src/packages/uc_ai_structured_output.pkb
 @@src/packages/uc_ai_logger.pkb
+@@src/packages/uc_ai_error.pkb
 @@src/packages/uc_ai_toon.pkb
 @@src/packages/uc_ai_agents_api.pkb
 @@src/packages/uc_ai_agent_exec_api.pkb
 @@src/packages/uc_ai_agent_workflow_api.pkb
+@@src/packages/uc_ai_utils.pkb
 PROMPT - Installing AI provider package bodies...
 @@src/packages/uc_ai_anthropic.pkb
 @@src/packages/uc_ai_google.pkb
