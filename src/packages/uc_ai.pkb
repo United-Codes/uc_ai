@@ -60,25 +60,51 @@ create or replace package body uc_ai as
           );
         end if;
       when c_provider_xai then
-        g_base_url := 'https://api.x.ai/v1';
-        g_provider_override := c_provider_xai;
-
-        l_result := uc_ai_openai.generate_text(
-          p_messages       => p_messages
-        , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
-        , p_schema         => p_response_json_schema
-        );
+        declare
+          l_prev_base_url  varchar2(4000 char) := g_base_url;
+          l_prev_override  varchar2(4000 char) := g_provider_override;
+        begin
+          g_base_url := 'https://api.x.ai/v1';
+          g_provider_override := c_provider_xai;
+          begin
+            l_result := uc_ai_openai.generate_text(
+              p_messages       => p_messages
+            , p_model          => p_model
+            , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+            , p_schema         => p_response_json_schema
+            );
+            g_base_url := l_prev_base_url;
+            g_provider_override := l_prev_override;
+          exception
+            when others then
+              g_base_url := l_prev_base_url;
+              g_provider_override := l_prev_override;
+              raise;
+          end;
+        end;
       when c_provider_openrouter then
-        g_base_url := 'https://openrouter.ai/api/v1';
-        g_provider_override := c_provider_openrouter;
-
-        l_result := uc_ai_openai.generate_text(
-          p_messages       => p_messages
-        , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
-        , p_schema         => p_response_json_schema
-        );
+        declare
+          l_prev_base_url  varchar2(4000 char) := g_base_url;
+          l_prev_override  varchar2(4000 char) := g_provider_override;
+        begin
+          g_base_url := 'https://openrouter.ai/api/v1';
+          g_provider_override := c_provider_openrouter;
+          begin
+            l_result := uc_ai_openai.generate_text(
+              p_messages       => p_messages
+            , p_model          => p_model
+            , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+            , p_schema         => p_response_json_schema
+            );
+            g_base_url := l_prev_base_url;
+            g_provider_override := l_prev_override;
+          exception
+            when others then
+              g_base_url := l_prev_base_url;
+              g_provider_override := l_prev_override;
+              raise;
+          end;
+        end;
       else
         uc_ai_error.raise_error(
           p_error_code => uc_ai_error.c_err_unknown_provider
@@ -155,13 +181,26 @@ create or replace package body uc_ai as
         , p_model => p_model
         );
       when c_provider_openrouter then
-        g_base_url := 'https://openrouter.ai/api/v1';
-        g_provider_override := c_provider_openrouter;
-
-        l_result := uc_ai_openai.generate_embeddings(
-          p_input => p_input
-        , p_model => p_model
-        );
+        declare
+          l_prev_base_url  varchar2(4000 char) := g_base_url;
+          l_prev_override  varchar2(4000 char) := g_provider_override;
+        begin
+          g_base_url := 'https://openrouter.ai/api/v1';
+          g_provider_override := c_provider_openrouter;
+          begin
+            l_result := uc_ai_openai.generate_embeddings(
+              p_input => p_input
+            , p_model => p_model
+            );
+            g_base_url := l_prev_base_url;
+            g_provider_override := l_prev_override;
+          exception
+            when others then
+              g_base_url := l_prev_base_url;
+              g_provider_override := l_prev_override;
+              raise;
+          end;
+        end;
       else
         uc_ai_error.raise_error(
           p_error_code => uc_ai_error.c_err_unknown_provider
