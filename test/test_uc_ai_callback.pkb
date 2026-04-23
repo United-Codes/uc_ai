@@ -84,8 +84,7 @@ create or replace package body test_uc_ai_callback as
   procedure setup_tests
   as
   begin
-    -- use chat API (matches test_uc_ai_openai_chat.setup_tests)
-    uc_ai_openai.g_use_responses_api := false;
+    null;
   end setup_tests;
 
   procedure reset_state

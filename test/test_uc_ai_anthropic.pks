@@ -2,7 +2,7 @@ create or replace package test_uc_ai_anthropic as
 
   --%suite(Anthropic AI tests)
 
-  --%beforeall
+  --%beforeeach
   procedure setup;
 
   --%test(Basic recipe assistant - system prompt and user prompt)

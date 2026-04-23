@@ -523,8 +523,8 @@ create or replace package body test_uc_ai_toon as
     
     l_expected := 'items[1]:' || chr(10)
                || '  - users[2]{id,name}:' || chr(10)
-               || '    1,Ada' || chr(10)
-               || '    2,Bob' || chr(10)
+               || '      1,Ada' || chr(10)
+               || '      2,Bob' || chr(10)
                || '    status: active';
     
     ut.expect(l_result).to_equal(l_expected);

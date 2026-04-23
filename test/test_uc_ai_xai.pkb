@@ -13,7 +13,7 @@ create or replace package body test_uc_ai_xai as
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What an I cook with that?',
       p_system_prompt => 'You are an assistant helping users to get recipes. Please answer in short sentences.',
       p_provider => uc_ai.c_provider_xai,
-      p_model => uc_ai_xai.c_model_grok_4_fast_non_reasoning
+      p_model => uc_ai_xai.c_model_grok_4_fast
     );
 
     l_final_message := l_result.get_clob('final_message');
@@ -50,7 +50,7 @@ create or replace package body test_uc_ai_xai as
       p_user_prompt => 'What is the email address of Jim?',
       p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.',
       p_provider => uc_ai.c_provider_xai,
-      p_model => uc_ai_xai.c_model_grok_4_fast_non_reasoning
+      p_model => uc_ai_xai.c_model_grok_4_fast
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
@@ -106,7 +106,7 @@ create or replace package body test_uc_ai_xai as
 
         If you clock somebody in, answer with: "You are now clocked in to the project "{{project_name}}" with the note "{{notes| - }}".',
       p_provider => uc_ai.c_provider_xai,
-      p_model => uc_ai_xai.c_model_grok_4_fast_reasoning,
+      p_model => uc_ai_xai.c_model_grok_4_1_fast_reasoning,
       p_max_tool_calls => 5
     );
 
@@ -154,7 +154,7 @@ create or replace package body test_uc_ai_xai as
 
         If you clock somebody in, answer with: "You are now clocked in to the project "{{project_name}}" with the note "{{notes| - }}".',
       p_provider => uc_ai.c_provider_xai,
-      p_model => uc_ai_xai.c_model_grok_4_fast_non_reasoning
+      p_model => uc_ai_xai.c_model_grok_4_fast
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
@@ -192,7 +192,7 @@ create or replace package body test_uc_ai_xai as
     l_result := uc_ai.generate_text(
       p_messages => l_messages,
       p_provider => uc_ai.c_provider_xai,
-      p_model => uc_ai_xai.c_model_grok_4_fast_non_reasoning,
+      p_model => uc_ai_xai.c_model_grok_4_fast,
       p_max_tool_calls => 3
     );
 
@@ -244,7 +244,7 @@ create or replace package body test_uc_ai_xai as
     l_result := uc_ai.generate_text(
       p_messages => l_messages,
       p_provider => uc_ai.c_provider_xai,
-      p_model => uc_ai_xai.c_model_grok_4_fast_non_reasoning,
+      p_model => uc_ai_xai.c_model_grok_4_fast,
       p_max_tool_calls => 3
     );
 
@@ -292,7 +292,7 @@ create or replace package body test_uc_ai_xai as
     l_result := uc_ai.generate_text(
       p_messages => l_messages,
       p_provider => uc_ai.c_provider_xai,
-      p_model => uc_ai_xai.c_model_grok_4_fast_non_reasoning,
+      p_model => uc_ai_xai.c_model_grok_4_fast,
       p_max_tool_calls => 3
     );
 
@@ -323,7 +323,7 @@ create or replace package body test_uc_ai_xai as
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
       p_provider => uc_ai.c_provider_xai,
-      p_model => uc_ai_xai.c_model_grok_4_fast_non_reasoning
+      p_model => uc_ai_xai.c_model_grok_4_fast
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
@@ -359,7 +359,7 @@ create or replace package body test_uc_ai_xai as
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
       p_provider => uc_ai.c_provider_xai,
-      p_model => uc_ai_xai.c_model_grok_4_fast_non_reasoning
+      p_model => uc_ai_xai.c_model_grok_4_fast
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
@@ -397,7 +397,7 @@ create or replace package body test_uc_ai_xai as
       p_user_prompt => 'What is the capital of France? Please respond with confidence.',
       p_system_prompt => 'You are a helpful assistant that provides accurate information.',
       p_provider => uc_ai.c_provider_xai,
-      p_model => uc_ai_xai.c_model_grok_4_fast_non_reasoning,
+      p_model => uc_ai_xai.c_model_grok_4_fast,
       p_response_json_schema => l_schema
     );
 
@@ -450,7 +450,7 @@ create or replace package body test_uc_ai_xai as
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What an I cook with that?',
       p_system_prompt => 'You are an assistant helping users to get recipes. Please answer in short sentences.',
       p_provider => uc_ai.c_provider_xai,
-      p_model => uc_ai_xai.c_model_grok_4_fast_non_reasoning
+      p_model => uc_ai_xai.c_model_grok_4_fast
     );
 
     l_final_message := l_result.get_clob('final_message');

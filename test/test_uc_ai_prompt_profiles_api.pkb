@@ -196,7 +196,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       ut.fail('Expected no_data_found exception');
     exception
       when others then
-        ut.expect(sqlcode).to_equal(-20001); -- Custom error from API
+        ut.expect(sqlcode).to_equal(uc_ai_error.c_err_not_found);
     end;
 
     sys.dbms_output.put_line('Deleted profile ID: ' || l_id);
@@ -234,7 +234,7 @@ create or replace package body test_uc_ai_prompt_profiles_api as
       ut.fail('Expected no_data_found exception');
     exception
       when others then
-        ut.expect(sqlcode).to_equal(-20001);
+        ut.expect(sqlcode).to_equal(uc_ai_error.c_err_not_found);
     end;
 
     sys.dbms_output.put_line('Deleted profile by code/version');

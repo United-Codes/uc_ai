@@ -5,6 +5,8 @@ create or replace package body test_uc_ai_anthropic as
   procedure setup
   as
   begin
+    -- ensure each test starts from a clean provider/global state (reasoning, tools, budgets)
+    uc_ai.reset_globals;
     uc_ai_anthropic.g_max_tokens := 2048;
   end setup;
 
@@ -22,7 +24,7 @@ create or replace package body test_uc_ai_anthropic as
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
       p_system_prompt => 'You are an assistant helping users to get recipes. Please just list 3 possible dishe names without instructions.',
       p_provider => uc_ai.c_provider_anthropic,
-      p_model => uc_ai_anthropic.c_model_claude_3_5_haiku
+      p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
@@ -58,7 +60,7 @@ create or replace package body test_uc_ai_anthropic as
       p_user_prompt => 'What is the email address of Jim?',
       p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.',
       p_provider => uc_ai.c_provider_anthropic,
-      p_model => uc_ai_anthropic.c_model_claude_3_5_haiku
+      p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
     );
 
     l_final_message := l_result.get_clob('final_message');
@@ -110,7 +112,7 @@ create or replace package body test_uc_ai_anthropic as
 
         If you clock somebody in, answer with: "You are now clocked in to the project "{{project_name}}" with the note "{{notes| - }}".',
       p_provider => uc_ai.c_provider_anthropic,
-      p_model => uc_ai_anthropic.c_model_claude_3_5_haiku
+      p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
@@ -149,7 +151,7 @@ create or replace package body test_uc_ai_anthropic as
 
     l_result := uc_ai_anthropic.generate_text(
       p_messages => l_messages,
-      p_model => uc_ai_anthropic.c_model_claude_3_5_haiku,
+      p_model => uc_ai_anthropic.c_model_claude_4_5_haiku,
       p_max_tool_calls => 3
     );
 
@@ -198,7 +200,7 @@ create or replace package body test_uc_ai_anthropic as
 
     l_result := uc_ai_anthropic.generate_text(
       p_messages => l_messages,
-      p_model => uc_ai_anthropic.c_model_claude_3_5_haiku,
+      p_model => uc_ai_anthropic.c_model_claude_4_5_haiku,
       p_max_tool_calls => 3
     );
 
@@ -244,7 +246,7 @@ create or replace package body test_uc_ai_anthropic as
 
     l_result := uc_ai_anthropic.generate_text(
       p_messages => l_messages,
-      p_model => uc_ai_anthropic.c_model_claude_3_5_haiku,
+      p_model => uc_ai_anthropic.c_model_claude_4_5_haiku,
       p_max_tool_calls => 3
     );
 
@@ -405,6 +407,7 @@ create or replace package body test_uc_ai_anthropic as
     l_reasoning_message_found boolean := false;
   begin
     uc_ai.g_enable_tools := false; -- disable tools for this test
+    uc_ai_anthropic.g_max_tokens := 4096; -- must be greater than reasoning budget (low = 2048)
     uc_ai_anthropic.g_reasoning_budget_tokens := null;
     uc_ai.g_enable_reasoning := true; -- enable reasoning for this test
     uc_ai.g_reasoning_level := 'low';
@@ -528,7 +531,7 @@ create or replace package body test_uc_ai_anthropic as
       p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
       p_system_prompt => 'Reply in one sentence.',
       p_provider => uc_ai.c_provider_anthropic,
-      p_model => uc_ai_anthropic.c_model_claude_3_5_haiku
+      p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
