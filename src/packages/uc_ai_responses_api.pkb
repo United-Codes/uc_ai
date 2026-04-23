@@ -304,16 +304,13 @@ create or replace package body uc_ai_responses_api as
               uc_ai_logger.log('Processing output item content', l_scope, l_content_item.to_clob);
               
               if l_content_item.get_string('type') = 'output_text' then
-                -- Convert to standardized text content
-                declare
-                  l_text_content json_object_t := json_object_t();
-                begin
-                  l_text_content.put('type', 'text');
-                  l_text_content.put('text', l_content_item.get_string('text'));
-
-                  l_assistant_content.append(l_text_content);
-                  l_has_text := true;
-                end;
+                -- Convert to standardized text content (also fires assistant_text event)
+                l_assistant_content.append(
+                  uc_ai_message_api.create_text_content(
+                    p_text => l_content_item.get_string('text')
+                  )
+                );
+                l_has_text := true;
               end if;
             end loop message_content_loop;
           else
