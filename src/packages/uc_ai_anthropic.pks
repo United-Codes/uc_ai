@@ -15,6 +15,8 @@ as
 
   -- Anthropic Claude models
   -- See https://docs.anthropic.com/en/docs/about-claude/models
+   c_model_claude_4_7_opus   constant uc_ai.model_type := 'claude-opus-4-7';
+
   c_model_claude_4_6_opus   constant uc_ai.model_type := 'claude-opus-4-6';
   c_model_claude_4_6_sonnet constant uc_ai.model_type := 'claude-sonnet-4-6';
 

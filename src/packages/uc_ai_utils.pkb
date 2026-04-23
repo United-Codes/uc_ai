@@ -77,6 +77,7 @@ as
 
     -- Anthropic
     if p_provider is null or p_provider = uc_ai.c_provider_anthropic then
+      l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_7_opus; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_6_opus; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_6_sonnet; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_5_opus; l_rec.model_type := c_chat; pipe row (l_rec);
