@@ -6,10 +6,13 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$ROOT_DIR"
 
 ./scripts/generate_uninstall_script.sh
-local-23ai.sh test-script-install ./install_uc_ai_complete_with_logger.sql -y
+local-26ai.sh test-script-install ./install_uc_ai_complete_with_logger.sql -y
+
+# Strip the interactive PAUSE so the heredoc can drive uninstall non-interactively
+sed -i.bak '/^PAUSE$/d' uninstall.sql && rm -f uninstall.sql.bak
 
 sql -name local-23ai-uc_testinstall_1 << EOF
-@uninstall.sql 
+@uninstall.sql
 
 SELECT object_type, count(object_name)
 from user_objects
