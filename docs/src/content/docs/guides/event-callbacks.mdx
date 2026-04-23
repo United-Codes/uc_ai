@@ -1,0 +1,149 @@
+---
+title: Event Callbacks
+description: Stream AI activity events (assistant text, reasoning, tool calls, completion) to a PL/SQL procedure of your choice.
+sidebar:
+  order: 70
+---
+
+UC AI can push events to a PL/SQL procedure of your choice while a `generate_text` call is running. This is useful for:
+
+- **Streaming-style UIs** — render assistant text or tool call activity as it happens instead of waiting for the whole response.
+- **Audit logging** — record every tool call and its result for compliance or debugging.
+- **Observability** — correlate events across providers or long-running agent runs via a request id.
+
+Event callbacks are global to the session — register once, then every subsequent `generate_text` call in that session will deliver events to your procedure until you clear it.
+
+## Registering a callback
+
+Your callback must be a top-level (schema-visible) procedure with this exact signature:
+
+```sql
+procedure my_ai_event_handler(
+  p_request_id in varchar2
+, p_event_type in varchar2
+, p_event_data in clob    -- JSON serialized payload
+);
+```
+
+`p_event_data` is a CLOB instead of `json_object_t` because PL/SQL object types cannot be bound via `execute immediate`. You can parse it with `json_object_t.parse(p_event_data)` if you need structured access.
+
+Register it with:
+
+```sql
+uc_ai.set_event_callback('MY_SCHEMA.MY_PKG.MY_AI_EVENT_HANDLER');
+```
+
+And clear it with:
+
+```sql
+uc_ai.clear_event_callback;
+```
+
+The registered callback name is preserved across `uc_ai.reset_globals` calls so you don't have to re-register it in every session setup.
+
+## Event types
+
+| Constant | Event type | When it fires |
+|---|---|---|
+| `uc_ai.c_event_assistant_text` | `assistant_text` | Whenever the assistant returns a text content block |
+| `uc_ai.c_event_assistant_reasoning` | `assistant_reasoning` | Whenever a reasoning/thinking block is returned |
+| `uc_ai.c_event_tool_call` | `tool_call` | Before a tool is executed |
+| `uc_ai.c_event_tool_result` | `tool_result` | After a tool executes, with its result |
+| `uc_ai.c_event_response_complete` | `response_complete` | At the very end of `generate_text`, with the final result object |
+
+All events are session-scoped: `uc_ai.g_request_id` is set by the framework at the start of each `generate_text` call and cleared at the end. Events emitted outside of a `generate_text` call (e.g. while you are building input messages yourself) will **not** fire.
+
+## Example
+
+A minimal logging handler that writes events to `dbms_output`:
+
+```sql
+create or replace package my_pkg is
+  procedure on_ai_event(
+    p_request_id in varchar2
+  , p_event_type in varchar2
+  , p_event_data in clob
+  );
+end my_pkg;
+/
+
+create or replace package body my_pkg is
+  procedure on_ai_event(
+    p_request_id in varchar2
+  , p_event_type in varchar2
+  , p_event_data in clob
+  )
+  as
+    l_data json_object_t;
+  begin
+    l_data := json_object_t.parse(p_event_data);
+    dbms_output.put_line('[' || p_request_id || '] ' || p_event_type);
+    case p_event_type
+      when uc_ai.c_event_assistant_text then
+        dbms_output.put_line('  text: ' || l_data.get_string('text'));
+      when uc_ai.c_event_tool_call then
+        dbms_output.put_line('  tool: ' || l_data.get_string('toolName'));
+      when uc_ai.c_event_tool_result then
+        dbms_output.put_line('  result: ' || l_data.get_clob('result'));
+      else
+        null;
+    end case;
+  end on_ai_event;
+end my_pkg;
+/
+```
+
+Use it:
+
+```sql
+begin
+  uc_ai.set_event_callback('MY_PKG.ON_AI_EVENT');
+
+  declare
+    l_result json_object_t;
+  begin
+    l_result := uc_ai.generate_text(
+      p_user_prompt => 'What is the email address of Jim?'
+    , p_provider    => uc_ai.c_provider_openai
+    , p_model       => uc_ai_openai.c_model_gpt_4o_mini
+    );
+  end;
+
+  uc_ai.clear_event_callback;
+end;
+/
+```
+
+Typical output (tool-calling path):
+
+```
+[A1B2C3...] tool_call
+  tool: TT_GET_USERS
+[A1B2C3...] tool_result
+  result: [{"user_id":4,"first_name":"Jim",...}]
+[A1B2C3...] assistant_text
+  text: jim.halpert@dundermifflin.com
+[A1B2C3...] response_complete
+```
+
+## Error handling
+
+If your callback raises an exception, UC AI swallows it by default so a bad handler can never break an AI call. Failures are logged via `uc_ai_logger` (including a backtrace) for diagnostics.
+
+If you instead want callback errors to abort the `generate_text` call — useful during development so you notice bugs in your handler — set:
+
+```sql
+uc_ai.g_callback_fatal := true;
+```
+
+Unlike `g_event_callback`, `g_callback_fatal` is reset by `uc_ai.reset_globals`.
+
+## Correlating events
+
+`p_request_id` is a per-call correlation id (a hex GUID). Two sequential `generate_text` calls get two different request ids — use this to group events belonging to the same AI call when multiple calls run in the same session (e.g. inside a multi-agent workflow).
+
+You can also read the current request id directly from `uc_ai.g_request_id` while a call is in progress.
+
+## Validation
+
+`set_event_callback` validates the procedure name via `dbms_assert.qualified_sql_name`, so passing a malformed name (for example `not a valid name!!!`) will raise `ORA-44003` or `ORA-44004` before any event ever fires.

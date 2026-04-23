@@ -12,6 +12,14 @@ The UC AI OpenAI package provides integration with OpenAI's GPT models, allowing
 - Advanced reasoning capabilities with reasoning effort control
 - Multi-modal support (text, images, PDFs)
 
+## Responses API
+
+As of v26.2, UC AI routes OpenAI calls through the [Responses API](https://platform.openai.com/docs/api-reference/responses) by default. This is OpenAI's recommended endpoint for new models and features. If you need the legacy Chat Completions endpoint for any reason, set:
+
+```sql
+uc_ai_openai.g_use_responses_api := false;
+```
+
 ## Prerequisites
 
 1. OpenAI API key

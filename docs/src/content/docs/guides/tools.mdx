@@ -98,6 +98,24 @@ Parameters:
 - `p_json_schema`: JSON schema of the parameters
 - `p_tags`: Add tags to the tool. You can enable/disable certain tools for a call via tags.
 
+`create_tool_from_schema` is **create-only** — if a tool with the same `p_tool_code` already exists it will raise an error.
+
+### Upserting a tool with `merge_tool_from_schema`
+
+If you want to create a tool if it doesn't exist yet, or update its description, parameters, and tags if it does, use `uc_ai_tools_api.merge_tool_from_schema` instead. It takes the exact same parameters as `create_tool_from_schema` and is useful for idempotent deployment scripts:
+
+```sql
+l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+  p_tool_code     => 'GET_WEATHER',
+  p_description   => 'Get the current weather for a given city',
+  p_function_call => 'return my_pkg.get_weather(:parameters);',
+  p_json_schema   => l_schema,
+  p_tags          => apex_t_varchar2('weather','weather-api')
+);
+```
+
+On update, the tool's parameters and tags are fully replaced — existing rows in `uc_ai_tool_parameters` and `uc_ai_tool_tags` for that tool are removed and rewritten from the new schema/tags.
+
 ## Using tools
 
 To allow the AI to use tools you have to manually enable them. By default it will use all tools that are enabled. You can use `uc_ai.g_tool_tags` to just give a subset of available tools to the AI.

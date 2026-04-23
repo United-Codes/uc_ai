@@ -10,6 +10,14 @@ The UC AI OCI package provides integration with Oracle Cloud Infrastructure's Ge
 - Support for Cohere, Meta Llama, xAI Grok models, and Google Gemini models
 - Features vary by model
 
+## Responses API
+
+As of v26.2, UC AI routes OCI calls through OCI's Responses API endpoint by default for models that support it. To fall back to the generic chat endpoint, set:
+
+```sql
+uc_ai_oci.g_use_responses_api := false;
+```
+
 ## Prerequisites
 
 1. Create OCI API Key and APEX Web Credential (see [guide](/products/uc-ai/docs/help/create-oci-key/))

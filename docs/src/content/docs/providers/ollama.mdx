@@ -13,6 +13,14 @@ The UC AI Ollama package provides integration with locally-running Ollama instan
 - Multi-modal support (text, images, PDFs) with models that support it
 - No API keys required (runs locally)
 
+## Responses API
+
+As of v26.2, UC AI routes Ollama calls through Ollama's OpenAI-compatible Responses API endpoint by default. To fall back to the legacy chat endpoint, set:
+
+```sql
+uc_ai_ollama.g_use_responses_api := false;
+```
+
 ## Prerequisites
 
 1. Install and run Ollama on your local machine or server

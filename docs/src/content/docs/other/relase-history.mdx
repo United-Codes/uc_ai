@@ -5,6 +5,56 @@ sidebar:
   order: 3
 ---
 
+## v26.2
+
+To upgrade run `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.2).
+
+For new installations follow [this guide](https://www.united-codes.com/products/uc-ai/docs/guides/installation/).
+
+**Features**:
+
+[Event Callback System](/products/uc-ai/docs/guides/event-callbacks/):
+
+- Register a PL/SQL procedure to receive events during `generate_text` calls
+- Event types: `assistant_text`, `assistant_reasoning`, `tool_call`, `tool_result`, `response_complete`
+- Register via `uc_ai.set_event_callback('MY_PKG.ON_AI_EVENT')` and clear with `uc_ai.clear_event_callback`
+- Useful for streaming-style UIs, audit logging, and observability into long-running AI interactions
+- Each event carries a correlation id (`uc_ai.g_request_id`) so events from concurrent requests can be distinguished
+- See the [event callbacks guide](/products/uc-ai/docs/guides/event-callbacks/) for details
+
+Multi-Agent Systems:
+
+- [Profile Agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/) and [Orchestrator Agents](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/) now support multi-turn conversations via follow-up messages
+- Continue an existing agent execution with additional user input while preserving full conversation history
+
+Responses API:
+
+- OpenAI's Responses API is now enabled by default across [OpenAI](/products/uc-ai/docs/providers/openai/#responses-api), [Ollama](/products/uc-ai/docs/providers/ollama/#responses-api), and [OCI](/products/uc-ai/docs/providers/oci/#responses-api) integrations
+- Previously opt-in via `uc_ai_openai.g_use_responses_api`; existing code continues to work
+- Improved Ollama Responses API integration with proper base URL error handling and usage tracking
+- OCI + Responses API now tracks token usage
+
+[Tools API](/products/uc-ai/docs/guides/tools/#registering-a-tool):
+
+- New `uc_ai_tools_api.merge_tool_from_schema` function for upsert semantics — creates a tool if it doesn't exist, or updates its description, parameters, and tags if it does
+- `create_tool_from_schema` retains its original create-only behavior (will raise if the tool code already exists)
+- See the [tools guide](/products/uc-ai/docs/guides/tools/#upserting-a-tool-with-merge_tool_from_schema) for an example
+
+New Utilities:
+
+- New [`uc_ai_utils`](/products/uc-ai/docs/api/utils/) package returning available models and providers programmatically — useful for building model picker UIs
+- New `uc_ai_error` package for centralized error handling across the framework
+- Centralized JSON response parsing with consistent error handling across all providers
+
+Other:
+
+- Added trigger to automatically set `started_at` timestamp on `uc_ai_agent_executions` rows
+- Package AUTHID changes for consistent invoker/definer rights handling
+- Fix: tool call arguments are now correctly wrapped in `json_object_t`
+- Fix: Anthropic combining reasoning with tools ([#46](https://github.com/United-Codes/uc_ai/issues/46))
+- Fix: documentation correction — `uc_ai.g_use_responses_api` was incorrect, the actual setting is `uc_ai_openai.g_use_responses_api` ([#50](https://github.com/United-Codes/uc_ai/issues/50))
+- New models: [Claude 4.7 Opus](/products/uc-ai/docs/providers/anthropic/#claude-4-models-latest) and additional constants across Anthropic, Google, OCI, OpenAI, and xAI
+
 ## v26.1
 
 To upgrade first run `v25.7_to_v26.1.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.1).
@@ -36,7 +86,7 @@ Multi-Agent Systems (v1):
 
 - OpenAI announced that they are focusing on their [Responses API](https://platform.openai.com/docs/api-reference/responses) for all new features and models
 - New `uc_ai_responses_api` package for native integration with OpenAI's Responses API
-- Currently it's opt-in by setting `uc_ai_openai.g_use_reponses_api` to TRUE
+- Currently it's opt-in by setting `uc_ai_openai.g_use_responses_api` to TRUE
 - In the future Ollama, Openrouter, and other providers who might adopt it will use that package as well
 
 Other:

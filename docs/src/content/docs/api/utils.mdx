@@ -1,0 +1,61 @@
+---
+title: uc_ai_utils
+description: Introspect available providers and models at runtime (useful for building APEX select lists).
+sidebar:
+  order: 80
+---
+
+`uc_ai_utils` exposes the list of providers and model constants that UC AI ships with as pipelined table functions. This is useful when you want to build a provider/model picker in APEX (or any UI) without hard-coding each constant.
+
+Both functions are pipelined so you can use them directly in `select ... from table(...)`.
+
+## `get_providers`
+
+Returns one row per provider: the human-readable name and the provider id (e.g. `openai`, `anthropic`) that you pass to `uc_ai.generate_text`.
+
+```sql
+select provider_name, provider_id
+  from table(uc_ai_utils.get_providers);
+```
+
+Result:
+
+| PROVIDER_NAME | PROVIDER_ID |
+|---|---|
+| OpenAI | openai |
+| Anthropic | anthropic |
+| Google | google |
+| Ollama | ollama |
+| OCI | oci |
+| xAI | xai |
+| OpenRouter | openrouter |
+
+Typical APEX LOV usage:
+
+```sql
+select provider_name d, provider_id r
+  from table(uc_ai_utils.get_providers);
+```
+
+## `get_models`
+
+Returns one row per known model constant across all providers. Each row has:
+
+- `provider` — provider id (matches `get_providers.provider_id`)
+- `model_id` — the raw model id string that the AI provider expects (e.g. `claude-opus-4-7`, `gpt-5-mini`)
+- `model_type` — either `chat` or `embedding`
+
+```sql
+-- all models
+select provider, model_id, model_type
+  from table(uc_ai_utils.get_models);
+
+-- just one provider, useful for a cascading LOV that filters by the provider picked above
+select model_id d, model_id r
+  from table(uc_ai_utils.get_models(p_provider => 'anthropic'))
+ where model_type = 'chat';
+```
+
+## Regeneration
+
+The body of `uc_ai_utils` is generated from the provider package specs by `scripts/generate_uc_ai_utils_body.sh`. When UC AI ships new model constants, this package is regenerated as part of the release, so `get_models` always reflects the models available in the installed version.
