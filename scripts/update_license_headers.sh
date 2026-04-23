@@ -37,17 +37,24 @@ update_license_header() {
     # Create a temporary file
     local tmp_file
     tmp_file=$(mktemp)
-    
-    # Use perl for reliable multiline replacement
-    # The regex finds comment blocks /** ... */ containing united-codes.com
+
+    # Use perl for reliable multiline replacement.
+    # Strict match: only replace comment blocks that match the exact license
+    # template structure (title, description, blank line, Licensed under,
+    # Copyright, URL). This prevents accidentally clobbering comment blocks
+    # that happen to contain the URL alongside other content (e.g. package
+    # docs merged into the license block).
     perl -0777 -pe '
         s{
-            (^\s*)           # Capture leading whitespace
-            /\*\*            # Start of comment block
-            .*?              # Any content (non-greedy)
-            united-codes\.com # Our marker URL
-            .*?              # Any content after URL (non-greedy)
-            \*/              # End of comment block
+            (^[ \t]*)                                          # Leading indent
+            /\*\*[ \t]*\n                                      # Opening /**
+            [ \t]*\*[ \t]*[^\n]+\n                             # Title line
+            [ \t]*\*[ \t]*[^\n]+\n                             # Description line
+            [ \t]*\*[ \t]*\n                                   # Blank line (with *)
+            [ \t]*\*[ \t]*Licensed\s+under[^\n]+\n             # License line
+            [ \t]*\*[ \t]*Copyright[^\n]+\n                    # Copyright line
+            [ \t]*\*[ \t]*https?://(?:www\.)?united-codes\.com[^\n]*\n  # URL line
+            [ \t]*\*/                                          # Closing */
         }{$1/**
   * '"${LICENSE_TITLE}"'
   * '"${LICENSE_DESCRIPTION}"'
@@ -55,11 +62,19 @@ update_license_header() {
   * Licensed under the GNU Lesser General Public License v3.0
   * Copyright (c) '"${LICENSE_YEAR}"' '"${LICENSE_COMPANY}"'
   * '"${LICENSE_URL}"'
-  */}xms' "$file" > "$tmp_file"
-    
+  */}xm' "$file" > "$tmp_file"
+
     # Check if file was modified
     if diff -q "$file" "$tmp_file" > /dev/null 2>&1; then
-        echo "  [UNCHANGED] License header already up to date"
+        # No replacement happened. Either already up-to-date, or the license
+        # block doesn't match the expected template. Distinguish the two so
+        # authors are warned instead of silently skipped.
+        if grep -qE '^\s*\*\s*'"$(printf '%s' "$LICENSE_TITLE" | sed 's/[][\.*^$/]/\\&/g')"'\s*$' "$file" \
+           && grep -q "$LICENSE_URL" "$file"; then
+            echo "  [UNCHANGED] License header already up to date"
+        else
+            echo "  [WARN] License URL found but block does not match template; skipping (edit manually)"
+        fi
         rm "$tmp_file"
     else
         mv "$tmp_file" "$file"

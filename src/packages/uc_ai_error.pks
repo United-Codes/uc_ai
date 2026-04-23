@@ -5,31 +5,36 @@ as
   -- @dblinter ignore(g-9108)
 
   /**
-  * UC AI - Centralized Error Handling
-  * Defines error codes, message templates, and a raise_error procedure
-  * that logs and raises with descriptive messages in one call.
-  *
-  * Each error code has a default message template. Placeholders use
-  * apex_string.format syntax: %0, %1, %2, ... %9
-  *
-  * Example:
-  *   uc_ai_error.raise_error(
-  *     p_error_code => uc_ai_error.c_err_unknown_provider
-  *   , p0           => 'my_provider'
-  *   );
-  *   -- raises: ORA-20306: Unknown AI provider: my_provider
-  *
-  * Override the default message when needed:
-  *   uc_ai_error.raise_error(
-  *     p_error_code => uc_ai_error.c_err_provider_response
-  *   , p_message    => 'Response is not valid JSON'
-  *   , p_extra      => l_resp
-  *   );
-  *
+  * UC AI
+  * PL/SQL SDK to integrate AI capabilities into Oracle databases.
+  * 
   * Licensed under the GNU Lesser General Public License v3.0
   * Copyright (c) 2025-present United Codes
   * https://www.united-codes.com
   */
+
+  /*
+   * Centralized Error Handling
+   * Defines error codes, message templates, and a raise_error procedure
+   * that logs and raises with descriptive messages in one call.
+   *
+   * Each error code has a default message template. Placeholders use
+   * apex_string.format syntax: %0, %1, %2, ... %9
+   *
+   * Example:
+   *   uc_ai_error.raise_error(
+   *     p_error_code => uc_ai_error.c_err_unknown_provider
+   *   , p0           => 'my_provider'
+   *   );
+   *   -- raises: ORA-20306: Unknown AI provider: my_provider
+   *
+   * Override the default message when needed:
+   *   uc_ai_error.raise_error(
+   *     p_error_code => uc_ai_error.c_err_provider_response
+   *   , p_message    => 'Response is not valid JSON'
+   *   , p_extra      => l_resp
+   *   );
+   */
 
   -- =============================================
   -- Error code constants
