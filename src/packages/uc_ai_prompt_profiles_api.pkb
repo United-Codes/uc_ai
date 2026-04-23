@@ -656,6 +656,8 @@ create or replace package body uc_ai_prompt_profiles_api as
                 uc_ai_openai.g_reasoning_effort := l_provider_obj.get_string(l_key);
               when 'g_apex_web_credential' then
                 uc_ai_openai.g_apex_web_credential := l_provider_obj.get_string(l_key);
+              when 'g_use_responses_api' then
+                uc_ai_openai.g_use_responses_api := l_provider_obj.get_boolean(l_key);
               else
                 uc_ai_logger.log_warn('Unknown OpenAI provider config key: ' || l_key, l_scope);
             end case;
@@ -717,6 +719,8 @@ create or replace package body uc_ai_prompt_profiles_api as
             case l_key
               when 'g_apex_web_credential' then
                 uc_ai_ollama.g_apex_web_credential := l_provider_obj.get_string(l_key);
+              when 'g_use_responses_api' then
+                uc_ai_ollama.g_use_responses_api := l_provider_obj.get_boolean(l_key);
               else
                 uc_ai_logger.log_warn('Unknown Ollama provider config key: ' || l_key, l_scope);
             end case;
@@ -772,6 +776,14 @@ create or replace package body uc_ai_prompt_profiles_api as
             case l_key
               when 'g_apex_web_credential' then
                 uc_ai_oci.g_apex_web_credential := l_provider_obj.get_string(l_key);
+              when 'g_compartment_id' then
+                uc_ai_oci.g_compartment_id := l_provider_obj.get_string(l_key);
+              when 'g_serving_type' then
+                uc_ai_oci.g_serving_type := l_provider_obj.get_string(l_key);
+              when 'g_region' then
+                uc_ai_oci.g_region := l_provider_obj.get_string(l_key);
+              when 'g_use_responses_api' then
+                uc_ai_oci.g_use_responses_api := l_provider_obj.get_boolean(l_key);
               else
                 uc_ai_logger.log_warn('Unknown OCI provider config key: ' || l_key, l_scope);
             end case;
