@@ -3,7 +3,7 @@ create or replace package body uc_ai_responses_api as
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_api_generate_text_path constant varchar2(255 char) := '/responses';
 
-  g_previous_response_id varchar2(255 char);
+  g_previous_response_id varchar2(4000 char);
   g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
   g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
   g_final_message clob;
@@ -49,7 +49,7 @@ create or replace package body uc_ai_responses_api as
     l_content_item json_object_t;
     l_content_type varchar2(255 char);
     l_system_instructions varchar2(32767 char);
-    l_media_type varchar2(255 char);
+    l_media_type varchar2(4000 char);
     l_has_reasoning_content boolean := false;
     l_reasoning_text clob;
   begin
@@ -630,7 +630,7 @@ create or replace package body uc_ai_responses_api as
     l_output           json_array_t;
     l_output_text      clob;
     l_normalized_messages json_array_t;
-    l_curr_response_id varchar2(255 char);
+    l_curr_response_id varchar2(4000 char);
   begin
     uc_ai_logger.log('Starting generate_text with Responses API', l_scope);
     g_previous_response_id := null;
@@ -901,8 +901,8 @@ create or replace package body uc_ai_responses_api as
               
               if l_output_item.get_string('type') = 'function_call' then
                 declare
-                  l_call_id varchar2(255 char);
-                  l_tool_name varchar2(255 char);
+                  l_call_id varchar2(4000 char);
+                  l_tool_name varchar2(4000 char);
                   l_arguments_str clob;
                   l_arguments_obj json_object_t;
                   l_tool_result clob;
