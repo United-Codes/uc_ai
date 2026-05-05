@@ -571,10 +571,19 @@ create or replace package body uc_ai_tools_api as
     l_bind_value   clob;
     l_plsql_block  varchar2(32767 char);
   begin
-    select function_call
-      into l_fc_code
-      from uc_ai_tools
-     where code = p_tool_code;
+    begin
+      select function_call
+        into l_fc_code
+        from uc_ai_tools
+       where code = p_tool_code;
+    exception
+      when no_data_found then -- @dblinter ignore(g-5040): error is handled in raise_error
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_tool_not_found
+        , p_scope      => l_scope
+        , p0           => p_tool_code
+        );
+    end;
 
     -- Extract bind variables from the PL/SQL function call
     -- Security: Only allow ONE bind variable to prevent complex injection attacks

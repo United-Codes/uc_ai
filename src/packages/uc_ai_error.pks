@@ -73,6 +73,7 @@ as
   c_err_invalid_status         constant number := -20501;
   c_err_missing_config         constant number := -20502;
   c_err_invalid_config         constant number := -20503;
+  c_err_tool_not_found         constant number := -20504;
   c_err_has_references         constant number := -20505;
   c_err_missing_placeholder    constant number := -20506;
   c_err_unsupported_content    constant number := -20508;
@@ -112,6 +113,7 @@ as
   c_msg_invalid_status         constant varchar2(200 char) := 'Invalid status value: %0. Allowed: %1';
   c_msg_missing_config         constant varchar2(200 char) := '%0 requires %1';
   c_msg_invalid_config         constant varchar2(200 char) := 'Invalid %0: %1';
+  c_msg_tool_not_found         constant varchar2(200 char) := 'Tool not found: %0';
   c_msg_has_references         constant varchar2(200 char) := 'Cannot delete "%0": referenced by %1 record(s)';
   c_msg_missing_placeholder    constant varchar2(200 char) := 'Missing parameter for placeholder: %0';
   c_msg_unsupported_content    constant varchar2(200 char) := 'Unsupported content type: %0';
