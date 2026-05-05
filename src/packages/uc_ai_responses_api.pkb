@@ -999,13 +999,15 @@ create or replace package body uc_ai_responses_api as
       
       -- Extract output text for simple usage
       l_output_text := extract_output_text(l_output);
-      if l_output_text is not null then
-        l_result.put('final_message', l_output_text);
-        g_final_message := l_output_text;
-      end if;
+      g_final_message := l_output_text;
     else
       l_normalized_messages := json_array_t();
     end if;
+
+    -- Always set final_message so the result contract matches other providers
+    -- (anthropic/google/openai-chat/ollama/oci all include the key, even if null).
+    -- Models can return only reasoning with no output_text, in which case this is null.
+    l_result.put('final_message', g_final_message);
     
     -- Use global normalized messages array (already contains full conversation history)
     l_result.put('messages', g_normalized_messages);
