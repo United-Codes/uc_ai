@@ -1199,14 +1199,16 @@ end;!';
 
   procedure create_apex_session_if_needed
   as
-    l_ws_id  number;
     l_app_id number;
+    l_ws_name apex_applications.workspace_display_name%type;
+    l_sec_id number;
   begin
     if apex_application.g_instance is null then
       begin
-        select workspace_id, application_id
-          into l_ws_id, l_app_id
+        select workspace_display_name, application_id
+          into l_ws_name, l_app_id
           from apex_applications
+         where workspace_display_name != 'INTERNAL' -- if the user had admin read role, don't return the internal workspace apps
          fetch first 1 row only;
       exception
         when no_data_found then
@@ -1215,6 +1217,9 @@ end;!';
           , p_scope      => gc_scope_prefix || 'create_apex_session_if_needed'
           );
       end;
+
+      l_sec_id := apex_util.find_security_group_id(p_workspace => l_ws_name);
+      apex_util.set_security_group_id (p_security_group_id => l_sec_id);
 
       apex_session.create_session(
         p_app_id       => l_app_id,
