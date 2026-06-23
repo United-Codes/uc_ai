@@ -34,13 +34,13 @@ To use your OpenRouter key with APEX Web Credentials, create a new web credentia
 
 We generally recommend also setting `Valid for URLs` to the OpenRouter API (https://openrouter.ai/) to limit the scope of the credential.
 
-To use the web credential in your PL/SQL code, set the package variable `uc_ai_openai.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
+To use the web credential in your PL/SQL code, set the package variable `uc_ai_openrouter.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
 ```sql
-uc_ai_openai.g_apex_web_credential := 'OPENROUTER';
+uc_ai_openrouter.g_apex_web_credential := 'OPENROUTER';
 ```
 
-Note: OpenRouter uses the OpenAI-compatible API format, so the `uc_ai_openai` package is used under the hood.
+Note: OpenRouter uses the OpenAI-compatible API format, so the `uc_ai_openai` package is used under the hood. Even so, set the credential on the `uc_ai_openrouter` package — it is resolved specifically for the OpenRouter provider.
 
 ## Models
 

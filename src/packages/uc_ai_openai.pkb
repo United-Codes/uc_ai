@@ -681,10 +681,25 @@ create or replace package body uc_ai_openai as
   as
   begin
     if g_use_responses_api then
-      -- Set base URL for Responses API to use OpenAI endpoint
+      -- Base URL fallback for direct OpenAI calls. A base URL set by a delegating
+      -- provider (e.g. OpenRouter via uc_ai.g_base_url) takes precedence in the
+      -- Responses API's get_generate_text_url.
       uc_ai_responses_api.g_base_url := 'https://api.openai.com/v1';
-      uc_ai_responses_api.g_apex_web_credential := g_apex_web_credential;
-      uc_ai.g_provider_override := uc_ai.c_provider_openai;
+
+      -- Resolve the web credential for the active provider, so OpenRouter / xAI use
+      -- their own credential instead of the OpenAI package's.
+      case uc_ai.g_provider_override
+        when uc_ai.c_provider_openrouter then
+          uc_ai_responses_api.g_apex_web_credential := coalesce(uc_ai_openrouter.g_apex_web_credential, g_apex_web_credential);
+        when uc_ai.c_provider_xai then
+          uc_ai_responses_api.g_apex_web_credential := coalesce(uc_ai_xai.g_apex_web_credential, g_apex_web_credential);
+        else
+          uc_ai_responses_api.g_apex_web_credential := g_apex_web_credential;
+      end case;
+
+      -- Preserve an override already set by a delegating provider so the Responses API
+      -- key/auth lookup targets that provider; default to OpenAI for direct calls.
+      uc_ai.g_provider_override := coalesce(uc_ai.g_provider_override, uc_ai.c_provider_openai);
 
       -- Pass messages directly - Responses API will convert them
       return uc_ai_responses_api.generate_text(
