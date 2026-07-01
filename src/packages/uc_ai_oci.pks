@@ -77,6 +77,7 @@ as
     p_messages       in json_array_t
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
+  , p_settings       in uc_ai_settings.t_settings default null
   ) return json_object_t;
 
   /*
@@ -90,6 +91,7 @@ as
   function generate_embeddings (
     p_input in json_array_t
   , p_model in uc_ai.model_type
+  , p_settings in uc_ai_settings.t_settings default null
   ) return json_array_t;
 
 end uc_ai_oci;

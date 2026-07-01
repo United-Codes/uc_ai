@@ -3,44 +3,44 @@ create or replace package body uc_ai_google as
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_api_url constant varchar2(255 char) := 'https://generativelanguage.googleapis.com/v1beta/models';
 
-  g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
-  g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
-  g_final_message clob;
-  g_input_tokens number := 0;  -- Global counter for input tokens
-  g_output_tokens number := 0;  -- Global counter for output tokens
-  g_reasoning_tokens number := 0;  -- Global counter for reasoning tokens
-  g_total_tokens number := 0;  -- Global counter for total tokens
+  -- Per-call conversation state is threaded as run-state/message parameters,
+  -- not package globals, so nested calls do not corrupt each other.
 
   -- Chat API reference: https://ai.google.dev/api/generate-content
 
-  function get_api_url_base return varchar2
+  function get_api_url_base(
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
   as
   begin
-    if uc_ai.g_base_url is not null then
-      return rtrim(uc_ai.g_base_url, '/');
+    if p_settings.base_url is not null then
+      return rtrim(p_settings.base_url, '/');
     end if;
-    
+
     return c_api_url;
   end get_api_url_base;
 
   function get_generate_text_url(
     p_model in varchar2
+  , p_settings in uc_ai_settings.t_settings
   ) return varchar2
   as
   begin
-    return get_api_url_base || '/' || p_model || ':generateContent';
+    return get_api_url_base(p_settings) || '/' || p_model || ':generateContent';
   end get_generate_text_url;
 
   function get_generate_embeddings_url(
     p_model in varchar2
+  , p_settings in uc_ai_settings.t_settings
   ) return varchar2
   as
   begin
-    return get_api_url_base || '/' || p_model || ':batchEmbedContents';
+    return get_api_url_base(p_settings) || '/' || p_model || ':batchEmbedContents';
   end get_generate_embeddings_url;
 
   function get_thought_content (
     p_message in json_object_t
+  , pio_state in out nocopy uc_ai_settings.t_run_state
   ) return json_object_t
   as
     l_content clob;
@@ -56,13 +56,14 @@ create or replace package body uc_ai_google as
     , p_provider_options => l_provider_options
     );
 
-    g_final_message := l_content;
+    pio_state.final_message := l_content;
 
     return l_lm_text_content;
   end get_thought_content;
 
   function get_text_content (
     p_message in json_object_t
+  , pio_state in out nocopy uc_ai_settings.t_run_state
   ) return json_object_t
   as
     l_thought boolean;
@@ -77,7 +78,7 @@ create or replace package body uc_ai_google as
     end if;
 
     if l_thought then
-      return get_thought_content(p_message);
+      return get_thought_content(p_message, pio_state);
     end if;
 
     l_content := p_message.get_clob('text');
@@ -89,7 +90,7 @@ create or replace package body uc_ai_google as
     , p_provider_options => l_provider_options
     );
 
-    g_final_message := l_content;
+    pio_state.final_message := l_content;
 
     return l_lm_text_content;
   end get_text_content;
@@ -281,6 +282,9 @@ create or replace package body uc_ai_google as
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
   , pio_result           in out nocopy json_object_t
+  , p_settings           in uc_ai_settings.t_settings
+  , pio_state            in out nocopy uc_ai_settings.t_run_state
+  , pio_norm_messages    in out nocopy json_array_t
   )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'internal_generate_text';
@@ -300,7 +304,7 @@ create or replace package body uc_ai_google as
     l_usage_metadata json_object_t;
     l_web_credential varchar2(255 char);
   begin
-    if g_tool_calls >= p_max_tool_calls then
+    if pio_state.tool_calls >= p_max_tool_calls then
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_max_calls_exceeded
@@ -316,9 +320,9 @@ create or replace package body uc_ai_google as
     -- Build API URL with model
     l_model := pio_result.get_string('model');
 
-    l_api_url := get_generate_text_url(l_model);
+    l_api_url := get_generate_text_url(l_model, p_settings);
 
-    l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+    l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.go_apex_web_credential);
 
     if l_web_credential is null then
       l_api_url := l_api_url || '?key=' || uc_ai_get_key(uc_ai.c_provider_google);
@@ -358,10 +362,10 @@ create or replace package body uc_ai_google as
     -- Extract and accumulate usage information in global counters
     if l_resp_json.has('usageMetadata') then
       l_usage_metadata := l_resp_json.get_object('usageMetadata');
-      g_input_tokens := g_input_tokens + nvl(l_usage_metadata.get_number('promptTokenCount'), 0);
-      g_output_tokens := g_output_tokens + nvl(l_usage_metadata.get_number('candidatesTokenCount'), 0);
-      g_reasoning_tokens := g_reasoning_tokens + nvl(l_usage_metadata.get_number('thoughtsTokenCount'), 0);
-      g_total_tokens := g_total_tokens + nvl(l_usage_metadata.get_number('totalTokenCount'), 0);
+      pio_state.input_tokens := pio_state.input_tokens + nvl(l_usage_metadata.get_number('promptTokenCount'), 0);
+      pio_state.output_tokens := pio_state.output_tokens + nvl(l_usage_metadata.get_number('candidatesTokenCount'), 0);
+      pio_state.reasoning_tokens := pio_state.reasoning_tokens + nvl(l_usage_metadata.get_number('thoughtsTokenCount'), 0);
+      pio_state.total_tokens := pio_state.total_tokens + nvl(l_usage_metadata.get_number('totalTokenCount'), 0);
     end if;
 
     -- Extract model information (Google returns it in response)
@@ -426,11 +430,11 @@ create or replace package body uc_ai_google as
           if l_part.has('functionCall') then
             uc_ai_logger.log('Executing function call', l_scope, l_part.to_clob);
 
-            g_tool_calls := g_tool_calls + 1;
+            pio_state.tool_calls := pio_state.tool_calls + 1;
             l_used_tool := true;
 
             l_tool_call := l_part.get_object('functionCall');
-            l_tool_call_id := coalesce(l_tool_call.get_string('id'), 'tool_call_' || g_tool_calls);
+            l_tool_call_id := coalesce(l_tool_call.get_string('id'), 'tool_call_' || pio_state.tool_calls);
             l_tool_name := l_tool_call.get_string('name');
             
             -- Handle function arguments (can be null for parameterless functions)
@@ -501,17 +505,17 @@ create or replace package body uc_ai_google as
           -- normal text part
           elsif l_part.has('text') then
             uc_ai_logger.log('Text received', l_scope, l_part.to_clob);
-            l_new_msg := get_text_content(l_part);
+            l_new_msg := get_text_content(l_part, pio_state);
             l_normalized_messages.append(l_new_msg);
           end if;
         end loop parts_loop;
 
-        g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+        pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
 
 
         if l_used_tool then
-          g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
-          pio_result.put('tool_calls_count', g_tool_calls);
+          pio_norm_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
+          pio_result.put('tool_calls_count', pio_state.tool_calls);
 
           -- Add tool results as new user message
           l_new_msg := json_object_t();
@@ -526,6 +530,9 @@ create or replace package body uc_ai_google as
           , p_max_tool_calls     => p_max_tool_calls
           , p_input_obj          => p_input_obj
           , pio_result           => pio_result
+          , p_settings           => p_settings
+          , pio_state            => pio_state
+          , pio_norm_messages    => pio_norm_messages
           );
         end if;
       end;
@@ -553,9 +560,13 @@ create or replace package body uc_ai_google as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
+  , p_settings       in uc_ai_settings.t_settings default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_with_messages';
+    l_settings           uc_ai_settings.t_settings;
+    l_state              uc_ai_settings.t_run_state := uc_ai_settings.new_run_state;
+    l_norm_messages      json_array_t := json_array_t();
     l_input_obj          json_object_t := json_object_t();
     l_google_messages    json_array_t;
     l_system_prompt      clob;
@@ -569,24 +580,21 @@ create or replace package body uc_ai_google as
   begin
     l_result := json_object_t();
     uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
-    
-    -- Reset global variables
-    g_tool_calls := 0;
-    g_final_message := null;
-    g_normalized_messages := json_array_t();
-    g_input_tokens := 0;
-    g_output_tokens := 0;
-    g_reasoning_tokens := 0;
-    g_total_tokens := 0;
-    
-    -- Copy input messages to global normalized messages array
+
+    if nvl(p_settings.initialized, false) then
+      l_settings := p_settings;
+    else
+      l_settings := uc_ai_settings.build_from_globals;
+    end if;
+
+    -- Copy input messages to the per-call conversation history
     <<copy_messages_loop>>
     for i in 0 .. p_messages.get_size - 1
     loop
       l_message := treat(p_messages.get(i) as json_object_t);
-      g_normalized_messages.append(l_message);
+      l_norm_messages.append(l_message);
     end loop copy_messages_loop;
-    
+
     -- Initialize result object with default values
     l_result.put('tool_calls_count', 0);
     l_result.put('finish_reason', 'unknown');
@@ -624,28 +632,28 @@ create or replace package body uc_ai_google as
     end if;
 
     -- Add reasoning configuration if enabled
-    if uc_ai.g_enable_reasoning then
+    if l_settings.enable_reasoning then
       declare
         l_thinking_config json_object_t := json_object_t();
       begin
         l_thinking_config.put('includeThoughts', true);
-        if g_reasoning_budget is not null then
-          l_thinking_config.put('thinkingBudget', g_reasoning_budget);
-        elsif uc_ai.g_reasoning_level is not null then
-          l_thinking_config.put('thinkingBudget', case uc_ai.g_reasoning_level
+        if l_settings.go_reasoning_budget is not null then
+          l_thinking_config.put('thinkingBudget', l_settings.go_reasoning_budget);
+        elsif l_settings.reasoning_level is not null then
+          l_thinking_config.put('thinkingBudget', case l_settings.reasoning_level
             when uc_ai.c_reasoning_level_low then 2048
             when uc_ai.c_reasoning_level_medium then 8192
             when uc_ai.c_reasoning_level_high then 32768
-            else uc_ai.g_reasoning_level
+            else l_settings.reasoning_level
           end);
         end if;
         l_generation_config.put('thinkingConfig', l_thinking_config);
       end;
     end if;
-    
+
     -- Get all available tools formatted for Google (function declarations)
-    if uc_ai.g_enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_google);
+    if l_settings.enable_tools then
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_google, p_tool_tags => l_settings.tool_tags);
 
       if l_tools.get_size > 0 then
         -- Google expects tools in this format: {"tools": [{"functionDeclarations": [...]}]}
@@ -672,29 +680,32 @@ create or replace package body uc_ai_google as
     , p_max_tool_calls     => p_max_tool_calls
     , p_input_obj          => l_input_obj
     , pio_result           => l_result
+    , p_settings           => l_settings
+    , pio_state            => l_state
+    , pio_norm_messages    => l_norm_messages
     );
 
-    -- Add final messages to result (already in standardized format from global variable)
-    l_result.put('messages', g_normalized_messages);
-    
-    -- Add final message (only the text)
-    l_result.put('final_message', g_final_message);
+    -- Add final messages to result (per-call conversation history)
+    l_result.put('messages', l_norm_messages);
 
-    -- Add usage information from global counters
+    -- Add final message (only the text)
+    l_result.put('final_message', l_state.final_message);
+
+    -- Add usage information from the per-call run state
     declare
       l_usage_obj json_object_t := json_object_t();
     begin
-      l_usage_obj.put('prompt_tokens', g_input_tokens);
-      l_usage_obj.put('completion_tokens', g_output_tokens);
-      l_usage_obj.put('reasoning_tokens', g_reasoning_tokens);
-      l_usage_obj.put('total_tokens', g_total_tokens);
+      l_usage_obj.put('prompt_tokens', l_state.input_tokens);
+      l_usage_obj.put('completion_tokens', l_state.output_tokens);
+      l_usage_obj.put('reasoning_tokens', l_state.reasoning_tokens);
+      l_usage_obj.put('total_tokens', l_state.total_tokens);
       l_result.put('usage', l_usage_obj);
     end;
 
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_google);
-    
-    uc_ai_logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
+
+    uc_ai_logger.log('Completed generate_text with final message count: ' || l_norm_messages.get_size, l_scope);
     
     return l_result;
   end generate_text;
@@ -711,9 +722,11 @@ create or replace package body uc_ai_google as
   function generate_embeddings (
     p_input in json_array_t
   , p_model in uc_ai.model_type
+  , p_settings in uc_ai_settings.t_settings default null
   ) return json_array_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_embeddings';
+    l_settings      uc_ai_settings.t_settings;
     l_api_url       varchar2(4000 char);
     l_resp          clob;
     l_resp_json     json_object_t;
@@ -730,7 +743,13 @@ create or replace package body uc_ai_google as
     l_web_credential varchar2(255 char);
   begin
     uc_ai_logger.log('Starting generate_embeddings with ' || p_input.get_size || ' input items', l_scope);
-    
+
+    if nvl(p_settings.initialized, false) then
+      l_settings := p_settings;
+    else
+      l_settings := uc_ai_settings.build_from_globals;
+    end if;
+
     -- Build requests array for batchEmbedContents
     -- Each request needs: {"model": "models/...", "content": {"parts": [{"text": "..."}]}}
     <<build_requests_loop>>
@@ -751,12 +770,12 @@ create or replace package body uc_ai_google as
       l_request.put('model', 'models/' || p_model);
       l_request.put('content', l_content);
 
-      if g_embedding_task_type is not null then
-        l_request.put('task_type', g_embedding_task_type);
+      if l_settings.go_embedding_task_type is not null then
+        l_request.put('task_type', l_settings.go_embedding_task_type);
       end if;
 
-      if g_embedding_output_dimensions is not null then
-        l_request.put('output_dimensionality', g_embedding_output_dimensions);
+      if l_settings.go_embedding_output_dimensions is not null then
+        l_request.put('output_dimensionality', l_settings.go_embedding_output_dimensions);
       end if;
       
       l_requests.append(l_request);
@@ -765,9 +784,9 @@ create or replace package body uc_ai_google as
     l_input_obj.put('requests', l_requests);
 
     -- Build API URL
-    l_api_url := get_generate_embeddings_url(p_model);
-    
-    l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+    l_api_url := get_generate_embeddings_url(p_model, l_settings);
+
+    l_web_credential := coalesce(l_settings.apex_web_credential, l_settings.go_apex_web_credential);
     if l_web_credential is null then
       l_api_url := l_api_url || '?key=' || uc_ai_get_key(uc_ai.c_provider_google);
     end if;

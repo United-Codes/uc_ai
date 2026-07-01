@@ -5,24 +5,17 @@ create or replace package body uc_ai_oci as
   c_api_generate_text_path constant varchar2(255 char) := '/20231130/actions/chat';
   c_api_generate_embeddings_path constant varchar2(255 char) := '/20231130/actions/embedText';
 
-  g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
-  g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
-  g_final_message clob;
-
   gc_mode_generic constant varchar2(255 char) := 'generic';
   gc_mode_cohere  constant varchar2(255 char) := 'cohere';
 
-  g_mode varchar2(255 char) := gc_mode_generic;
-
-  g_cohere_system_prompt clob;
-  g_cohere_user_message clob;
-
-  g_input_tokens number := 0;
-  g_output_tokens number := 0;
+  -- Per-call conversation state (tool-call count, message history, final message,
+  -- token counters, mode, cohere prompts) is threaded as parameters, not package
+  -- globals, so nested calls do not corrupt each other.
 
   -- OCI Generative AI reference: https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/
   function get_text_content_generic (
     p_message in json_object_t
+  , pio_state in out nocopy uc_ai_settings.t_run_state
   ) return json_object_t
   as
     l_message json_object_t;
@@ -51,7 +44,7 @@ create or replace package body uc_ai_oci as
     , p_provider_options => l_provider_options
     );
 
-    g_final_message := l_content;
+    pio_state.final_message := l_content;
 
     return l_lm_text_content;
   end get_text_content_generic;
@@ -59,6 +52,7 @@ create or replace package body uc_ai_oci as
 
   function get_text_content_cohere (
     p_chat_response in json_object_t
+  , pio_state in out nocopy uc_ai_settings.t_run_state
   ) return json_object_t
   as
     l_text             clob;
@@ -74,7 +68,7 @@ create or replace package body uc_ai_oci as
     end if;
 
     l_text := p_chat_response.get_clob('text');
-    g_final_message := l_text;
+    pio_state.final_message := l_text;
 
     l_lm_text_content := uc_ai_message_api.create_text_content(
       p_text => l_text
@@ -242,7 +236,9 @@ create or replace package body uc_ai_oci as
    */
   procedure convert_lm_messages_to_cohere_oci(
     p_lm_messages in json_array_t,
-    po_oci_messages out nocopy json_array_t
+    po_oci_messages out nocopy json_array_t,
+    po_system_prompt out nocopy clob,
+    po_user_message out nocopy clob
   )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_lm_messages_to_cohere_oci';
@@ -272,7 +268,7 @@ create or replace package body uc_ai_oci as
 
       case l_role
         when 'system' then
-          g_cohere_system_prompt := l_lm_message.get_clob('content');
+          po_system_prompt := l_lm_message.get_clob('content');
         when 'user' then
           -- User message: extract content from content array
           l_content := l_lm_message.get_array('content');
@@ -408,7 +404,7 @@ create or replace package body uc_ai_oci as
       l_last_message_role := l_last_message.get_string('role');
 
       if l_last_message_role = 'USER' then
-        g_cohere_user_message := l_last_message.get_clob('message');
+        po_user_message := l_last_message.get_clob('message');
 
         -- remove last message as cohere expects it in the body (message) and not in the chat history
         po_oci_messages.remove(po_oci_messages.get_size - 1);
@@ -421,47 +417,59 @@ create or replace package body uc_ai_oci as
   /*
    * Get OCI region from global setting or use default
    */
-  function get_oci_region return varchar2
+  function get_oci_region(
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
   as
   begin
-    return coalesce(g_region, 'us-ashburn-1');
+    return coalesce(p_settings.oc_region, 'us-ashburn-1');
   end get_oci_region;
 
   /*
    * Build the full API URL for OCI Generative AI chat
    */
-  function get_generate_text_url return varchar2
+  function get_generate_text_url(
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
   as
     l_region varchar2(64 char);
   begin
-    if uc_ai.g_base_url is not null then
-      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_text_path;
+    if p_settings.base_url is not null then
+      return rtrim(p_settings.base_url, '/') || c_api_generate_text_path;
     end if;
-    
-    l_region := get_oci_region();
+
+    l_region := get_oci_region(p_settings);
     return c_api_url_base || l_region || '.oci.oraclecloud.com' || c_api_generate_text_path;
   end get_generate_text_url;
 
   /*
    * Build the full API URL for OCI Generative AI embeddings
    */
-  function get_generate_embeddings_url return varchar2
+  function get_generate_embeddings_url(
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
   as
     l_region varchar2(64 char);
   begin
-    if uc_ai.g_base_url is not null then
-      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_embeddings_path;
+    if p_settings.base_url is not null then
+      return rtrim(p_settings.base_url, '/') || c_api_generate_embeddings_path;
     end if;
-    
-    l_region := get_oci_region();
+
+    l_region := get_oci_region(p_settings);
     return c_api_url_base || l_region || '.oci.oraclecloud.com' || c_api_generate_embeddings_path;
   end get_generate_embeddings_url;
 
   procedure internal_generate_text (
-    pio_messages         in out nocopy json_array_t
-  , p_max_tool_calls     in pls_integer
-  , p_input_obj          in json_object_t
-  , pio_result           in out nocopy json_object_t
+    pio_messages             in out nocopy json_array_t
+  , p_max_tool_calls         in pls_integer
+  , p_input_obj              in json_object_t
+  , pio_result               in out nocopy json_object_t
+  , p_settings               in uc_ai_settings.t_settings
+  , pio_state                in out nocopy uc_ai_settings.t_run_state
+  , pio_norm_messages        in out nocopy json_array_t
+  , p_mode                   in varchar2
+  , p_cohere_system_prompt   in clob
+  , pio_cohere_user_message  in out nocopy clob
   )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'internal_generate_text';
@@ -475,7 +483,7 @@ create or replace package body uc_ai_oci as
     l_chat_response json_object_t;
     l_code varchar2(255 char);
   begin
-    if g_tool_calls >= p_max_tool_calls then
+    if pio_state.tool_calls >= p_max_tool_calls then
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_max_calls_exceeded
@@ -486,20 +494,20 @@ create or replace package body uc_ai_oci as
     l_input_obj := p_input_obj;
     l_chat_request := l_input_obj.get_object('chatRequest');
 
-    if g_mode = gc_mode_generic then
+    if p_mode = gc_mode_generic then
       l_chat_request.put('messages', pio_messages);
     else
       l_chat_request.put('chatHistory', pio_messages);
-      l_chat_request.put('message', g_cohere_user_message);
+      l_chat_request.put('message', pio_cohere_user_message);
 
-      if g_cohere_system_prompt is not null then
-        l_chat_request.put('preambleOverride', g_cohere_system_prompt);
+      if p_cohere_system_prompt is not null then
+        l_chat_request.put('preambleOverride', p_cohere_system_prompt);
       end if;
     end if;
     l_input_obj.put('chatRequest', l_chat_request);
 
     -- Build API URL
-    l_api_url := get_generate_text_url();
+    l_api_url := get_generate_text_url(p_settings);
 
     uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
 
@@ -511,7 +519,7 @@ create or replace package body uc_ai_oci as
       p_url => l_api_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
+      p_credential_static_id => coalesce(p_settings.apex_web_credential, p_settings.oc_apex_web_credential)
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);
@@ -571,11 +579,11 @@ create or replace package body uc_ai_oci as
       -- Extract and accumulate usage information
       if l_chat_response.has('usage') then
         l_temp_obj := l_chat_response.get_object('usage');
-        g_input_tokens := g_input_tokens + nvl(l_temp_obj.get_number('promptTokens'), 0);
-        g_output_tokens := g_output_tokens + nvl(l_temp_obj.get_number('completionTokens'), 0);
+        pio_state.input_tokens := pio_state.input_tokens + nvl(l_temp_obj.get_number('promptTokens'), 0);
+        pio_state.output_tokens := pio_state.output_tokens + nvl(l_temp_obj.get_number('completionTokens'), 0);
       end if;
 
-      if g_mode = gc_mode_generic then
+      if p_mode = gc_mode_generic then
         -- OCI response structure is different from OpenAI/Google
         -- It has a direct text response in chatResponse
         if l_chat_response.has('choices') then
@@ -611,7 +619,7 @@ create or replace package body uc_ai_oci as
                   for j in 0 .. l_content_arr.get_size - 1 loop
                     l_oci_content_item := treat(l_content_arr.get(j) as json_object_t);
                   
-                    l_new_msg := get_text_content_generic(l_oci_content_item);
+                    l_new_msg := get_text_content_generic(l_oci_content_item, pio_state);
                     l_normalized_messages.append(l_new_msg);
                   end loop content_loop;
                 elsif l_resp_message.has('toolCalls') then
@@ -636,9 +644,9 @@ create or replace package body uc_ai_oci as
                     pio_messages.append(l_tool_response);
 
                     <<tool_calls>>
-                    for k in 0 .. l_tool_call_arr.get_size - 1 
+                    for k in 0 .. l_tool_call_arr.get_size - 1
                     loop
-                      g_tool_calls := g_tool_calls + 1;
+                      pio_state.tool_calls := pio_state.tool_calls + 1;
                       l_tool_call_item := treat(l_tool_call_arr.get(k) as json_object_t);
 
                       l_tool_call_id := l_tool_call_item.get_string('id');
@@ -703,19 +711,25 @@ create or replace package body uc_ai_oci as
               end if;
             end loop choices_loop;
             
-            g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
-            
+            pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+
 
             if l_used_tool then
-              g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
-              pio_result.put('tool_calls_count', g_tool_calls);
+              pio_norm_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
+              pio_result.put('tool_calls_count', pio_state.tool_calls);
 
               -- Continue conversation with tool results - recursive call
               internal_generate_text(
-                pio_messages         => pio_messages
-              , p_max_tool_calls     => p_max_tool_calls
-              , p_input_obj          => p_input_obj
-              , pio_result           => pio_result
+                pio_messages             => pio_messages
+              , p_max_tool_calls         => p_max_tool_calls
+              , p_input_obj              => p_input_obj
+              , pio_result               => pio_result
+              , p_settings               => p_settings
+              , pio_state                => pio_state
+              , pio_norm_messages        => pio_norm_messages
+              , p_mode                   => p_mode
+              , p_cohere_system_prompt   => p_cohere_system_prompt
+              , pio_cohere_user_message  => pio_cohere_user_message
               );
             end if;
 
@@ -752,7 +766,7 @@ create or replace package body uc_ai_oci as
             l_tool_calls := l_chat_response.get_array('toolCalls');
             <<tool_calls_loop>>
             for i in 0 .. l_tool_calls.get_size - 1 loop
-              g_tool_calls := g_tool_calls + 1;
+              pio_state.tool_calls := pio_state.tool_calls + 1;
 
               l_tool_call_item := treat(l_tool_calls.get(i) as json_object_t);
 
@@ -813,21 +827,27 @@ create or replace package body uc_ai_oci as
             l_tool_response.put('toolResults', l_oci_tool_results);
             --l_messages.append(l_tool_response);
 
-            g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+            pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
 
-            g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
-            pio_result.put('tool_calls_count', g_tool_calls);
+            pio_norm_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
+            pio_result.put('tool_calls_count', pio_state.tool_calls);
 
             -- clear user message for subsequent calls
-            g_cohere_user_message := 'Continue processing the user prompt with the provided tool results.';
+            pio_cohere_user_message := 'Continue processing the user prompt with the provided tool results.';
             l_chat_request.put('toolResults', l_oci_tool_results);
             l_input_obj.put('chatRequest', l_chat_request);
 
             internal_generate_text(
-              pio_messages         => pio_messages
-            , p_max_tool_calls     => p_max_tool_calls
-            , p_input_obj          => p_input_obj
-            , pio_result           => pio_result
+              pio_messages             => pio_messages
+            , p_max_tool_calls         => p_max_tool_calls
+            , p_input_obj              => p_input_obj
+            , pio_result               => pio_result
+            , p_settings               => p_settings
+            , pio_state                => pio_state
+            , pio_norm_messages        => pio_norm_messages
+            , p_mode                   => p_mode
+            , p_cohere_system_prompt   => p_cohere_system_prompt
+            , pio_cohere_user_message  => pio_cohere_user_message
               );
           end;
         elsif l_chat_response.has('text') then
@@ -835,10 +855,10 @@ create or replace package body uc_ai_oci as
             l_new_msg json_object_t;
             l_normalized_messages json_array_t := json_array_t();
           begin
-            l_new_msg := get_text_content_cohere(l_chat_response);
+            l_new_msg := get_text_content_cohere(l_chat_response, pio_state);
             l_normalized_messages.append(l_new_msg);
 
-            g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+            pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
           end;
         else
           uc_ai_logger.log_error('No text in OCI chatResponse', l_scope);
@@ -862,10 +882,17 @@ create or replace package body uc_ai_oci as
     p_messages       in json_array_t
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
+  , p_settings       in uc_ai_settings.t_settings default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_with_messages';
-    l_region varchar2(64 char) := coalesce(g_region, 'us-ashburn-1');
+    l_settings           uc_ai_settings.t_settings;
+    l_state              uc_ai_settings.t_run_state := uc_ai_settings.new_run_state;
+    l_norm_messages      json_array_t := json_array_t();
+    l_mode               varchar2(255 char);
+    l_cohere_system_prompt clob;
+    l_cohere_user_message  clob;
+    l_region varchar2(64 char);
     l_input_obj          json_object_t := json_object_t();
     l_oci_messages       json_array_t;
     l_result             json_object_t;
@@ -876,43 +903,52 @@ create or replace package body uc_ai_oci as
   begin
     uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
 
-    if g_use_responses_api then
-      uc_ai_responses_api.g_base_url := c_api_url_base || l_region || '.oci.oraclecloud.com/openai/v1';
-      uc_ai_responses_api.g_apex_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
-      uc_ai_responses_api.g_extra_header_name := 'opc-compartment-id';
-      uc_ai_responses_api.g_extra_header_value := g_compartment_id;
-      uc_ai.g_provider_override := uc_ai.c_provider_oci;
+    if nvl(p_settings.initialized, false) then
+      l_settings := p_settings;
+    else
+      l_settings := uc_ai_settings.build_from_globals;
+    end if;
 
-      return uc_ai_responses_api.generate_text(
-        p_messages       => p_messages
-      , p_model          => p_model
-      , p_max_tool_calls => p_max_tool_calls
-      );
+    l_region := coalesce(l_settings.oc_region, 'us-ashburn-1');
+
+    if l_settings.oc_use_responses_api then
+      declare
+        l_resp_settings uc_ai_settings.t_settings := l_settings;
+      begin
+        -- Build a settings copy for the Responses API delegate. No package
+        -- globals are mutated.
+        l_resp_settings.ra_base_url := c_api_url_base || l_region || '.oci.oraclecloud.com/openai/v1';
+        l_resp_settings.ra_apex_web_credential := coalesce(l_settings.apex_web_credential, l_settings.oc_apex_web_credential);
+        l_resp_settings.ra_extra_header_name := 'opc-compartment-id';
+        l_resp_settings.ra_extra_header_value := l_settings.oc_compartment_id;
+        l_resp_settings.provider_override := uc_ai.c_provider_oci;
+        l_resp_settings.base_url := null;
+
+        return uc_ai_responses_api.generate_text(
+          p_messages       => p_messages
+        , p_model          => p_model
+        , p_max_tool_calls => p_max_tool_calls
+        , p_settings       => l_resp_settings
+        );
+      end;
     end if;
 
     l_result := json_object_t();
 
     if p_model like 'cohere.%' then
-      g_mode := gc_mode_cohere;
+      l_mode := gc_mode_cohere;
     else
-      g_mode := gc_mode_generic;
+      l_mode := gc_mode_generic;
     end if;
 
-    -- Reset global variables
-    g_tool_calls := 0;
-    g_final_message := null;
-    g_normalized_messages := json_array_t();
-    g_input_tokens := 0;
-    g_output_tokens := 0;
-    
-    -- Copy input messages to global normalized messages array
+    -- Copy input messages to the per-call conversation history
     <<copy_messages_loop>>
     for i in 0 .. p_messages.get_size - 1
     loop
       l_message := treat(p_messages.get(i) as json_object_t);
-      g_normalized_messages.append(l_message);
+      l_norm_messages.append(l_message);
     end loop copy_messages_loop;
-    
+
     -- Initialize result object with default values
     l_result.put('tool_calls_count', 0);
     l_result.put('finish_reason', 'unknown');
@@ -920,7 +956,7 @@ create or replace package body uc_ai_oci as
 
     -- Build OCI request structure
     -- Set compartment ID (must be configured)
-    if g_compartment_id is null then
+    if l_settings.oc_compartment_id is null then
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_missing_config
       , p_scope      => l_scope
@@ -928,16 +964,16 @@ create or replace package body uc_ai_oci as
       , p1           => 'g_compartment_id to be configured'
       );
     end if;
-    
-    l_input_obj.put('compartmentId', g_compartment_id);
-    
+
+    l_input_obj.put('compartmentId', l_settings.oc_compartment_id);
+
     -- Set serving mode
     l_serving_mode := json_object_t();
     l_serving_mode.put('modelId', p_model);
-    l_serving_mode.put('servingType', coalesce(g_serving_type, 'ON_DEMAND'));
+    l_serving_mode.put('servingType', coalesce(l_settings.oc_serving_type, 'ON_DEMAND'));
     l_input_obj.put('servingMode', l_serving_mode);
 
-    if g_mode = gc_mode_generic then
+    if l_mode = gc_mode_generic then
       -- Convert standardized messages to OCI format
       convert_lm_messages_to_generic_oci(
         p_lm_messages => p_messages,
@@ -959,7 +995,9 @@ create or replace package body uc_ai_oci as
       -- Convert standardized messages to OCI format
       convert_lm_messages_to_cohere_oci(
         p_lm_messages => p_messages,
-        po_oci_messages => l_oci_messages
+        po_oci_messages => l_oci_messages,
+        po_system_prompt => l_cohere_system_prompt,
+        po_user_message => l_cohere_user_message
       );
 
       l_chat_request := json_object_t();
@@ -968,7 +1006,7 @@ create or replace package body uc_ai_oci as
       l_chat_request.put('frequencyPenalty', 0);
       l_chat_request.put('isStream', false);
       l_chat_request.put('maxTokens', 600);
-      if uc_ai.g_enable_tools then
+      if l_settings.enable_tools then
         l_chat_request.put('isForceSingleStep', true);
       end if;
       --l_chat_request.put('presencePenalty', 0);
@@ -977,34 +1015,38 @@ create or replace package body uc_ai_oci as
       --l_chat_request.put('topK', 1);
     end if;
 
-    -- Get all available tools formatted for Google (function declarations)
+    -- Get all available tools formatted for OCI (function declarations)
     l_tools := uc_ai_tools_api.get_tools_array(
       uc_ai.c_provider_oci
-    , case when g_mode = gc_mode_cohere then uc_ai_tools_api.gc_cohere else 'generic' end
+    , case when l_mode = gc_mode_cohere then uc_ai_tools_api.gc_cohere else 'generic' end
+    , p_tool_tags => l_settings.tool_tags
     );
 
     if l_tools.get_size > 0 then
       l_chat_request.put('tools', l_tools);
     end if;
-    
+
     l_input_obj.put('chatRequest', l_chat_request);
 
-    -- Note: Tool support would need to be added here if OCI supports it
-    -- This would require additional research into OCI's tool calling capabilities
-
     internal_generate_text(
-      pio_messages         => l_oci_messages
-    , p_max_tool_calls     => p_max_tool_calls
-    , p_input_obj          => l_input_obj
-    , pio_result           => l_result
+      pio_messages             => l_oci_messages
+    , p_max_tool_calls         => p_max_tool_calls
+    , p_input_obj              => l_input_obj
+    , pio_result               => l_result
+    , p_settings               => l_settings
+    , pio_state                => l_state
+    , pio_norm_messages        => l_norm_messages
+    , p_mode                   => l_mode
+    , p_cohere_system_prompt   => l_cohere_system_prompt
+    , pio_cohere_user_message  => l_cohere_user_message
     );
 
-    -- Add final messages to result (already in standardized format from global variable)
-    l_result.put('messages', g_normalized_messages);
-    
+    -- Add final messages to result (per-call conversation history)
+    l_result.put('messages', l_norm_messages);
+
     -- Add final message (only the text)
-    l_result.put('final_message', g_final_message);
- 
+    l_result.put('final_message', l_state.final_message);
+
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_oci);
 
@@ -1012,14 +1054,14 @@ create or replace package body uc_ai_oci as
     declare
       l_usage_obj json_object_t := json_object_t();
     begin
-      l_usage_obj.put('prompt_tokens', g_input_tokens);
-      l_usage_obj.put('completion_tokens', g_output_tokens);
+      l_usage_obj.put('prompt_tokens', l_state.input_tokens);
+      l_usage_obj.put('completion_tokens', l_state.output_tokens);
       l_usage_obj.put('reasoning_tokens', cast(null as number));
-      l_usage_obj.put('total_tokens', g_input_tokens + g_output_tokens);
+      l_usage_obj.put('total_tokens', l_state.input_tokens + l_state.output_tokens);
       l_result.put('usage', l_usage_obj);
     end;
 
-    uc_ai_logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
+    uc_ai_logger.log('Completed generate_text with final message count: ' || l_norm_messages.get_size, l_scope);
 
     return l_result;
   end generate_text;
@@ -1035,9 +1077,11 @@ create or replace package body uc_ai_oci as
   function generate_embeddings (
     p_input in json_array_t
   , p_model in uc_ai.model_type
+  , p_settings in uc_ai_settings.t_settings default null
   ) return json_array_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_embeddings';
+    l_settings      uc_ai_settings.t_settings;
     l_api_url       varchar2(4000 char);
     l_resp          clob;
     l_resp_json     json_object_t;
@@ -1047,26 +1091,32 @@ create or replace package body uc_ai_oci as
     l_inputs        json_array_t := json_array_t();
   begin
     uc_ai_logger.log('Starting generate_embeddings with ' || p_input.get_size || ' input items', l_scope);
-    
+
+    if nvl(p_settings.initialized, false) then
+      l_settings := p_settings;
+    else
+      l_settings := uc_ai_settings.build_from_globals;
+    end if;
+
     -- Build inputs array (OCI expects array of strings)
     <<build_inputs_loop>>
     for i in 0 .. p_input.get_size - 1
     loop
       l_inputs.append(p_input.get_clob(i));
     end loop build_inputs_loop;
-    
+
     -- Build serving mode
-    l_serving_mode.put('servingType', g_serving_type);
+    l_serving_mode.put('servingType', l_settings.oc_serving_type);
     l_serving_mode.put('modelId', p_model);
-    
+
     -- Build request body
     l_input_obj.put('inputs', l_inputs);
     l_input_obj.put('servingMode', l_serving_mode);
-    l_input_obj.put('compartmentId', g_compartment_id);
+    l_input_obj.put('compartmentId', l_settings.oc_compartment_id);
     l_input_obj.put('truncate', 'NONE');
 
     -- Build API URL
-    l_api_url := get_generate_embeddings_url();
+    l_api_url := get_generate_embeddings_url(l_settings);
 
     apex_web_service.clear_request_headers;
     apex_web_service.set_request_headers(
@@ -1081,7 +1131,7 @@ create or replace package body uc_ai_oci as
       p_url => l_api_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
+      p_credential_static_id => coalesce(l_settings.apex_web_credential, l_settings.oc_apex_web_credential)
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);

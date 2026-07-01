@@ -451,6 +451,7 @@ create or replace package body uc_ai_tools_api as
   function get_tools_array (
     p_provider        in uc_ai.provider_type
   , p_additional_info in varchar2 default null
+  , p_tool_tags       in apex_t_varchar2 default null
   ) return json_array_t
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'get_tools_array';
@@ -458,16 +459,26 @@ create or replace package body uc_ai_tools_api as
     l_tools_array  json_array_t := json_array_t();
     l_tool_obj     json_object_t;
     l_tool_cpy_obj json_object_t;
-    l_enable_tool_filter number(1) := 0; -- @dbLinter ignore(G-2410) used in SQL 
+    l_enable_tool_filter number(1) := 0; -- @dbLinter ignore(G-2410) used in SQL
     l_found_tools number := 0;
+    -- Prefer explicitly threaded tags (from the per-call settings record); fall
+    -- back to the global for direct callers that still rely on it. coalesce does
+    -- not work on collection types, so branch explicitly.
+    l_tool_tags    apex_t_varchar2; -- @dbLinter ignore(G-2410) used in SQL
   begin
-    uc_ai_logger.log('Building tools array for provider: ' || p_provider, l_scope, 'uc_ai.g_enable_tools=' || case when uc_ai.g_enable_tools then 'true' else 'false' end || ', g_tool_tags=' || apex_string.join(uc_ai.g_tool_tags, ', '));
+    if p_tool_tags is not null then
+      l_tool_tags := p_tool_tags;
+    else
+      l_tool_tags := uc_ai.g_tool_tags;
+    end if;
+
+    uc_ai_logger.log('Building tools array for provider: ' || p_provider, l_scope, 'uc_ai.g_enable_tools=' || case when uc_ai.g_enable_tools then 'true' else 'false' end || ', tool_tags=' || apex_string.join(l_tool_tags, ', '));
 
     if not uc_ai.g_enable_tools then
       return l_tools_array;
     end if;
 
-    if uc_ai.g_tool_tags is not null and uc_ai.g_tool_tags.count > 0 then
+    if l_tool_tags is not null and l_tool_tags.count > 0 then
       l_enable_tool_filter := 1;
     end if;
 
@@ -480,7 +491,7 @@ create or replace package body uc_ai_tools_api as
                or id in (
                  select tt.tool_id
                    from uc_ai_tool_tags tt
-                  where tt.tag_name member of uc_ai.g_tool_tags
+                  where tt.tag_name member of l_tool_tags
                   group by tt.tool_id
                )
              )

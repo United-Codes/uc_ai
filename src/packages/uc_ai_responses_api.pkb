@@ -3,22 +3,24 @@ create or replace package body uc_ai_responses_api as
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_api_generate_text_path constant varchar2(255 char) := '/responses';
 
-  g_previous_response_id varchar2(4000 char);
-  g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
-  g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
-  g_final_message clob;
+  -- Per-call conversation state (previous_response_id, tool-call count, message
+  -- history, final message) is kept in locals within generate_text, not package
+  -- globals, so nested calls do not corrupt each other.
 
   -- Responses API reference: https://www.openresponses.org/reference
-  
-  
-  function get_generate_text_url return varchar2
+
+
+  function get_generate_text_url(
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
   as
   begin
-    if uc_ai.g_base_url is not null then
-      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_text_path;
+    -- A delegating provider's base_url wins; otherwise the responses-own base_url.
+    if p_settings.base_url is not null then
+      return rtrim(p_settings.base_url, '/') || c_api_generate_text_path;
     end if;
-    
-    return rtrim(g_base_url, '/') || c_api_generate_text_path;
+
+    return rtrim(p_settings.ra_base_url, '/') || c_api_generate_text_path;
   end get_generate_text_url;
 
 
@@ -508,6 +510,7 @@ create or replace package body uc_ai_responses_api as
    */
   function internal_generate_text (
     p_input_obj      in json_object_t
+  , p_settings       in uc_ai_settings.t_settings
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'internal_generate_text';
@@ -537,19 +540,19 @@ create or replace package body uc_ai_responses_api as
     apex_web_service.g_request_headers(1).name := 'Content-Type';
     apex_web_service.g_request_headers(1).value := 'application/json';
 
-    l_web_credential := coalesce(g_apex_web_credential, uc_ai.g_apex_web_credential);
+    l_web_credential := coalesce(p_settings.ra_apex_web_credential, p_settings.apex_web_credential);
 
-    if l_web_credential is null and not g_skip_auth then
+    if l_web_credential is null and not nvl(p_settings.ra_skip_auth, false) then
       apex_web_service.g_request_headers(2).name := 'Authorization';
-      apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(uc_ai.g_provider_override);
+      apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(p_settings.provider_override);
     end if;
 
-    if g_extra_header_name is not null then
-      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count + 1).name := g_extra_header_name;
-      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count).value := g_extra_header_value;
+    if p_settings.ra_extra_header_name is not null then
+      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count + 1).name := p_settings.ra_extra_header_name;
+      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count).value := p_settings.ra_extra_header_value;
     end if;
 
-    l_url := get_generate_text_url;
+    l_url := get_generate_text_url(p_settings);
     uc_ai_logger.log('Calling Responses API at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null'), l_scope);
 
     l_resp := apex_web_service.make_rest_request(
@@ -613,9 +616,11 @@ create or replace package body uc_ai_responses_api as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
+  , p_settings       in uc_ai_settings.t_settings default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text';
+    l_settings         uc_ai_settings.t_settings;
     l_input_obj        json_object_t := json_object_t();
     l_items            json_array_t;
     l_tools            json_array_t;
@@ -631,21 +636,26 @@ create or replace package body uc_ai_responses_api as
     l_output_text      clob;
     l_normalized_messages json_array_t;
     l_curr_response_id varchar2(4000 char);
+    -- Per-call conversation state (formerly package globals)
+    l_conversation_msgs json_array_t := json_array_t();
+    l_final_message     clob;
+    l_prev_response_id  varchar2(4000 char);
   begin
     uc_ai_logger.log('Starting generate_text with Responses API', l_scope);
-    g_previous_response_id := null;
-    
-    -- Reset global variables
-    g_tool_calls := 0;
-    g_final_message := null;
-    g_normalized_messages := json_array_t();
-    
-    -- Copy input messages to global normalized messages array
+
+    -- Resolve settings: use the supplied record, else snapshot the globals.
+    if nvl(p_settings.initialized, false) then
+      l_settings := p_settings;
+    else
+      l_settings := uc_ai_settings.build_from_globals;
+    end if;
+
+    -- Copy input messages to the per-call conversation history
     <<copy_messages_loop>>
     for i in 0 .. p_messages.get_size - 1
     loop
       l_message := treat(p_messages.get(i) as json_object_t);
-      g_normalized_messages.append(l_message);
+      l_conversation_msgs.append(l_message);
     end loop copy_messages_loop;
     
     l_input_obj.put('model', p_model);
@@ -659,8 +669,8 @@ create or replace package body uc_ai_responses_api as
       continue when l_message.has('role') and l_message.get_string('role') != 'assistant';
 
       if l_message.has('response_id') then
-        g_previous_response_id := l_message.get_string('response_id');
-        uc_ai_logger.log('Found previous_response_id in assistant message', l_scope, g_previous_response_id);
+        l_prev_response_id := l_message.get_string('response_id');
+        uc_ai_logger.log('Found previous_response_id in assistant message', l_scope, l_prev_response_id);
         exit extract_provider_options_loop;
       end if;
 
@@ -688,38 +698,38 @@ create or replace package body uc_ai_responses_api as
       );
       
       l_text_config.put('format', l_response_format);
-      
+
       -- Add verbosity if configured
-      if g_text_verbosity is not null then
-        l_text_config.put('verbosity', g_text_verbosity);
+      if l_settings.ra_text_verbosity is not null then
+        l_text_config.put('verbosity', l_settings.ra_text_verbosity);
       end if;
-      
+
       l_input_obj.put('text', l_text_config);
-    elsif g_text_verbosity is not null then
+    elsif l_settings.ra_text_verbosity is not null then
       -- Just verbosity, no format
       l_text_config := json_object_t();
-      l_text_config.put('verbosity', g_text_verbosity);
+      l_text_config.put('verbosity', l_settings.ra_text_verbosity);
       l_input_obj.put('text', l_text_config);
     end if;
 
     -- Get all available tools formatted for Responses API (if tools are enabled)
-    if uc_ai.g_enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_responses_api);
+    if l_settings.enable_tools then
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_responses_api, p_tool_tags => l_settings.tool_tags);
       l_input_obj.put('tools', l_tools);
     end if;
 
     -- Configure reasoning
-    if uc_ai.g_enable_reasoning then
+    if l_settings.enable_reasoning then
       l_reasoning_config := json_object_t();
-      
+
       -- Set reasoning effort
-      l_reasoning_config.put('effort', coalesce(g_reasoning_effort, uc_ai.g_reasoning_level, 'medium'));
-      
+      l_reasoning_config.put('effort', coalesce(l_settings.ra_reasoning_effort, l_settings.reasoning_level, 'medium'));
+
       -- Set reasoning summary verbosity
-      if g_reasoning_summary is not null then
-        l_reasoning_config.put('summary', coalesce(g_reasoning_summary, 'auto'));
+      if l_settings.ra_reasoning_summary is not null then
+        l_reasoning_config.put('summary', coalesce(l_settings.ra_reasoning_summary, 'auto'));
       end if;
-      
+
       l_input_obj.put('reasoning', l_reasoning_config);
     end if;
 
@@ -729,16 +739,16 @@ create or replace package body uc_ai_responses_api as
     end if;
 
     -- Configure storage and encrypted reasoning
-    l_input_obj.put('store', coalesce(g_store_responses, false));
-    
-    if g_include_encrypted_reasoning then
+    l_input_obj.put('store', coalesce(l_settings.ra_store_responses, false));
+
+    if l_settings.ra_include_encrypted_reasoning then
       l_include_array := json_array_t();
       l_include_array.append('reasoning.encrypted_content');
       l_input_obj.put('include', l_include_array);
     end if;
 
     -- Make the API call
-    l_api_response := internal_generate_text(l_input_obj);
+    l_api_response := internal_generate_text(l_input_obj, l_settings);
 
     -- Initialize unified result object
     l_result := json_object_t();
@@ -763,7 +773,7 @@ create or replace package body uc_ai_responses_api as
           l_has_function_calls := false;
           l_current_output := l_current_response.get_array('output');
           l_curr_response_id := l_api_response.get_string('id');
-          g_previous_response_id := l_curr_response_id;
+          l_prev_response_id := l_curr_response_id;
           
           -- Check for function calls in output
           <<check_function_calls>>
@@ -779,7 +789,7 @@ create or replace package body uc_ai_responses_api as
           -- If no function calls or max tool calls exceeded, exit loop
           exit tool_execution_loop when not l_has_function_calls or l_tool_calls_count >= p_max_tool_calls;
           
-          uc_ai_logger.log('Found function calls in output, executing tools', l_scope, 'Previous response_id: ' || g_previous_response_id);
+          uc_ai_logger.log('Found function calls in output, executing tools', l_scope, 'Previous response_id: ' || l_prev_response_id);
 
           -- Convert function calls to normalized assistant message and add to global array
           declare
@@ -862,7 +872,7 @@ create or replace package body uc_ai_responses_api as
               l_assistant_message := uc_ai_message_api.create_assistant_message(
                 p_content => l_assistant_content
               );
-              g_normalized_messages.append(l_assistant_message);
+              l_conversation_msgs.append(l_assistant_message);
             end if;
           end;
           
@@ -877,7 +887,7 @@ create or replace package body uc_ai_responses_api as
               l_skip boolean := false;
             begin
               if l_item.get_string('type') = 'reasoning'
-                 and not g_store_responses
+                 and not nvl(l_settings.ra_store_responses, false)
                  and (not l_item.has('encrypted_content')
                       or l_item.get('encrypted_content').is_null) then
                 l_skip := true;
@@ -950,7 +960,6 @@ create or replace package body uc_ai_responses_api as
                   l_tool_content.append(l_tool_result_content);
                   
                   l_tool_calls_count := l_tool_calls_count + 1;
-                  g_tool_calls := g_tool_calls + 1;
                 exception
                   when others then
                     uc_ai_logger.log_error('Error executing tool: ' || l_tool_name, l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
@@ -964,13 +973,13 @@ create or replace package body uc_ai_responses_api as
               l_tool_message := uc_ai_message_api.create_tool_message(
                 p_content => l_tool_content
               );
-              g_normalized_messages.append(l_tool_message);
+              l_conversation_msgs.append(l_tool_message);
             end if;
           end;
-          
+
           -- Make another API call with updated items
           l_input_obj.put('input', l_current_items);
-          l_current_response := internal_generate_text(l_input_obj);
+          l_current_response := internal_generate_text(l_input_obj, l_settings);
           
           uc_ai_logger.log('Made follow-up API call after tool execution', l_scope);
         end loop tool_execution_loop;
@@ -990,16 +999,16 @@ create or replace package body uc_ai_responses_api as
         l_normalized_messages := convert_output_to_lm_messages(l_output);
       end if;
       
-      -- Add final output messages to global normalized messages
+      -- Add final output messages to the per-call conversation history
       <<add_final_messages>>
       for i in 0 .. l_normalized_messages.get_size - 1
       loop
-        g_normalized_messages.append(l_normalized_messages.get(i));
+        l_conversation_msgs.append(l_normalized_messages.get(i));
       end loop add_final_messages;
-      
+
       -- Extract output text for simple usage
       l_output_text := extract_output_text(l_output);
-      g_final_message := l_output_text;
+      l_final_message := l_output_text;
     else
       l_normalized_messages := json_array_t();
     end if;
@@ -1007,10 +1016,10 @@ create or replace package body uc_ai_responses_api as
     -- Always set final_message so the result contract matches other providers
     -- (anthropic/google/openai-chat/ollama/oci all include the key, even if null).
     -- Models can return only reasoning with no output_text, in which case this is null.
-    l_result.put('final_message', g_final_message);
-    
-    -- Use global normalized messages array (already contains full conversation history)
-    l_result.put('messages', g_normalized_messages);
+    l_result.put('final_message', l_final_message);
+
+    -- Use the per-call conversation history (already contains full history)
+    l_result.put('messages', l_conversation_msgs);
     
     -- Add finish_reason (Responses API uses 'stop_reason')
     if l_api_response.has('stop_reason') then
@@ -1045,7 +1054,7 @@ create or replace package body uc_ai_responses_api as
     end if;
     
     -- Add provider info
-    l_result.put('provider', coalesce(uc_ai.g_provider_override, uc_ai.c_provider_openai));
+    l_result.put('provider', coalesce(l_settings.provider_override, uc_ai.c_provider_openai));
     
     uc_ai_logger.log('Completed generate_text with Responses API', l_scope);
     

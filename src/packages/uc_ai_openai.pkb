@@ -5,39 +5,41 @@ create or replace package body uc_ai_openai as
   c_api_generate_text_path constant varchar2(255 char) := '/chat/completions';
   c_api_generate_embeddings_path constant varchar2(255 char) := '/embeddings';
 
-  g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
-  g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
-  g_final_message clob;
-  g_input_tokens number := 0;  -- Global counter for input tokens (prompt_tokens)
-  g_output_tokens number := 0;  -- Global counter for output tokens (completion_tokens)
-  g_reasoning_tokens number := 0;  -- Global counter for reasoning tokens
-  g_total_tokens number := 0;  -- Global counter for total tokens
+  -- Per-call conversation state (tool-call count, message history, final message,
+  -- token counters) is threaded as run-state/message parameters, not package
+  -- globals, so nested calls do not corrupt each other.
 
   -- Chat API reference: https://platform.openai.com/docs/api-reference/chat/create
-  
-  
-  function get_generate_text_url return varchar2
+
+
+  function get_generate_text_url(
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
   as
   begin
-    if uc_ai.g_base_url is not null then
-      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_text_path;
+    if p_settings.base_url is not null then
+      return rtrim(p_settings.base_url, '/') || c_api_generate_text_path;
     end if;
-    
+
     return c_api_url || c_api_generate_text_path;
   end get_generate_text_url;
 
-  function get_generate_embeddings_url return varchar2
+  function get_generate_embeddings_url(
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
   as
   begin
-    if uc_ai.g_base_url is not null then
-      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_embeddings_path;
+    if p_settings.base_url is not null then
+      return rtrim(p_settings.base_url, '/') || c_api_generate_embeddings_path;
     end if;
-    
+
     return c_api_url || c_api_generate_embeddings_path;
   end get_generate_embeddings_url;
 
   procedure process_text_message(
-    p_message in json_object_t
+    p_message         in json_object_t
+  , pio_state         in out nocopy uc_ai_settings.t_run_state
+  , pio_norm_messages in out nocopy json_array_t
   )
   as
     l_content clob;
@@ -62,8 +64,8 @@ create or replace package body uc_ai_openai as
       p_content => l_arr
     );
 
-    g_final_message := l_content;
-    g_normalized_messages.append(l_assistant_message);
+    pio_state.final_message := l_content;
+    pio_norm_messages.append(l_assistant_message);
   end process_text_message;
 
 
@@ -275,10 +277,13 @@ create or replace package body uc_ai_openai as
 
 
   procedure internal_generate_text (
-    pio_messages     in out nocopy json_array_t
-  , p_max_tool_calls in pls_integer
-  , p_input_obj      in json_object_t
-  , pio_result       in out nocopy json_object_t
+    pio_messages      in out nocopy json_array_t
+  , p_max_tool_calls  in pls_integer
+  , p_input_obj       in json_object_t
+  , pio_result        in out nocopy json_object_t
+  , p_settings        in uc_ai_settings.t_settings
+  , pio_state         in out nocopy uc_ai_settings.t_run_state
+  , pio_norm_messages in out nocopy json_array_t
   )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'internal_generate_text';
@@ -296,7 +301,7 @@ create or replace package body uc_ai_openai as
     l_model     varchar2(255 char);
     l_web_credential varchar2(255 char);
   begin
-    if g_tool_calls >= p_max_tool_calls then
+    if pio_state.tool_calls >= p_max_tool_calls then
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_max_calls_exceeded
@@ -314,21 +319,21 @@ create or replace package body uc_ai_openai as
     apex_web_service.g_request_headers(1).name := 'Content-Type';
     apex_web_service.g_request_headers(1).value := 'application/json';
 
-    case uc_ai.g_provider_override
+    case p_settings.provider_override
       when uc_ai.c_provider_xai then
-         l_web_credential := coalesce(uc_ai.g_apex_web_credential, uc_ai_xai.g_apex_web_credential);
+         l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.xa_apex_web_credential);
       when uc_ai.c_provider_openrouter then
-         l_web_credential := coalesce(uc_ai.g_apex_web_credential, uc_ai_openrouter.g_apex_web_credential);
+         l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.or_apex_web_credential);
       else
-         l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+         l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.oa_apex_web_credential);
     end case;
 
     if l_web_credential is null then
       apex_web_service.g_request_headers(2).name := 'Authorization';
-      apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(coalesce(uc_ai.g_provider_override, uc_ai.c_provider_openai));
+      apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(coalesce(p_settings.provider_override, uc_ai.c_provider_openai));
     end if;
 
-    l_url := get_generate_text_url;
+    l_url := get_generate_text_url(p_settings);
     uc_ai_logger.log('Calling OpenAI API at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null'), l_scope);
 
     l_resp := apex_web_service.make_rest_request(
@@ -365,16 +370,16 @@ create or replace package body uc_ai_openai as
     -- Extract and accumulate usage information in global counters
     if l_resp_json.has('usage') then
       l_usage := l_resp_json.get_object('usage');
-      g_input_tokens := g_input_tokens + nvl(l_usage.get_number('prompt_tokens'), 0);
-      g_output_tokens := g_output_tokens + nvl(l_usage.get_number('completion_tokens'), 0);
-      g_total_tokens := g_total_tokens + nvl(l_usage.get_number('total_tokens'), 0);
-      
+      pio_state.input_tokens := pio_state.input_tokens + nvl(l_usage.get_number('prompt_tokens'), 0);
+      pio_state.output_tokens := pio_state.output_tokens + nvl(l_usage.get_number('completion_tokens'), 0);
+      pio_state.total_tokens := pio_state.total_tokens + nvl(l_usage.get_number('total_tokens'), 0);
+
       -- Extract reasoning tokens from completion_tokens_details if available
       if l_usage.has('completion_tokens_details') then
         declare
           l_completion_details json_object_t := l_usage.get_object('completion_tokens_details');
         begin
-          g_reasoning_tokens := g_reasoning_tokens + nvl(l_completion_details.get_number('reasoning_tokens'), 0);
+          pio_state.reasoning_tokens := pio_state.reasoning_tokens + nvl(l_completion_details.get_number('reasoning_tokens'), 0);
         end;
       end if;
     end if;
@@ -426,7 +431,7 @@ create or replace package body uc_ai_openai as
             <<tool_call_loop>>
             for j in 0 .. l_tool_calls.get_size - 1
             loop
-              g_tool_calls := g_tool_calls + 1;
+              pio_state.tool_calls := pio_state.tool_calls + 1;
    
               l_curr_call := treat( l_tool_calls.get(j) as json_object_t );
               l_call_id := l_curr_call.get_string('id');
@@ -447,7 +452,7 @@ create or replace package body uc_ai_openai as
               l_args_json := json_object_t.parse(coalesce(l_arguments, '{}'));
 
               -- xAI wraps arguments in "parameters" object
-              if uc_ai.g_provider_override = uc_ai.c_provider_xai then
+              if p_settings.provider_override = uc_ai.c_provider_xai then
                 l_args_json := treat( l_args_json.get('parameters') as json_object_t );
               end if;
    
@@ -473,18 +478,21 @@ create or replace package body uc_ai_openai as
               );
             end loop tool_call_loop;
    
-            g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_lm_tool_calls));
-            g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_lm_tool_results));
-   
-   
-            pio_result.put('tool_calls_count', g_tool_calls);
-   
+            pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_lm_tool_calls));
+            pio_norm_messages.append(uc_ai_message_api.create_tool_message(l_lm_tool_results));
+
+
+            pio_result.put('tool_calls_count', pio_state.tool_calls);
+
             -- Continue conversation with tool results - recursive call
             internal_generate_text(
-              pio_messages     => pio_messages
-            , p_max_tool_calls => p_max_tool_calls
-            , p_input_obj      => p_input_obj
-            , pio_result       => pio_result
+              pio_messages      => pio_messages
+            , p_max_tool_calls  => p_max_tool_calls
+            , p_input_obj       => p_input_obj
+            , pio_result        => pio_result
+            , p_settings        => p_settings
+            , pio_state         => pio_state
+            , pio_norm_messages => pio_norm_messages
             );
           end;
         when uc_ai.c_finish_reason_stop then
@@ -492,13 +500,13 @@ create or replace package body uc_ai_openai as
           l_message := l_choice.get_object('message');
           pio_messages.append(l_message);
    
-          process_text_message(l_message);
+          process_text_message(l_message, pio_state, pio_norm_messages);
         when uc_ai.c_finish_reason_length then
           uc_ai_logger.log_warn('Response truncated due to length', l_scope);
           l_message := l_choice.get_object('message');
           pio_messages.append(l_message);
    
-          process_text_message(l_message);
+          process_text_message(l_message, pio_state, pio_norm_messages);
         when uc_ai.c_finish_reason_content_filter then
           uc_ai_logger.log_warn('Content filter triggered', l_scope);
           pio_messages.append(l_choice.get_object('message'));
@@ -508,7 +516,7 @@ create or replace package body uc_ai_openai as
           l_message := l_choice.get_object('message');
           pio_messages.append(l_message);
    
-          process_text_message(l_message);
+          process_text_message(l_message, pio_state, pio_norm_messages);
       end case;
     end loop choices_loop;
 
@@ -547,9 +555,13 @@ create or replace package body uc_ai_openai as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
+  , p_settings       in uc_ai_settings.t_settings
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_chat_api';
+    l_settings         uc_ai_settings.t_settings := p_settings;
+    l_state            uc_ai_settings.t_run_state := uc_ai_settings.new_run_state;
+    l_norm_messages    json_array_t := json_array_t();
     l_input_obj        json_object_t := json_object_t();
     l_openai_messages  json_array_t;
     l_tools            json_array_t;
@@ -559,24 +571,15 @@ create or replace package body uc_ai_openai as
   begin
     l_result := json_object_t();
     uc_ai_logger.log('Starting generate_text_chat_api with ' || p_messages.get_size || ' input messages', l_scope);
-    
-    -- Reset global variables
-    g_tool_calls := 0;
-    g_final_message := null;
-    g_normalized_messages := json_array_t();
-    g_input_tokens := 0;
-    g_output_tokens := 0;
-    g_reasoning_tokens := 0;
-    g_total_tokens := 0;
-    
-    -- Copy input messages to global normalized messages array
+
+    -- Copy input messages to the per-call conversation history
     <<copy_messages_loop>>
     for i in 0 .. p_messages.get_size - 1
     loop
       l_message := treat(p_messages.get(i) as json_object_t);
-      g_normalized_messages.append(l_message);
+      l_norm_messages.append(l_message);
     end loop copy_messages_loop;
-    
+
     -- Initialize result object with default values
     l_result.put('tool_calls_count', 0);
     l_result.put('finish_reason', 'unknown');
@@ -598,31 +601,31 @@ create or replace package body uc_ai_openai as
     end if;
 
     -- Get all available tools formatted for OpenAI (if tools are enabled)
-    if uc_ai.g_enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_openai, uc_ai.g_provider_override);
+    if l_settings.enable_tools then
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_openai, l_settings.provider_override, p_tool_tags => l_settings.tool_tags);
       l_input_obj.put('tools', l_tools);
     end if;
 
-    if uc_ai.g_enable_reasoning then
-      case uc_ai.g_provider_override
+    if l_settings.enable_reasoning then
+      case l_settings.provider_override
         when uc_ai.c_provider_xai then
           declare
             l_reasoning_effort varchar2(32 char);
             l_model varchar2(255 char);
           begin
-            l_reasoning_effort := coalesce(uc_ai_xai.g_reasoning_effort, uc_ai.g_reasoning_level);
+            l_reasoning_effort := coalesce(l_settings.xa_reasoning_effort, l_settings.reasoning_level);
             if l_reasoning_effort = uc_ai.c_reasoning_level_medium then
               l_reasoning_effort := uc_ai.c_reasoning_level_low; -- xAI does not have medium, map to low
               uc_ai_logger.log('Mapping reasoning_effort "medium" to "low" for xAI provider', l_scope);
             end if;
-   
+
             l_model := l_input_obj.get_string('model');
             if l_model like '%non-reasoning%' then
               l_model := replace(l_model, 'non-reasoning', 'reasoning');
               l_input_obj.put('model', l_model);
               uc_ai_logger.log('Switching model to reasoning variant for xAI provider: ' || l_model, l_scope);
             end if;
-            
+
             l_input_obj.put('reasoning_level', l_reasoning_effort);
           end;
         when uc_ai.c_provider_openrouter then
@@ -630,44 +633,47 @@ create or replace package body uc_ai_openai as
             l_reasoning_obj json_object_t;
           begin
             l_reasoning_obj := json_object_t();
-            l_reasoning_obj.put('level', coalesce(uc_ai_openrouter.g_reasoning_effort, uc_ai.g_reasoning_level));
+            l_reasoning_obj.put('level', coalesce(l_settings.or_reasoning_effort, l_settings.reasoning_level));
             l_input_obj.put('reasoning', l_reasoning_obj);
             uc_ai_logger.log('Setting reasoning level for OpenRouter provider: ' || l_reasoning_obj.to_clob, l_scope);
           end;
         else
-          l_input_obj.put('reasoning_effort', coalesce(uc_ai_openai.g_reasoning_effort, uc_ai.g_reasoning_level));
+          l_input_obj.put('reasoning_effort', coalesce(l_settings.oa_reasoning_effort, l_settings.reasoning_level));
       end case;
     end if;
 
     internal_generate_text(
-      pio_messages     => l_openai_messages
-    , p_max_tool_calls => p_max_tool_calls
-    , p_input_obj      => l_input_obj
-    , pio_result       => l_result
+      pio_messages      => l_openai_messages
+    , p_max_tool_calls  => p_max_tool_calls
+    , p_input_obj       => l_input_obj
+    , pio_result        => l_result
+    , p_settings        => l_settings
+    , pio_state         => l_state
+    , pio_norm_messages => l_norm_messages
     );
 
-    -- Add final messages to result (already in standardized format from global variable)
-    l_result.put('messages', g_normalized_messages);
-    
+    -- Add final messages to result (per-call conversation history)
+    l_result.put('messages', l_norm_messages);
+
     -- Add final message (only the text)
-    l_result.put('final_message', g_final_message);
- 
-    -- Add usage information from global counters
+    l_result.put('final_message', l_state.final_message);
+
+    -- Add usage information from the per-call run state
     declare
       l_usage_obj json_object_t := json_object_t();
     begin
-      l_usage_obj.put('prompt_tokens', g_input_tokens);
-      l_usage_obj.put('completion_tokens', g_output_tokens);
-      l_usage_obj.put('reasoning_tokens', g_reasoning_tokens);
-      l_usage_obj.put('total_tokens', g_total_tokens);
+      l_usage_obj.put('prompt_tokens', l_state.input_tokens);
+      l_usage_obj.put('completion_tokens', l_state.output_tokens);
+      l_usage_obj.put('reasoning_tokens', l_state.reasoning_tokens);
+      l_usage_obj.put('total_tokens', l_state.total_tokens);
       l_result.put('usage', l_usage_obj);
     end;
- 
+
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_openai);
-    
-    uc_ai_logger.log('Completed generate_text_chat_api with final message count: ' || g_normalized_messages.get_size, l_scope);
-    
+
+    uc_ai_logger.log('Completed generate_text_chat_api with final message count: ' || l_norm_messages.get_size, l_scope);
+
     return l_result;
   end generate_text_chat_api;
 
@@ -677,29 +683,42 @@ create or replace package body uc_ai_openai as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
+  , p_settings       in uc_ai_settings.t_settings default null
   ) return json_object_t
   as
+    l_settings uc_ai_settings.t_settings;
+    l_resp     uc_ai_settings.t_settings;
   begin
-    if g_use_responses_api then
+    -- Resolve settings: use the supplied record, else snapshot the globals.
+    if nvl(p_settings.initialized, false) then
+      l_settings := p_settings;
+    else
+      l_settings := uc_ai_settings.build_from_globals;
+    end if;
+
+    if l_settings.oa_use_responses_api then
+      -- Build a settings copy for the Responses API delegate. No package globals
+      -- are mutated, so a nested call cannot corrupt this caller.
+      l_resp := l_settings;
+
       -- Base URL fallback for direct OpenAI calls. A base URL set by a delegating
-      -- provider (e.g. OpenRouter via uc_ai.g_base_url) takes precedence in the
-      -- Responses API's get_generate_text_url.
-      uc_ai_responses_api.g_base_url := 'https://api.openai.com/v1';
+      -- provider (e.g. OpenRouter) takes precedence via base_url in get_generate_text_url.
+      l_resp.ra_base_url := coalesce(l_settings.base_url, 'https://api.openai.com/v1');
 
       -- Resolve the web credential for the active provider, so OpenRouter / xAI use
       -- their own credential instead of the OpenAI package's.
-      case uc_ai.g_provider_override
+      case l_settings.provider_override
         when uc_ai.c_provider_openrouter then
-          uc_ai_responses_api.g_apex_web_credential := coalesce(uc_ai_openrouter.g_apex_web_credential, g_apex_web_credential);
+          l_resp.ra_apex_web_credential := coalesce(l_settings.or_apex_web_credential, l_settings.oa_apex_web_credential);
         when uc_ai.c_provider_xai then
-          uc_ai_responses_api.g_apex_web_credential := coalesce(uc_ai_xai.g_apex_web_credential, g_apex_web_credential);
+          l_resp.ra_apex_web_credential := coalesce(l_settings.xa_apex_web_credential, l_settings.oa_apex_web_credential);
         else
-          uc_ai_responses_api.g_apex_web_credential := g_apex_web_credential;
+          l_resp.ra_apex_web_credential := l_settings.oa_apex_web_credential;
       end case;
 
       -- Preserve an override already set by a delegating provider so the Responses API
       -- key/auth lookup targets that provider; default to OpenAI for direct calls.
-      uc_ai.g_provider_override := coalesce(uc_ai.g_provider_override, uc_ai.c_provider_openai);
+      l_resp.provider_override := coalesce(l_settings.provider_override, uc_ai.c_provider_openai);
 
       -- Pass messages directly - Responses API will convert them
       return uc_ai_responses_api.generate_text(
@@ -707,6 +726,7 @@ create or replace package body uc_ai_openai as
       , p_model          => p_model
       , p_max_tool_calls => p_max_tool_calls
       , p_schema         => p_schema
+      , p_settings       => l_resp
       );
     else
       return generate_text_chat_api(
@@ -714,6 +734,7 @@ create or replace package body uc_ai_openai as
       , p_model          => p_model
       , p_max_tool_calls => p_max_tool_calls
       , p_schema         => p_schema
+      , p_settings       => l_settings
       );
     end if;
 
@@ -728,9 +749,11 @@ create or replace package body uc_ai_openai as
   function generate_embeddings (
     p_input in json_array_t
   , p_model in uc_ai.model_type
+  , p_settings in uc_ai_settings.t_settings default null
   ) return json_array_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_embeddings';
+    l_settings       uc_ai_settings.t_settings;
     l_url            varchar2(4000 char);
     l_resp           clob;
     l_resp_json      json_object_t;
@@ -742,7 +765,13 @@ create or replace package body uc_ai_openai as
     l_web_credential varchar2(255 char);
   begin
     uc_ai_logger.log('Starting generate_embeddings with ' || p_input.get_size || ' input items', l_scope);
-    
+
+    if nvl(p_settings.initialized, false) then
+      l_settings := p_settings;
+    else
+      l_settings := uc_ai_settings.build_from_globals;
+    end if;
+
     l_input_obj.put('model', p_model);
     l_input_obj.put('input', p_input);
 
@@ -750,22 +779,22 @@ create or replace package body uc_ai_openai as
     apex_web_service.g_request_headers(1).name := 'Content-Type';
     apex_web_service.g_request_headers(1).value := 'application/json';
 
-    case uc_ai.g_provider_override
+    case l_settings.provider_override
       when uc_ai.c_provider_openrouter then
-         l_web_credential := coalesce(uc_ai.g_apex_web_credential, uc_ai_openrouter.g_apex_web_credential);
+         l_web_credential := coalesce(l_settings.apex_web_credential, l_settings.or_apex_web_credential);
       else
-         l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+         l_web_credential := coalesce(l_settings.apex_web_credential, l_settings.oa_apex_web_credential);
     end case;
 
 
     if l_web_credential is null then
       apex_web_service.g_request_headers(2).name := 'Authorization';
-      apex_web_service.g_request_headers(2).value := 'Bearer ' || uc_ai_get_key(coalesce(uc_ai.g_provider_override, uc_ai.c_provider_openai));
+      apex_web_service.g_request_headers(2).value := 'Bearer ' || uc_ai_get_key(coalesce(l_settings.provider_override, uc_ai.c_provider_openai));
     end if;
 
     uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
 
-    l_url := get_generate_embeddings_url();
+    l_url := get_generate_embeddings_url(l_settings);
     uc_ai_logger.log('Request URL: ' || l_url, l_scope);
 
     l_resp := apex_web_service.make_rest_request(

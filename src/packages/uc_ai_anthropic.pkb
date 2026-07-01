@@ -5,26 +5,26 @@ create or replace package body uc_ai_anthropic as
   c_api_generate_text_path constant varchar2(255 char) := '/messages';
   c_anthropic_version constant varchar2(32 char) := '2023-06-01';
 
-  g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
-  g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
-  g_final_message clob;
-  g_input_tokens number := 0;  -- Global counter for input tokens
-  g_output_tokens number := 0;  -- Global counter for output tokens
+  -- Per-call conversation state is threaded as run-state/message parameters,
+  -- not package globals, so nested calls do not corrupt each other.
 
   -- Chat API reference: https://docs.anthropic.com/en/api/messages
 
-  function get_generate_text_url return varchar2
+  function get_generate_text_url(
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
   as
   begin
-    if uc_ai.g_base_url is not null then
-      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_text_path;
+    if p_settings.base_url is not null then
+      return rtrim(p_settings.base_url, '/') || c_api_generate_text_path;
     end if;
-    
+
     return c_api_url || c_api_generate_text_path;
   end get_generate_text_url;
 
   function get_text_content (
     p_message in json_object_t
+  , pio_state in out nocopy uc_ai_settings.t_run_state
   ) return json_object_t
   as
     l_content clob;
@@ -41,7 +41,7 @@ create or replace package body uc_ai_anthropic as
     , p_provider_options => l_provider_options
     );
 
-    g_final_message := l_content;
+    pio_state.final_message := l_content;
 
     return l_lm_text_content;
   end get_text_content;
@@ -278,6 +278,9 @@ create or replace package body uc_ai_anthropic as
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
   , pio_result           in out nocopy json_object_t
+  , p_settings           in uc_ai_settings.t_settings
+  , pio_state            in out nocopy uc_ai_settings.t_run_state
+  , pio_norm_messages    in out nocopy json_array_t
   )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'internal_generate_text';
@@ -296,7 +299,7 @@ create or replace package body uc_ai_anthropic as
     
     l_has_tool_use boolean := false;
   begin
-    if g_tool_calls >= p_max_tool_calls then
+    if pio_state.tool_calls >= p_max_tool_calls then
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_max_calls_exceeded
@@ -321,14 +324,14 @@ create or replace package body uc_ai_anthropic as
     apex_web_service.g_request_headers(2).name := 'anthropic-version';
     apex_web_service.g_request_headers(2).value := c_anthropic_version;
 
-    l_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
+    l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.an_apex_web_credential);
     if l_web_credential is null then
       apex_web_service.g_request_headers(3).name := 'x-api-key';
       apex_web_service.g_request_headers(3).value := uc_ai_get_key(uc_ai.c_provider_anthropic);
     end if;
 
     l_resp := apex_web_service.make_rest_request(
-      p_url => get_generate_text_url,
+      p_url => get_generate_text_url(p_settings),
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
       p_credential_static_id => l_web_credential
@@ -352,8 +355,8 @@ create or replace package body uc_ai_anthropic as
     -- Extract and accumulate usage information in global counters
     if l_resp_json.has('usage') then
       l_usage := l_resp_json.get_object('usage');
-      g_input_tokens := g_input_tokens + nvl(l_usage.get_number('input_tokens'), 0);
-      g_output_tokens := g_output_tokens + nvl(l_usage.get_number('output_tokens'), 0);
+      pio_state.input_tokens := pio_state.input_tokens + nvl(l_usage.get_number('input_tokens'), 0);
+      pio_state.output_tokens := pio_state.output_tokens + nvl(l_usage.get_number('output_tokens'), 0);
     end if;
 
     -- Extract model information
@@ -426,8 +429,8 @@ create or replace package body uc_ai_anthropic as
             when 'tool_use' then
               uc_ai_logger.log('Executing tool use', l_scope, l_content_prompt.to_clob);
 
-              g_tool_calls := g_tool_calls + 1;
-   
+              pio_state.tool_calls := pio_state.tool_calls + 1;
+
               l_tool_call_id := l_content_prompt.get_string('id');
               l_tool_name := l_content_prompt.get_string('name');
               l_tool_input := l_content_prompt.get_object('input');
@@ -475,7 +478,7 @@ create or replace package body uc_ai_anthropic as
             when 'text' then
               uc_ai_logger.log('Text content block found', l_scope, l_content_prompt.to_clob);
 
-              l_new_msg := get_text_content(l_content_prompt);
+              l_new_msg := get_text_content(l_content_prompt, pio_state);
               l_normalized_messages.append(l_new_msg);
             when 'thinking' then
               uc_ai_logger.log('Thinking content block found', l_scope, l_content_prompt.to_clob);
@@ -492,11 +495,11 @@ create or replace package body uc_ai_anthropic as
           end case;
         end loop tool_use_loop;
 
-        g_normalized_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
-        g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
+        pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+        pio_norm_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
 
 
-        pio_result.put('tool_calls_count', g_tool_calls);
+        pio_result.put('tool_calls_count', pio_state.tool_calls);
 
         -- Add tool results as new user message with tool_result content
         l_new_msg := json_object_t();
@@ -511,6 +514,9 @@ create or replace package body uc_ai_anthropic as
         , p_max_tool_calls     => p_max_tool_calls
         , p_input_obj          => p_input_obj
         , pio_result           => pio_result
+        , p_settings           => p_settings
+        , pio_state            => pio_state
+        , pio_norm_messages    => pio_norm_messages
         );
       end;
     else
@@ -529,7 +535,7 @@ create or replace package body uc_ai_anthropic as
       
           case l_content_type
             when 'text' then
-              l_content_msg := get_text_content(l_content_prompt);
+              l_content_msg := get_text_content(l_content_prompt, pio_state);
               l_content_array.append(l_content_msg);
             when 'thinking' then
               l_content_msg := get_reasoning_content(l_content_prompt);
@@ -549,7 +555,7 @@ create or replace package body uc_ai_anthropic as
         l_assistant_message := uc_ai_message_api.create_assistant_message(
           p_content => l_content_array
         );
-        g_normalized_messages.append(l_assistant_message);
+        pio_norm_messages.append(l_assistant_message);
       end;
 
       pio_messages.append(l_content_prompt);
@@ -589,9 +595,13 @@ create or replace package body uc_ai_anthropic as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
+  , p_settings       in uc_ai_settings.t_settings default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_with_messages';
+    l_settings           uc_ai_settings.t_settings;
+    l_state              uc_ai_settings.t_run_state := uc_ai_settings.new_run_state;
+    l_norm_messages      json_array_t := json_array_t();
     l_input_obj          json_object_t := json_object_t();
     l_anthropic_messages json_array_t;
     l_system_prompt      clob;
@@ -604,22 +614,21 @@ create or replace package body uc_ai_anthropic as
   begin
     l_result := json_object_t();
     uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
-    
-    -- Reset global variables
-    g_tool_calls := 0;
-    g_final_message := null;
-    g_normalized_messages := json_array_t();
-    g_input_tokens := 0;
-    g_output_tokens := 0;
-    
-    -- Copy input messages to global normalized messages array
+
+    if nvl(p_settings.initialized, false) then
+      l_settings := p_settings;
+    else
+      l_settings := uc_ai_settings.build_from_globals;
+    end if;
+
+    -- Copy input messages to the per-call conversation history
     <<copy_messages_loop>>
     for i in 0 .. p_messages.get_size - 1
     loop
       l_message := treat(p_messages.get(i) as json_object_t);
-      g_normalized_messages.append(l_message);
+      l_norm_messages.append(l_message);
     end loop copy_messages_loop;
-    
+
     -- Initialize result object with default values
     l_result.put('tool_calls_count', 0);
     l_result.put('finish_reason', 'unknown');
@@ -634,23 +643,23 @@ create or replace package body uc_ai_anthropic as
     l_input_obj.put('model', p_model);
 
     -- Get all available tools formatted for Anthropic
-    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_anthropic);
+    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_anthropic, p_tool_tags => l_settings.tool_tags);
 
     if l_tools.get_size > 0 then
       l_input_obj.put('tools', l_tools);
     end if;
 
-    if uc_ai.g_enable_reasoning then
+    if l_settings.enable_reasoning then
       l_reasoning := json_object_t();
       l_reasoning.put('type', 'enabled');
-      if g_reasoning_budget_tokens is not null then
-        l_reasoning_tokens := g_reasoning_budget_tokens;
-      elsif uc_ai.g_reasoning_level is not null then
-        l_reasoning_tokens := case uc_ai.g_reasoning_level
+      if l_settings.an_reasoning_budget_tokens is not null then
+        l_reasoning_tokens := l_settings.an_reasoning_budget_tokens;
+      elsif l_settings.reasoning_level is not null then
+        l_reasoning_tokens := case l_settings.reasoning_level
           when uc_ai.c_reasoning_level_low then 2048
           when uc_ai.c_reasoning_level_medium then 8192
           when uc_ai.c_reasoning_level_high then 32768
-          else uc_ai.g_reasoning_level
+          else l_settings.reasoning_level
         end;
       end if;
       uc_ai_logger.log_info('Using reasoning with budget tokens: ' || l_reasoning_tokens, l_scope);
@@ -666,16 +675,16 @@ create or replace package body uc_ai_anthropic as
       l_input_obj.put('output_config', l_output_config);
     end if;
 
-    if g_max_tokens <= l_reasoning_tokens then
+    if l_settings.an_max_tokens <= l_reasoning_tokens then
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_reasoning_budget
       , p_scope      => l_scope
       , p0           => to_char(l_reasoning_tokens)
-      , p1           => to_char(g_max_tokens)
+      , p1           => to_char(l_settings.an_max_tokens)
       );
     end if;
 
-    l_input_obj.put('max_tokens', g_max_tokens); -- Anthropic requires max_tokens
+    l_input_obj.put('max_tokens', l_settings.an_max_tokens); -- Anthropic requires max_tokens
 
     internal_generate_text(
       pio_messages         => l_anthropic_messages
@@ -683,29 +692,32 @@ create or replace package body uc_ai_anthropic as
     , p_max_tool_calls     => p_max_tool_calls
     , p_input_obj          => l_input_obj
     , pio_result           => l_result
+    , p_settings           => l_settings
+    , pio_state            => l_state
+    , pio_norm_messages    => l_norm_messages
     );
 
-    -- Add final messages to result (already in standardized format from global variable)
-    l_result.put('messages', g_normalized_messages);
-    
+    -- Add final messages to result (per-call conversation history)
+    l_result.put('messages', l_norm_messages);
+
     -- Add final message (only the text)
-    l_result.put('final_message', g_final_message);
- 
-    -- Add usage information from global counters
+    l_result.put('final_message', l_state.final_message);
+
+    -- Add usage information from the per-call run state
     declare
       l_usage_obj json_object_t := json_object_t();
     begin
-      l_usage_obj.put('prompt_tokens', g_input_tokens);
-      l_usage_obj.put('completion_tokens', g_output_tokens);
+      l_usage_obj.put('prompt_tokens', l_state.input_tokens);
+      l_usage_obj.put('completion_tokens', l_state.output_tokens);
       l_usage_obj.put('reasoning_tokens', cast(null as number)); -- anthropic does not provide separate reasoning token count
-      l_usage_obj.put('total_tokens', g_input_tokens + g_output_tokens);
+      l_usage_obj.put('total_tokens', l_state.input_tokens + l_state.output_tokens);
       l_result.put('usage', l_usage_obj);
     end;
- 
+
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_anthropic);
-    
-    uc_ai_logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
+
+    uc_ai_logger.log('Completed generate_text with final message count: ' || l_norm_messages.get_size, l_scope);
     
     return l_result;
   end generate_text;

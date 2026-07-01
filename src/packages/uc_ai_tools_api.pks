@@ -23,6 +23,7 @@ as
   function get_tools_array (
     p_provider        in uc_ai.provider_type
   , p_additional_info in varchar2 default null
+  , p_tool_tags       in apex_t_varchar2 default null
   ) return json_array_t;
 
   /*

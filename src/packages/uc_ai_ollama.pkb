@@ -5,27 +5,30 @@ create or replace package body uc_ai_ollama as
   c_api_generate_text_path constant varchar2(255 char) := '/chat';
   c_api_generate_embeddings_path constant varchar2(255 char) := '/embed';
 
-  g_tool_calls number := 0;  -- Global counter to prevent infinite tool calling loops
-  g_normalized_messages json_array_t;  -- Global messages array to keep conversation history
-  g_final_message clob;
+  -- Per-call conversation state is threaded as run-state/message parameters,
+  -- not package globals, so nested calls do not corrupt each other.
 
   -- Chat API reference: https://github.com/ollama/ollama/blob/main/docs/api.md#generate-a-chat-completion
 
-  function get_generate_text_url return varchar2
+  function get_generate_text_url(
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
   as
   begin
-    if uc_ai.g_base_url is not null then
-      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_text_path;
+    if p_settings.base_url is not null then
+      return rtrim(p_settings.base_url, '/') || c_api_generate_text_path;
     end if;
-    
+
     return c_api_url || c_api_generate_text_path;
   end get_generate_text_url;
 
-  function get_generate_embeddings_url return varchar2
+  function get_generate_embeddings_url(
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
   as
   begin
-    if uc_ai.g_base_url is not null then
-      return rtrim(uc_ai.g_base_url, '/') || c_api_generate_embeddings_path;
+    if p_settings.base_url is not null then
+      return rtrim(p_settings.base_url, '/') || c_api_generate_embeddings_path;
     end if;
 
     return c_api_url || c_api_generate_embeddings_path;
@@ -33,6 +36,7 @@ create or replace package body uc_ai_ollama as
 
   function get_text_content (
     p_message in json_object_t
+  , pio_state in out nocopy uc_ai_settings.t_run_state
   ) return json_object_t
   as
     l_content clob;
@@ -56,7 +60,7 @@ create or replace package body uc_ai_ollama as
     , p_provider_options => l_provider_options
     );
 
-    g_final_message := l_content;
+    pio_state.final_message := l_content;
 
     return l_lm_text_content;
   end get_text_content;
@@ -87,13 +91,14 @@ create or replace package body uc_ai_ollama as
 
   function process_llm_response(
     p_message in json_object_t
+  , pio_state in out nocopy uc_ai_settings.t_run_state
   ) return json_array_t
   as
     l_lm_text_content  json_object_t;
     l_lm_reasoning_content json_object_t;
     l_arr json_array_t;
   begin
-    l_lm_text_content := get_text_content(p_message);
+    l_lm_text_content := get_text_content(p_message, pio_state);
     l_lm_reasoning_content := get_reasoning_content(p_message);
 
     if l_lm_reasoning_content is null and l_lm_text_content is null then
@@ -268,6 +273,9 @@ create or replace package body uc_ai_ollama as
   , p_max_tool_calls     in pls_integer
   , p_input_obj          in json_object_t
   , pio_result           in out nocopy json_object_t
+  , p_settings           in uc_ai_settings.t_settings
+  , pio_state            in out nocopy uc_ai_settings.t_run_state
+  , pio_norm_messages    in out nocopy json_array_t
   )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'internal_generate_text';
@@ -286,7 +294,7 @@ create or replace package body uc_ai_ollama as
 
     l_has_tool_calls boolean := false;
   begin
-    if g_tool_calls >= p_max_tool_calls then
+    if pio_state.tool_calls >= p_max_tool_calls then
       pio_result.put('finish_reason', 'max_tool_calls_exceeded');
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_max_calls_exceeded
@@ -297,7 +305,7 @@ create or replace package body uc_ai_ollama as
 
     l_input_obj := p_input_obj;
     l_input_obj.put('messages', pio_messages);
-    l_input_obj.put('think', uc_ai.g_enable_reasoning);
+    l_input_obj.put('think', p_settings.enable_reasoning);
 
     uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
 
@@ -308,10 +316,10 @@ create or replace package body uc_ai_ollama as
     );
 
     l_resp := apex_web_service.make_rest_request(
-      p_url => get_generate_text_url(),
+      p_url => get_generate_text_url(p_settings),
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
+      p_credential_static_id => coalesce(p_settings.apex_web_credential, p_settings.ol_apex_web_credential)
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);
@@ -369,8 +377,8 @@ create or replace package body uc_ai_ollama as
       l_has_tool_calls := l_tool_calls.get_size > 0;
     end if;
 
-    -- add response text to global messages
-    l_assistant_content := process_llm_response(l_message);
+    -- add response text to the per-call conversation history
+    l_assistant_content := process_llm_response(l_message, pio_state);
 
     if l_has_tool_calls then
       -- AI wants to call tools - extract calls, execute them, add results to conversation
@@ -399,9 +407,9 @@ create or replace package body uc_ai_ollama as
           l_tool_call := treat(l_tool_calls.get(j) as json_object_t);
           uc_ai_logger.log('Processing tool call', l_scope, 'Tool Call: ' || l_tool_call.to_clob);
           
-          g_tool_calls := g_tool_calls + 1;
+          pio_state.tool_calls := pio_state.tool_calls + 1;
 
-          l_tool_call_id := 'tool_call_' || g_tool_calls; -- Generate unique ID for tool call
+          l_tool_call_id := 'tool_call_' || pio_state.tool_calls; -- Generate unique ID for tool call
           l_function := l_tool_call.get_object('function');
           l_tool_name := l_function.get_string('name');
           
@@ -446,11 +454,11 @@ create or replace package body uc_ai_ollama as
         l_assistant_message := uc_ai_message_api.create_assistant_message(
           p_content => l_assistant_content
         );
-        g_normalized_messages.append(l_assistant_message);
+        pio_norm_messages.append(l_assistant_message);
 
-        g_normalized_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
+        pio_norm_messages.append(uc_ai_message_api.create_tool_message(l_normalized_tool_results));
 
-        pio_result.put('tool_calls_count', g_tool_calls);
+        pio_result.put('tool_calls_count', pio_state.tool_calls);
 
         -- Continue conversation with tool results - recursive call
         internal_generate_text(
@@ -458,6 +466,9 @@ create or replace package body uc_ai_ollama as
         , p_max_tool_calls     => p_max_tool_calls
         , p_input_obj          => p_input_obj
         , pio_result           => pio_result
+        , p_settings           => p_settings
+        , pio_state            => pio_state
+        , pio_norm_messages    => pio_norm_messages
         );
       end;
     else
@@ -468,7 +479,7 @@ create or replace package body uc_ai_ollama as
       l_assistant_message := uc_ai_message_api.create_assistant_message(
         p_content => l_assistant_content
       );
-      g_normalized_messages.append(l_assistant_message);
+      pio_norm_messages.append(l_assistant_message);
     end if;
 
 
@@ -532,9 +543,13 @@ create or replace package body uc_ai_ollama as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
+  , p_settings       in uc_ai_settings.t_settings default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_text_with_messages';
+    l_settings           uc_ai_settings.t_settings;
+    l_state              uc_ai_settings.t_run_state := uc_ai_settings.new_run_state;
+    l_norm_messages      json_array_t := json_array_t();
     l_input_obj          json_object_t := json_object_t();
     l_ollama_messages    json_array_t;
     l_tools              json_array_t;
@@ -544,11 +559,16 @@ create or replace package body uc_ai_ollama as
   begin
     uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
 
-    if g_use_responses_api then
+    if nvl(p_settings.initialized, false) then
+      l_settings := p_settings;
+    else
+      l_settings := uc_ai_settings.build_from_globals;
+    end if;
+
+    if l_settings.ol_use_responses_api then
       declare
-        l_base varchar2(500 char) := coalesce(uc_ai.g_base_url, c_api_url);
-        l_saved_base_url varchar2(500 char) := uc_ai.g_base_url;
-        l_resp json_object_t;
+        l_base varchar2(500 char) := coalesce(l_settings.base_url, c_api_url);
+        l_resp_settings uc_ai_settings.t_settings := l_settings;
       begin
         if l_base is null then
           uc_ai_error.raise_error(
@@ -564,44 +584,35 @@ create or replace package body uc_ai_ollama as
         else
           l_base := rtrim(l_base, '/') || '/v1';
         end if;
-        uc_ai_responses_api.g_base_url := l_base;
-        uc_ai_responses_api.g_apex_web_credential := coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential);
-        uc_ai_responses_api.g_skip_auth := uc_ai_responses_api.g_apex_web_credential is null;
-        uc_ai.g_provider_override := uc_ai.c_provider_ollama;
-        -- Clear g_base_url so responses API uses its own g_base_url
-        uc_ai.g_base_url := null;
+        -- Build a settings copy for the Responses API delegate. No package
+        -- globals are mutated. The responses URL lives in ra_base_url; base_url
+        -- is cleared so get_generate_text_url falls through to ra_base_url.
+        l_resp_settings.ra_base_url := l_base;
+        l_resp_settings.ra_apex_web_credential := coalesce(l_settings.apex_web_credential, l_settings.ol_apex_web_credential);
+        l_resp_settings.ra_skip_auth := l_resp_settings.ra_apex_web_credential is null;
+        l_resp_settings.provider_override := uc_ai.c_provider_ollama;
+        l_resp_settings.base_url := null;
 
-        l_resp := uc_ai_responses_api.generate_text(
+        return uc_ai_responses_api.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
         , p_max_tool_calls => p_max_tool_calls
         , p_schema         => p_schema
+        , p_settings       => l_resp_settings
         );
-        -- Restore g_base_url so subsequent calls use the correct URL
-        uc_ai.g_base_url := l_saved_base_url;
-        return l_resp;
-      exception
-        when others then
-          uc_ai.g_base_url := l_saved_base_url;
-          raise;
       end;
     end if;
 
     l_result := json_object_t();
 
-    -- Reset global variables
-    g_tool_calls := 0;
-    g_final_message := null;
-    g_normalized_messages := json_array_t();
-    
-    -- Copy input messages to global normalized messages array
+    -- Copy input messages to the per-call conversation history
     <<copy_messages_loop>>
     for i in 0 .. p_messages.get_size - 1
     loop
       l_message := treat(p_messages.get(i) as json_object_t);
-      g_normalized_messages.append(l_message);
+      l_norm_messages.append(l_message);
     end loop copy_messages_loop;
-    
+
     -- Initialize result object with default values
     l_result.put('tool_calls_count', 0);
     l_result.put('finish_reason', 'unknown');
@@ -622,8 +633,8 @@ create or replace package body uc_ai_ollama as
     end if;
 
     -- Get all available tools formatted for Ollama (if tools are enabled)
-    if uc_ai.g_enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_ollama);
+    if l_settings.enable_tools then
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_ollama, p_tool_tags => l_settings.tool_tags);
 
       if l_tools.get_size > 0 then
         l_input_obj.put('tools', l_tools);
@@ -635,18 +646,21 @@ create or replace package body uc_ai_ollama as
     , p_max_tool_calls     => p_max_tool_calls
     , p_input_obj          => l_input_obj
     , pio_result           => l_result
+    , p_settings           => l_settings
+    , pio_state            => l_state
+    , pio_norm_messages    => l_norm_messages
     );
 
-    -- Add final messages to result (already in standardized format from global variable)
-    l_result.put('messages', g_normalized_messages);
-    
+    -- Add final messages to result (per-call conversation history)
+    l_result.put('messages', l_norm_messages);
+
     -- Add final message (only the text)
-    l_result.put('final_message', g_final_message);
- 
+    l_result.put('final_message', l_state.final_message);
+
     -- Add provider info to the result
     l_result.put('provider', uc_ai.c_provider_ollama);
-    
-    uc_ai_logger.log('Completed generate_text with final message count: ' || g_normalized_messages.get_size, l_scope);
+
+    uc_ai_logger.log('Completed generate_text with final message count: ' || l_norm_messages.get_size, l_scope);
     
     return l_result;
   end generate_text;
@@ -654,9 +668,11 @@ create or replace package body uc_ai_ollama as
   function generate_embeddings (
     p_input in json_array_t
   , p_model in uc_ai.model_type
+  , p_settings in uc_ai_settings.t_settings default null
   ) return json_array_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'generate_embeddings';
+    l_settings      uc_ai_settings.t_settings;
     l_url           varchar2(4000 char);
     l_resp          clob;
     l_resp_json     json_object_t;
@@ -665,7 +681,13 @@ create or replace package body uc_ai_ollama as
   begin
     uc_ai_logger.log('Starting generate_embeddings with ' || p_input.get_size || ' input items',
       l_scope);
-    
+
+    if nvl(p_settings.initialized, false) then
+      l_settings := p_settings;
+    else
+      l_settings := uc_ai_settings.build_from_globals;
+    end if;
+
     l_input_obj.put('model', p_model);
     l_input_obj.put('input', p_input);
 
@@ -677,14 +699,14 @@ create or replace package body uc_ai_ollama as
 
     uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
 
-    l_url := get_generate_embeddings_url();
+    l_url := get_generate_embeddings_url(l_settings);
     uc_ai_logger.log('Request URL: ' || l_url, l_scope);
 
     l_resp := apex_web_service.make_rest_request(
       p_url => l_url,
       p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => coalesce(uc_ai.g_apex_web_credential, g_apex_web_credential)
+      p_credential_static_id => coalesce(l_settings.apex_web_credential, l_settings.ol_apex_web_credential)
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);
