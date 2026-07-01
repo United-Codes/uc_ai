@@ -149,6 +149,25 @@ as
   ) return json_array_t;
 
   /*
+   * Config-driven variant of generate_embeddings.
+   *
+   * Takes the same JSON config object as the config-driven generate_text
+   * overloads (the structure accepted by uc_ai_prompt_profiles_api.apply_model_config)
+   * and derives this call's configuration from it directly, WITHOUT reading or
+   * mutating the package globals. Lets other libraries request embeddings with a
+   * self-contained config; safe to call concurrently / re-entrantly.
+   *
+   * Keys absent from p_config fall back to the framework defaults (the values
+   * uc_ai.reset_globals restores), not to the current global values.
+   */
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_provider in provider_type
+  , p_model in model_type
+  , p_config in json_object_t
+  ) return json_array_t;
+
+  /*
    * Resets all global variables in uc_ai and provider packages to their default values.
    * Note: g_event_callback is intentionally preserved across resets (long-lived registration).
    */

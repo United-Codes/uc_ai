@@ -214,47 +214,49 @@ create or replace package body uc_ai as
     );
   end generate_text;
 
-  function generate_embeddings (
-    p_input in json_array_t
+  -- Shared dispatch for the generate_embeddings overloads. The caller builds the
+  -- settings record (from globals or from a JSON config) and hands it in.
+  function dispatch_generate_embeddings (
+    p_input    in json_array_t
   , p_provider in provider_type
-  , p_model in model_type
+  , p_model    in model_type
+  , p_settings in out nocopy uc_ai_settings.t_settings
   ) return json_array_t
   as
-    l_result   json_array_t;
-    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals;
+    l_result json_array_t;
   begin
     case p_provider
       when c_provider_openai then
         l_result := uc_ai_openai.generate_embeddings(
           p_input => p_input
         , p_model => p_model
-        , p_settings => l_settings
+        , p_settings => p_settings
         );
       when c_provider_google then
         l_result := uc_ai_google.generate_embeddings(
           p_input => p_input
         , p_model => p_model
-        , p_settings => l_settings
+        , p_settings => p_settings
         );
       when c_provider_oci then
         l_result := uc_ai_oci.generate_embeddings(
           p_input => p_input
         , p_model => p_model
-        , p_settings => l_settings
+        , p_settings => p_settings
         );
       when c_provider_ollama then
         l_result := uc_ai_ollama.generate_embeddings(
           p_input => p_input
         , p_model => p_model
-        , p_settings => l_settings
+        , p_settings => p_settings
         );
       when c_provider_openrouter then
-        l_settings.base_url          := 'https://openrouter.ai/api/v1';
-        l_settings.provider_override := c_provider_openrouter;
+        p_settings.base_url          := 'https://openrouter.ai/api/v1';
+        p_settings.provider_override := c_provider_openrouter;
         l_result := uc_ai_openai.generate_embeddings(
           p_input => p_input
         , p_model => p_model
-        , p_settings => l_settings
+        , p_settings => p_settings
         );
       else
         uc_ai_error.raise_error(
@@ -266,6 +268,39 @@ create or replace package body uc_ai as
     end case;
 
     return l_result;
+  end dispatch_generate_embeddings;
+
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_provider in provider_type
+  , p_model in model_type
+  ) return json_array_t
+  as
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals;
+  begin
+    return dispatch_generate_embeddings(
+      p_input    => p_input
+    , p_provider => p_provider
+    , p_model    => p_model
+    , p_settings => l_settings
+    );
+  end generate_embeddings;
+
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_provider in provider_type
+  , p_model in model_type
+  , p_config in json_object_t
+  ) return json_array_t
+  as
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_config(p_config, p_provider);
+  begin
+    return dispatch_generate_embeddings(
+      p_input    => p_input
+    , p_provider => p_provider
+    , p_model    => p_model
+    , p_settings => l_settings
+    );
   end generate_embeddings;
 
   procedure reset_globals

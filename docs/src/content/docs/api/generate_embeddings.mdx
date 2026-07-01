@@ -28,6 +28,30 @@ Most notably `p_input` receives an array of strings as `generate_embeddings` whi
 
 The return is **an array of arrays**. As you can pass multiple input texts you can get back multiple vectors. The first vector represents the first input text and so on.
 
+### Config-driven variant (p_config)
+
+There is also an overload with an extra `p_config` parameter that derives its
+configuration from a JSON object instead of the package globals — the same
+config-driven mechanism as [`generate_text`](/products/uc-ai/docs/api/generate_text#config-driven-variants-p_config). The globals are neither read nor mutated, so other libraries can request embeddings self-contained and re-entrantly:
+
+```sql
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_provider in provider_type
+  , p_model in model_type
+  , p_config in json_object_t
+  ) return json_array_t;
+```
+
+```sql
+l_result := uc_ai.generate_embeddings(
+  p_input    => json_array_t('["hello world", "oracle database"]'),
+  p_provider => uc_ai.c_provider_openai,
+  p_model    => uc_ai_openai.c_model_text_embedding_3_small,
+  p_config   => json_object_t('{"openai": {"g_apex_web_credential": "MY_OPENAI_CRED"}}')
+);
+```
+
 ## Usage Example
 
 ```sql
