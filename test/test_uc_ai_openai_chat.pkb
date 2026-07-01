@@ -5,6 +5,10 @@ create or replace package body test_uc_ai_openai_chat as
   procedure setup_tests
   as
   begin
+    -- Reset all globals before each test so a prior test's leftover state
+    -- (e.g. g_enable_reasoning from the reasoning tests) cannot leak into the
+    -- next one and make the suite order-dependent.
+    uc_ai.reset_globals;
     uc_ai_openai.g_use_responses_api := false; -- to ensure the chat API is used disable Responses API
   end setup_tests;
 

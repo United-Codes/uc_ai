@@ -2,7 +2,7 @@ create or replace package test_uc_ai_openai_chat as
 
   --%suite(OpenAI AI tests)
 
-  --%beforeall
+  --%beforeeach
   procedure setup_tests;
 
   --%test(Basic recipe assistant - system prompt and user prompt)

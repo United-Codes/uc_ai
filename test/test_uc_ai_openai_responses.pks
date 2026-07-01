@@ -18,7 +18,7 @@ create or replace package test_uc_ai_openai_responses as
   --%suite(UC AI OpenAI Responses API Tests)
   --%suitepath(uc_ai)
 
-  --%beforeall
+  --%beforeeach
   procedure setup_tests;
 
   --%test(Simple text generation with string input)

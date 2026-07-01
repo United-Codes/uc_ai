@@ -7,10 +7,18 @@ create or replace package body test_uc_ai_openai_responses as
   procedure setup_tests
   as
   begin
+    -- Reset all globals before each test so leftover state from a previously
+    -- run suite (e.g. the chat suite sets g_use_responses_api := false and
+    -- leaks g_apex_web_credential) cannot make this suite order-dependent.
+    uc_ai.reset_globals;
+
     uc_ai.g_provider_override := null;
     uc_ai.g_enable_tools := false;
     uc_ai.g_enable_reasoning := false;
-    
+
+    -- This suite exercises the Responses API path explicitly.
+    uc_ai_openai.g_use_responses_api := true;
+
     -- Configure Responses API settings
     uc_ai_responses_api.g_store_responses := true;
     uc_ai_responses_api.g_include_encrypted_reasoning := false;
