@@ -108,6 +108,40 @@ as
   , p_response_json_schema  in json_object_t default null
   ) return json_object_t;
 
+  /*
+   * Config-driven variants of generate_text.
+   *
+   * These take a JSON config object (the same structure accepted by
+   * uc_ai_prompt_profiles_api.apply_model_config, e.g.
+   *   {"g_enable_tools": true, "g_tool_tags": ["math"],
+   *    "openai": {"g_use_responses_api": false}} )
+   * and derive this call's configuration from it directly, WITHOUT reading or
+   * mutating the package globals. This lets other libraries call generate_text
+   * with a self-contained config instead of setting globals first, and is safe to
+   * call concurrently / re-entrantly (each call owns its settings on the stack).
+   *
+   * Keys absent from p_config fall back to the framework defaults (the values
+   * uc_ai.reset_globals restores), not to the current global values.
+   */
+  function generate_text (
+    p_user_prompt           in clob
+  , p_system_prompt         in clob default null
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_config                in json_object_t
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
+  ) return json_object_t;
+
+  function generate_text (
+    p_messages              in json_array_t
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_config                in json_object_t
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
+  ) return json_object_t;
+
   function generate_embeddings (
     p_input in json_array_t
   , p_provider in provider_type

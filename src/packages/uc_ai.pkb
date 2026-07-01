@@ -3,18 +3,20 @@ create or replace package body uc_ai as
   c_scope_prefix           constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_default_max_tool_calls constant pls_integer := 10;
 
-  function generate_text (
+  -- Shared dispatch for all generate_text overloads. The caller builds the
+  -- settings record (from globals or from a JSON config) and hands it in; this
+  -- routes to the provider, threading the record so a nested call cannot corrupt
+  -- this call's in-flight configuration.
+  function dispatch_generate_text (
     p_messages              in json_array_t
   , p_provider              in provider_type
   , p_model                 in model_type
-  , p_max_tool_calls        in pls_integer default null
-  , p_response_json_schema  in json_object_t default null
+  , p_max_tool_calls        in pls_integer
+  , p_response_json_schema  in json_object_t
+  , p_settings              in out nocopy uc_ai_settings.t_settings
   ) return json_object_t
   as
-    l_result   json_object_t;
-    -- Snapshot the config globals once; thread the record to the provider so a
-    -- nested agent execution cannot corrupt this call's in-flight configuration.
-    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals;
+    l_result json_object_t;
   begin
     -- assign a fresh correlation id for this AI call; used by fire_event to gate emission
     g_request_id := rawtohex(sys_guid());
@@ -24,33 +26,33 @@ create or replace package body uc_ai as
         l_result := uc_ai_openai.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
-        , p_settings       => l_settings
+        , p_settings       => p_settings
         );
       when c_provider_anthropic then
         l_result := uc_ai_anthropic.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
-        , p_settings       => l_settings
+        , p_settings       => p_settings
         );
       when c_provider_google then
         l_result := uc_ai_google.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
-        , p_settings       => l_settings
+        , p_settings       => p_settings
         );
       when c_provider_ollama then
         l_result := uc_ai_ollama.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
-        , p_settings       => l_settings
+        , p_settings       => p_settings
         );
       when c_provider_oci then
         if p_response_json_schema is not null then
@@ -63,31 +65,31 @@ create or replace package body uc_ai as
           l_result := uc_ai_oci.generate_text(
             p_messages       => p_messages
           , p_model          => p_model
-          , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
-          , p_settings       => l_settings
+          , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
+          , p_settings       => p_settings
           );
         end if;
       when c_provider_xai then
         -- xAI delegates to the OpenAI implementation with its own endpoint/provider.
         -- Set them on the settings record instead of mutating globals.
-        l_settings.base_url          := 'https://api.x.ai/v1';
-        l_settings.provider_override := c_provider_xai;
+        p_settings.base_url          := 'https://api.x.ai/v1';
+        p_settings.provider_override := c_provider_xai;
         l_result := uc_ai_openai.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
-        , p_settings       => l_settings
+        , p_settings       => p_settings
         );
       when c_provider_openrouter then
-        l_settings.base_url          := 'https://openrouter.ai/api/v1';
-        l_settings.provider_override := c_provider_openrouter;
+        p_settings.base_url          := 'https://openrouter.ai/api/v1';
+        p_settings.provider_override := c_provider_openrouter;
         l_result := uc_ai_openai.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
-        , p_settings       => l_settings
+        , p_settings       => p_settings
         );
       else
         uc_ai_error.raise_error(
@@ -101,6 +103,51 @@ create or replace package body uc_ai as
     g_request_id := null;
 
     return l_result;
+  end dispatch_generate_text;
+
+  function generate_text (
+    p_messages              in json_array_t
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
+  ) return json_object_t
+  as
+    -- Snapshot the config globals once; thread the record to the provider so a
+    -- nested agent execution cannot corrupt this call's in-flight configuration.
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals;
+  begin
+    return dispatch_generate_text(
+      p_messages             => p_messages
+    , p_provider             => p_provider
+    , p_model                => p_model
+    , p_max_tool_calls       => p_max_tool_calls
+    , p_response_json_schema => p_response_json_schema
+    , p_settings             => l_settings
+    );
+  end generate_text;
+
+  function generate_text (
+    p_messages              in json_array_t
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_config                in json_object_t
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
+  ) return json_object_t
+  as
+    -- Derive this call's configuration straight from the JSON config, without
+    -- reading or mutating any global.
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_config(p_config, p_provider);
+  begin
+    return dispatch_generate_text(
+      p_messages             => p_messages
+    , p_provider             => p_provider
+    , p_model                => p_model
+    , p_max_tool_calls       => p_max_tool_calls
+    , p_response_json_schema => p_response_json_schema
+    , p_settings             => l_settings
+    );
   end generate_text;
 
   function generate_text (
@@ -130,6 +177,38 @@ create or replace package body uc_ai as
       p_messages              => l_messages
     , p_provider              => p_provider
     , p_model                 => p_model
+    , p_max_tool_calls        => p_max_tool_calls
+    , p_response_json_schema  => p_response_json_schema
+    );
+  end generate_text;
+
+  function generate_text (
+    p_user_prompt           in clob
+  , p_system_prompt         in clob default null
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_config                in json_object_t
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
+  ) return json_object_t
+  as
+    l_messages json_array_t;
+  begin
+    -- Build message array
+    l_messages := json_array_t();
+
+    if p_system_prompt is not null then
+      l_messages.append(uc_ai_message_api.create_system_message(p_system_prompt));
+    end if;
+
+    l_messages.append(uc_ai_message_api.create_simple_user_message(p_user_prompt));
+
+    -- Route through the config-driven message overload.
+    return generate_text(
+      p_messages              => l_messages
+    , p_provider              => p_provider
+    , p_model                 => p_model
+    , p_config                => p_config
     , p_max_tool_calls        => p_max_tool_calls
     , p_response_json_schema  => p_response_json_schema
     );

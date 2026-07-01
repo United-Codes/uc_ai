@@ -99,6 +99,28 @@ as
   function build_from_globals return t_settings;
 
   /*
+   * Build a settings record directly from a JSON config object WITHOUT reading
+   * or mutating any global variable. Accepts the same JSON structure as
+   * uc_ai_prompt_profiles_api.apply_model_config (root keys such as g_base_url,
+   * g_enable_tools, g_tool_tags, ... plus a provider-named nested object, e.g.
+   * {"openai": {"g_use_responses_api": false}}). Unknown keys raise
+   * uc_ai_error.c_err_invalid_config; an unknown provider raises
+   * c_err_unknown_provider.
+   *
+   * This lets external callers drive uc_ai.generate_text with a self-contained
+   * config (see the uc_ai.generate_text overloads that take p_config) instead of
+   * having to set the package globals first.
+   *
+   * Fields not present in p_config keep their framework default (the same values
+   * uc_ai.reset_globals restores). The `response_schema` key is ignored here
+   * (pass the schema via p_response_json_schema instead).
+   */
+  function build_from_config(
+    p_config   in json_object_t
+  , p_provider in varchar2
+  ) return t_settings;
+
+  /*
    * Fresh, zero-initialised run state for a single generate_text call.
    */
   function new_run_state return t_run_state;

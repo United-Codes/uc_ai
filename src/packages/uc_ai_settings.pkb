@@ -1,6 +1,77 @@
 create or replace package body uc_ai_settings
 as
 
+  c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
+
+  -- Framework defaults, mirroring the values uc_ai.reset_globals restores.
+  -- build_from_config starts from these and overlays whatever the config supplies,
+  -- so a config that omits a key behaves exactly like a freshly reset global.
+  function default_settings return t_settings
+  as
+    l_s t_settings;
+  begin
+    l_s.initialized                    := true;
+
+    -- common
+    l_s.base_url                       := null;
+    l_s.provider_override              := null;
+    l_s.apex_web_credential            := null;
+    l_s.enable_tools                   := false;
+    l_s.enable_reasoning               := false;
+    l_s.reasoning_level                := null;
+    l_s.tool_tags                      := apex_t_varchar2();
+    l_s.max_tool_calls                 := null;
+
+    -- openai
+    l_s.oa_use_responses_api           := true;
+    l_s.oa_reasoning_effort            := 'low';
+    l_s.oa_apex_web_credential         := null;
+
+    -- anthropic
+    l_s.an_max_tokens                  := 8192;
+    l_s.an_reasoning_budget_tokens     := null;
+    l_s.an_apex_web_credential         := null;
+
+    -- google
+    l_s.go_reasoning_budget            := null;
+    l_s.go_apex_web_credential         := null;
+    l_s.go_embedding_task_type         := 'SEMANTIC_SIMILARITY';
+    l_s.go_embedding_output_dimensions := 1536;
+
+    -- ollama
+    l_s.ol_apex_web_credential         := null;
+    l_s.ol_use_responses_api           := true;
+
+    -- oci
+    l_s.oc_compartment_id              := null;
+    l_s.oc_serving_type                := 'ON_DEMAND';
+    l_s.oc_region                      := 'us-ashburn-1';
+    l_s.oc_apex_web_credential         := null;
+    l_s.oc_use_responses_api           := true;
+
+    -- xai
+    l_s.xa_reasoning_effort            := 'low';
+    l_s.xa_apex_web_credential         := null;
+
+    -- openrouter
+    l_s.or_reasoning_effort            := 'low';
+    l_s.or_apex_web_credential         := null;
+
+    -- responses api
+    l_s.ra_base_url                    := null;
+    l_s.ra_apex_web_credential         := null;
+    l_s.ra_reasoning_effort            := null;
+    l_s.ra_reasoning_summary           := null;
+    l_s.ra_text_verbosity              := 'medium';
+    l_s.ra_store_responses             := false;
+    l_s.ra_include_encrypted_reasoning := false;
+    l_s.ra_extra_header_name           := null;
+    l_s.ra_extra_header_value          := null;
+    l_s.ra_skip_auth                   := false;
+
+    return l_s;
+  end default_settings;
+
   function build_from_globals return t_settings
   as
     l_s t_settings;
@@ -66,6 +137,298 @@ as
 
     return l_s;
   end build_from_globals;
+
+  function build_from_config(
+    p_config   in json_object_t
+  , p_provider in varchar2
+  ) return t_settings
+  as
+    l_scope            uc_ai_logger.scope := c_scope_prefix || 'build_from_config';
+    l_s                t_settings := default_settings;
+    l_key_arr          json_key_list;
+    l_key              varchar2(4000 char);
+    l_value            json_element_t;
+    l_provider_obj     json_object_t;
+    l_provider_key_arr json_key_list;
+  begin
+    if p_config is null then
+      return l_s;
+    end if;
+
+    -- Root-level keys (mirror uc_ai_prompt_profiles_api.apply_model_config, but
+    -- written to the record instead of the globals).
+    l_key_arr := p_config.get_keys;
+    <<root_keys_loop>>
+    for i in 1 .. l_key_arr.count loop
+      l_key := l_key_arr(i);
+      l_value := p_config.get(l_key);
+
+      case l_key
+        when 'g_base_url' then
+          if l_value.is_string then
+            l_s.base_url := p_config.get_string(l_key);
+          end if;
+        when 'g_enable_reasoning' then
+          if l_value.is_boolean then
+            l_s.enable_reasoning := p_config.get_boolean(l_key);
+          end if;
+        when 'g_reasoning_level' then
+          if l_value.is_string then
+            l_s.reasoning_level := p_config.get_string(l_key);
+          end if;
+        when 'g_enable_tools' then
+          if l_value.is_boolean then
+            l_s.enable_tools := p_config.get_boolean(l_key);
+          end if;
+        when 'g_max_tool_calls' then
+          if l_value.is_number then
+            l_s.max_tool_calls := p_config.get_number(l_key);
+          end if;
+        when 'g_apex_web_credential' then
+          if l_value.is_string then
+            l_s.apex_web_credential := p_config.get_string(l_key);
+          end if;
+        when 'g_tool_tags' then
+          declare
+            l_tags_array json_array_t;
+            l_tags       apex_t_varchar2 := apex_t_varchar2();
+          begin
+            if l_value.is_string then
+              l_tags.extend;
+              l_tags(l_tags.count) := p_config.get_string(l_key);
+            elsif l_value.is_array then
+              l_tags_array := treat(p_config.get(l_key) as json_array_t);
+              <<tags_array>>
+              for j in 0 .. l_tags_array.get_size - 1 loop
+                l_tags.extend;
+                l_tags(l_tags.count) := l_tags_array.get_string(j);
+              end loop tags_array;
+            end if;
+            l_s.tool_tags := l_tags;
+          end;
+        when 'response_schema' then
+          -- Not part of the settings record; pass the schema via
+          -- p_response_json_schema on uc_ai.generate_text instead.
+          null;
+        else
+          -- Allow provider-name keys with nested objects (processed below).
+          if l_key in (
+            uc_ai.c_provider_openai
+          , uc_ai.c_provider_anthropic
+          , uc_ai.c_provider_google
+          , uc_ai.c_provider_ollama
+          , uc_ai.c_provider_oci
+          , uc_ai.c_provider_xai
+          , uc_ai.c_provider_openrouter
+          ) and l_value.is_object then
+            null;
+          else
+            uc_ai_error.raise_error(
+              p_error_code => uc_ai_error.c_err_invalid_config
+            , p_scope      => l_scope
+            , p0           => 'model config key'
+            , p1           => l_key
+            , p_extra      => p_config.to_clob
+            );
+          end if;
+      end case;
+    end loop root_keys_loop;
+
+    -- Provider-specific nested settings for the active provider.
+    case p_provider
+      when uc_ai.c_provider_openai then
+        if p_config.has(uc_ai.c_provider_openai) and p_config.get(uc_ai.c_provider_openai).is_object then
+          l_provider_obj := treat(p_config.get(uc_ai.c_provider_openai) as json_object_t);
+          l_provider_key_arr := l_provider_obj.get_keys;
+          <<openai_keys_loop>>
+          for i in 1 .. l_provider_key_arr.count loop
+            l_key := l_provider_key_arr(i);
+            case l_key
+              when 'g_reasoning_effort' then
+                l_s.oa_reasoning_effort := l_provider_obj.get_string(l_key);
+              when 'g_apex_web_credential' then
+                l_s.oa_apex_web_credential := l_provider_obj.get_string(l_key);
+              when 'g_use_responses_api' then
+                l_s.oa_use_responses_api := l_provider_obj.get_boolean(l_key);
+              else
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'OpenAI provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
+            end case;
+          end loop openai_keys_loop;
+        end if;
+
+      when uc_ai.c_provider_anthropic then
+        if p_config.has(uc_ai.c_provider_anthropic) and p_config.get(uc_ai.c_provider_anthropic).is_object then
+          l_provider_obj := treat(p_config.get(uc_ai.c_provider_anthropic) as json_object_t);
+          l_provider_key_arr := l_provider_obj.get_keys;
+          <<anthropic_keys_loop>>
+          for i in 1 .. l_provider_key_arr.count loop
+            l_key := l_provider_key_arr(i);
+            case l_key
+              when 'g_max_tokens' then
+                l_s.an_max_tokens := l_provider_obj.get_number(l_key);
+              when 'g_reasoning_budget_tokens' then
+                l_s.an_reasoning_budget_tokens := l_provider_obj.get_number(l_key);
+              when 'g_apex_web_credential' then
+                l_s.an_apex_web_credential := l_provider_obj.get_string(l_key);
+              else
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'Anthropic provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
+            end case;
+          end loop anthropic_keys_loop;
+        end if;
+
+      when uc_ai.c_provider_google then
+        if p_config.has(uc_ai.c_provider_google) and p_config.get(uc_ai.c_provider_google).is_object then
+          l_provider_obj := treat(p_config.get(uc_ai.c_provider_google) as json_object_t);
+          l_provider_key_arr := l_provider_obj.get_keys;
+          <<google_keys_loop>>
+          for i in 1 .. l_provider_key_arr.count loop
+            l_key := l_provider_key_arr(i);
+            case l_key
+              when 'g_reasoning_budget' then
+                l_s.go_reasoning_budget := l_provider_obj.get_number(l_key);
+              when 'g_apex_web_credential' then
+                l_s.go_apex_web_credential := l_provider_obj.get_string(l_key);
+              when 'g_embedding_task_type' then
+                l_s.go_embedding_task_type := l_provider_obj.get_string(l_key);
+              when 'g_embedding_output_dimensions' then
+                l_s.go_embedding_output_dimensions := l_provider_obj.get_number(l_key);
+              else
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'Google provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
+            end case;
+          end loop google_keys_loop;
+        end if;
+
+      when uc_ai.c_provider_ollama then
+        if p_config.has(uc_ai.c_provider_ollama) and p_config.get(uc_ai.c_provider_ollama).is_object then
+          l_provider_obj := treat(p_config.get(uc_ai.c_provider_ollama) as json_object_t);
+          l_provider_key_arr := l_provider_obj.get_keys;
+          <<ollama_keys_loop>>
+          for i in 1 .. l_provider_key_arr.count loop
+            l_key := l_provider_key_arr(i);
+            case l_key
+              when 'g_apex_web_credential' then
+                l_s.ol_apex_web_credential := l_provider_obj.get_string(l_key);
+              when 'g_use_responses_api' then
+                l_s.ol_use_responses_api := l_provider_obj.get_boolean(l_key);
+              else
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'Ollama provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
+            end case;
+          end loop ollama_keys_loop;
+        end if;
+
+      when uc_ai.c_provider_xai then
+        if p_config.has(uc_ai.c_provider_xai) and p_config.get(uc_ai.c_provider_xai).is_object then
+          l_provider_obj := treat(p_config.get(uc_ai.c_provider_xai) as json_object_t);
+          l_provider_key_arr := l_provider_obj.get_keys;
+          <<xai_keys_loop>>
+          for i in 1 .. l_provider_key_arr.count loop
+            l_key := l_provider_key_arr(i);
+            case l_key
+              when 'g_reasoning_effort' then
+                l_s.xa_reasoning_effort := l_provider_obj.get_string(l_key);
+              when 'g_apex_web_credential' then
+                l_s.xa_apex_web_credential := l_provider_obj.get_string(l_key);
+              else
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'XAI provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
+            end case;
+          end loop xai_keys_loop;
+        end if;
+
+      when uc_ai.c_provider_openrouter then
+        if p_config.has(uc_ai.c_provider_openrouter) and p_config.get(uc_ai.c_provider_openrouter).is_object then
+          l_provider_obj := treat(p_config.get(uc_ai.c_provider_openrouter) as json_object_t);
+          l_provider_key_arr := l_provider_obj.get_keys;
+          <<openrouter_keys_loop>>
+          for i in 1 .. l_provider_key_arr.count loop
+            l_key := l_provider_key_arr(i);
+            case l_key
+              when 'g_reasoning_effort' then
+                l_s.or_reasoning_effort := l_provider_obj.get_string(l_key);
+              when 'g_apex_web_credential' then
+                l_s.or_apex_web_credential := l_provider_obj.get_string(l_key);
+              else
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'OpenRouter provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
+            end case;
+          end loop openrouter_keys_loop;
+        end if;
+
+      when uc_ai.c_provider_oci then
+        if p_config.has(uc_ai.c_provider_oci) and p_config.get(uc_ai.c_provider_oci).is_object then
+          l_provider_obj := treat(p_config.get(uc_ai.c_provider_oci) as json_object_t);
+          l_provider_key_arr := l_provider_obj.get_keys;
+          <<oci_keys_loop>>
+          for i in 1 .. l_provider_key_arr.count loop
+            l_key := l_provider_key_arr(i);
+            case l_key
+              when 'g_apex_web_credential' then
+                l_s.oc_apex_web_credential := l_provider_obj.get_string(l_key);
+              when 'g_compartment_id' then
+                l_s.oc_compartment_id := l_provider_obj.get_string(l_key);
+              when 'g_serving_type' then
+                l_s.oc_serving_type := l_provider_obj.get_string(l_key);
+              when 'g_region' then
+                l_s.oc_region := l_provider_obj.get_string(l_key);
+              when 'g_use_responses_api' then
+                l_s.oc_use_responses_api := l_provider_obj.get_boolean(l_key);
+              else
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'OCI provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
+            end case;
+          end loop oci_keys_loop;
+        end if;
+
+      else
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_unknown_provider
+        , p_scope      => l_scope
+        , p0           => p_provider
+        , p_extra      => p_config.to_clob
+        );
+    end case;
+
+    return l_s;
+  end build_from_config;
 
   function new_run_state return t_run_state
   as

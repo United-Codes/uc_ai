@@ -7,7 +7,9 @@ sidebar:
 
 ## Parameters
 
-The `uc_ai.generate_text()` function has two overloaded signatures:
+The `uc_ai.generate_text()` function has four overloaded signatures: two that read
+configuration from the package globals, and two config-driven variants that take a
+`p_config` JSON object instead (see [Config-driven variants](#config-driven-variants-p_config)).
 
 ### Function Signatures
 
@@ -31,6 +33,32 @@ FUNCTION generate_text (
   p_messages              IN JSON_ARRAY_T,
   p_provider              IN provider_type,
   p_model                 IN model_type,
+  p_max_tool_calls        IN PLS_INTEGER DEFAULT NULL,
+  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL
+) RETURN JSON_OBJECT_T;
+```
+
+#### Signatures 3 & 4: Config-driven
+
+The same two shapes, each with an extra `p_config` parameter placed right after
+`p_model`:
+
+```sql
+FUNCTION generate_text (
+  p_user_prompt           IN CLOB,
+  p_system_prompt         IN CLOB DEFAULT NULL,
+  p_provider              IN provider_type,
+  p_model                 IN model_type,
+  p_config                IN JSON_OBJECT_T,
+  p_max_tool_calls        IN PLS_INTEGER DEFAULT NULL,
+  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL
+) RETURN JSON_OBJECT_T;
+
+FUNCTION generate_text (
+  p_messages              IN JSON_ARRAY_T,
+  p_provider              IN provider_type,
+  p_model                 IN model_type,
+  p_config                IN JSON_OBJECT_T,
   p_max_tool_calls        IN PLS_INTEGER DEFAULT NULL,
   p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL
 ) RETURN JSON_OBJECT_T;
@@ -311,6 +339,61 @@ END IF;
 You can provide a custom JSON schema and force the AI to answer in this format. This is useful for ensuring consistent and predictable output structures, especially when using that output in automated systems or storing the results.
 
 [See Structured Output](/products/uc-ai/docs/guides/structured_output) for more information and usage examples.
+
+## Config-driven variants (p_config)
+
+By default `generate_text` reads its configuration (base URL, credential, reasoning,
+tool tags, provider-specific options, …) from the `uc_ai` and provider package
+globals — you set those globals first, then call `generate_text`.
+
+The `p_config` overloads let you instead pass all of that as a single JSON object,
+**without touching the globals**. This is aimed at other libraries / packages that
+want to call UC AI directly and self-contained:
+
+- The globals are neither read nor modified — the call derives its configuration
+  solely from `p_config`.
+- It is safe to call concurrently and re-entrantly: each call owns its configuration
+  for the duration of the call, so a nested call (e.g. an agent used as a tool)
+  cannot disturb it.
+- Keys you omit fall back to the framework defaults (the values
+  `uc_ai.reset_globals` restores) — **not** to the current global values.
+
+`p_config` accepts the exact same JSON structure as
+[`uc_ai_prompt_profiles_api.apply_model_config`](/products/uc-ai/docs/guides/prompt-profiles):
+root-level keys (`g_base_url`, `g_enable_tools`, `g_tool_tags`, `g_reasoning_level`,
+`g_max_tool_calls`, `g_apex_web_credential`, …) plus an optional provider-named nested
+object for provider-specific settings. Unknown keys raise `ORA-20503`; an unknown
+provider raises `ORA-20306`.
+
+```sql
+DECLARE
+  l_config JSON_OBJECT_T;
+  l_result JSON_OBJECT_T;
+BEGIN
+  l_config := JSON_OBJECT_T('{
+    "g_enable_tools": true,
+    "g_tool_tags": ["timetracking"],
+    "g_apex_web_credential": "MY_OPENAI_CRED",
+    "openai": {
+      "g_use_responses_api": false,
+      "g_reasoning_effort": "low"
+    }
+  }');
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Clock me in to the marketing project.',
+    p_provider    => uc_ai.c_provider_openai,
+    p_model       => uc_ai_openai.c_model_gpt_4o_mini,
+    p_config      => l_config
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+To supply structured output with a config-driven call, keep passing the schema via
+`p_response_json_schema` (a `response_schema` key inside `p_config` is ignored here).
 
 ## Return Object Overview
 

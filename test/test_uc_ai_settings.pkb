@@ -124,5 +124,108 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_r.previous_response_id).to_be_null();
   end new_run_state_zeroed;
 
+  procedure config_maps_keys
+  as
+    l_config json_object_t;
+    l_s      uc_ai_settings.t_settings;
+  begin
+    l_config := json_object_t('{
+      "g_base_url": "https://cfg.example/v1",
+      "g_enable_reasoning": true,
+      "g_reasoning_level": "high",
+      "g_enable_tools": true,
+      "g_max_tool_calls": 7,
+      "g_apex_web_credential": "CFG_CRED",
+      "g_tool_tags": ["alpha", "beta"],
+      "openai": {
+        "g_use_responses_api": false,
+        "g_reasoning_effort": "high",
+        "g_apex_web_credential": "OA_CFG"
+      }
+    }');
+
+    l_s := uc_ai_settings.build_from_config(l_config, uc_ai.c_provider_openai);
+
+    ut.expect(l_s.initialized).to_be_true();
+    ut.expect(l_s.base_url).to_equal('https://cfg.example/v1');
+    ut.expect(l_s.enable_reasoning).to_be_true();
+    ut.expect(l_s.reasoning_level).to_equal('high');
+    ut.expect(l_s.enable_tools).to_be_true();
+    ut.expect(l_s.max_tool_calls).to_equal(7);
+    ut.expect(l_s.apex_web_credential).to_equal('CFG_CRED');
+    ut.expect(l_s.tool_tags.count).to_equal(2);
+    -- provider-nested
+    ut.expect(l_s.oa_use_responses_api).to_be_false();
+    ut.expect(l_s.oa_reasoning_effort).to_equal('high');
+    ut.expect(l_s.oa_apex_web_credential).to_equal('OA_CFG');
+  end config_maps_keys;
+
+  procedure config_uses_defaults
+  as
+    l_s uc_ai_settings.t_settings;
+  begin
+    -- Empty config: every field must equal the framework default (reset_globals).
+    l_s := uc_ai_settings.build_from_config(json_object_t('{}'), uc_ai.c_provider_openai);
+
+    ut.expect(l_s.initialized).to_be_true();
+    ut.expect(l_s.base_url).to_be_null();
+    ut.expect(l_s.enable_tools).to_be_false();
+    ut.expect(l_s.enable_reasoning).to_be_false();
+    ut.expect(l_s.max_tool_calls).to_be_null();
+    ut.expect(l_s.tool_tags.count).to_equal(0);
+    ut.expect(l_s.oa_use_responses_api).to_be_true();
+    ut.expect(l_s.oa_reasoning_effort).to_equal('low');
+    ut.expect(l_s.an_max_tokens).to_equal(8192);
+    ut.expect(l_s.oc_serving_type).to_equal('ON_DEMAND');
+    ut.expect(l_s.ra_text_verbosity).to_equal('medium');
+  end config_uses_defaults;
+
+  procedure config_ignores_globals
+  as
+    l_s uc_ai_settings.t_settings;
+  begin
+    -- Set globals to sentinels that must NOT appear in a config-built record.
+    uc_ai.reset_globals;
+    uc_ai.g_base_url            := 'https://global.sentinel/v1';
+    uc_ai.g_enable_tools        := true;
+    uc_ai.g_apex_web_credential := 'GLOBAL_CRED';
+
+    l_s := uc_ai_settings.build_from_config(
+      json_object_t('{"g_enable_reasoning": true}')
+    , uc_ai.c_provider_openai
+    );
+
+    -- Config did not set these -> they stay at defaults, NOT the global values.
+    ut.expect(l_s.base_url).to_be_null();
+    ut.expect(l_s.enable_tools).to_be_false();
+    ut.expect(l_s.apex_web_credential).to_be_null();
+    -- The one key the config did set is honoured.
+    ut.expect(l_s.enable_reasoning).to_be_true();
+
+    -- And the globals themselves must be untouched by build_from_config.
+    ut.expect(uc_ai.g_base_url).to_equal('https://global.sentinel/v1');
+    ut.expect(case when uc_ai.g_enable_tools then 1 else 0 end).to_equal(1);
+    ut.expect(uc_ai.g_apex_web_credential).to_equal('GLOBAL_CRED');
+
+    uc_ai.reset_globals;
+  end config_ignores_globals;
+
+  procedure config_rejects_unknown_key
+  as
+    l_s uc_ai_settings.t_settings;
+  begin
+    l_s := uc_ai_settings.build_from_config(
+      json_object_t('{"g_not_a_real_key": 1}')
+    , uc_ai.c_provider_openai
+    );
+  end config_rejects_unknown_key;
+
+  procedure config_rejects_unknown_provider
+  as
+    l_s uc_ai_settings.t_settings;
+  begin
+    l_s := uc_ai_settings.build_from_config(json_object_t('{}'), 'not_a_provider');
+  end config_rejects_unknown_provider;
+
 end test_uc_ai_settings;
 /
