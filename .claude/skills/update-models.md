@@ -91,6 +91,10 @@ select provider, model_type, count(*) as cnt
 bash scripts/generate_install_script.sh
 ```
 
+### 7. Check the consumer skills
+
+The top-level `skills/` directory (Claude Code skills for library consumers) uses model constants in examples and tables. If a constant used there was deprecated or a notable new default model exists, update the affected skills — `grep -rn "c_model_" skills/` shows what they reference. The provider table in `skills/uc-ai-quickstart/SKILL.md` lists example constants per provider.
+
 ## Important notes
 
 - `uc_ai_utils.pkb` is compiled as an API package body (after all provider specs), so it can reference any provider's constants.

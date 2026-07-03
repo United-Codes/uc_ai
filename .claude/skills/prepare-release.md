@@ -135,6 +135,15 @@ Then the **release history** entry at the top of [docs/src/content/docs/other/re
 - **Link to the relevant doc page** from each bullet that introduces something new — the section headers themselves can be links (`[Tools API](/products/uc-ai/docs/guides/tools/#...)`). This is how v26.1 and v26.2 are structured.
 - Use the `/products/uc-ai/docs/...` URL prefix (that's the deployed path).
 
+### 7b. Sync the consumer skills in `skills/`
+
+The top-level `skills/` directory ships Claude Code skills for library consumers (`uc-ai-quickstart`, `uc-ai-tools`, …). They quote real signatures and constants, so drift breaks them:
+
+- For every guide page touched in step 7, update the corresponding skill (mapping is in `skills/README.md`).
+- New/changed public signatures, globals, or error codes in `uc_ai*.pks` → update the skill that quotes them (`grep -rn "<identifier>" skills/`).
+- New model constants → refresh example model constants in `skills/` (the update-models skill's checklist also covers this).
+- New provider → add it to the provider table in `skills/uc-ai-quickstart/SKILL.md` and to frontmatter descriptions that enumerate providers.
+
 ### 8. Build the docs site
 
 ```bash
