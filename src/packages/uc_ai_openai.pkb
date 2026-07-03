@@ -324,6 +324,8 @@ create or replace package body uc_ai_openai as
          l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.xa_apex_web_credential);
       when uc_ai.c_provider_openrouter then
          l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.or_apex_web_credential);
+      when uc_ai.c_provider_mistral then
+         l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.ms_apex_web_credential);
       else
          l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.oa_apex_web_credential);
     end case;
@@ -453,8 +455,13 @@ create or replace package body uc_ai_openai as
               uc_ai_logger.log('Tool call', l_scope, 'Tool ID: ' || l_tool_id || ', Call ID: ' || l_call_id || ', Arguments: ' || l_arguments);
               l_args_json := json_object_t.parse(coalesce(l_arguments, '{}'));
 
-              -- xAI wraps arguments in "parameters" object
-              if p_settings.provider_override = uc_ai.c_provider_xai then
+              -- xAI wraps arguments in "parameters" object; Mistral models do the
+              -- same but not reliably, so only unwrap when the wrapper is present
+              if p_settings.provider_override = uc_ai.c_provider_xai
+                or (    p_settings.provider_override = uc_ai.c_provider_mistral
+                    and l_args_json.has('parameters')
+                    and l_args_json.get('parameters').is_object)
+              then
                 l_args_json := treat( l_args_json.get('parameters') as json_object_t );
               end if;
    
@@ -639,6 +646,10 @@ create or replace package body uc_ai_openai as
             l_input_obj.put('reasoning', l_reasoning_obj);
             uc_ai_logger.log('Setting reasoning level for OpenRouter provider: ' || l_reasoning_obj.to_clob, l_scope);
           end;
+        when uc_ai.c_provider_mistral then
+          -- Mistral has no reasoning effort parameter; the magistral models reason
+          -- by default and unknown body parameters are rejected by the API.
+          uc_ai_logger.log('Ignoring reasoning settings for Mistral provider; magistral models reason by default', l_scope);
         else
           l_input_obj.put('reasoning_effort', coalesce(l_settings.oa_reasoning_effort, l_settings.reasoning_level));
       end case;
@@ -698,7 +709,10 @@ create or replace package body uc_ai_openai as
       l_settings := uc_ai_settings.build_from_globals;
     end if;
 
-    if l_settings.oa_use_responses_api then
+    -- Mistral offers no Responses API, so it always uses the Chat Completions API
+    if l_settings.oa_use_responses_api
+      and coalesce(l_settings.provider_override, uc_ai.c_provider_openai) != uc_ai.c_provider_mistral
+    then
       -- Build a settings copy for the Responses API delegate. No package globals
       -- are mutated, so a nested call cannot corrupt this caller.
       l_resp := l_settings;
@@ -784,6 +798,8 @@ create or replace package body uc_ai_openai as
     case l_settings.provider_override
       when uc_ai.c_provider_openrouter then
          l_web_credential := coalesce(l_settings.apex_web_credential, l_settings.or_apex_web_credential);
+      when uc_ai.c_provider_mistral then
+         l_web_credential := coalesce(l_settings.apex_web_credential, l_settings.ms_apex_web_credential);
       else
          l_web_credential := coalesce(l_settings.apex_web_credential, l_settings.oa_apex_web_credential);
     end case;

@@ -40,6 +40,7 @@ PROMPT - Installing API package specifications...
 PROMPT - Installing AI provider package specifications...
 @@src/packages/uc_ai_anthropic.pks
 @@src/packages/uc_ai_google.pks
+@@src/packages/uc_ai_mistral.pks
 @@src/packages/uc_ai_oci.pks
 @@src/packages/uc_ai_ollama.pks
 @@src/packages/uc_ai_openai.pks

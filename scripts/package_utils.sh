@@ -29,6 +29,7 @@ declare -a API_PACKAGES=(
 declare -a PROVIDER_PACKAGES=(
     "uc_ai_anthropic"
     "uc_ai_google"
+    "uc_ai_mistral"
     "uc_ai_oci"
     "uc_ai_ollama"
     "uc_ai_openai"
@@ -89,6 +90,9 @@ get_package_description() {
             ;;
         "uc_ai_google")
             echo "Google Gemini AI Provider Package"
+            ;;
+        "uc_ai_mistral")
+            echo "Mistral AI Provider Package"
             ;;
         "uc_ai_oci")
             echo "OCI AI Provider Package"

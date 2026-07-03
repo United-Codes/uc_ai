@@ -73,6 +73,8 @@ as
     -- openrouter
   , or_reasoning_effort            varchar2(32 char)
   , or_apex_web_credential         varchar2(255 char)
+    -- mistral
+  , ms_apex_web_credential         varchar2(255 char)
     -- responses api (populated by openai/ollama/oci before delegating)
   , ra_base_url                    varchar2(4000 char)
   , ra_apex_web_credential         varchar2(255 char)

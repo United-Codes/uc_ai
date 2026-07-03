@@ -46,6 +46,8 @@ create or replace package body test_uc_ai_settings as
     uc_ai_openrouter.g_reasoning_effort := 'high';
     uc_ai_openrouter.g_apex_web_credential := 'OR_CRED';
 
+    uc_ai_mistral.g_apex_web_credential := 'MS_CRED';
+
     uc_ai_responses_api.g_base_url := 'https://resp.example/v1';
     uc_ai_responses_api.g_reasoning_effort := 'high';
     uc_ai_responses_api.g_reasoning_summary := 'detailed';
@@ -96,6 +98,8 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.xa_apex_web_credential).to_equal('XA_CRED');
     ut.expect(l_s.or_reasoning_effort).to_equal('high');
     ut.expect(l_s.or_apex_web_credential).to_equal('OR_CRED');
+    -- mistral
+    ut.expect(l_s.ms_apex_web_credential).to_equal('MS_CRED');
     -- responses api
     ut.expect(l_s.ra_base_url).to_equal('https://resp.example/v1');
     ut.expect(l_s.ra_reasoning_effort).to_equal('high');

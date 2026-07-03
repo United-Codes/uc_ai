@@ -58,6 +58,9 @@ as
     l_s.or_reasoning_effort            := 'low';
     l_s.or_apex_web_credential         := null;
 
+    -- mistral
+    l_s.ms_apex_web_credential         := null;
+
     -- responses api
     l_s.ra_base_url                    := null;
     l_s.ra_apex_web_credential         := null;
@@ -122,6 +125,9 @@ as
     -- openrouter
     l_s.or_reasoning_effort            := uc_ai_openrouter.g_reasoning_effort;
     l_s.or_apex_web_credential         := uc_ai_openrouter.g_apex_web_credential;
+
+    -- mistral
+    l_s.ms_apex_web_credential         := uc_ai_mistral.g_apex_web_credential;
 
     -- responses api
     l_s.ra_base_url                    := uc_ai_responses_api.g_base_url;
@@ -232,6 +238,7 @@ as
           , uc_ai.c_provider_oci
           , uc_ai.c_provider_xai
           , uc_ai.c_provider_openrouter
+          , uc_ai.c_provider_mistral
           ) and l_value.is_object then
             null;
           else
@@ -398,6 +405,28 @@ as
                 );
             end case;
           end loop openrouter_keys_loop;
+        end if;
+
+      when uc_ai.c_provider_mistral then
+        if p_config.has(uc_ai.c_provider_mistral) and p_config.get(uc_ai.c_provider_mistral).is_object then
+          l_provider_obj := treat(p_config.get(uc_ai.c_provider_mistral) as json_object_t);
+          l_provider_key_arr := l_provider_obj.get_keys;
+          <<mistral_keys_loop>>
+          for i in 1 .. l_provider_key_arr.count loop
+            l_key := l_provider_key_arr(i);
+            case l_key
+              when 'g_apex_web_credential' then
+                l_s.ms_apex_web_credential := l_provider_obj.get_string(l_key);
+              else
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'Mistral provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
+            end case;
+          end loop mistral_keys_loop;
         end if;
 
       when uc_ai.c_provider_oci then

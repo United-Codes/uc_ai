@@ -23,7 +23,8 @@ as
   c_provider_oci        constant provider_type := 'oci';
   c_provider_xai        constant provider_type := 'xai';
   c_provider_openrouter constant provider_type := 'openrouter';
-  
+  c_provider_mistral    constant provider_type := 'mistral';
+
   -- not a real provider, but usable for any provider that supports Responses API
   c_provider_responses_api constant provider_type := 'responses_api';
 

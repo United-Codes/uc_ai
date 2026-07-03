@@ -63,6 +63,9 @@ create or replace package body test_uc_ai_reset_globals as
     -- OpenRouter
     uc_ai_openrouter.g_reasoning_effort    := 'high';
     uc_ai_openrouter.g_apex_web_credential := 'DIRTY';
+
+    -- Mistral
+    uc_ai_mistral.g_apex_web_credential := 'DIRTY';
   end dirty_all_globals;
 
   procedure resets_uc_ai_core
@@ -140,6 +143,9 @@ create or replace package body test_uc_ai_reset_globals as
     -- OpenRouter
     ut.expect(uc_ai_openrouter.g_reasoning_effort).to_equal('low');
     ut.expect(uc_ai_openrouter.g_apex_web_credential).to_be_null();
+
+    -- Mistral
+    ut.expect(uc_ai_mistral.g_apex_web_credential).to_be_null();
   end resets_providers;
 
 end test_uc_ai_reset_globals;

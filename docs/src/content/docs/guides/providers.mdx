@@ -14,6 +14,7 @@ Currently the framework supports the following AI providers:
 - **Google**: Gemini
 - **OCI**: Oracle Cloud Infrastructure
 - **xAI**: Grok
+- **Mistral**: Mistral Large/Medium/Small, Magistral, Codestral
 - **Ollama**: Open source models (Llama, Mistral, Qwen, etc.)
 - **OpenRouter**: Unified API for 300+ models from multiple providers
 
@@ -67,6 +68,7 @@ Each provider has its own package with a consistent interface. For example:
 - **Google**: `uc_ai_google`
 - **xAI**: `uc_ai_xai`
 - **Ollama**: `uc_ai_ollama`
+- **Mistral**: Uses `uc_ai_openai` (OpenAI-compatible API)
 - **OpenRouter**: Uses `uc_ai_openai` (OpenAI-compatible API)
 
 That way the API differences between providers are abstracted away, allowing you to switch providers easily.

@@ -91,6 +91,16 @@ create or replace package body uc_ai as
         , p_schema         => p_response_json_schema
         , p_settings       => p_settings
         );
+      when c_provider_mistral then
+        p_settings.base_url          := 'https://api.mistral.ai/v1';
+        p_settings.provider_override := c_provider_mistral;
+        l_result := uc_ai_openai.generate_text(
+          p_messages       => p_messages
+        , p_model          => p_model
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
+        , p_schema         => p_response_json_schema
+        , p_settings       => p_settings
+        );
       else
         uc_ai_error.raise_error(
           p_error_code => uc_ai_error.c_err_unknown_provider
@@ -258,6 +268,14 @@ create or replace package body uc_ai as
         , p_model => p_model
         , p_settings => p_settings
         );
+      when c_provider_mistral then
+        p_settings.base_url          := 'https://api.mistral.ai/v1';
+        p_settings.provider_override := c_provider_mistral;
+        l_result := uc_ai_openai.generate_embeddings(
+          p_input => p_input
+        , p_model => p_model
+        , p_settings => p_settings
+        );
       else
         uc_ai_error.raise_error(
           p_error_code => uc_ai_error.c_err_unknown_provider
@@ -366,6 +384,9 @@ create or replace package body uc_ai as
     -- Reset OpenRouter global variables
     uc_ai_openrouter.g_reasoning_effort := 'low';
     uc_ai_openrouter.g_apex_web_credential := null;
+
+    -- Reset Mistral global variables
+    uc_ai_mistral.g_apex_web_credential := null;
   end reset_globals;
 
   procedure set_event_callback(p_proc_name in varchar2)
