@@ -28,6 +28,11 @@ as
   -- Read-only per-call configuration snapshot.
   -- `initialized` distinguishes a supplied record from an uninitialised default
   -- (records cannot be null); build_from_globals sets it to true.
+  --
+  -- Adding a setting means touching four places: the g_* global (uc_ai.pks or the
+  -- provider .pks), the field below (keep the type in sync with the global's),
+  -- build_from_globals and build_from_config in uc_ai_settings.pkb, and the
+  -- consumer that reads it from the record.
   type t_settings is record (
     initialized                    boolean
     -- common (from uc_ai.g_*)
@@ -89,7 +94,6 @@ as
   , output_tokens        number
   , reasoning_tokens     number
   , total_tokens         number
-  , previous_response_id varchar2(4000 char)
   );
 
   /*

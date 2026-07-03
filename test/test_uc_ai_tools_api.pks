@@ -35,5 +35,8 @@ create or replace package test_uc_ai_tools_api as
   --%test(Merge tool replaces tags on update)
   procedure test_merge_tool_replaces_tags;
 
+  --%test(get_tools_array prefers threaded p_enable_tools over the global)
+  procedure test_enable_tools_param_wins;
+
 end test_uc_ai_tools_api;
 /

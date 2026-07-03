@@ -121,7 +121,6 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_r.reasoning_tokens).to_equal(0);
     ut.expect(l_r.total_tokens).to_equal(0);
     ut.expect(l_r.final_message).to_be_null();
-    ut.expect(l_r.previous_response_id).to_be_null();
   end new_run_state_zeroed;
 
   procedure config_maps_keys

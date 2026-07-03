@@ -434,13 +434,12 @@ as
   as
     l_r t_run_state;
   begin
-    l_r.tool_calls           := 0;
-    l_r.final_message        := null;
-    l_r.input_tokens         := 0;
-    l_r.output_tokens        := 0;
-    l_r.reasoning_tokens     := 0;
-    l_r.total_tokens         := 0;
-    l_r.previous_response_id := null;
+    l_r.tool_calls       := 0;
+    l_r.final_message    := null;
+    l_r.input_tokens     := 0;
+    l_r.output_tokens    := 0;
+    l_r.reasoning_tokens := 0;
+    l_r.total_tokens     := 0;
     return l_r;
   end new_run_state;
 

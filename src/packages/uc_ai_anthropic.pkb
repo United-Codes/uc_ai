@@ -643,7 +643,7 @@ create or replace package body uc_ai_anthropic as
     l_input_obj.put('model', p_model);
 
     -- Get all available tools formatted for Anthropic
-    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_anthropic, p_tool_tags => l_settings.tool_tags);
+    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_anthropic, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools);
 
     if l_tools.get_size > 0 then
       l_input_obj.put('tools', l_tools);

@@ -695,5 +695,42 @@ create or replace package body test_uc_ai_tools_api as
 
   end test_merge_tool_replaces_tags;
 
+  /*
+   * The per-call settings snapshot threads enable_tools explicitly; the global
+   * is only a fallback for direct callers. A stale/mutated global must not
+   * override the threaded value (re-entrancy: a nested agent flipping the
+   * global must not affect its caller's in-flight tool fetch).
+   */
+  procedure test_enable_tools_param_wins as
+    l_tool_id uc_ai_tools.id%type;
+    l_tools_array json_array_t;
+  begin
+    l_tool_id := uc_ai_tools_api.create_tool_from_schema(
+      p_tool_code => gc_test_prefix || 'ENABLE_PARAM',
+      p_description => 'Test enable_tools threading',
+      p_function_call => 'return ''Test result'';',
+      p_json_schema => json_object_t.parse('{"type": "object", "properties": {"message": {"type": "string", "description": "Test message"}}, "required": ["message"]}'),
+      p_created_by => gc_test_user
+    );
+
+    -- global disabled, threaded value enabled -> tools are returned
+    uc_ai.g_enable_tools := false;
+    l_tools_array := uc_ai_tools_api.get_tools_array(
+      p_provider     => uc_ai.c_provider_openai
+    , p_enable_tools => true
+    );
+    ut.expect(l_tools_array.get_size).to_be_greater_than(0);
+
+    -- global enabled, threaded value disabled -> no tools
+    uc_ai.g_enable_tools := true;
+    l_tools_array := uc_ai_tools_api.get_tools_array(
+      p_provider     => uc_ai.c_provider_openai
+    , p_enable_tools => false
+    );
+    ut.expect(l_tools_array.get_size).to_equal(0);
+
+    uc_ai.g_enable_tools := false;
+  end test_enable_tools_param_wins;
+
 end test_uc_ai_tools_api;
 /

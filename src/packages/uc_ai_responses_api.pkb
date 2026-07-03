@@ -714,7 +714,7 @@ create or replace package body uc_ai_responses_api as
 
     -- Get all available tools formatted for Responses API (if tools are enabled)
     if l_settings.enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_responses_api, p_tool_tags => l_settings.tool_tags);
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_responses_api, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools);
       l_input_obj.put('tools', l_tools);
     end if;
 

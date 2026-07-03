@@ -1020,6 +1020,7 @@ create or replace package body uc_ai_oci as
       uc_ai.c_provider_oci
     , case when l_mode = gc_mode_cohere then uc_ai_tools_api.gc_cohere else 'generic' end
     , p_tool_tags => l_settings.tool_tags
+    , p_enable_tools => l_settings.enable_tools
     );
 
     if l_tools.get_size > 0 then
