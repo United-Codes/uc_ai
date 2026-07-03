@@ -5,6 +5,9 @@ create or replace package body test_uc_ai_agent_workflow as
 
   gc_seq_workflow_code  constant varchar2(50 char) := 'TEST_SEQ_WORKFLOW';
   gc_loop_workflow_code constant varchar2(50 char) := 'TEST_LOOP_WORKFLOW';
+  gc_cond_workflow_code constant varchar2(50 char) := 'TEST_COND_WORKFLOW';
+  gc_cond_geo_agent_code constant varchar2(50 char) := 'TEST_WF_COND_GEO';
+  gc_cond_sum_agent_code constant varchar2(50 char) := 'TEST_WF_COND_SUM';
   gc_step1_agent_code   constant varchar2(50 char) := 'TEST_WF_STEP1';
   gc_step2_agent_code   constant varchar2(50 char) := 'TEST_WF_STEP2';
   gc_haiku_creator_agent_code constant varchar2(50 char) := 'TEST_WF_HAIKU_CREATOR';
@@ -28,7 +31,10 @@ create or replace package body test_uc_ai_agent_workflow as
        gc_haiku_creator_agent_code,
        gc_haiku_rater_agent_code,
        gc_haiku_improver_agent_code,
-       gc_haiku_translator_agent_code
+       gc_haiku_translator_agent_code,
+       gc_cond_geo_agent_code,
+       gc_cond_sum_agent_code,
+       gc_cond_workflow_code
      );
 
     -- Create step 1 profile agent (math)
@@ -78,6 +84,22 @@ create or replace package body test_uc_ai_agent_workflow as
       p_description         => 'Haiku translator agent',
       p_agent_type          => uc_ai_agents_api.c_type_profile,
       p_prompt_profile_code => 'TEST_AGENT_HAIKU_TRANSLATOR',
+      p_status              => uc_ai_agents_api.c_status_active
+    );
+
+    l_id := uc_ai_agents_api.create_agent(
+      p_code                => gc_cond_geo_agent_code,
+      p_description         => 'Conditional workflow step - geography',
+      p_agent_type          => uc_ai_agents_api.c_type_profile,
+      p_prompt_profile_code => 'TEST_AGENT_GEO',
+      p_status              => uc_ai_agents_api.c_status_active
+    );
+
+    l_id := uc_ai_agents_api.create_agent(
+      p_code                => gc_cond_sum_agent_code,
+      p_description         => 'Conditional workflow step - summarizer',
+      p_agent_type          => uc_ai_agents_api.c_type_profile,
+      p_prompt_profile_code => 'TEST_AGENT_SUM',
       p_status              => uc_ai_agents_api.c_status_active
     );
   end setup;
@@ -339,6 +361,157 @@ create or replace package body test_uc_ai_agent_workflow as
     sys.dbms_output.put_line('Loop workflow result: ' || l_final_msg);
     ut.expect(l_final_msg).to_be_not_null();
   end execute_loop_workflow_better;
+
+
+  /*
+   * Creates the conditional workflow agent used by the conditional tests.
+   * Exactly one of the two steps should run depending on input.category.
+   */
+  procedure create_conditional_workflow
+  as
+    l_workflow_id  number;
+    l_workflow_def clob;
+  begin
+    delete from uc_ai_agents where code = gc_cond_workflow_code;
+
+    l_workflow_def := q'#{
+      "workflow_type": "conditional",
+      "steps": [
+        {
+          "agent_code": "#' || gc_cond_geo_agent_code || q'#",
+          "condition": "'{$.input.category}' = 'geography'",
+          "input_mapping": {
+            "question": "{$.input.text}"
+          },
+          "output_key": "geo_result"
+        },
+        {
+          "agent_code": "#' || gc_cond_sum_agent_code || q'#",
+          "condition": "'{$.input.category}' = 'summary'",
+          "input_mapping": {
+            "text": "{$.input.text}"
+          },
+          "output_key": "sum_result"
+        }
+      ]
+    }#';
+
+    l_workflow_id := uc_ai_agents_api.create_agent(
+      p_code                => gc_cond_workflow_code,
+      p_description         => 'Test conditional workflow',
+      p_agent_type          => uc_ai_agents_api.c_type_workflow,
+      p_workflow_definition => l_workflow_def,
+      p_status              => uc_ai_agents_api.c_status_active
+    );
+
+    ut.expect(l_workflow_id).to_be_not_null();
+  end create_conditional_workflow;
+
+
+  procedure execute_conditional_workflow
+  as
+    l_session_id varchar2(100 char);
+    l_result     json_object_t;
+    l_steps      json_object_t;
+    l_final_msg  clob;
+  begin
+    create_conditional_workflow;
+
+    l_session_id := uc_ai_agents_api.generate_session_id;
+    l_result := uc_ai_agents_api.execute_agent(
+      p_agent_code       => gc_cond_workflow_code,
+      p_input_parameters => json_object_t('{"category": "geography", "text": "What is the capital of France?"}'),
+      p_session_id       => l_session_id
+    );
+
+    sys.dbms_output.put_line('Conditional workflow result JSON: ' || l_result.to_clob);
+
+    uc_ai_test_agent_utils.validate_agent_result(l_result, 'Conditional Workflow');
+
+    ut.expect(l_result.get_string('status')).to_equal(uc_ai_agents_api.c_exec_completed);
+
+    -- Only the geography step must have run
+    ut.expect(l_result.get_number('_workflow_iterations'), 'Exactly one step should have executed').to_equal(1);
+
+    l_steps := l_result.get_object('steps');
+    ut.expect(l_steps.has('geo_result'), 'Matching step (geo) should have run').to_be_true();
+    ut.expect(l_steps.has('sum_result'), 'Non-matching step (sum) should have been skipped').to_be_false();
+
+    l_final_msg := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Conditional workflow result: ' || l_final_msg);
+    ut.expect(l_final_msg).to_be_not_null();
+  end execute_conditional_workflow;
+
+
+  procedure conditional_workflow_all_skipped
+  as
+    l_session_id varchar2(100 char);
+    l_result     json_object_t;
+    l_steps      json_object_t;
+  begin
+    create_conditional_workflow;
+
+    l_session_id := uc_ai_agents_api.generate_session_id;
+    l_result := uc_ai_agents_api.execute_agent(
+      p_agent_code       => gc_cond_workflow_code,
+      p_input_parameters => json_object_t('{"category": "nomatch", "text": "hello"}'),
+      p_session_id       => l_session_id
+    );
+
+    sys.dbms_output.put_line('All-skipped workflow result JSON: ' || l_result.to_clob);
+
+    ut.expect(l_result.get_string('status')).to_equal(uc_ai_agents_api.c_exec_completed);
+    ut.expect(l_result.get_number('_workflow_iterations'), 'No step should have executed').to_equal(0);
+
+    l_steps := l_result.get_object('steps');
+    ut.expect(l_steps.has('geo_result'), 'Geo step should have been skipped').to_be_false();
+    ut.expect(l_steps.has('sum_result'), 'Sum step should have been skipped').to_be_false();
+
+    -- No step ran, so there is no final message
+    ut.expect(l_result.get_clob('final_message')).to_be_null();
+  end conditional_workflow_all_skipped;
+
+
+  procedure conditional_rejects_object_cond
+  as
+    l_workflow_id  number;
+    l_workflow_def clob;
+  begin
+    delete from uc_ai_agents where code = 'TEST_COND_WF_INVALID';
+
+    -- condition as object was never supported and used to be silently ignored;
+    -- create_agent must reject it
+    l_workflow_def := q'#{
+      "workflow_type": "conditional",
+      "steps": [
+        {
+          "agent_code": "#' || gc_cond_geo_agent_code || q'#",
+          "condition": {
+            "type": "plsql",
+            "expression": "'{$.input.category}' = 'geography'"
+          },
+          "input_mapping": {
+            "question": "{$.input.text}"
+          },
+          "output_key": "geo_result"
+        }
+      ]
+    }#';
+
+    begin
+      l_workflow_id := uc_ai_agents_api.create_agent(
+        p_code                => 'TEST_COND_WF_INVALID',
+        p_description         => 'Conditional workflow with invalid object condition',
+        p_agent_type          => uc_ai_agents_api.c_type_workflow,
+        p_workflow_definition => l_workflow_def,
+        p_status              => uc_ai_agents_api.c_status_active
+      );
+      ut.fail('create_agent should have rejected a non-string condition');
+    exception
+      when others then
+        ut.expect(sqlcode, 'Should raise invalid config error').to_equal(-20503);
+    end;
+  end conditional_rejects_object_cond;
 
 end test_uc_ai_agent_workflow;
 /

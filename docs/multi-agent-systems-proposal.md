@@ -184,10 +184,8 @@ For `agent_type = 'workflow'`, the `workflow_definition` CLOB contains:
       "output_mapping": {
         "workflow_state.analysis": "${step_output}"
       },
-      "condition": {
-        "type": "json_path|plsql",
-        "expression": "$.priority == 'high'"  // PL/SQL evaluated via APEX_PLUGIN_UTIL
-      },
+      "condition": "'{$.input.priority}' = 'high'",  // PL/SQL boolean expression, evaluated via APEX_PLUGIN_UTIL
+
       "timeout_seconds": 30,
       "on_error": "continue|stop|retry"
     }
@@ -198,10 +196,7 @@ For `agent_type = 'workflow'`, the `workflow_definition` CLOB contains:
   },
   "loop_config": {
     "max_iterations": 5,
-    "exit_condition": {
-      "type": "json_path|plsql",
-      "expression": "$.completed == true"
-    }
+    "exit_condition": "'{$.steps.check.completed}' = 'true'"
   }
 }
 ```

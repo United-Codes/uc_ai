@@ -72,6 +72,80 @@ END;
 3. `summarizer_agent` receives `{"text": "<math agent's response>"}` from the previous step's output
 4. The final result is the output of the last step
 
+## Conditional workflow
+
+Steps run in order like in a sequential workflow, but each step can have a `condition`. A step only executes when its condition evaluates to true; otherwise it is skipped.
+
+The condition is a string containing a PL/SQL boolean expression. `{$.path}` placeholders are resolved against the workflow state first, then the expression is evaluated. As placeholders resolve to plain text, wrap them in single quotes when comparing against string values.
+
+```sql
+DECLARE
+  l_workflow_id  NUMBER;
+  l_result       json_object_t;
+  l_workflow_def CLOB;
+BEGIN
+  l_workflow_def := q'[{
+    "workflow_type": "conditional",
+    "steps": [
+      {
+        "agent_code": "geography_agent",
+        "condition": "'{$.input.category}' = 'geography'",
+        "input_mapping": {
+          "question": "{$.input.text}"
+        },
+        "output_key": "geo_result"
+      },
+      {
+        "agent_code": "summarizer_agent",
+        "condition": "'{$.input.category}' = 'summary'",
+        "input_mapping": {
+          "text": "{$.input.text}"
+        },
+        "output_key": "sum_result"
+      }
+    ]
+  }]';
+
+  l_workflow_id := uc_ai_agents_api.create_agent(
+    p_code                => 'category_router',
+    p_description         => 'Routes a request to the matching specialist agent',
+    p_agent_type          => uc_ai_agents_api.c_type_workflow,
+    p_workflow_definition => l_workflow_def,
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'category_router',
+    p_input_parameters => json_object_t('{"category": "geography", "text": "What is the capital of France?"}'),
+    p_session_id       => uc_ai_agents_api.generate_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Result: ' || l_result.get_clob('final_message'));
+END;
+/
+```
+
+**How it works:**
+
+1. Each step's `condition` is evaluated against the current workflow state before the step runs
+2. With `category = 'geography'`, only `geography_agent` executes; the summarizer step is skipped
+3. Steps without a `condition` always run
+4. The final result is the output of the last step that actually executed
+
+Conditions can also reference the output of previous steps. A common pattern is a first (unconditional) classifier step with a [response schema](/products/uc-ai/docs/guides/structured_output/), followed by steps gated on its structured output:
+
+```json
+"condition": "'{$.steps.classification.category}' = 'complaint'"
+```
+
+Since the condition is a PL/SQL expression, any boolean expression works, e.g. numeric comparisons like `"{$.steps.classification.confidence} >= 0.8"` or function calls.
+
+<Aside type="caution">
+  The `condition` value must be a string. If every step's condition evaluates
+  to false, the workflow still completes successfully, but with no
+  `final_message` and `_workflow_iterations` set to `0`.
+</Aside>
+
 ## Loop workflow
 
 Agents run in a loop until an exit condition is met or the maximum number of iterations is reached. This is useful for iterative refinement where you want to keep improving output until it meets a quality bar.

@@ -1006,6 +1006,15 @@ create or replace package body uc_ai_agents_api as
           uc_ai_logger.log_error(l_result.error_reason, l_scope);
           return l_result;
         end if;
+
+        -- condition must be a string holding a PL/SQL boolean expression;
+        -- other types would be silently ignored at execution time
+        if l_step.has('condition') and not l_step.get('condition').is_string() then
+          l_result.is_valid := false;
+          l_result.error_reason := 'Step ' || i || ' condition must be a string containing a PL/SQL boolean expression';
+          uc_ai_logger.log_error(l_result.error_reason, l_scope);
+          return l_result;
+        end if;
       end;
     end loop step_loop;
     
