@@ -141,7 +141,7 @@ Then the **release history** entry at the top of [docs/src/content/docs/other/re
 cd docs && bun run build 2>&1 | grep -iE "invalid|error" | head -30
 ```
 
-There's a **known pre-existing** link validator failure in [docs/src/content/docs/other/faq.md](docs/src/content/docs/other/faq.md) for `#custom-model-strings` — Starlight's validator doesn't recognize the `{#id}` syntax in `.md` files. Ignore those 6 lines. Any **other** invalid link or anchor is a real problem — usually you've linked a heading whose slug differs from what you guessed.
+Any link validator failures need to be fixed before release.
 
 ### 9. Final regen pass
 

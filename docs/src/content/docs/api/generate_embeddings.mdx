@@ -32,7 +32,7 @@ The return is **an array of arrays**. As you can pass multiple input texts you c
 
 There is also an overload with an extra `p_config` parameter that derives its
 configuration from a JSON object instead of the package globals — the same
-config-driven mechanism as [`generate_text`](/products/uc-ai/docs/api/generate_text#config-driven-variants-p_config). The globals are neither read nor mutated, so other libraries can request embeddings self-contained and re-entrantly:
+config-driven mechanism as [`generate_text`](/products/uc-ai/docs/api/generate_text#config-driven-variants-p_config). The globals are neither read nor mutated, so other libraries can request embeddings self-contained and re-entrantly. [Custom HTTP headers](/products/uc-ai/docs/api/generate_text#custom-http-headers) (`uc_ai.g_extra_headers` or the `g_extra_headers` config key) apply to embedding requests too:
 
 ```sql
   function generate_embeddings (

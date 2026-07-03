@@ -39,6 +39,12 @@ as
   -- general global settings
   g_base_url varchar2(4000 char);
 
+  -- extra HTTP request headers sent with every provider REST request,
+  -- appended after the framework's base headers (Content-Type, auth, ...)
+  -- e.g. uc_ai.g_extra_headers('X-Tenant-Id') := 'acme';
+  type t_extra_headers is table of varchar2(4000 char) index by varchar2(255 char);
+  g_extra_headers t_extra_headers;
+
   -- reasoning level constants
   c_reasoning_level_low    constant varchar2(10 char) := 'low';
   c_reasoning_level_medium constant varchar2(10 char) := 'medium';
@@ -114,6 +120,7 @@ as
    * These take a JSON config object (the same structure accepted by
    * uc_ai_prompt_profiles_api.apply_model_config, e.g.
    *   {"g_enable_tools": true, "g_tool_tags": ["math"],
+   *    "g_extra_headers": {"X-Tenant-Id": "acme"},
    *    "openai": {"g_use_responses_api": false}} )
    * and derive this call's configuration from it directly, WITHOUT reading or
    * mutating the package globals. This lets other libraries call generate_text

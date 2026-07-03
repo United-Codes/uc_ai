@@ -330,6 +330,8 @@ create or replace package body uc_ai_anthropic as
       apex_web_service.g_request_headers(3).value := uc_ai_get_key(uc_ai.c_provider_anthropic);
     end if;
 
+    uc_ai_settings.apply_extra_headers(p_settings);
+
     l_resp := apex_web_service.make_rest_request(
       p_url => get_generate_text_url(p_settings),
       p_http_method => 'POST',

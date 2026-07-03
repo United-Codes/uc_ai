@@ -56,5 +56,14 @@ create or replace package test_uc_ai_prompt_profiles_api as
   --%test(Execute profile - tool usage)
   procedure execute_profile_with_tools;
 
+  --%test(Execute profile - unknown root config key raises invalid_config)
+  procedure execute_profile_bad_root_key;
+
+  --%test(Execute profile - unknown provider config key raises invalid_config)
+  procedure execute_profile_bad_provider_key;
+
+  --%test(Execute profile - unknown provider raises unknown_provider)
+  procedure execute_profile_bad_provider;
+
 end test_uc_ai_prompt_profiles_api;
 /

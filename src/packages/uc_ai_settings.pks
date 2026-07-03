@@ -44,6 +44,7 @@ as
   , reasoning_level                varchar2(10 char)
   , tool_tags                      apex_t_varchar2
   , max_tool_calls                 pls_integer
+  , extra_headers                  uc_ai.t_extra_headers
     -- openai
   , oa_use_responses_api           boolean
   , oa_reasoning_effort            varchar2(32 char)
@@ -80,8 +81,6 @@ as
   , ra_text_verbosity              varchar2(32 char)
   , ra_store_responses             boolean
   , ra_include_encrypted_reasoning boolean
-  , ra_extra_header_name           varchar2(255 char)
-  , ra_extra_header_value          varchar2(4000 char)
   , ra_skip_auth                   boolean
   );
 
@@ -123,6 +122,18 @@ as
     p_config   in json_object_t
   , p_provider in varchar2
   ) return t_settings;
+
+  /*
+   * Append the user-supplied extra HTTP headers (uc_ai.g_extra_headers /
+   * "g_extra_headers" config key) to apex_web_service.g_request_headers.
+   * Call AFTER the provider set its base headers (Content-Type, auth, ...)
+   * and immediately before apex_web_service.make_rest_request, so a prior
+   * apex_web_service.set_request_headers (p_reset defaults to true) cannot
+   * wipe them.
+   */
+  procedure apply_extra_headers(
+    p_settings in t_settings
+  );
 
   /*
    * Fresh, zero-initialised run state for a single generate_text call.

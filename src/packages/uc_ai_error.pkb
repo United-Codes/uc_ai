@@ -94,15 +94,41 @@ create or replace package body uc_ai_error as
   , p_scope    in varchar2
   ) return json_object_t
   is
-    l_status_code number;
+    -- Captured before parsing; JSON parsing makes no HTTP call, so the status
+    -- code from the immediately preceding make_rest_request stays valid.
+    l_status_code number := apex_web_service.g_status_code;
     l_preview     varchar2(500 char);
+    l_json        json_object_t;
   begin
-    return json_object_t.parse(p_response);
+    l_json := json_object_t.parse(p_response);
+
+    -- Guard on the HTTP status regardless of the error-body shape. Providers
+    -- disagree on how they report errors: OpenAI/Anthropic use {"error":{...}},
+    -- while OCI can return a valid-JSON {"code":"404","message":"..."} body with
+    -- no "error" key. Without this check such error responses parse cleanly and
+    -- slip past the per-provider has('error') checks, producing a silent empty
+    -- result (e.g. OCI Responses API 404 "Entity with key ... not found").
+    if nvl(l_status_code, 0) >= 400 then
+      l_preview := substr(p_response, 1, 500);
+      raise_error(
+        p_error_code => c_err_provider_response
+      , p_scope      => p_scope
+      , p0           => p_provider
+      , p1           => 'HTTP ' || l_status_code || ' from provider, response: ' || l_preview
+      , p_extra      => p_response
+      );
+    end if;
+
+    return l_json;
   exception
     when others then -- @dblinter ignore(g-5040): error is handled in raise_error
-      l_status_code := apex_web_service.g_status_code;
-      l_preview := substr(p_response, 1, 500);
+      -- Re-raise anything already raised by raise_error (custom -203xx codes)
+      -- unchanged; only wrap genuine JSON parse failures below.
+      if sqlcode <= -20000 and sqlcode >= -20999 then
+        raise;
+      end if;
 
+      l_preview := substr(p_response, 1, 500);
       raise_error(
         p_error_code => c_err_provider_response
       , p_scope      => p_scope

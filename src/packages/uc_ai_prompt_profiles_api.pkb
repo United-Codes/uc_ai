@@ -1,4 +1,4 @@
-create or replace package body uc_ai_prompt_profiles_api as 
+create or replace package body uc_ai_prompt_profiles_api as
 
   gc_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
 
@@ -636,8 +636,43 @@ create or replace package body uc_ai_prompt_profiles_api as
             end if;
             uc_ai.g_tool_tags := l_tags;
           end;
+        when 'g_extra_headers' then
+          if l_value.is_object then
+            declare
+              l_hdr_obj  json_object_t := treat(p_config.get(l_key) as json_object_t);
+              l_hdr_keys json_key_list := l_hdr_obj.get_keys;
+            begin
+              <<extra_headers_keys>>
+              for j in 1 .. l_hdr_keys.count loop
+                uc_ai.g_extra_headers(l_hdr_keys(j)) := l_hdr_obj.get_string(l_hdr_keys(j));
+              end loop extra_headers_keys;
+            end;
+          end if;
+        when 'response_schema' then
+          -- Consumed by execute_profile after apply_model_config returns.
+          null;
         else
-          null; -- Ignore unknown keys at root level (might be provider-specific)
+          -- Allow provider-name keys with nested objects (e.g., {"openai": {...}});
+          -- they are processed by the provider-specific case below.
+          if l_key in (
+            uc_ai.c_provider_openai
+          , uc_ai.c_provider_anthropic
+          , uc_ai.c_provider_google
+          , uc_ai.c_provider_ollama
+          , uc_ai.c_provider_oci
+          , uc_ai.c_provider_xai
+          , uc_ai.c_provider_openrouter
+          ) and l_value.is_object then
+            null;
+          else
+            uc_ai_error.raise_error(
+              p_error_code => uc_ai_error.c_err_invalid_config
+            , p_scope      => l_scope
+            , p0           => 'model config key'
+            , p1           => l_key
+            , p_extra      => p_config.to_clob
+            );
+          end if;
       end case;
     end loop root_keys_loop;
     
@@ -659,7 +694,13 @@ create or replace package body uc_ai_prompt_profiles_api as
               when 'g_use_responses_api' then
                 uc_ai_openai.g_use_responses_api := l_provider_obj.get_boolean(l_key);
               else
-                uc_ai_logger.log_warn('Unknown OpenAI provider config key: ' || l_key, l_scope);
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'OpenAI provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
             end case;
           end loop openai_keys_loop;
         end if;
@@ -680,7 +721,13 @@ create or replace package body uc_ai_prompt_profiles_api as
               when 'g_apex_web_credential' then
                 uc_ai_anthropic.g_apex_web_credential := l_provider_obj.get_string(l_key);
               else
-                uc_ai_logger.log_warn('Unknown Anthropic provider config key: ' || l_key, l_scope);
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'Anthropic provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
             end case;
           end loop anthropic_keys_loop;
         end if;
@@ -703,7 +750,13 @@ create or replace package body uc_ai_prompt_profiles_api as
               when 'g_embedding_output_dimensions' then
                 uc_ai_google.g_embedding_output_dimensions := l_provider_obj.get_number(l_key);
               else
-                uc_ai_logger.log_warn('Unknown Google provider config key: ' || l_key, l_scope);
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'Google provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
             end case;
           end loop google_keys_loop;
         end if;
@@ -722,7 +775,13 @@ create or replace package body uc_ai_prompt_profiles_api as
               when 'g_use_responses_api' then
                 uc_ai_ollama.g_use_responses_api := l_provider_obj.get_boolean(l_key);
               else
-                uc_ai_logger.log_warn('Unknown Ollama provider config key: ' || l_key, l_scope);
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'Ollama provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
             end case;
           end loop ollama_keys_loop;
         end if;
@@ -741,7 +800,13 @@ create or replace package body uc_ai_prompt_profiles_api as
               when 'g_apex_web_credential' then
                 uc_ai_xai.g_apex_web_credential := l_provider_obj.get_string(l_key);
               else
-                uc_ai_logger.log_warn('Unknown XAI provider config key: ' || l_key, l_scope);
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'XAI provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
             end case;
           end loop xai_keys_loop;
         end if;
@@ -760,7 +825,13 @@ create or replace package body uc_ai_prompt_profiles_api as
               when 'g_apex_web_credential' then
                 uc_ai_openrouter.g_apex_web_credential := l_provider_obj.get_string(l_key);
               else
-                uc_ai_logger.log_warn('Unknown OpenRouter provider config key: ' || l_key, l_scope);
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'OpenRouter provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
             end case;
           end loop openrouter_keys_loop;
         end if;
@@ -785,13 +856,24 @@ create or replace package body uc_ai_prompt_profiles_api as
               when 'g_use_responses_api' then
                 uc_ai_oci.g_use_responses_api := l_provider_obj.get_boolean(l_key);
               else
-                uc_ai_logger.log_warn('Unknown OCI provider config key: ' || l_key, l_scope);
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'OCI provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
             end case;
           end loop oci_keys_loop;
         end if;
-        
+
       else
-        uc_ai_logger.log_warn('Unknown provider in model config: ' || p_provider, l_scope);
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_unknown_provider
+        , p_scope      => l_scope
+        , p0           => p_provider
+        , p_extra      => p_config.to_clob
+        );
     end case;
 
     uc_ai_logger.log('Applied model config successfully', l_scope, p_config.to_clob);
@@ -834,7 +916,7 @@ create or replace package body uc_ai_prompt_profiles_api as
   begin
     -- Get profile
     l_profile := get_prompt_profile(p_code, p_version);
-    
+
     -- Validate all placeholders have corresponding parameters
     validate_parameters(
       p_system_template => l_profile.system_prompt_template,
@@ -859,7 +941,7 @@ create or replace package body uc_ai_prompt_profiles_api as
     
     -- Apply model configuration to global variables
     apply_model_config(l_config, l_provider);
-    
+
     -- Parse response schema if provided
     -- Agents can override the response schema in the config JSON
     -- this is not documented for normal use as the column should be used
@@ -868,7 +950,7 @@ create or replace package body uc_ai_prompt_profiles_api as
     elsif l_profile.response_schema is not null then
       l_response_schema := json_object_t.parse(l_profile.response_schema);
     end if;
-    
+
     -- Call uc_ai.generate_text
     return uc_ai.generate_text(
       p_user_prompt          => l_user_prompt,

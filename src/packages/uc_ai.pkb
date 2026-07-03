@@ -317,6 +317,7 @@ create or replace package body uc_ai as
     g_apex_web_credential := null;
     g_provider_override := null;
     g_max_tool_calls := null;
+    g_extra_headers.delete();
     g_request_id := null;
     g_callback_fatal := false;
     -- g_event_callback intentionally preserved (long-lived registration)
@@ -334,8 +335,6 @@ create or replace package body uc_ai as
     uc_ai_responses_api.g_store_responses := false;
     uc_ai_responses_api.g_include_encrypted_reasoning := false;
     uc_ai_responses_api.g_apex_web_credential := null;
-    uc_ai_responses_api.g_extra_header_name := null;
-    uc_ai_responses_api.g_extra_header_value := null;
     uc_ai_responses_api.g_skip_auth := false;
 
     -- Reset Anthropic global variables

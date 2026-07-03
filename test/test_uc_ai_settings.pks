@@ -17,6 +17,12 @@ create or replace package test_uc_ai_settings as
   --%test(build_from_config does not read or mutate globals)
   procedure config_ignores_globals;
 
+  --%test(apply_extra_headers appends after existing request headers)
+  procedure apply_headers_appended;
+
+  --%test(apply_extra_headers is a no-op when no extra headers are set)
+  procedure apply_headers_noop_when_empty;
+
   --%test(build_from_config raises on an unknown root key)
   --%throws(-20503)
   procedure config_rejects_unknown_key;

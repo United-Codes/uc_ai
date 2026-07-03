@@ -16,6 +16,7 @@ create or replace package body test_uc_ai_settings as
     uc_ai.g_reasoning_level     := uc_ai.c_reasoning_level_high;
     uc_ai.g_tool_tags           := apex_t_varchar2('tag_a', 'tag_b');
     uc_ai.g_max_tool_calls      := 42;
+    uc_ai.g_extra_headers('x-sentinel') := 'hdr-val';
 
     uc_ai_openai.g_use_responses_api := false;
     uc_ai_openai.g_reasoning_effort  := 'high';
@@ -52,8 +53,6 @@ create or replace package body test_uc_ai_settings as
     uc_ai_responses_api.g_store_responses := true;
     uc_ai_responses_api.g_include_encrypted_reasoning := true;
     uc_ai_responses_api.g_apex_web_credential := 'RA_CRED';
-    uc_ai_responses_api.g_extra_header_name := 'opc-compartment-id';
-    uc_ai_responses_api.g_extra_header_value := 'ocid1.hdr';
     uc_ai_responses_api.g_skip_auth := true;
 
     l_s := uc_ai_settings.build_from_globals;
@@ -68,6 +67,8 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.reasoning_level).to_equal(uc_ai.c_reasoning_level_high);
     ut.expect(l_s.tool_tags.count).to_equal(2);
     ut.expect(l_s.max_tool_calls).to_equal(42);
+    ut.expect(l_s.extra_headers.count).to_equal(1);
+    ut.expect(l_s.extra_headers('x-sentinel')).to_equal('hdr-val');
     -- openai
     ut.expect(l_s.oa_use_responses_api).to_be_false();
     ut.expect(l_s.oa_reasoning_effort).to_equal('high');
@@ -103,8 +104,6 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.ra_store_responses).to_be_true();
     ut.expect(l_s.ra_include_encrypted_reasoning).to_be_true();
     ut.expect(l_s.ra_apex_web_credential).to_equal('RA_CRED');
-    ut.expect(l_s.ra_extra_header_name).to_equal('opc-compartment-id');
-    ut.expect(l_s.ra_extra_header_value).to_equal('ocid1.hdr');
     ut.expect(l_s.ra_skip_auth).to_be_true();
 
     uc_ai.reset_globals;
@@ -136,6 +135,7 @@ create or replace package body test_uc_ai_settings as
       "g_max_tool_calls": 7,
       "g_apex_web_credential": "CFG_CRED",
       "g_tool_tags": ["alpha", "beta"],
+      "g_extra_headers": {"x-tenant": "acme", "x-trace": "1"},
       "openai": {
         "g_use_responses_api": false,
         "g_reasoning_effort": "high",
@@ -153,6 +153,9 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.max_tool_calls).to_equal(7);
     ut.expect(l_s.apex_web_credential).to_equal('CFG_CRED');
     ut.expect(l_s.tool_tags.count).to_equal(2);
+    ut.expect(l_s.extra_headers.count).to_equal(2);
+    ut.expect(l_s.extra_headers('x-tenant')).to_equal('acme');
+    ut.expect(l_s.extra_headers('x-trace')).to_equal('1');
     -- provider-nested
     ut.expect(l_s.oa_use_responses_api).to_be_false();
     ut.expect(l_s.oa_reasoning_effort).to_equal('high');
@@ -172,6 +175,7 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.enable_reasoning).to_be_false();
     ut.expect(l_s.max_tool_calls).to_be_null();
     ut.expect(l_s.tool_tags.count).to_equal(0);
+    ut.expect(l_s.extra_headers.count).to_equal(0);
     ut.expect(l_s.oa_use_responses_api).to_be_true();
     ut.expect(l_s.oa_reasoning_effort).to_equal('low');
     ut.expect(l_s.an_max_tokens).to_equal(8192);
@@ -188,6 +192,7 @@ create or replace package body test_uc_ai_settings as
     uc_ai.g_base_url            := 'https://global.sentinel/v1';
     uc_ai.g_enable_tools        := true;
     uc_ai.g_apex_web_credential := 'GLOBAL_CRED';
+    uc_ai.g_extra_headers('x-global') := 'leak';
 
     l_s := uc_ai_settings.build_from_config(
       json_object_t('{"g_enable_reasoning": true}')
@@ -198,6 +203,7 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.base_url).to_be_null();
     ut.expect(l_s.enable_tools).to_be_false();
     ut.expect(l_s.apex_web_credential).to_be_null();
+    ut.expect(l_s.extra_headers.count).to_equal(0);
     -- The one key the config did set is honoured.
     ut.expect(l_s.enable_reasoning).to_be_true();
 
@@ -208,6 +214,49 @@ create or replace package body test_uc_ai_settings as
 
     uc_ai.reset_globals;
   end config_ignores_globals;
+
+  procedure apply_headers_appended
+  as
+    l_s uc_ai_settings.t_settings;
+  begin
+    l_s := uc_ai_settings.build_from_config(
+      json_object_t('{"g_extra_headers": {"x-aaa": "1", "x-bbb": "2"}}')
+    , uc_ai.c_provider_openai
+    );
+
+    apex_web_service.clear_request_headers;
+    apex_web_service.g_request_headers(1).name := 'Content-Type';
+    apex_web_service.g_request_headers(1).value := 'application/json';
+
+    uc_ai_settings.apply_extra_headers(l_s);
+
+    -- Extra headers are appended after the existing base headers
+    ut.expect(apex_web_service.g_request_headers.count).to_equal(3);
+    ut.expect(apex_web_service.g_request_headers(1).name).to_equal('Content-Type');
+    ut.expect(apex_web_service.g_request_headers(2).name).to_equal('x-aaa');
+    ut.expect(apex_web_service.g_request_headers(2).value).to_equal('1');
+    ut.expect(apex_web_service.g_request_headers(3).name).to_equal('x-bbb');
+    ut.expect(apex_web_service.g_request_headers(3).value).to_equal('2');
+
+    apex_web_service.clear_request_headers;
+  end apply_headers_appended;
+
+  procedure apply_headers_noop_when_empty
+  as
+    l_s uc_ai_settings.t_settings;
+  begin
+    l_s := uc_ai_settings.build_from_config(json_object_t('{}'), uc_ai.c_provider_openai);
+
+    apex_web_service.clear_request_headers;
+    apex_web_service.g_request_headers(1).name := 'Content-Type';
+    apex_web_service.g_request_headers(1).value := 'application/json';
+
+    uc_ai_settings.apply_extra_headers(l_s);
+
+    ut.expect(apex_web_service.g_request_headers.count).to_equal(1);
+
+    apex_web_service.clear_request_headers;
+  end apply_headers_noop_when_empty;
 
   procedure config_rejects_unknown_key
   as

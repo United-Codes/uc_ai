@@ -547,10 +547,7 @@ create or replace package body uc_ai_responses_api as
       apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(p_settings.provider_override);
     end if;
 
-    if p_settings.ra_extra_header_name is not null then
-      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count + 1).name := p_settings.ra_extra_header_name;
-      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count).value := p_settings.ra_extra_header_value;
-    end if;
+    uc_ai_settings.apply_extra_headers(p_settings);
 
     l_url := get_generate_text_url(p_settings);
     uc_ai_logger.log('Calling Responses API at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null'), l_scope);

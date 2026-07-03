@@ -499,7 +499,8 @@ create or replace package body test_uc_ai_prompt_profiles_api as
     -- Create config with specific settings
     l_config := '{
       "g_enable_reasoning": true,
-      "g_reasoning_level": "low"
+      "g_reasoning_level": "low",
+      "g_extra_headers": {"x-uc-ai-test": "1"}
     }';
 
     uc_ai.g_enable_reasoning := false; -- Ensure global is off to test profile config
@@ -530,6 +531,8 @@ create or replace package body test_uc_ai_prompt_profiles_api as
 
     ut.expect(uc_ai.g_enable_reasoning).to_equal(true);
     ut.expect(uc_ai.g_reasoning_level).to_equal(uc_ai.c_reasoning_level_low);
+    ut.expect(uc_ai.g_extra_headers.count).to_equal(1);
+    ut.expect(uc_ai.g_extra_headers('x-uc-ai-test')).to_equal('1');
   end execute_profile_with_config;
 
 
@@ -694,6 +697,100 @@ create or replace package body test_uc_ai_prompt_profiles_api as
 
     sys.dbms_output.put_line('Tool calls made: ' || l_tool_calls_count);
   end execute_profile_with_tools;
+
+
+  procedure execute_profile_bad_root_key
+  as
+    l_id     number;
+    l_result json_object_t;
+    l_config json_object_t;
+  begin
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code => gc_test_code || '_BAD_ROOT',
+      p_description => 'Profile for invalid root key test',
+      p_system_prompt_template => 'You are a helpful assistant.',
+      p_user_prompt_template => 'Hello',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_4o_mini,
+      p_status => 'active'
+    );
+
+    l_config := json_object_t('{"g_does_not_exist": "value"}');
+
+    begin
+      l_result := uc_ai_prompt_profiles_api.execute_profile(
+        p_code => gc_test_code || '_BAD_ROOT',
+        p_config_override => l_config
+      );
+      ut.fail('Expected c_err_invalid_config exception for unknown root key');
+    exception
+      when others then
+        ut.expect(sqlcode).to_equal(uc_ai_error.c_err_invalid_config);
+    end;
+  end execute_profile_bad_root_key;
+
+
+  procedure execute_profile_bad_provider_key
+  as
+    l_id     number;
+    l_result json_object_t;
+    l_config json_object_t;
+  begin
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code => gc_test_code || '_BAD_PROV_KEY',
+      p_description => 'Profile for invalid provider key test',
+      p_system_prompt_template => 'You are a helpful assistant.',
+      p_user_prompt_template => 'Hello',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_4o_mini,
+      p_status => 'active'
+    );
+
+    l_config := json_object_t('{"openai": {"g_unknown_setting": "value"}}');
+
+    begin
+      l_result := uc_ai_prompt_profiles_api.execute_profile(
+        p_code => gc_test_code || '_BAD_PROV_KEY',
+        p_config_override => l_config
+      );
+      ut.fail('Expected c_err_invalid_config exception for unknown provider key');
+    exception
+      when others then
+        ut.expect(sqlcode).to_equal(uc_ai_error.c_err_invalid_config);
+    end;
+  end execute_profile_bad_provider_key;
+
+
+  procedure execute_profile_bad_provider
+  as
+    l_id     number;
+    l_result json_object_t;
+    l_config json_object_t;
+  begin
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code => gc_test_code || '_BAD_PROV',
+      p_description => 'Profile for unknown provider test',
+      p_system_prompt_template => 'You are a helpful assistant.',
+      p_user_prompt_template => 'Hello',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_4o_mini,
+      p_status => 'active'
+    );
+
+    l_config := json_object_t('{}');
+
+    begin
+      l_result := uc_ai_prompt_profiles_api.execute_profile(
+        p_code => gc_test_code || '_BAD_PROV',
+        p_provider_override => 'not_a_real_provider',
+        p_config_override => l_config
+      );
+      ut.fail('Expected c_err_unknown_provider exception');
+    exception
+      when others then
+        ut.expect(sqlcode).to_equal(uc_ai_error.c_err_unknown_provider);
+    end;
+  end execute_profile_bad_provider;
 
 end test_uc_ai_prompt_profiles_api;
 /

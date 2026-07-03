@@ -333,6 +333,8 @@ create or replace package body uc_ai_openai as
       apex_web_service.g_request_headers(2).value := 'Bearer '||uc_ai_get_key(coalesce(p_settings.provider_override, uc_ai.c_provider_openai));
     end if;
 
+    uc_ai_settings.apply_extra_headers(p_settings);
+
     l_url := get_generate_text_url(p_settings);
     uc_ai_logger.log('Calling OpenAI API at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null'), l_scope);
 
@@ -791,6 +793,8 @@ create or replace package body uc_ai_openai as
       apex_web_service.g_request_headers(2).name := 'Authorization';
       apex_web_service.g_request_headers(2).value := 'Bearer ' || uc_ai_get_key(coalesce(l_settings.provider_override, uc_ai.c_provider_openai));
     end if;
+
+    uc_ai_settings.apply_extra_headers(l_settings);
 
     uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
 

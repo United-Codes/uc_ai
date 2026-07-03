@@ -21,6 +21,7 @@ as
     l_s.reasoning_level                := null;
     l_s.tool_tags                      := apex_t_varchar2();
     l_s.max_tool_calls                 := null;
+    l_s.extra_headers.delete();
 
     -- openai
     l_s.oa_use_responses_api           := true;
@@ -65,8 +66,6 @@ as
     l_s.ra_text_verbosity              := 'medium';
     l_s.ra_store_responses             := false;
     l_s.ra_include_encrypted_reasoning := false;
-    l_s.ra_extra_header_name           := null;
-    l_s.ra_extra_header_value          := null;
     l_s.ra_skip_auth                   := false;
 
     return l_s;
@@ -87,6 +86,7 @@ as
     l_s.reasoning_level                := uc_ai.g_reasoning_level;
     l_s.tool_tags                      := uc_ai.g_tool_tags;
     l_s.max_tool_calls                 := uc_ai.g_max_tool_calls;
+    l_s.extra_headers                  := uc_ai.g_extra_headers;
 
     -- openai
     l_s.oa_use_responses_api           := uc_ai_openai.g_use_responses_api;
@@ -131,8 +131,6 @@ as
     l_s.ra_text_verbosity              := uc_ai_responses_api.g_text_verbosity;
     l_s.ra_store_responses             := uc_ai_responses_api.g_store_responses;
     l_s.ra_include_encrypted_reasoning := uc_ai_responses_api.g_include_encrypted_reasoning;
-    l_s.ra_extra_header_name           := uc_ai_responses_api.g_extra_header_name;
-    l_s.ra_extra_header_value          := uc_ai_responses_api.g_extra_header_value;
     l_s.ra_skip_auth                   := uc_ai_responses_api.g_skip_auth;
 
     return l_s;
@@ -206,6 +204,20 @@ as
             end if;
             l_s.tool_tags := l_tags;
           end;
+        when 'g_extra_headers' then
+          if l_value.is_object then
+            declare
+              l_hdr_obj  json_object_t := treat(p_config.get(l_key) as json_object_t);
+              l_hdr_keys json_key_list := l_hdr_obj.get_keys;
+              l_headers  uc_ai.t_extra_headers;
+            begin
+              <<extra_headers_keys>>
+              for j in 1 .. l_hdr_keys.count loop
+                l_headers(l_hdr_keys(j)) := l_hdr_obj.get_string(l_hdr_keys(j));
+              end loop extra_headers_keys;
+              l_s.extra_headers := l_headers;
+            end;
+          end if;
         when 'response_schema' then
           -- Not part of the settings record; pass the schema via
           -- p_response_json_schema on uc_ai.generate_text instead.
@@ -429,6 +441,21 @@ as
 
     return l_s;
   end build_from_config;
+
+  procedure apply_extra_headers(
+    p_settings in t_settings
+  )
+  as
+    l_name varchar2(255 char);
+  begin
+    l_name := p_settings.extra_headers.first;
+    <<extra_headers_loop>>
+    while l_name is not null loop
+      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count + 1).name := l_name;
+      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count).value := p_settings.extra_headers(l_name);
+      l_name := p_settings.extra_headers.next(l_name);
+    end loop extra_headers_loop;
+  end apply_extra_headers;
 
   function new_run_state return t_run_state
   as

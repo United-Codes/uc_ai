@@ -512,7 +512,8 @@ create or replace package body uc_ai_oci as
     uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
 
     apex_web_service.clear_request_headers;
-    apex_web_service.set_request_headers('Content-Type', 'application/json; charset=utf-8');   
+    apex_web_service.set_request_headers('Content-Type', 'application/json; charset=utf-8');
+    uc_ai_settings.apply_extra_headers(p_settings);
 
     -- Make the API call using credential (OCI authentication should be configured)
     l_resp := apex_web_service.make_rest_request(
@@ -911,7 +912,14 @@ create or replace package body uc_ai_oci as
 
     l_region := coalesce(l_settings.oc_region, 'us-ashburn-1');
 
-    if l_settings.oc_use_responses_api then
+    -- OCI exposes an OpenAI-compatible "/openai/v1/responses" endpoint, but it
+    -- only accepts openai.* models. Non-OpenAI families (xai.*, meta.*,
+    -- cohere.* ...) are rejected there ("Non-OpenAI models require
+    -- 'OpenAI-Project' or 'opc-conversation-store-id' header"), so route only
+    -- openai.* models through the Responses delegate and fall through to the
+    -- native GENERIC/COHERE chat endpoint for everything else, regardless of
+    -- the oc_use_responses_api setting.
+    if l_settings.oc_use_responses_api and p_model like 'openai.%' then
       declare
         l_resp_settings uc_ai_settings.t_settings := l_settings;
       begin
@@ -919,8 +927,7 @@ create or replace package body uc_ai_oci as
         -- globals are mutated.
         l_resp_settings.ra_base_url := c_api_url_base || l_region || '.oci.oraclecloud.com/openai/v1';
         l_resp_settings.ra_apex_web_credential := coalesce(l_settings.apex_web_credential, l_settings.oc_apex_web_credential);
-        l_resp_settings.ra_extra_header_name := 'opc-compartment-id';
-        l_resp_settings.ra_extra_header_value := l_settings.oc_compartment_id;
+        l_resp_settings.extra_headers('opc-compartment-id') := l_settings.oc_compartment_id;
         l_resp_settings.provider_override := uc_ai.c_provider_oci;
         l_resp_settings.base_url := null;
 
@@ -931,6 +938,10 @@ create or replace package body uc_ai_oci as
         , p_settings       => l_resp_settings
         );
       end;
+    elsif l_settings.oc_use_responses_api then
+      uc_ai_logger.log(
+        'Responses API is enabled but model "' || p_model || '" is not an openai.* model; '
+        || 'using the native OCI chat endpoint instead.', l_scope);
     end if;
 
     l_result := json_object_t();
@@ -1124,6 +1135,7 @@ create or replace package body uc_ai_oci as
       p_name_01  => 'Content-Type',
       p_value_01 => 'application/json'
     );
+    uc_ai_settings.apply_extra_headers(l_settings);
 
     uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
     uc_ai_logger.log('Request URL: ' || l_api_url, l_scope);

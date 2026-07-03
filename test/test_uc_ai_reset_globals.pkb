@@ -17,6 +17,7 @@ create or replace package body test_uc_ai_reset_globals as
     uc_ai.g_provider_override  := uc_ai.c_provider_xai;
     uc_ai.g_request_id         := 'dirtyreqid';
     uc_ai.g_callback_fatal     := true;
+    uc_ai.g_extra_headers('x-dirty') := 'v';
 
     -- OpenAI
     uc_ai_openai.g_use_responses_api := false;
@@ -31,8 +32,6 @@ create or replace package body test_uc_ai_reset_globals as
     uc_ai_responses_api.g_store_responses             := true;
     uc_ai_responses_api.g_include_encrypted_reasoning := true;
     uc_ai_responses_api.g_apex_web_credential         := 'DIRTY';
-    uc_ai_responses_api.g_extra_header_name           := 'opc-compartment-id';
-    uc_ai_responses_api.g_extra_header_value          := 'ocid1.dirty';
     uc_ai_responses_api.g_skip_auth                   := true;
 
     -- Anthropic
@@ -82,6 +81,7 @@ create or replace package body test_uc_ai_reset_globals as
     ut.expect(uc_ai.g_provider_override).to_be_null();
     ut.expect(uc_ai.g_request_id).to_be_null();
     ut.expect(case when uc_ai.g_callback_fatal then 1 else 0 end).to_equal(0);
+    ut.expect(uc_ai.g_extra_headers.count).to_equal(0);
   end resets_uc_ai_core;
 
   procedure resets_responses_api
@@ -97,8 +97,6 @@ create or replace package body test_uc_ai_reset_globals as
     ut.expect(uc_ai_responses_api.g_store_responses).to_be_false();
     ut.expect(uc_ai_responses_api.g_include_encrypted_reasoning).to_be_false();
     ut.expect(uc_ai_responses_api.g_apex_web_credential).to_be_null();
-    ut.expect(uc_ai_responses_api.g_extra_header_name).to_be_null();
-    ut.expect(uc_ai_responses_api.g_extra_header_value).to_be_null();
     ut.expect(uc_ai_responses_api.g_skip_auth).to_be_false();
   end resets_responses_api;
 

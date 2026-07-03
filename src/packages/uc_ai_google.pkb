@@ -336,6 +336,7 @@ create or replace package body uc_ai_google as
       p_name_01  => 'Content-Type',
       p_value_01 => 'application/json'
     );
+    uc_ai_settings.apply_extra_headers(p_settings);
 
     l_resp := apex_web_service.make_rest_request(
       p_url => l_api_url,
@@ -796,6 +797,7 @@ create or replace package body uc_ai_google as
       p_name_01  => 'Content-Type',
       p_value_01 => 'application/json'
     );
+    uc_ai_settings.apply_extra_headers(l_settings);
 
     uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
     uc_ai_logger.log('Request URL: ' || l_api_url, l_scope);
