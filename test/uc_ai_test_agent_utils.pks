@@ -23,5 +23,11 @@ create or replace package uc_ai_test_agent_utils as
     p_test_name  in varchar2
   );
 
+  -- Validates execution captured the caller's environment context
+  procedure validate_execution_context(
+    p_session_id in varchar2,
+    p_test_name  in varchar2
+  );
+
 end uc_ai_test_agent_utils;
 /

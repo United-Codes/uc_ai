@@ -577,5 +577,53 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
     ).to_be_greater_than(0);
   end validate_execution_recorded;
 
+  procedure validate_execution_context(
+    p_session_id in varchar2,
+    p_test_name  in varchar2
+  )
+  as
+    l_created_by  uc_ai_agent_executions.created_by%type;
+    l_db_user     uc_ai_agent_executions.db_user%type;
+    l_sid         uc_ai_agent_executions.sid%type;
+    l_env_context uc_ai_agent_executions.env_context%type;
+    l_has_session_user number;
+  begin
+    select created_by, db_user, sid, env_context
+      into l_created_by, l_db_user, l_sid, l_env_context
+      from uc_ai_agent_executions
+     where session_id = p_session_id
+       and parent_execution_id is null
+     fetch first 1 row only;
+
+    ut.expect(
+      l_created_by,
+      p_test_name || ': created_by should be the caller''s DB user'
+    ).to_equal(user);
+
+    ut.expect(
+      l_db_user,
+      p_test_name || ': db_user should be the caller''s DB user'
+    ).to_equal(user);
+
+    ut.expect(
+      l_sid,
+      p_test_name || ': sid should be captured'
+    ).to_be_not_null();
+
+    ut.expect(
+      l_env_context is not null,
+      p_test_name || ': env_context should be captured'
+    ).to_be_true();
+
+    select case when json_exists(l_env_context, '$.session_user') then 1 else 0 end
+      into l_has_session_user
+      from dual;
+
+    ut.expect(
+      l_has_session_user,
+      p_test_name || ': env_context should contain session_user'
+    ).to_equal(1);
+  end validate_execution_context;
+
 end uc_ai_test_agent_utils;
 /

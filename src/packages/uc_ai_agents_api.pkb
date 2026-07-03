@@ -6,8 +6,30 @@ create or replace package body uc_ai_agents_api as
   -- ============================================================================
   -- Private Types
   -- ============================================================================
-  
+
   type t_agent_code_list is table of uc_ai_agents.code%type;
+
+  -- Environment/session context captured once per top-level execution
+  type t_exec_env is record (
+    created_by        uc_ai_agent_executions.created_by%type,
+    db_user           uc_ai_agent_executions.db_user%type,
+    apex_user         uc_ai_agent_executions.apex_user%type,
+    apex_session_id   uc_ai_agent_executions.apex_session_id%type,
+    apex_app_id       uc_ai_agent_executions.apex_app_id%type,
+    apex_page_id      uc_ai_agent_executions.apex_page_id%type,
+    os_user           uc_ai_agent_executions.os_user%type,
+    host              uc_ai_agent_executions.host%type,
+    ip_address        uc_ai_agent_executions.ip_address%type,
+    module            uc_ai_agent_executions.module%type,
+    action            uc_ai_agent_executions.action%type,
+    client_identifier uc_ai_agent_executions.client_identifier%type,
+    sid               uc_ai_agent_executions.sid%type,
+    env_context       clob
+  );
+
+  -- @dblinter ignore(g-7230): allow use of global variables
+  g_exec_env   t_exec_env;
+  g_exec_depth pls_integer := 0;
 
 
   -- ============================================================================
@@ -109,6 +131,76 @@ create or replace package body uc_ai_agents_api as
 
 
   /*
+   * Snapshots the caller's environment/session context.
+   * Must run BEFORE uc_ai_agent_exec_api.create_apex_session_if_needed —
+   * the synthetic APEX session persists for the DB session and would
+   * mask the real caller.
+   */
+  function snapshot_exec_env return t_exec_env
+  as
+    l_env t_exec_env;
+    l_ctx json_object_t := json_object_t();
+
+    procedure put_if_set(p_key in varchar2, p_val in varchar2)
+    as
+    begin
+      if p_val is not null then
+        l_ctx.put(p_key, p_val);
+      end if;
+    end put_if_set;
+
+    procedure put_if_set(p_key in varchar2, p_val in number)
+    as
+    begin
+      if p_val is not null then
+        l_ctx.put(p_key, p_val);
+      end if;
+    end put_if_set;
+  begin
+    l_env.db_user           := sys_context('userenv', 'session_user');
+    l_env.os_user           := sys_context('userenv', 'os_user');
+    l_env.host              := sys_context('userenv', 'host');
+    l_env.ip_address        := sys_context('userenv', 'ip_address');
+    l_env.module            := sys_context('userenv', 'module');
+    l_env.action            := sys_context('userenv', 'action');
+    l_env.client_identifier := sys_context('userenv', 'client_identifier');
+    l_env.sid               := to_number(sys_context('userenv', 'sid'));
+
+    l_env.apex_user := sys_context('APEX$SESSION', 'APP_USER');
+    if l_env.apex_user = uc_ai_agent_exec_api.c_synthetic_apex_user then
+      -- uc_ai's own synthetic session — not real caller context
+      l_env.apex_user := null;
+    elsif l_env.apex_user is not null then
+      l_env.apex_session_id := to_number(sys_context('APEX$SESSION', 'APP_SESSION'));
+      l_env.apex_app_id     := apex_application.g_flow_id;
+      l_env.apex_page_id    := apex_application.g_flow_step_id;
+    end if;
+
+    l_env.created_by := coalesce(l_env.apex_user, l_env.db_user);
+
+    put_if_set('session_user', l_env.db_user);
+    put_if_set('current_schema', sys_context('userenv', 'current_schema'));
+    put_if_set('os_user', l_env.os_user);
+    put_if_set('client_identifier', l_env.client_identifier);
+    put_if_set('client_info', sys_context('userenv', 'client_info'));
+    put_if_set('ip_address', l_env.ip_address);
+    put_if_set('host', l_env.host);
+    put_if_set('terminal', sys_context('userenv', 'terminal'));
+    put_if_set('module', l_env.module);
+    put_if_set('action', l_env.action);
+    put_if_set('sid', l_env.sid);
+    put_if_set('apex_user', l_env.apex_user);
+    put_if_set('apex_session_id', l_env.apex_session_id);
+    put_if_set('apex_app_id', l_env.apex_app_id);
+    put_if_set('apex_page_id', l_env.apex_page_id);
+
+    l_env.env_context := l_ctx.to_clob;
+
+    return l_env;
+  end snapshot_exec_env;
+
+
+  /*
    * Creates an execution record and returns its ID
    */
   function create_execution(
@@ -130,13 +222,41 @@ create or replace package body uc_ai_agents_api as
       parent_execution_id,
       session_id,
       input_parameters,
-      status
+      status,
+      created_by,
+      db_user,
+      apex_user,
+      apex_session_id,
+      apex_app_id,
+      apex_page_id,
+      os_user,
+      host,
+      ip_address,
+      module,
+      action,
+      client_identifier,
+      sid,
+      env_context
     ) values (
       p_agent_id,
       p_parent_exec_id,
       p_session_id,
       l_params,
-      c_exec_running
+      c_exec_running,
+      g_exec_env.created_by,
+      g_exec_env.db_user,
+      g_exec_env.apex_user,
+      g_exec_env.apex_session_id,
+      g_exec_env.apex_app_id,
+      g_exec_env.apex_page_id,
+      g_exec_env.os_user,
+      g_exec_env.host,
+      g_exec_env.ip_address,
+      g_exec_env.module,
+      g_exec_env.action,
+      g_exec_env.client_identifier,
+      g_exec_env.sid,
+      g_exec_env.env_context
     )
     returning id into l_exec_id;
     
@@ -1108,6 +1228,13 @@ create or replace package body uc_ai_agents_api as
   begin
     uc_ai_logger.log('Executing agent: ' || p_agent_code, l_scope);
 
+    -- Capture caller context once per top-level execution, before the
+    -- synthetic APEX session masks it; nested executions reuse it
+    if g_exec_depth = 0 then
+      g_exec_env := snapshot_exec_env();
+    end if;
+    g_exec_depth := g_exec_depth + 1;
+
     uc_ai_agent_exec_api.create_apex_session_if_needed;
 
     -- Get agent
@@ -1220,10 +1347,12 @@ create or replace package body uc_ai_agents_api as
         );
         raise;
     end;
-    
+
+    g_exec_depth := g_exec_depth - 1;
     return l_result;
   exception
     when others then
+      g_exec_depth := greatest(g_exec_depth - 1, 0);
       uc_ai_logger.log_error('Error executing agent: ' || p_agent_code, l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end execute_agent;
@@ -1291,7 +1420,8 @@ create or replace package body uc_ai_agents_api as
              e.total_output_tokens,
              e.started_at,
              e.completed_at,
-             e.error_message
+             e.error_message,
+             e.created_by
       from uc_ai_agent_executions e
       join uc_ai_agents a on a.id = e.agent_id
       where (p_session_id is null or e.session_id = p_session_id)
@@ -1346,7 +1476,18 @@ create or replace package body uc_ai_agents_api as
     l_result.put('started_at', to_char(l_exec.started_at, 'YYYY-MM-DD"T"HH24:MI:SS'));
     l_result.put('completed_at', to_char(l_exec.completed_at, 'YYYY-MM-DD"T"HH24:MI:SS'));
     l_result.put('error_message', l_exec.error_message);
-    
+    l_result.put('created_by', l_exec.created_by);
+    l_result.put('db_user', l_exec.db_user);
+    l_result.put('apex_user', l_exec.apex_user);
+    l_result.put('apex_app_id', l_exec.apex_app_id);
+    l_result.put('apex_page_id', l_exec.apex_page_id);
+    l_result.put('module', l_exec.module);
+    l_result.put('client_identifier', l_exec.client_identifier);
+
+    if l_exec.env_context is not null then
+      l_result.put('env_context', json_object_t.parse(l_exec.env_context));
+    end if;
+
     if l_exec.input_parameters is not null then
       l_result.put('input_parameters', json_object_t.parse(l_exec.input_parameters));
     end if;

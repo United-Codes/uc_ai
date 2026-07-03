@@ -286,6 +286,33 @@ SELECT agent_id,
  ORDER BY started_at;
 ```
 
+### Caller environment context
+
+Each execution also records who started it and from where. The context is
+captured once at the start of the top-level execution and shared by all
+nested executions (workflow steps, orchestrator sub-agents, handoffs):
+
+| Column | Content |
+|--------|---------|
+| `created_by` | APEX user if called from an APEX session, otherwise the database user |
+| `db_user`, `os_user`, `host`, `ip_address` | `SYS_CONTEXT('USERENV', ...)` values of the caller |
+| `module`, `action`, `client_identifier`, `sid` | Database session identification |
+| `apex_user`, `apex_session_id`, `apex_app_id`, `apex_page_id` | APEX session details (null when not called from a real APEX session) |
+| `env_context` | JSON with the full context snapshot (session_user, current_schema, os_user, client_identifier, client_info, ip_address, host, terminal, module, action, sid plus the APEX values) |
+
+UC AI creates an internal APEX session (`UC_AI_AGENT_EXEC`) when executed
+outside of APEX. This synthetic session is never recorded as the caller —
+the `apex_*` columns stay null in that case.
+
+```sql
+SELECT created_by,
+       apex_app_id,
+       apex_page_id,
+       e.env_context
+  FROM uc_ai_agent_executions e
+ WHERE session_id = :session_id;
+```
+
 You can also use the API:
 
 ```sql

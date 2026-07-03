@@ -107,6 +107,55 @@ create or replace package body test_uc_ai_agent_profile as
     ut.expect(l_final_msg).to_be_like('%50%');
   end execute_with_parameters;
 
+  procedure execution_records_context
+  as
+    l_agent_id   number;
+    l_session_id varchar2(100 char);
+    l_result     json_object_t;
+    l_created_by uc_ai_agent_executions.created_by%type;
+  begin
+    -- Create profile agent if not exists
+    begin
+      select id into l_agent_id
+        from uc_ai_agents
+       where code = gc_profile_agent_code || '_CTX'
+         and status = 'active';
+    exception
+      when no_data_found then
+        l_agent_id := uc_ai_agents_api.create_agent(
+          p_code                => gc_profile_agent_code || '_CTX',
+          p_description         => 'Test profile agent for context capture',
+          p_agent_type          => uc_ai_agents_api.c_type_profile,
+          p_prompt_profile_code => 'TEST_AGENT_MATH',
+          p_status              => uc_ai_agents_api.c_status_active
+        );
+    end;
+
+    l_session_id := uc_ai_agents_api.generate_session_id;
+    l_result := uc_ai_agents_api.execute_agent(
+      p_agent_code       => gc_profile_agent_code || '_CTX',
+      p_input_parameters => json_object_t('{"question": "1 + 1"}'),
+      p_session_id       => l_session_id
+    );
+
+    uc_ai_test_agent_utils.validate_agent_result(l_result, 'Context capture');
+
+    -- created_by, db_user, sid and env_context should reflect the real caller
+    uc_ai_test_agent_utils.validate_execution_context(l_session_id, 'Context capture');
+
+    -- the synthetic APEX session created by uc_ai must never be recorded as the caller
+    select created_by
+      into l_created_by
+      from uc_ai_agent_executions
+     where session_id = l_session_id
+     fetch first 1 row only;
+
+    ut.expect(
+      l_created_by,
+      'created_by must not be the synthetic APEX session user'
+    ).not_to_equal(uc_ai_agent_exec_api.c_synthetic_apex_user);
+  end execution_records_context;
+
   procedure execute_follow_up_message
   as
     l_agent_id     number;

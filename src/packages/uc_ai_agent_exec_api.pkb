@@ -1224,7 +1224,7 @@ end;!';
       apex_session.create_session(
         p_app_id       => l_app_id,
         p_page_id      => 0,
-        p_username     => 'UC_AI_AGENT_EXEC'
+        p_username     => c_synthetic_apex_user
       );
     end if;
   end create_apex_session_if_needed;

@@ -238,7 +238,23 @@ create table uc_ai_agent_executions (
   started_at             timestamp not null,
   completed_at           timestamp,
   error_message          varchar2(4000 char),
-  
+
+  -- Environment/session context (captured at top-level execution start)
+  created_by             varchar2(255 char),
+  db_user                varchar2(255 char),
+  apex_user              varchar2(255 char),
+  apex_session_id        number,
+  apex_app_id            number,
+  apex_page_id           number,
+  os_user                varchar2(255 char),
+  host                   varchar2(255 char),
+  ip_address             varchar2(64 char),
+  module                 varchar2(255 char),
+  action                 varchar2(255 char),
+  client_identifier      varchar2(255 char),
+  sid                    number,
+  env_context            clob,
+
   constraint uc_ai_agent_executions_pk primary key (id),
   constraint uc_ai_agent_exec_agent_fk foreign key (agent_id) 
     references uc_ai_agents(id),
@@ -251,3 +267,11 @@ create table uc_ai_agent_executions (
 create index uc_ai_agent_exec_session_idx on uc_ai_agent_executions(session_id);
 create index uc_ai_agent_exec_status_idx on uc_ai_agent_executions(status, started_at);
 create index uc_ai_agent_exec_agent_idx on uc_ai_agent_executions(agent_id);
+
+comment on column uc_ai_agent_executions.created_by is 'coalesce(real APEX user, DB user) at top-level execution start';
+comment on column uc_ai_agent_executions.db_user is 'SYS_CONTEXT USERENV SESSION_USER';
+comment on column uc_ai_agent_executions.apex_user is 'APEX APP_USER (null for uc_ai''s own synthetic session)';
+comment on column uc_ai_agent_executions.apex_session_id is 'APEX APP_SESSION';
+comment on column uc_ai_agent_executions.apex_app_id is 'APEX application ID';
+comment on column uc_ai_agent_executions.apex_page_id is 'APEX page ID';
+comment on column uc_ai_agent_executions.env_context is 'JSON dump of SYS_CONTEXT USERENV + APEX session values';

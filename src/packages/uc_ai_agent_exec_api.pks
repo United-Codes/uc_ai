@@ -36,6 +36,14 @@ as
 
 
   -- ============================================================================
+  -- Session Constants
+  -- ============================================================================
+
+  -- Username of the synthetic APEX session created by create_apex_session_if_needed
+  c_synthetic_apex_user constant varchar2(30 char) := 'UC_AI_AGENT_EXEC';
+
+
+  -- ============================================================================
   -- Pattern Execution Functions
   -- ============================================================================
 

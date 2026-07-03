@@ -78,5 +78,16 @@ create or replace trigger uc_ai_agent_executions_bi
     for each row
 begin
     :new.started_at := systimestamp;
+
+    -- fallbacks for inserts outside the API; API-captured values win
+    if :new.created_by is null
+    then
+        :new.created_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+    end if;
+
+    if :new.db_user is null
+    then
+        :new.db_user := user;
+    end if;
 end uc_ai_agent_executions_bi;
 /

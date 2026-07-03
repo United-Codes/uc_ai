@@ -157,8 +157,24 @@ create or replace package body test_uc_ai_agent_workflow as
     select count(*) into l_exec_count
       from uc_ai_agent_executions
      where session_id = l_session_id;
-    
+
     ut.expect(l_exec_count, 'Should have recorded multiple executions').to_be_greater_than(1);
+
+    -- Child executions must share the caller context captured at the top level
+    declare
+      l_distinct_created_by number;
+      l_child_count         number;
+    begin
+      select count(distinct e.created_by), count(c.id)
+        into l_distinct_created_by, l_child_count
+        from uc_ai_agent_executions e
+        left join uc_ai_agent_executions c
+          on c.parent_execution_id = e.id
+       where e.session_id = l_session_id;
+
+      ut.expect(l_child_count, 'Should have child executions').to_be_greater_than(0);
+      ut.expect(l_distinct_created_by, 'All executions should share the caller''s created_by').to_equal(1);
+    end;
   end execute_sequential_workflow;
 
   procedure execute_loop_workflow

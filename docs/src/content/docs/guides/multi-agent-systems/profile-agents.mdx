@@ -93,6 +93,7 @@ Every call to `execute_agent` creates a row in `uc_ai_agent_executions`. You can
 SELECT ae.id,
        a.code AS agent_code,
        ae.status,
+       ae.created_by,
        ae.total_input_tokens,
        ae.total_output_tokens,
        ae.started_at,
@@ -102,6 +103,8 @@ SELECT ae.id,
  WHERE ae.session_id = :session_id
  ORDER BY ae.started_at;
 ```
+
+Each row also captures the caller's environment (`created_by`, database user, APEX user/session/app/page, module, and a full `env_context` JSON snapshot) — see [session tracking](/products/uc-ai/docs/guides/multi-agent-systems/#caller-environment-context) for details.
 
 This is especially useful when profile agents are composed into larger patterns. A workflow with three profile agent steps produces three execution rows under the same session, so you can see exactly which step took the most tokens or failed.
 

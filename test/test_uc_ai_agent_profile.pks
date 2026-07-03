@@ -16,6 +16,9 @@ create or replace package test_uc_ai_agent_profile as
   --%test(Execute profile agent with input parameters)
   procedure execute_with_parameters;
 
+  --%test(Execution records caller context)
+  procedure execution_records_context;
+
   --%test(Continue conversation with follow-up message)
   procedure execute_follow_up_message;
 
