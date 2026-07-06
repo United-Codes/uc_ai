@@ -3,13 +3,30 @@ title: Sample Apps
 description: Demonstration applications showcasing the capabilities of the UC AI SDK
 ---
 
+import { Aside } from "@astrojs/starlight/components";
+
 ## Practical AI in PL/SQL Made Easy
 
-This is the sample app I showed in our [UC Live webinar](https://youtube.com/live/k4Vt7AKXCnM). It features simple text generation, structured output, reasoning, file analysis, and tool usage.
+This is the sample APEX app shown in our [UC Live webinar](https://youtube.com/live/k4Vt7AKXCnM). It is the fastest way to see UC AI working end-to-end and to have runnable examples you can pick apart. It features simple text generation, structured output, reasoning, file analysis, and tool usage.
+
+### What it demonstrates
+
+Each page maps to a UC AI feature so you can see the input, the code, and the result side by side:
+
+- **Text generation** — a basic prompt/response screen backed by [`generate_text`](/products/uc-ai/docs/api/generate_text/). The "hello world" of the SDK.
+- **Structured output** — the model returns JSON that conforms to a schema, ready to store in columns. See the [Structured Output guide](/products/uc-ai/docs/guides/structured_output/).
+- **Reasoning** — shows how to enable and display the model's step-by-step [reasoning](/products/uc-ai/docs/guides/reasoning/) for harder questions.
+- **File analysis** — upload a PDF or image and ask questions about it ([File Analysis guide](/products/uc-ai/docs/guides/file_analysis/)).
+- **Tool usage** — the model calls PL/SQL functions to read and act on data in the app's tables ([Tools guide](/products/uc-ai/docs/guides/tools/)).
 
 ### Setup Instructions
 
-- You need to have UC AI already installed in your database schema
+- You need to have UC AI already installed in your database schema (see [Installation](/products/uc-ai/docs/guides/installation/)).
 - [Download the APEX app](https://github.com/United-Codes/uc_ai/releases/download/v25.7/f135.sql)
-- Then import the APEX app and install supporting objects
-- For OCI and Ollama modify the `reset_global_variables` procedure in `pame_pkg` to set your credentials
+- Then import the APEX app and install supporting objects.
+- Configure your API keys as described in [Installation → Set up API Keys](/products/uc-ai/docs/guides/installation/#set-up-api-keys).
+- For OCI and Ollama modify the `reset_global_variables` procedure in `pame_pkg` to set your credentials.
+
+<Aside type="tip">
+Prefer code over clicking through an app? The [Use Cases](/products/uc-ai/docs/guides/use-cases/) page and the individual guides contain copy-paste PL/SQL for every feature above.
+</Aside>

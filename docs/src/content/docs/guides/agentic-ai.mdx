@@ -12,6 +12,10 @@ import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
 
 Agentic AI has many definitions, but in essence you give LLMs additional capabilities that the model can decide to use based on their autonomous decisions. Importantly, these capabilities are not executed within the LLM itself – instead, you inform the LLM that it can perform X, and it requests execution externally. Thus, the agent's core logic resides not in the LLM, but in the calling mechanism: your database's PL/SQL code with UC AI.
 
+<Aside type="tip" title="First time building an agent?">
+Start with the [Quickstart](/products/uc-ai/docs/guides/quickstart/) — it builds the smallest possible agent (reason → call one tool → answer) in a few minutes. The examples below show fuller, real-world agents.
+</Aside>
+
 You can build agents in UC AI through these techniques:
 
 - Prompt engineering: give the right instructions with system prompts and context
@@ -70,7 +74,7 @@ begin
   uc_ai.g_tool_tags := apex_t_varchar2('customer_insight_agent');
 
   l_result := uc_ai.generate_text(
-    p_system_prompt => 'You are an... First analyze the ticket and think of actions that make sense from the given tools...'
+    p_system_prompt => 'You are an... First analyze the ticket and think of actions that make sense from the given tools...',
     p_user_prompt => 'Ticket #1243: ...',
     p_provider => uc_ai.c_provider_openai,
     p_model => uc_ai_openai.c_model_gpt_o4_mini

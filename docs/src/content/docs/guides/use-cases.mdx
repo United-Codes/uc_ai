@@ -1,0 +1,168 @@
+---
+title: Use Cases
+description: What you can build with UC AI - concrete, real-world scenarios for bringing AI into your Oracle database and APEX apps.
+sidebar:
+  order: 5
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+UC AI lets you call large language models (LLMs) **directly from PL/SQL** — no Python, no separate AI service, no copying data out of your database. That opens up a lot of practical automation right where your data already lives.
+
+This page is a tour of what teams actually build with it. Each use case starts with the business outcome, then shows roughly how it looks in code. You do **not** need to read the code to understand the value — skim the bold outcomes first.
+
+<Aside type="tip">
+New here? Start with the [Quickstart](/products/uc-ai/docs/guides/quickstart/) to get a working call in ~10 minutes, then come back to pick a use case.
+</Aside>
+
+## How it works
+
+Everything runs inside your database. UC AI takes a prompt (and optionally your data and tools), calls the AI provider you choose, and hands the answer back to your PL/SQL — so results can go straight into your tables or APEX pages.
+
+```
+  ┌───────────────────────────┐        ┌──────────────────┐
+  │  Your Oracle Database      │        │   AI Provider    │
+  │  + APEX app                │        │  (OpenAI,        │
+  │                            │        │   Anthropic,     │
+  │  ┌──────────────────────┐  │  HTTPS │   Google, OCI,   │
+  │  │  UC AI (PL/SQL)      ─┼──┼───────▶│   Ollama, ...)   │
+  │  │  generate_text()     ◀┼──┼────────┤                  │
+  │  └───────┬──────────────┘  │        └──────────────────┘
+  │          │ tools call back           
+  │          ▼                 │         Your data never leaves
+  │  Your tables & functions   │         the database unless you
+  │  (read + write)            │         choose to send it.
+  └───────────────────────────┘        
+```
+
+The AI can only touch your data through **tools** — PL/SQL functions you explicitly register — so you stay in control of exactly what it can read and do.
+
+---
+
+## 1. Classify and route incoming records
+
+**Outcome:** Automatically tag support tickets, emails, or feedback by topic, urgency, or sentiment — and route them to the right queue — without a human triaging each one.
+
+Use [structured output](/products/uc-ai/docs/guides/structured_output/) so the model returns clean JSON you can insert straight into a column:
+
+```sql
+declare
+  l_result json_object_t;
+  l_schema json_object_t := json_object_t('{
+    "type": "object",
+    "properties": {
+      "category": { "type": "string", "enum": ["billing", "technical", "sales", "other"] },
+      "urgency":  { "type": "string", "enum": ["low", "medium", "high"] },
+      "summary":  { "type": "string", "description": "One-sentence summary" }
+    },
+    "required": ["category", "urgency", "summary"]
+  }');
+begin
+  l_result := uc_ai.generate_text(
+    p_user_prompt          => 'Ticket: "The invoice total looks wrong and I was charged twice."',
+    p_provider             => uc_ai.c_provider_openai,
+    p_model                => uc_ai_openai.c_model_gpt_4o_mini,
+    p_response_json_schema => l_schema
+  );
+  -- l_result.get_clob('final_message') is guaranteed to match the schema.
+end;
+/
+```
+
+---
+
+## 2. Answer questions about your documents (PDF / image analysis)
+
+**Outcome:** Let users ask questions about a scanned invoice, a contract, or a product photo — and get answers grounded in the file's actual content.
+
+UC AI can send PDFs and images to models that support them. You attach the file (straight from a `BLOB` column) to a message and ask your question. See the [File Analysis guide](/products/uc-ai/docs/guides/file_analysis/) for the full example:
+
+```sql
+-- Build a user message that combines the file with a question
+l_content.append(uc_ai_message_api.create_file_content(
+  p_media_type => 'application/pdf',
+  p_data_blob  => (select blob_content from your_table where id = 1),
+  p_filename   => 'contract.pdf'
+));
+l_content.append(uc_ai_message_api.create_text_content(
+  'Summarize this contract and list any payment deadlines.'
+));
+l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+l_result := uc_ai_google.generate_text(
+  p_messages => l_messages,
+  p_model    => uc_ai_google.c_model_gemini_2_5_flash
+);
+```
+
+<Aside type="note">
+Great fit for accounts-payable automation, document intake, and "explain this attachment" features in APEX.
+</Aside>
+
+---
+
+## 3. Enrich and clean up data
+
+**Outcome:** Turn messy free-text columns into structured, queryable data — extract addresses, normalize product names, generate short descriptions, or translate content — in a batch job over your tables.
+
+Loop over rows and call `generate_text` with a structured-output schema, then write the result back. Because it's all PL/SQL, this is just a cursor and an `UPDATE` — no external pipeline to maintain.
+
+---
+
+## 4. Build an in-database assistant over your own data
+
+**Outcome:** A chatbot or natural-language search that answers questions like *"How many open tickets does Jim have?"* by actually querying your live tables — not a stale export.
+
+This uses [tools](/products/uc-ai/docs/guides/tools/): you register PL/SQL functions the model can call, and it decides when to use them.
+
+```sql
+begin
+  uc_ai.g_enable_tools := true;
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt   => 'What is the email address of Jim?',
+    p_system_prompt => 'You are an assistant to a time tracking system.
+      Use the provided tools to access user, project and timetracking data.',
+    p_provider      => uc_ai.c_provider_anthropic,
+    p_model         => uc_ai_anthropic.c_model_claude_3_5_haiku
+  );
+  -- "Jim's email address is jim.halpert@dundermifflin.com."
+end;
+/
+```
+
+The same pattern lets the assistant **take action** — clock someone in, create a record, trigger a REST call — through tools you control.
+
+---
+
+## 5. Automate multi-step workflows with agents
+
+**Outcome:** Hand off a goal ("research this customer and draft an onboarding email") to an agent that plans, calls several tools, and produces a finished result — or coordinate several specialized agents.
+
+See the [Agentic AI](/products/uc-ai/docs/guides/agentic-ai/) and [Multi-Agent Systems](/products/uc-ai/docs/guides/multi-agent-systems/) guides for orchestrator, workflow, and conversation patterns.
+
+---
+
+## 6. Semantic search and RAG
+
+**Outcome:** "Find me documents about X" that understands meaning, not just keywords — the foundation for retrieval-augmented generation (RAG) over your own content.
+
+Generate embeddings (vectors) for your text and store them for similarity search — on 23ai/26ai using the native `VECTOR` type, or on older databases via any vector store:
+
+```sql
+l_vectors := uc_ai.generate_embeddings(
+  p_input    => json_array_t('["First document chunk", "Second document chunk"]'),
+  p_provider => uc_ai.c_provider_openai,
+  p_model    => uc_ai_openai.c_model_text_embedding_3_small
+);
+```
+
+See the [Generate Embeddings reference](/products/uc-ai/docs/api/generate_embeddings/) for converting results to the Oracle `VECTOR` type.
+
+---
+
+## Not sure where to start?
+
+- **Just exploring?** Watch the [UC Live webinar](https://youtube.com/live/k4Vt7AKXCnM) or read Philipp's [blog post on real AI solutions in PL/SQL](https://hartenfeller.dev/blog/real-ai-solutions-oracle-plsql).
+- **Want to see it running?** Grab the [sample APEX app](/products/uc-ai/docs/other/sample-apps/).
+- **Ready to build?** Follow the [Quickstart](/products/uc-ai/docs/guides/quickstart/).

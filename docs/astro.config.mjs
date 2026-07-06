@@ -53,11 +53,16 @@ export default defineConfig({
 					collapsed: false,
 					items: [
 						"guides/installation",
+						"guides/quickstart",
+						"guides/use-cases",
 						"guides/providers",
+						"guides/tools",
+						"guides/file_analysis",
 						"guides/reasoning",
 						"guides/structured_output",
-						"guides/tools",
 						"guides/prompt-profiles",
+						"guides/toon",
+						"guides/event-callbacks",
 						"guides/agentic-ai",
 						{
 							label: "Multi-Agent Systems",
@@ -67,11 +72,10 @@ export default defineConfig({
 								variant: "caution",
 							},
 						},
-						"guides/toon",
 					],
 				},
 				{
-					label: "Providers",
+					label: "Provider Setup",
 					autogenerate: { directory: "providers" },
 				},
 				{

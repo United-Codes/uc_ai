@@ -9,6 +9,10 @@ import { Aside } from "@astrojs/starlight/components";
 
 **Workflows execute agents in a defined structure. The execution order is deterministic - you control exactly what happens and when.**
 
+<Aside type="tip" title="When to use this">
+Choose workflows when you already know the steps and their order — a repeatable pipeline (e.g. classify → enrich → summarize). If the sequence should depend on the input, use the [orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/) instead.
+</Aside>
+
 Workflows reference [profile agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/) by their `agent_code` to create deterministic pipelines.
 
 ## Sequential workflow

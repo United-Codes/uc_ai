@@ -1,0 +1,155 @@
+---
+title: Cheatsheet
+description: One-page quick reference for the most-used UC AI functions, constants, and global settings.
+sidebar:
+  order: 5
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+A scannable reference for day-to-day work. For full parameter details see [generate_text](/products/uc-ai/docs/api/generate_text/) and [generate_embeddings](/products/uc-ai/docs/api/generate_embeddings/).
+
+## Core functions
+
+```sql
+-- Text from a prompt
+uc_ai.generate_text(
+  p_user_prompt          => 'clob',
+  p_system_prompt        => 'clob',            -- optional
+  p_provider             => uc_ai.c_provider_openai,
+  p_model                => uc_ai_openai.c_model_gpt_4o_mini,
+  p_max_tool_calls       => 6,                 -- optional
+  p_response_json_schema => l_schema           -- optional: structured output
+) return json_object_t;
+
+-- Text from a full message array (needed for file/image input & history)
+uc_ai.generate_text(
+  p_messages       => l_messages,
+  p_provider       => ...,
+  p_model          => ...
+) return json_object_t;
+
+-- Embeddings (vectors) for an array of strings
+uc_ai.generate_embeddings(
+  p_input    => json_array_t('["text one", "text two"]'),
+  p_provider => uc_ai.c_provider_openai,
+  p_model    => uc_ai_openai.c_model_text_embedding_3_small
+) return json_array_t;   -- array of vectors, one per input
+```
+
+Both `generate_text` and `generate_embeddings` also have a **config-driven overload** with an extra `p_config json_object_t` parameter — see [Config vs globals](#config-driven-calls-vs-globals) below.
+
+## Reading the result
+
+`generate_text` returns a `json_object_t`. Common keys:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `final_message` | CLOB | The AI's final text answer. Use `.get_clob('final_message')`. |
+| `finish_reason` | string | Why generation stopped (see constants below). |
+| `messages` | array | Full conversation incl. tool calls and results. |
+
+```sql
+dbms_output.put_line( l_result.get_clob('final_message') );
+```
+
+## Providers
+
+```sql
+uc_ai.c_provider_openai       uc_ai.c_provider_anthropic
+uc_ai.c_provider_google       uc_ai.c_provider_ollama
+uc_ai.c_provider_oci          uc_ai.c_provider_xai
+uc_ai.c_provider_mistral      uc_ai.c_provider_openrouter
+```
+
+Model constants live in each provider package, e.g. `uc_ai_openai.c_model_gpt_4o_mini`, `uc_ai_anthropic.c_model_claude_3_5_haiku`, `uc_ai_google.c_model_gemini_2_5_flash`. See each [provider page](/products/uc-ai/docs/guides/providers/) for the full list, or use the [utility functions](/products/uc-ai/docs/api/utils/) to list them at runtime.
+
+## Global settings
+
+Set these before calling `generate_text` (they default to off). Call `uc_ai.reset_globals` to restore defaults.
+
+```sql
+-- Tools
+uc_ai.g_enable_tools := true;
+uc_ai.g_tool_tags    := apex_t_varchar2('weather', 'users');  -- restrict to tags
+uc_ai.g_max_tool_calls := 6;
+
+-- Reasoning / thinking
+uc_ai.g_enable_reasoning := true;
+uc_ai.g_reasoning_level  := uc_ai.c_reasoning_level_medium;  -- low | medium | high
+-- (some providers have their own, e.g. uc_ai_openai.g_reasoning_effort)
+
+-- Connection & auth
+uc_ai.g_base_url := 'host.containers.internal:11434/api';    -- e.g. Ollama
+uc_ai.g_apex_web_credential := 'OPENAI';                     -- APEX Web Credential static id
+uc_ai_openai.g_apex_web_credential := 'OPENAI';              -- or per-provider
+
+-- Extra HTTP headers on every request
+uc_ai.g_extra_headers('X-Tenant-Id') := 'acme';
+
+uc_ai.reset_globals;  -- restore all globals to defaults
+```
+
+## Finish reason constants
+
+```sql
+uc_ai.c_finish_reason_stop            -- completed normally
+uc_ai.c_finish_reason_tool_calls      -- paused to call a tool
+uc_ai.c_finish_reason_length          -- hit token limit (truncated)
+uc_ai.c_finish_reason_content_filter  -- blocked by content filter
+```
+
+## Registering a tool
+
+```sql
+uc_ai_tools_api.create_tool_from_schema(   -- create-only (errors if exists)
+  p_tool_code     => 'GET_WEATHER',
+  p_description   => 'Get the current weather for a city',
+  p_function_call => 'return my_pkg.get_weather(:parameters);',
+  p_json_schema   => l_schema,             -- null if no parameters
+  p_tags          => apex_t_varchar2('weather')
+);
+
+uc_ai_tools_api.merge_tool_from_schema( ... );  -- upsert (idempotent deploys)
+```
+
+## Building messages (for files, images, history)
+
+```sql
+uc_ai_message_api.create_system_message('You are ...')
+uc_ai_message_api.create_user_message(l_content_array)
+uc_ai_message_api.create_text_content('a question')
+uc_ai_message_api.create_file_content(
+  p_media_type => 'application/pdf',  -- or image/png, image/webp, ...
+  p_data_blob  => l_blob,
+  p_filename   => 'doc.pdf'
+)
+```
+
+## Config-driven calls vs globals
+
+There are two ways to configure a call:
+
+| | **Package globals** | **`p_config` overload** |
+| --- | --- | --- |
+| How | Set `uc_ai.g_*` before the call | Pass a JSON config object as `p_config` |
+| State | Reads & mutates shared session globals | Reads neither; nothing is mutated |
+| Best for | Interactive / app code you control end-to-end | Libraries, concurrent or re-entrant calls, self-contained requests |
+| Defaults | Uses current global values | Absent keys fall back to framework defaults (as `reset_globals` restores) |
+
+```sql
+l_result := uc_ai.generate_text(
+  p_user_prompt => 'How is the weather in Paris?',
+  p_provider    => uc_ai.c_provider_openai,
+  p_model       => uc_ai_openai.c_model_gpt_4o_mini,
+  p_config      => json_object_t('{
+    "g_enable_tools": true,
+    "g_tool_tags": ["weather"],
+    "openai": {"g_use_responses_api": false}
+  }')
+);
+```
+
+<Aside type="tip">
+Use `p_config` when a library must not depend on or disturb the caller's globals. Use globals for straightforward application code where a single session owns the settings.
+</Aside>

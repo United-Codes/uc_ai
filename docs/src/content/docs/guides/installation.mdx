@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
 ## Prerequisites
 
 - Oracle Database 12.2 or later
@@ -130,3 +132,40 @@ END;
 Most of the time you just need to run the `upgrade_packages.sql` script to upgrade to a newer version of UC AI. This script will only upgrade the packages that have changed since the last version.
 
 Please still keep an eye on the [release notes](https://github.com/United-Codes/uc_ai/releases) to see if there are any changes that require you to run the complete installation script.
+
+## Next steps
+
+Now that UC AI is installed, here is a suggested reading order:
+
+<CardGrid>
+  <LinkCard
+    title="Quickstart"
+    description="Go from a plain text call to your first tool-calling agent in ~10 minutes."
+    href="/products/uc-ai/docs/guides/quickstart/"
+  />
+  <LinkCard
+    title="Use Cases"
+    description="See what you can build with UC AI: classification, document Q&A, chatbots, and more."
+    href="/products/uc-ai/docs/guides/use-cases/"
+  />
+  <LinkCard
+    title="AI Providers"
+    description="Learn how to pick and switch between OpenAI, Anthropic, Google, and others."
+    href="/products/uc-ai/docs/guides/providers/"
+  />
+  <LinkCard
+    title="Tools / Functions"
+    description="Let the model call your PL/SQL functions to read and act on your data."
+    href="/products/uc-ai/docs/guides/tools/"
+  />
+  <LinkCard
+    title="Structured Output"
+    description="Force responses into a JSON schema you can insert straight into tables."
+    href="/products/uc-ai/docs/guides/structured_output/"
+  />
+  <LinkCard
+    title="Agentic AI"
+    description="Build agents and multi-agent workflows that reason and take action."
+    href="/products/uc-ai/docs/guides/agentic-ai/"
+  />
+</CardGrid>

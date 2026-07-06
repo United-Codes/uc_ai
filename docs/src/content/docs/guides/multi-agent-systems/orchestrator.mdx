@@ -9,6 +9,10 @@ import { Aside } from "@astrojs/starlight/components";
 
 **The orchestrator pattern uses a central AI agent that autonomously decides which specialized agents to delegate to and in what order.**
 
+<Aside type="tip" title="When to use this">
+Choose the orchestrator when the right sequence of agents depends on the input and you want the AI to plan it. If the steps are always the same, a deterministic [workflow](/products/uc-ai/docs/guides/multi-agent-systems/workflows/) is simpler and cheaper.
+</Aside>
+
 Delegate agents are exposed as [tools](/products/uc-ai/docs/guides/tools/) that the orchestrator can call. This is the most flexible pattern - the AI itself decides the execution flow based on the task.
 
 ## How it works

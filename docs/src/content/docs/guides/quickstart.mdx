@@ -1,0 +1,123 @@
+---
+title: Quickstart
+description: Go from installed to your first tool-calling agent in about 10 minutes, one small step at a time.
+sidebar:
+  order: 2
+---
+
+import { Steps, Aside } from "@astrojs/starlight/components";
+
+This guide takes you from a fresh install to a working AI agent in three small steps. Every example here is the **simplest possible version** — once these work, the [Tools](/products/uc-ai/docs/guides/tools/) and [Agentic AI](/products/uc-ai/docs/guides/agentic-ai/) guides show the fuller picture.
+
+<Aside type="note">
+New to the terms *token*, *tool*, or *structured output*? Keep the [Glossary](/products/uc-ai/docs/other/glossary/) open in another tab.
+</Aside>
+
+## Before you start
+
+- UC AI is [installed](/products/uc-ai/docs/guides/installation/) in your schema.
+- You have an API key for one provider set up (via the `uc_ai_get_key` function or an APEX Web Credential — see [Set up API Keys](/products/uc-ai/docs/guides/installation/#set-up-api-keys)).
+
+The examples below use OpenAI, but any [provider](/products/uc-ai/docs/guides/providers/) works — just swap the `p_provider` and `p_model` constants.
+
+<Steps>
+
+1. ### Say hello
+
+   The smallest useful call: send a prompt, get text back. Run this in your SQL client with `set serveroutput on`.
+
+   ```sql
+   set serveroutput on
+   declare
+     l_result json_object_t;
+   begin
+     l_result := uc_ai.generate_text(
+       p_user_prompt => 'In one sentence, what is Oracle APEX?',
+       p_provider    => uc_ai.c_provider_openai,
+       p_model       => uc_ai_openai.c_model_gpt_4o_mini
+     );
+
+     dbms_output.put_line(l_result.get_clob('final_message'));
+   end;
+   /
+   ```
+
+   If you see a sentence printed, your provider and key are working. 🎉
+
+2. ### Give the AI a tool
+
+   On its own, the model only knows what it was trained on. A **tool** is a PL/SQL function it can call to get live information or take an action. Let's give it the simplest possible tool: one that returns the current date.
+
+   First, create the function. It must take no meaningful input and **return a `CLOB`** (the AI communicates in text):
+
+   ```sql
+   create or replace function get_today
+     return clob
+   as
+   begin
+     return 'The current date is ' || to_char(sysdate, 'YYYY-MM-DD Dy');
+   end;
+   /
+   ```
+
+   Then register it as a tool so the model knows it exists:
+
+   ```sql
+   declare
+     l_tool_id uc_ai_tools.id%type;
+   begin
+     l_tool_id := uc_ai_tools_api.create_tool_from_schema(
+       p_tool_code     => 'GET_TODAY',
+       p_description   => 'Returns the current date. Use this whenever you need to know today''s date.',
+       p_function_call => 'return get_today();',
+       p_json_schema   => null,   -- this tool takes no parameters
+       p_tags          => apex_t_varchar2('demo')
+     );
+     commit;
+   end;
+   /
+   ```
+
+   <Aside type="tip">
+   `p_json_schema => null` means the tool has no parameters. When a tool *does* need input, you describe it with a [JSON schema](/products/uc-ai/docs/guides/tools/#tools-call-a-plsql-function) and read the values from a `CLOB` parameter.
+   </Aside>
+
+3. ### Watch the AI use it
+
+   Now ask a question the model can only answer by calling your tool. Enabling tools is a single flag:
+
+   ```sql
+   set serveroutput on
+   declare
+     l_result json_object_t;
+   begin
+     uc_ai.g_enable_tools := true;              -- allow tool use
+     uc_ai.g_tool_tags := apex_t_varchar2('demo');  -- only offer our demo tool
+
+     l_result := uc_ai.generate_text(
+       p_user_prompt => 'What day of the week is it today?',
+       p_provider    => uc_ai.c_provider_openai,
+       p_model       => uc_ai_openai.c_model_gpt_4o_mini
+     );
+
+     dbms_output.put_line(l_result.get_clob('final_message'));
+     -- e.g. "Today is a Wednesday."
+   end;
+   /
+   ```
+
+   Behind the scenes the model decided it needed the date, called `GET_TODAY`, read the result, and answered in plain language. That loop — reason, call a tool, use the result — is the core of an **agent**.
+
+</Steps>
+
+## What just happened
+
+You built a tiny agent: the model reasoned about your question, chose a tool, and used its output to respond. Everything ran inside your database, and you controlled exactly what the AI could do.
+
+## Where to go next
+
+- **Give it real data** — register tools that query your tables. See the [Tools guide](/products/uc-ai/docs/guides/tools/).
+- **Get structured results** — force JSON output you can insert into columns with the [Structured Output guide](/products/uc-ai/docs/guides/structured_output/).
+- **Reuse prompts** — manage versioned prompt templates with [Prompt Profiles](/products/uc-ai/docs/guides/prompt-profiles/).
+- **Build bigger agents** — orchestrate multi-step and multi-agent workflows in [Agentic AI](/products/uc-ai/docs/guides/agentic-ai/).
+- **Browse ideas** — see the [Use Cases](/products/uc-ai/docs/guides/use-cases/) page.

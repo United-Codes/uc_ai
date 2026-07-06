@@ -32,7 +32,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is APEX Office Print?',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o_mini model
+    p_model => uc_ai_openai.c_model_gpt_4o_mini
   );
 
   DBMS_OUTPUT.PUT_LINE('OpenAI Response: '
