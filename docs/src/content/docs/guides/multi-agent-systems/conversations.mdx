@@ -92,6 +92,8 @@ BEGIN
     p_prompt_profile_code => 'party_synthesizer_profile',
     p_status              => uc_ai_agents_api.c_status_active
   );
+
+  COMMIT; -- agents must be committed before they can be executed
 END;
 /
 ```
@@ -144,6 +146,8 @@ BEGIN
     p_max_iterations       => 2,
     p_status               => uc_ai_agents_api.c_status_active
   );
+
+  COMMIT;
 END;
 /
 ```
@@ -274,6 +278,8 @@ BEGIN
     p_max_iterations       => 1,
     p_status               => uc_ai_agents_api.c_status_active
   );
+
+  COMMIT;
 END;
 /
 ```

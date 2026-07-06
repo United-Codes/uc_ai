@@ -44,6 +44,8 @@ create or replace package body test_uc_ai_agent_conversation as
           p_status              => uc_ai_agents_api.c_status_active
         );
     end;
+
+    commit; -- agents must be committed before execution (autonomous telemetry)
   end setup;
 
   procedure teardown
@@ -57,12 +59,10 @@ create or replace package body test_uc_ai_agent_conversation as
   as
     l_agent_id    number;
   begin
-    delete from uc_ai_agents where code in (
-      'party_brainstormer_agent',
-      'party_critic_agent',
-      'party_synthesizer_agent',
-      'party_moderator_agent'
-    );
+    uc_ai_test_agent_utils.delete_agents_cascade('party_brainstormer_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('party_critic_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('party_synthesizer_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('party_moderator_agent');
 
     l_agent_id := uc_ai_agents_api.create_agent(
       p_code                => 'party_brainstormer_agent',
@@ -99,6 +99,8 @@ create or replace package body test_uc_ai_agent_conversation as
       p_status              => uc_ai_agents_api.c_status_active,
       p_input_schema        => null
     );
+
+    commit;
   end birthday_agents;
 
   procedure execute_round_robin_conversation
@@ -139,6 +141,7 @@ create or replace package body test_uc_ai_agent_conversation as
     }';
 
     -- Create the conversation agent
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_conversation_code);
     l_conv_id := uc_ai_agents_api.create_agent(
       p_code                 => gc_conversation_code,
       p_description          => 'Test conversation agent',
@@ -147,6 +150,7 @@ create or replace package body test_uc_ai_agent_conversation as
       p_max_iterations       => 2,
       p_status               => uc_ai_agents_api.c_status_active
     );
+    commit;
 
     ut.expect(l_conv_id, 'Conversation agent should have been created').to_be_not_null();
 
@@ -207,7 +211,7 @@ create or replace package body test_uc_ai_agent_conversation as
       ]
     }';
 
-    delete from UC_AI_AGENTS where code = 'test_ai_driven_conversation';
+    uc_ai_test_agent_utils.delete_agents_cascade('test_ai_driven_conversation');
 
     l_conv_id := uc_ai_agents_api.create_agent(
       p_code                 => 'test_ai_driven_conversation',
@@ -217,6 +221,7 @@ create or replace package body test_uc_ai_agent_conversation as
       p_max_iterations       => 1,
       p_status               => uc_ai_agents_api.c_status_active
     );
+    commit;
 
     -- Execute the conversation
     l_session_id := uc_ai_agents_api.generate_session_id;

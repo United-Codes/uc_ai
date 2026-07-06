@@ -201,7 +201,10 @@ create or replace package body uc_ai_agents_api as
 
 
   /*
-   * Creates an execution record and returns its ID
+   * Creates an execution record and returns its ID.
+   * Commits in an autonomous transaction (Logger-style telemetry): execution
+   * rows are immediately visible to other sessions and survive a rollback of
+   * the calling transaction.
    */
   function create_execution(
     p_agent_id         in uc_ai_agents.id%type,
@@ -210,8 +213,12 @@ create or replace package body uc_ai_agents_api as
     p_input_parameters in json_object_t
   ) return uc_ai_agent_executions.id%type
   as
+    pragma autonomous_transaction;
+    l_scope   uc_ai_logger.scope := gc_scope_prefix || 'create_execution';
     l_exec_id uc_ai_agent_executions.id%type;
     l_params clob;
+    e_fk_violation exception;
+    pragma exception_init(e_fk_violation, -2291);
   begin
     if p_input_parameters is not null then
       l_params := p_input_parameters.to_clob;
@@ -259,13 +266,29 @@ create or replace package body uc_ai_agents_api as
       g_exec_env.env_context
     )
     returning id into l_exec_id;
-    
+
+    commit;
     return l_exec_id;
+  exception
+    when e_fk_violation then
+      rollback;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'execution'
+      , p1           => 'agent (id ' || p_agent_id || ') must be committed before execution because execution telemetry uses autonomous transactions'
+      );
+    when others then
+      rollback;
+      raise;
   end create_execution;
 
 
   /*
-   * Updates execution with completion status and results
+   * Updates execution with completion status and results.
+   * Commits in an autonomous transaction; failed/timeout rows keep their last
+   * state checkpoint for diagnosis, successful ones clear it (the final state
+   * lives in output_result).
    */
   procedure complete_execution(
     p_exec_id           in uc_ai_agent_executions.id%type,
@@ -278,9 +301,10 @@ create or replace package body uc_ai_agents_api as
     p_output_tokens     in number default 0
   )
   as
+    pragma autonomous_transaction;
     l_output_result clob;
   begin
-    l_output_result := case when p_output_result is not null then p_output_result.to_clob else null end;  
+    l_output_result := case when p_output_result is not null then p_output_result.to_clob else null end;
 
     update uc_ai_agent_executions
     set status              = p_status,
@@ -290,9 +314,57 @@ create or replace package body uc_ai_agents_api as
         iteration_count     = p_iteration_count,
         tool_calls_count    = p_tool_calls_count,
         total_input_tokens  = p_input_tokens,
-        total_output_tokens = p_output_tokens
+        total_output_tokens = p_output_tokens,
+        current_state       = case when p_status = c_exec_completed then null else current_state end
     where id = p_exec_id;
+
+    commit;
+  exception
+    when others then
+      rollback;
+      raise;
   end complete_execution;
+
+
+  /*
+   * Persists a mid-run state checkpoint for a running execution.
+   * Commits in an autonomous transaction so running workflows can be monitored
+   * from other sessions and crashed runs keep their last known state in
+   * uc_ai_agent_executions.current_state. Best-effort: never raises.
+   */
+  procedure checkpoint_execution(
+    p_exec_id       in uc_ai_agent_executions.id%type,
+    p_current_state in json_object_t,
+    p_last_step     in varchar2 default null
+  )
+  as
+    pragma autonomous_transaction;
+    l_scope uc_ai_logger.scope := gc_scope_prefix || 'checkpoint_execution';
+    l_state json_object_t;
+    l_state_clob clob;
+  begin
+    if p_exec_id is null or p_current_state is null then
+      return;
+    end if;
+
+    l_state := treat(p_current_state.clone as json_object_t);
+    if p_last_step is not null then
+      l_state.put('_last_completed_step', p_last_step);
+    end if;
+    l_state.put('_checkpoint_at', to_char(systimestamp, 'YYYY-MM-DD"T"HH24:MI:SS.FF3'));
+    l_state_clob := l_state.to_clob;
+
+    update uc_ai_agent_executions
+    set current_state = l_state_clob
+    where id = p_exec_id;
+
+    commit;
+  exception
+    when others then
+      -- best-effort telemetry: a checkpoint failure must never abort the run
+      rollback;
+      uc_ai_logger.log_error('Error writing execution checkpoint for execution ' || p_exec_id, l_scope, sqlerrm);
+  end checkpoint_execution;
 
 
   -- ============================================================================
@@ -1504,7 +1576,11 @@ create or replace package body uc_ai_agents_api as
     if l_exec.output_result is not null then
       l_result.put('output_result', json_object_t.parse(l_exec.output_result));
     end if;
-    
+
+    if l_exec.current_state is not null then
+      l_result.put('current_state', json_object_t.parse(l_exec.current_state));
+    end if;
+
     return l_result;
   exception
     when no_data_found then

@@ -67,6 +67,7 @@ as
   c_err_input_mapping_eval     constant number := -20452;
   c_err_final_message_eval     constant number := -20453;
   c_err_apex_session           constant number := -20454;
+  c_err_jsonpath_resolve       constant number := -20455;
 
   -- Validation errors
   c_err_not_found              constant number := -20500;
@@ -107,6 +108,7 @@ as
   c_msg_input_mapping_eval     constant varchar2(200 char) := 'Error evaluating input mapping key %0: %1';
   c_msg_final_message_eval     constant varchar2(200 char) := 'Error evaluating final_message: %0 - %1';
   c_msg_apex_session           constant varchar2(500 char) := 'Cannot create APEX session. Schema needs an APEX Workspace with at least one application.';
+  c_msg_jsonpath_resolve       constant varchar2(200 char) := 'Error resolving state expression %0: %1';
 
   -- Validation messages
   c_msg_not_found              constant varchar2(200 char) := '%0 not found: %1';

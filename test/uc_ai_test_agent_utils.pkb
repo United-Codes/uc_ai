@@ -504,19 +504,46 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
       p_status                => 'active'
     );
 
-    -- Delete test executions first (FK constraint)
-    delete from uc_ai_agent_executions 
-     where agent_id in (
-       select a.id from uc_ai_agents a where code like 'TEST_%'
+    -- Delete test executions first (FK constraint, includes child executions)
+    delete from uc_ai_agent_executions
+     where id in (
+       select e.id
+         from uc_ai_agent_executions e
+        start with e.agent_id in (
+          select a.id from uc_ai_agents a where a.code like 'TEST_%'
+        )
+      connect by nocycle prior e.id = e.parent_execution_id
      );
-    
+
   end create_profiles;
+
+  procedure delete_agents_cascade(
+    p_code_pattern in varchar2
+  )
+  as
+  begin
+    -- Single statement so the self-referencing parent_execution_id FK is
+    -- checked after all hierarchy rows (parents and children) are gone.
+    -- The connect by also catches child executions that belong to OTHER
+    -- agents but were spawned by executions of the deleted ones.
+    delete from uc_ai_agent_executions
+     where id in (
+       select e.id
+         from uc_ai_agent_executions e
+        start with e.agent_id in (
+          select a.id from uc_ai_agents a where a.code like p_code_pattern
+        )
+      connect by nocycle prior e.id = e.parent_execution_id
+     );
+
+    delete from uc_ai_agents where code like p_code_pattern;
+  end delete_agents_cascade;
 
   procedure cleanup_test_data
   as
   begin
-    -- Delete test agents
-    delete from uc_ai_agents where code like 'TEST_%';
+    -- Delete test agents (with their committed execution telemetry)
+    delete_agents_cascade('TEST_%');
 
     -- Delete test profiles
     delete from uc_ai_prompt_profiles where code like 'TEST_AGENT_%';

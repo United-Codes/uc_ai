@@ -51,6 +51,7 @@ BEGIN
     p_workflow_definition => l_workflow_def,
     p_status              => uc_ai_agents_api.c_status_active
   );
+  commit; -- agents must be committed before they can be executed
 
   -- Execute
   l_session_id := uc_ai_agents_api.generate_session_id;
@@ -113,6 +114,7 @@ BEGIN
     p_workflow_definition => l_workflow_def,
     p_status              => uc_ai_agents_api.c_status_active
   );
+  commit; -- agents must be committed before they can be executed
 
   l_result := uc_ai_agents_api.execute_agent(
     p_agent_code       => 'category_router',
@@ -211,6 +213,7 @@ BEGIN
     p_max_iterations      => 3,
     p_status              => uc_ai_agents_api.c_status_active
   );
+  commit; -- agents must be committed before they can be executed
 
   l_result := uc_ai_agents_api.execute_agent(
     p_agent_code       => 'haiku_refinement',
@@ -335,3 +338,28 @@ A string value that resolves a path from the workflow state:
 | `{$.input.*}`                    | Original input parameters passed to the workflow |
 | `{$.steps.<output_key>}`         | Full output of a previous step                   |
 | `{$.steps.<output_key>.<field>}` | Specific field from a step's structured output   |
+
+## Monitoring running workflows
+
+Workflows checkpoint their state to `uc_ai_agent_executions.current_state` after every completed step (conversation and handoff agents checkpoint after every turn/handoff). Checkpoints are committed in autonomous transactions, so you can watch a long-running workflow from another session:
+
+```sql
+SELECT status,
+       json_value(current_state, '$._last_completed_step') AS last_step,
+       json_value(current_state, '$._checkpoint_at')       AS checkpointed_at
+  FROM uc_ai_agent_executions
+ WHERE id = :execution_id;
+```
+
+The checkpoint contains the full workflow state (all step outputs so far) plus two markers:
+
+- `_last_completed_step` — agent code of the most recently completed step
+- `_checkpoint_at` — timestamp of the checkpoint
+
+On successful completion the checkpoint is cleared (the final state lives in `output_result`). Failed or crashed executions keep their last checkpoint, so you can inspect exactly how far a workflow got and what each step produced. `uc_ai_agents_api.get_execution_details` also returns `current_state` when present.
+
+<Aside type="note">
+  Execution telemetry is written in autonomous transactions: execution rows
+  survive a rollback of your calling transaction, and an agent must be
+  committed before it can be executed within the same session transaction.
+</Aside>

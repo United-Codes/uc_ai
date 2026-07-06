@@ -3,6 +3,7 @@ create or replace package test_uc_ai_agent_orchestrator as
 
   --%suite(Orchestrator Agent Tests)
   --%suitepath(uc_ai.agents)
+  --%rollback(manual)
 
   --%beforeall
   procedure setup;

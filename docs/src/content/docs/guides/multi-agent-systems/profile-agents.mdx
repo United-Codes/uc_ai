@@ -51,6 +51,8 @@ BEGIN
     p_prompt_profile_code => 'GEO_ASSISTANT',
     p_status              => uc_ai_agents_api.c_status_active
   );
+
+  COMMIT; -- agents must be committed before they can be executed
 END;
 /
 ```

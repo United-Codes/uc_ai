@@ -72,6 +72,13 @@ create or replace package body uc_ai_agent_exec_api as
       p_step_output      => po_step_output,
       pio_workflow_state => pio_workflow_state
     );
+
+    -- persist state so running workflows can be monitored and failed ones diagnosed
+    uc_ai_agents_api.checkpoint_execution(
+      p_exec_id       => p_exec_id,
+      p_current_state => pio_workflow_state,
+      p_last_step     => l_step_agent
+    );
   end run_step;
 
 
@@ -164,7 +171,7 @@ create or replace package body uc_ai_agent_exec_api as
     l_max_it_json     number;
     l_iteration_array json_array_t := json_array_t();
     l_step_state      json_object_t;
-    l_final_msg       varchar2(32676 char);
+    l_final_msg       clob;
   begin
     uc_ai_logger.log('Executing loop workflow: ' || p_agent.code, l_scope);
     
@@ -240,7 +247,9 @@ create or replace package body uc_ai_agent_exec_api as
       
       l_iteration := l_iteration + 1;
 
-      l_step_state := l_workflow_state.get_object('steps');
+      -- clone: append of a parented node copies on 23ai, but that is
+      -- undocumented JSON DOM behavior - make the per-iteration snapshot explicit
+      l_step_state := treat(l_workflow_state.get_object('steps').clone as json_object_t);
       l_iteration_array.append(l_step_state);
     end loop iteration_loop;
     
@@ -886,6 +895,19 @@ end;!';
       else
         exit handoff_loop;
       end if;
+
+      declare
+        l_checkpoint json_object_t := json_object_t();
+      begin
+        l_checkpoint.put('handoff_count', l_handoff_count);
+        l_checkpoint.put('current_agent', l_current_agent);
+        l_checkpoint.put('conversation_history', l_conversation_history);
+        uc_ai_agents_api.checkpoint_execution(
+          p_exec_id       => p_exec_id,
+          p_current_state => l_checkpoint,
+          p_last_step     => 'handoff_' || l_handoff_count
+        );
+      end;
     end loop handoff_loop;
     
     -- Return final result with full history
@@ -1023,8 +1045,20 @@ end;!';
               exit turn_loop;
             end if;
           end loop participant_loop;
-          
+
           l_turn_count := l_turn_count + 1;
+
+          declare
+            l_checkpoint json_object_t := json_object_t();
+          begin
+            l_checkpoint.put('turn', l_turn_count);
+            l_checkpoint.put('conversation', l_conversation);
+            uc_ai_agents_api.checkpoint_execution(
+              p_exec_id       => p_exec_id,
+              p_current_state => l_checkpoint,
+              p_last_step     => 'turn_' || l_turn_count
+            );
+          end;
         end loop turn_loop;
 
         l_return := json_object_t();
@@ -1160,6 +1194,18 @@ end;!';
           );
           
           l_turn_count := l_turn_count + 1;
+
+          declare
+            l_checkpoint json_object_t := json_object_t();
+          begin
+            l_checkpoint.put('turn', l_turn_count);
+            l_checkpoint.put('conversation', l_conversation);
+            uc_ai_agents_api.checkpoint_execution(
+              p_exec_id       => p_exec_id,
+              p_current_state => l_checkpoint,
+              p_last_step     => 'turn_' || l_turn_count
+            );
+          end;
         end loop ai_turn_loop;
 
         l_agent_input := uc_ai_agent_workflow_api.map_inputs(l_moderator_summary_input, l_current_state);

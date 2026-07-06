@@ -13,12 +13,18 @@ create or replace package body test_uc_ai_agent_profile as
 
     -- Create required prompt profile
     uc_ai_test_agent_utils.create_math_profile;
+
+    -- clear committed agents/executions from previous runs
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_profile_agent_code || '%');
+
+    commit; -- agents must be committed before execution (autonomous telemetry)
   end setup;
 
   procedure teardown
   as
   begin
     uc_ai_test_agent_utils.cleanup_test_data;
+    commit;
   end teardown;
 
   procedure execute_profile_agent
@@ -37,6 +43,7 @@ create or replace package body test_uc_ai_agent_profile as
       p_prompt_profile_code => 'TEST_AGENT_MATH',
       p_status              => uc_ai_agents_api.c_status_active
     );
+    commit;
 
     ut.expect(l_agent_id).to_be_not_null();
 
@@ -87,6 +94,7 @@ create or replace package body test_uc_ai_agent_profile as
           p_prompt_profile_code => 'TEST_AGENT_MATH',
           p_status              => uc_ai_agents_api.c_status_active
         );
+        commit;
     end;
 
     -- Execute with different math question
@@ -129,6 +137,7 @@ create or replace package body test_uc_ai_agent_profile as
           p_prompt_profile_code => 'TEST_AGENT_MATH',
           p_status              => uc_ai_agents_api.c_status_active
         );
+        commit;
     end;
 
     l_session_id := uc_ai_agents_api.generate_session_id;
@@ -180,6 +189,7 @@ create or replace package body test_uc_ai_agent_profile as
           p_prompt_profile_code => 'TEST_AGENT_MATH',
           p_status              => uc_ai_agents_api.c_status_active
         );
+        commit;
     end;
 
     -- First call
@@ -283,6 +293,7 @@ create or replace package body test_uc_ai_agent_profile as
           p_prompt_profile_code => 'TEST_AGENT_MATH',
           p_status              => uc_ai_agents_api.c_status_active
         );
+        commit;
     end;
 
     -- Should raise error: follow_up_message without session_id
@@ -312,6 +323,7 @@ create or replace package body test_uc_ai_agent_profile as
           p_prompt_profile_code => 'TEST_AGENT_MATH',
           p_status              => uc_ai_agents_api.c_status_active
         );
+        commit;
     end;
 
     -- Should raise error: no prior execution in this session

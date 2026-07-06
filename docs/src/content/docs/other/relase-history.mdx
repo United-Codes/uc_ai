@@ -5,6 +5,17 @@ sidebar:
   order: 3
 ---
 
+## v26.3 (unreleased)
+
+**Features**:
+
+Multi-Agent Systems:
+
+- **Per-step execution checkpointing**: workflow, conversation, and handoff agents now write their state to `uc_ai_agent_executions.current_state` after every step/turn. Running executions can be monitored from other sessions, and failed or crashed executions keep their last known state for diagnosis (cleared automatically on success). `uc_ai_agents_api.get_execution_details` includes the checkpoint when present.
+- **Durable execution telemetry**: execution rows are now written in autonomous transactions (like Logger). They are visible immediately to other sessions and survive a rollback of the calling transaction, so failed executions and their token accounting are never lost. **Breaking**: an agent must be committed before it can be executed in the same session transaction — creating and executing an agent in one uncommitted transaction now raises a clear error.
+- **Input mapping engine rewrite**: `{$.path}` expressions are now resolved by walking the workflow state natively instead of reserializing and reparsing the full state via `APEX_JSON` for every expression — significantly faster for large workflows and loops. Mapped values are no longer capped at 32k characters (large step outputs like long LLM messages now flow through mappings intact). Resolution errors raise `-20455` instead of silently returning `NULL`; unresolvable paths still substitute an empty string as before.
+- Loop workflows now snapshot each iteration's state explicitly (guards against JSON DOM reference aliasing in `_loop_iteration_state`).
+
 ## v26.2
 
 To upgrade run `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.2).

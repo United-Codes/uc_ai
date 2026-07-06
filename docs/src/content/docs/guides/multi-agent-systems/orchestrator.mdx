@@ -159,6 +159,8 @@ BEGIN
     p_status              => uc_ai_agents_api.c_status_active,
     p_input_schema        => l_input_schema.to_clob
   );
+
+  COMMIT; -- agents must be committed before they can be executed
 END;
 /
 ```
@@ -194,6 +196,8 @@ BEGIN
     p_orchestration_config => l_orch_config,
     p_status               => uc_ai_agents_api.c_status_active
   );
+
+  COMMIT;
 END;
 /
 ```

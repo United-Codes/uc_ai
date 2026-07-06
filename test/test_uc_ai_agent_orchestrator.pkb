@@ -45,12 +45,15 @@ create or replace package body test_uc_ai_agent_orchestrator as
           p_status              => uc_ai_agents_api.c_status_active
         );
     end;
+
+    commit; -- agents must be committed before execution (autonomous telemetry)
   end setup;
 
   procedure teardown
   as
   begin
     uc_ai_test_agent_utils.cleanup_test_data;
+    commit;
   end teardown;
 
   procedure execute_orchestrator_routing
@@ -78,8 +81,10 @@ create or replace package body test_uc_ai_agent_orchestrator as
       "required": ["prompt"]
     }');
 
-    delete from uc_ai_agents where code in ('calendar_agent', 'flight_booking_agent', 'hotel_booking_agent', 'finance_agent');
-    
+    uc_ai_test_agent_utils.delete_agents_cascade('calendar_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('flight_booking_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('hotel_booking_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('finance_agent');
 
     l_agent_id := uc_ai_agents_api.create_agent(
       p_code                => 'calendar_agent',
@@ -126,6 +131,7 @@ create or replace package body test_uc_ai_agent_orchestrator as
     }';
 
     -- Create the orchestrator agent
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_orchestrator_code);
     l_orchestrator_id := uc_ai_agents_api.create_agent(
       p_code                 => gc_orchestrator_code,
       p_description          => 'Test orchestrator agent',
@@ -133,6 +139,7 @@ create or replace package body test_uc_ai_agent_orchestrator as
       p_orchestration_config => l_orch_config,
       p_status               => uc_ai_agents_api.c_status_active
     );
+    commit;
 
     ut.expect(l_orchestrator_id).to_be_not_null();
 
@@ -186,7 +193,10 @@ create or replace package body test_uc_ai_agent_orchestrator as
       "required": ["prompt"]
     }');
 
-    delete from uc_ai_agents where code in ('calendar_agent', 'flight_booking_agent', 'hotel_booking_agent', 'finance_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('calendar_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('flight_booking_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('hotel_booking_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('finance_agent');
 
     l_agent_id := uc_ai_agents_api.create_agent(
       p_code                => 'calendar_agent',
@@ -247,6 +257,7 @@ create or replace package body test_uc_ai_agent_orchestrator as
           p_status               => uc_ai_agents_api.c_status_active
         );
     end;
+    commit;
 
     -- First call
     l_session_id := uc_ai_agents_api.generate_session_id;

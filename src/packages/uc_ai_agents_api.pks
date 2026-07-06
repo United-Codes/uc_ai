@@ -374,6 +374,26 @@ as
   ) return json_object_t;
 
 
+  /*
+   * Persists a mid-run state checkpoint for a running execution into
+   * uc_ai_agent_executions.current_state.
+   *
+   * Commits in an autonomous transaction so running workflows can be monitored
+   * from other sessions and failed/crashed runs keep their last known state.
+   * Cleared automatically when the execution completes successfully.
+   * Best-effort: never raises.
+   *
+   * @param p_exec_id       ID of the running execution
+   * @param p_current_state Current workflow state (stored as a copy)
+   * @param p_last_step     Optional marker of the last completed step
+   */
+  procedure checkpoint_execution(
+    p_exec_id       in uc_ai_agent_executions.id%type,
+    p_current_state in json_object_t,
+    p_last_step     in varchar2 default null
+  );
+
+
   -- ============================================================================
   -- Execution History
   -- ============================================================================

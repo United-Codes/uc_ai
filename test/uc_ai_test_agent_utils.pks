@@ -11,6 +11,14 @@ create or replace package uc_ai_test_agent_utils as
   -- Cleans up all test data
   procedure cleanup_test_data;
 
+  -- Deletes agents matching a code pattern together with their execution
+  -- rows (including child executions of other agents spawned by them).
+  -- Needed because execution telemetry commits autonomously and survives
+  -- test rollbacks.
+  procedure delete_agents_cascade(
+    p_code_pattern in varchar2
+  );
+
   -- Validates agent result has required fields
   procedure validate_agent_result(
     p_result    in json_object_t,

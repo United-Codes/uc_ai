@@ -24,18 +24,19 @@ create or replace package body test_uc_ai_agent_workflow as
 
     -- Create required prompt profiles
     uc_ai_test_agent_utils.create_profiles;
-    delete from uc_ai_agents
-     where code in (
-       gc_step1_agent_code,
-       gc_step2_agent_code,
-       gc_haiku_creator_agent_code,
-       gc_haiku_rater_agent_code,
-       gc_haiku_improver_agent_code,
-       gc_haiku_translator_agent_code,
-       gc_cond_geo_agent_code,
-       gc_cond_sum_agent_code,
-       gc_cond_workflow_code
-     );
+    -- workflow agents first: their executions are parents of the step agents' executions
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_seq_workflow_code);
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_loop_workflow_code);
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_cond_workflow_code);
+    uc_ai_test_agent_utils.delete_agents_cascade('TEST_COND_WF_INVALID');
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_step1_agent_code);
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_step2_agent_code);
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_haiku_creator_agent_code);
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_haiku_rater_agent_code);
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_haiku_improver_agent_code);
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_haiku_translator_agent_code);
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_cond_geo_agent_code);
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_cond_sum_agent_code);
 
     -- Create step 1 profile agent (math)
     l_id := uc_ai_agents_api.create_agent(
@@ -102,6 +103,8 @@ create or replace package body test_uc_ai_agent_workflow as
       p_prompt_profile_code => 'TEST_AGENT_SUM',
       p_status              => uc_ai_agents_api.c_status_active
     );
+
+    commit; -- agents must be committed before execution (autonomous telemetry)
   end setup;
 
   procedure teardown
@@ -152,6 +155,7 @@ create or replace package body test_uc_ai_agent_workflow as
       p_workflow_definition => l_workflow_def,
       p_status              => uc_ai_agents_api.c_status_active
     );
+    commit;
 
     ut.expect(l_workflow_id).to_be_not_null();
 
@@ -239,6 +243,7 @@ create or replace package body test_uc_ai_agent_workflow as
     }#';
 
     -- Create the loop workflow agent
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_loop_workflow_code);
     l_workflow_id := uc_ai_agents_api.create_agent(
       p_code                => gc_loop_workflow_code,
       p_description         => 'Test loop workflow',
@@ -247,6 +252,7 @@ create or replace package body test_uc_ai_agent_workflow as
       p_max_iterations      => 3,
       p_status              => uc_ai_agents_api.c_status_active
     );
+    commit;
 
     ut.expect(l_workflow_id).to_be_not_null();
 
@@ -330,6 +336,7 @@ create or replace package body test_uc_ai_agent_workflow as
     }#';
 
     -- Create the loop workflow agent
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_loop_workflow_code);
     l_workflow_id := uc_ai_agents_api.create_agent(
       p_code                => gc_loop_workflow_code,
       p_description         => 'Test loop workflow',
@@ -338,6 +345,7 @@ create or replace package body test_uc_ai_agent_workflow as
       p_max_iterations      => 3,
       p_status              => uc_ai_agents_api.c_status_active
     );
+    commit;
 
     ut.expect(l_workflow_id).to_be_not_null();
 
@@ -360,6 +368,10 @@ create or replace package body test_uc_ai_agent_workflow as
     l_final_msg := l_result.get_clob('final_message');
     sys.dbms_output.put_line('Loop workflow result: ' || l_final_msg);
     ut.expect(l_final_msg).to_be_not_null();
+
+    -- one snapshot per completed loop iteration (guards against JSON DOM reference aliasing)
+    ut.expect(l_result.has('_loop_iteration_state')).to_be_true();
+    ut.expect(l_result.get_array('_loop_iteration_state').get_size).to_equal(l_result.get_number('_loop_iterations'));
   end execute_loop_workflow_better;
 
 
@@ -372,7 +384,7 @@ create or replace package body test_uc_ai_agent_workflow as
     l_workflow_id  number;
     l_workflow_def clob;
   begin
-    delete from uc_ai_agents where code = gc_cond_workflow_code;
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_cond_workflow_code);
 
     l_workflow_def := q'#{
       "workflow_type": "conditional",
@@ -403,6 +415,7 @@ create or replace package body test_uc_ai_agent_workflow as
       p_workflow_definition => l_workflow_def,
       p_status              => uc_ai_agents_api.c_status_active
     );
+    commit;
 
     ut.expect(l_workflow_id).to_be_not_null();
   end create_conditional_workflow;
@@ -477,7 +490,7 @@ create or replace package body test_uc_ai_agent_workflow as
     l_workflow_id  number;
     l_workflow_def clob;
   begin
-    delete from uc_ai_agents where code = 'TEST_COND_WF_INVALID';
+    uc_ai_test_agent_utils.delete_agents_cascade('TEST_COND_WF_INVALID');
 
     -- condition as object was never supported and used to be silently ignored;
     -- create_agent must reject it

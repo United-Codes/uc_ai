@@ -3,6 +3,7 @@ create or replace package test_uc_ai_agent_conversation as
 
   --%suite(Conversation Agent Tests)
   --%suitepath(uc_ai.agents)
+  --%rollback(manual)
 
   --%beforeall
   procedure setup;
