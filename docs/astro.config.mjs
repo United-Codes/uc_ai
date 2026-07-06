@@ -1,5 +1,6 @@
 // @ts-check
 
+import { unified } from "@astrojs/markdown-remark";
 import react from "@astrojs/react";
 import starlight from "@astrojs/starlight";
 import { defineConfig } from "astro/config";
@@ -10,6 +11,12 @@ import starlightLinksValidator from "starlight-links-validator";
 export default defineConfig({
 	site: "https://united-codes.com/products/uc-ai/docs",
 	base: "/products/uc-ai/docs",
+	// Astro 7 defaults to the new "Satteri" Markdown processor, which
+	// starlight-image-zoom does not support yet. Use the classic unified()
+	// (remark/rehype) processor until the plugin catches up.
+	markdown: {
+		processor: unified(),
+	},
 	integrations: [
 		starlight({
 			title: "UC AI",
@@ -66,25 +73,27 @@ export default defineConfig({
 						"guides/agentic-ai",
 						{
 							label: "Multi-Agent Systems",
-							autogenerate: { directory: "guides/multi-agent-systems" },
 							badge: {
 								text: "WIP",
 								variant: "caution",
 							},
+							items: [
+								{ autogenerate: { directory: "guides/multi-agent-systems" } },
+							],
 						},
 					],
 				},
 				{
 					label: "Provider Setup",
-					autogenerate: { directory: "providers" },
+					items: [{ autogenerate: { directory: "providers" } }],
 				},
 				{
 					label: "API Reference",
-					autogenerate: { directory: "api" },
+					items: [{ autogenerate: { directory: "api" } }],
 				},
 				{
 					label: "Other",
-					autogenerate: { directory: "other" },
+					items: [{ autogenerate: { directory: "other" } }],
 				},
 			],
 			customCss: ["./src/styles/uc.css"],
