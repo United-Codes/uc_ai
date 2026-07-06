@@ -255,6 +255,7 @@ create or replace package body uc_ai_structured_output as
     l_result.remove('maxLength');
 
     -- Remove array constraints
+    l_result.remove('minItems');
     l_result.remove('maxItems');
     l_result.remove('uniqueItems');
 

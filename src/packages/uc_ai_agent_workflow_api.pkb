@@ -277,7 +277,18 @@ create or replace package body uc_ai_agent_workflow_api as
       end if;
     else
       l_is_plsqlsql := false;
-      l_expr := p_final_message.to_string();
+      if p_final_message.is_string then
+        -- read the string value through a container; to_string() would keep
+        -- the surrounding JSON quotes in the final message
+        declare
+          l_wrap json_array_t := json_array_t();
+        begin
+          l_wrap.append(p_final_message);
+          l_expr := l_wrap.get_clob(0);
+        end;
+      else
+        l_expr := p_final_message.to_string();
+      end if;
     end if;
 
     l_tmp := resolve_jsonpath_values(l_expr, p_workflow_state);
