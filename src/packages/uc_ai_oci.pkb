@@ -613,17 +613,27 @@ create or replace package body uc_ai_oci as
               l_role := l_resp_message.get_string('role');
 
               if l_role = 'ASSISTANT' then
+                -- NOTE: In the OCI GENERIC apiFormat an assistant message can carry
+                -- BOTH `content` and `toolCalls` at the same time (they are independent
+                -- optional fields on AssistantMessage in OCI's SDK). Some models (e.g.
+                -- xai.grok-*) return an empty `content` array *together* with `toolCalls`
+                -- on a tool-calling turn. These must therefore be handled as two separate
+                -- `if` branches: an `if/elsif` would let a present-but-empty `content`
+                -- short-circuit the tool-call handling, yielding an empty final message
+                -- and tool_calls_count = 0.
                 if l_resp_message.has('content') then
                   l_content_arr := l_resp_message.get_array('content');
 
                   <<content_loop>>
                   for j in 0 .. l_content_arr.get_size - 1 loop
                     l_oci_content_item := treat(l_content_arr.get(j) as json_object_t);
-                  
+
                     l_new_msg := get_text_content_generic(l_oci_content_item, pio_state);
                     l_normalized_messages.append(l_new_msg);
                   end loop content_loop;
-                elsif l_resp_message.has('toolCalls') then
+                end if;
+
+                if l_resp_message.has('toolCalls') then
                   declare
                     l_tool_call_arr  json_array_t;
                     l_tool_call_item json_object_t;
