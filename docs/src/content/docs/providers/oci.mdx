@@ -117,6 +117,15 @@ end;
 
 Tools / function calling is supported. Refer to the [model documentation page](https://docs.oracle.com/en-us/iaas/Content/generative-ai/pretrained-models.htm) to see which models support it.
 
+### File input (images & PDFs)
+
+OCI supports file input through the [file analysis](/products/uc-ai/docs/guides/file_analysis/) message API, but only via its GENERIC chat format:
+
+- Use a GENERIC-format vision model (Meta Llama vision, Google Gemini, xAI Grok). **Cohere models reject file content.**
+- **Images:** PNG or JPG only, ≤ 5 MB.
+- **Documents:** PDF only.
+- Other types (e.g. WebP, GIF) are rejected with `ORA-20303`.
+
 ## Generating Embeddings
 
 OCI provides Cohere embedding models for semantic search, clustering, and other vector-based operations:

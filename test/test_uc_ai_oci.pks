@@ -29,6 +29,15 @@ create or replace package test_uc_ai_oci as
   --%test(Tool usage - clock in user using Responses API)
   procedure tool_clock_in_responses_api;
 
+  --%test(PDF file input in Generic Mode)
+  procedure pdf_file_input_generic;
+
+  --%test(Image file input in Generic Mode)
+  procedure image_file_input_generic;
+
+  --%test(Unsupported file type is rejected in Generic Mode)
+  procedure rejects_unsupported_file;
+
   --%test(Basic recipe generation with OCI in Cohere Mode)
   procedure basic_recipe_cohere;
 

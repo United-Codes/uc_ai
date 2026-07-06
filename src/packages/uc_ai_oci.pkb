@@ -139,14 +139,45 @@ create or replace package body uc_ai_oci as
                 l_oci_content_item.put('text', l_content_item.get_clob('text'));
                 l_oci_content.append(l_oci_content_item);
               when 'file' then
-                -- OCI supports file content in specific formats
-                l_oci_content_item := json_object_t();
-                l_oci_content_item.put('type', 'IMAGE'); -- or other supported types
-                -- Note: OCI may require different format for file content
-                -- This would need to be adapted based on OCI's exact requirements
-                l_oci_content_item.put('data', l_content_item.get_clob('data'));
-                l_oci_content_item.put('mediaType', l_content_item.get_string('mediaType'));
-                l_oci_content.append(l_oci_content_item);
+                -- OCI GENERIC chat expects polymorphic content parts keyed by "type":
+                --   IMAGE    -> { imageUrl:    { url: "data:<mime>;base64,..", detail } }  (PNG/JPG, <= 5 MB)
+                --   DOCUMENT -> { documentUrl: { url: "data:application/pdf;base64,..", detail } }  (PDF)
+                -- data URI encoding matches the other providers; see uc_ai_openai.pkb 'file' branch.
+                declare
+                  l_data      clob := l_content_item.get_clob('data');
+                  l_mime_type varchar2(4000 char) := l_content_item.get_string('mediaType');
+                  l_url_obj   json_object_t;
+                  l_detail    varchar2(20 char);
+                  l_opts      json_object_t := l_content_item.get_object('providerOptions');
+                begin
+                  l_oci_content_item := json_object_t();
+                  l_url_obj := json_object_t();
+                  -- optional per-file detail via providerOptions => {"detail":"HIGH"}; default AUTO
+                  l_detail := coalesce(case when l_opts is not null then l_opts.get_string('detail') end, 'AUTO');
+
+                  if l_mime_type in ('image/png', 'image/jpeg', 'image/jpg') then
+                    l_oci_content_item.put('type', 'IMAGE');
+                    l_url_obj.put('url', 'data:' || l_mime_type || ';base64,' || l_data);
+                    l_url_obj.put('detail', l_detail);
+                    l_oci_content_item.put('imageUrl', l_url_obj);
+                  elsif l_mime_type = 'application/pdf' then
+                    l_oci_content_item.put('type', 'DOCUMENT');
+                    l_url_obj.put('url', 'data:application/pdf;base64,' || l_data);
+                    l_url_obj.put('detail', l_detail);
+                    l_oci_content_item.put('documentUrl', l_url_obj);
+                  else
+                    -- OCI only supports PNG/JPG images and PDF documents in GENERIC mode
+                    uc_ai_error.raise_error(
+                      p_error_code => uc_ai_error.c_err_unhandled_format
+                    , p_scope      => l_scope
+                    , p0           => 'file type'
+                    , p1           => l_mime_type
+                    , p_extra      => l_content_item.stringify
+                    );
+                  end if;
+
+                  l_oci_content.append(l_oci_content_item);
+                end;
             end case;
           end loop user_content_loop;
           

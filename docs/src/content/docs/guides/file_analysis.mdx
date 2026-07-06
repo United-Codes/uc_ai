@@ -112,3 +112,37 @@ begin
   sys.dbms_output.put_line('Last message: ' || l_final_message);
   -- > The AI should respond with "Apple"
 ```
+
+## Provider support and limits
+
+File input works with the same message API across providers, but the accepted
+file types differ by provider (and by model). The framework rejects a file it
+cannot map to the provider's format with `ORA-20303` (unhandled format).
+
+| Provider | Images | Documents | Notes |
+|----------|--------|-----------|-------|
+| Anthropic | JPEG, PNG, GIF, WebP | PDF | |
+| OpenAI | JPEG, PNG, GIF, WebP | PDF | |
+| Google | JPEG, PNG, GIF, WebP | PDF (+ more) | |
+| Ollama | model-dependent | — | files are sent as images |
+| **OCI** | **PNG, JPG only** (≤ 5 MB) | **PDF only** | GENERIC-format vision models only; **Cohere models do not accept files** |
+
+### OCI specifics
+
+OCI Generative AI only supports file input through its GENERIC chat format, so
+you must use a GENERIC-format vision model (e.g. Meta Llama vision, Google
+Gemini, xAI Grok) — **Cohere models reject file content**. Images must be **PNG
+or JPG and ≤ 5 MB**; documents must be **PDF**. WebP/GIF and other types are
+rejected with `ORA-20303`.
+
+Optionally pass a `detail` hint (`AUTO` (default), `HIGH`, `LOW`) via provider
+options:
+
+```sql
+l_content.append(uc_ai_message_api.create_file_content(
+  p_media_type      => 'image/png',
+  p_data_blob       => :my_png,
+  p_filename        => 'chart.png',
+  p_provider_options => json_object_t('{"detail":"HIGH"}')
+));
+```
