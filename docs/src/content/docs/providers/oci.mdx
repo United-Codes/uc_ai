@@ -18,6 +18,16 @@ As of v26.2, UC AI routes OCI calls through OCI's Responses API endpoint by defa
 uc_ai_oci.g_use_responses_api := false;
 ```
 
+## Max output tokens
+
+OCI chat requests are capped by `maxTokens`, which defaults to `4096`. Raise it for long outputs (e.g. document extraction) to avoid silent truncation:
+
+```sql
+uc_ai_oci.g_max_tokens := 8192;
+```
+
+When the model stops because this cap was reached, UC AI reports `finish_reason = 'length'` so callers can detect truncation. (Can also be set per call via the provider config key `g_max_tokens`.)
+
 ## Prerequisites
 
 1. Create OCI API Key and APEX Web Credential (see [guide](/products/uc-ai/docs/help/create-oci-key/))

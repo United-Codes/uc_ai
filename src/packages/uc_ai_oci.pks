@@ -69,6 +69,7 @@ as
   g_region varchar2(64 char) := 'us-ashburn-1'; -- OCI region for API endpoint
   g_apex_web_credential varchar2(255 char);
   g_use_responses_api boolean := true;
+  g_max_tokens pls_integer := 4096; -- Default max output tokens for OCI chat requests (GENERIC & COHERE)
 
   /*
    * Oracle Cloud Infrastructure (OCI) Generative AI implementation for text generation 

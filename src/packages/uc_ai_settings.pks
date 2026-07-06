@@ -67,6 +67,7 @@ as
   , oc_region                      varchar2(64 char)
   , oc_apex_web_credential         varchar2(255 char)
   , oc_use_responses_api           boolean
+  , oc_max_tokens                  pls_integer
     -- xai
   , xa_reasoning_effort            varchar2(32 char)
   , xa_apex_web_credential         varchar2(255 char)

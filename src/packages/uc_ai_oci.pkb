@@ -631,6 +631,7 @@ create or replace package body uc_ai_oci as
             l_normalized_tool_results json_array_t := json_array_t();
 
             l_used_tool boolean := false;
+            l_finish_reason varchar2(255 char);
 
             l_new_msg json_object_t;
           begin
@@ -640,6 +641,7 @@ create or replace package body uc_ai_oci as
             for i in 0 .. l_choices.get_size - 1 loop
               l_choice := treat(l_choices.get(i) as json_object_t);
               l_resp_message :=  l_choice.get_object('message');
+              l_finish_reason := l_choice.get_string('finishReason');
 
               l_role := l_resp_message.get_string('role');
 
@@ -775,8 +777,22 @@ create or replace package body uc_ai_oci as
               );
             end if;
 
-            -- Set finish reason to stop for successful completion
-            pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
+            -- Map OCI's GENERIC finishReason to UC AI's finish reasons so callers
+            -- can detect truncation (length). When tools were used we recursed above
+            -- and the nested (final) turn already set finish_reason, so don't clobber it.
+            if not l_used_tool then
+              case lower(l_finish_reason)
+                when 'length' then
+                  pio_result.put('finish_reason', uc_ai.c_finish_reason_length);
+                when 'content_filter' then
+                  pio_result.put('finish_reason', uc_ai.c_finish_reason_content_filter);
+                when 'tool_calls' then
+                  pio_result.put('finish_reason', uc_ai.c_finish_reason_tool_calls);
+                else
+                  -- 'stop', null, or anything unknown -> treat as a normal completion
+                  pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
+              end case;
+            end if;
           end;
         else
           uc_ai_logger.log_error('No text in OCI chatResponse', l_scope);
@@ -901,6 +917,17 @@ create or replace package body uc_ai_oci as
             l_normalized_messages.append(l_new_msg);
 
             pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+
+            -- Map OCI COHERE finishReason so callers can detect truncation (length)
+            case upper(l_chat_response.get_string('finishReason'))
+              when 'MAX_TOKENS' then
+                pio_result.put('finish_reason', uc_ai.c_finish_reason_length);
+              when 'CONTENT_FILTER' then
+                pio_result.put('finish_reason', uc_ai.c_finish_reason_content_filter);
+              else
+                -- COMPLETE, STOP_SEQUENCE, null, or unknown -> normal completion
+                pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
+            end case;
           end;
         else
           uc_ai_logger.log_error('No text in OCI chatResponse', l_scope);
@@ -1035,7 +1062,7 @@ create or replace package body uc_ai_oci as
       -- Set chat request
       l_chat_request := json_object_t();
       l_chat_request.put('apiFormat', 'GENERIC');
-      l_chat_request.put('maxTokens', 600);
+      l_chat_request.put('maxTokens', coalesce(l_settings.oc_max_tokens, 4096));
       l_chat_request.put('isStream', false);
       l_chat_request.put('numGenerations', 1);
       --l_chat_request.put('frequencyPenalty', 0);
@@ -1057,7 +1084,7 @@ create or replace package body uc_ai_oci as
       l_chat_request.put('isEcho', false);
       l_chat_request.put('frequencyPenalty', 0);
       l_chat_request.put('isStream', false);
-      l_chat_request.put('maxTokens', 600);
+      l_chat_request.put('maxTokens', coalesce(l_settings.oc_max_tokens, 4096));
       if l_settings.enable_tools then
         l_chat_request.put('isForceSingleStep', true);
       end if;

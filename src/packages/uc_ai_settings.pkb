@@ -49,6 +49,7 @@ as
     l_s.oc_region                      := 'us-ashburn-1';
     l_s.oc_apex_web_credential         := null;
     l_s.oc_use_responses_api           := true;
+    l_s.oc_max_tokens                  := 4096;
 
     -- xai
     l_s.xa_reasoning_effort            := 'low';
@@ -117,6 +118,7 @@ as
     l_s.oc_region                      := uc_ai_oci.g_region;
     l_s.oc_apex_web_credential         := uc_ai_oci.g_apex_web_credential;
     l_s.oc_use_responses_api           := uc_ai_oci.g_use_responses_api;
+    l_s.oc_max_tokens                  := uc_ai_oci.g_max_tokens;
 
     -- xai
     l_s.xa_reasoning_effort            := uc_ai_xai.g_reasoning_effort;
@@ -447,6 +449,8 @@ as
                 l_s.oc_region := l_provider_obj.get_string(l_key);
               when 'g_use_responses_api' then
                 l_s.oc_use_responses_api := l_provider_obj.get_boolean(l_key);
+              when 'g_max_tokens' then
+                l_s.oc_max_tokens := l_provider_obj.get_number(l_key);
               else
                 uc_ai_error.raise_error(
                   p_error_code => uc_ai_error.c_err_invalid_config
