@@ -21,6 +21,9 @@ as
 
   subtype scope is varchar2(100 char); -- @dblinter ignore(g-9115): compliant with real logger
 
+  -- @dblinter ignore(g-7230): compliant with real logger
+  -- @dblinter ignore(g-9101): compliant with real logger
+  -- @dblinter ignore(g-9105): compliant with real logger
   gc_empty_tab_param tab_param;
 
  -- $if sys.dbms_db_version.version > 12 $then

@@ -44,6 +44,7 @@ as
   -- appended after the framework's base headers (Content-Type, auth, ...)
   -- e.g. uc_ai.g_extra_headers('X-Tenant-Id') := 'acme';
   type t_extra_headers is table of varchar2(4000 char) index by varchar2(255 char);
+  -- @dblinter ignore(g-9105): public package-global collection, g_ prefix is intended (not a local var)
   g_extra_headers t_extra_headers;
 
   -- reasoning level constants

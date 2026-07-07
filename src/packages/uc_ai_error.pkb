@@ -125,6 +125,7 @@ create or replace package body uc_ai_error as
     when others then -- @dblinter ignore(g-5040): error is handled in raise_error
       -- Re-raise anything already raised by raise_error (custom -203xx codes)
       -- unchanged; only wrap genuine JSON parse failures below.
+      -- @dblinter ignore(g-5020): must match the whole -20000..-20999 application-error range, no named exception applies
       if sqlcode <= -20000 and sqlcode >= -20999 then
         raise;
       end if;

@@ -24,6 +24,8 @@ create or replace package body uc_ai_anthropic as
 
   function get_text_content (
     p_message in json_object_t
+  -- @dblinter ignore(g-7170): in out kept for a uniform signature across the get_*_content accumulator family
+  -- @dblinter ignore(g-7440): pio_state is a run-state accumulator threaded through the call, so in out is intentional
   , pio_state in out nocopy uc_ai_settings.t_run_state
   ) return json_object_t
   as

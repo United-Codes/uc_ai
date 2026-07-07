@@ -38,6 +38,7 @@ create or replace package body uc_ai_openai as
 
   procedure process_text_message(
     p_message         in json_object_t
+  -- @dblinter ignore(g-7170): in out kept for a uniform signature across the state-accumulator helper family
   , pio_state         in out nocopy uc_ai_settings.t_run_state
   , pio_norm_messages in out nocopy json_array_t
   )

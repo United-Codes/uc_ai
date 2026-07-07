@@ -28,6 +28,7 @@ create or replace package body uc_ai_agents_api as
   );
 
   -- @dblinter ignore(g-7230): allow use of global variables
+  -- @dblinter ignore(g-9104): package-global record, g_ prefix is intended (not a local var)
   g_exec_env   t_exec_env;
   g_exec_depth pls_integer := 0;
 
@@ -213,6 +214,7 @@ create or replace package body uc_ai_agents_api as
     p_input_parameters in json_object_t
   ) return uc_ai_agent_executions.id%type
   as
+    -- @dblinter ignore(g-3330): intentional Logger-style telemetry; execution rows must survive a rollback of the calling transaction
     pragma autonomous_transaction;
     l_scope   uc_ai_logger.scope := gc_scope_prefix || 'create_execution';
     l_exec_id uc_ai_agent_executions.id%type;
@@ -301,6 +303,7 @@ create or replace package body uc_ai_agents_api as
     p_output_tokens     in number default 0
   )
   as
+    -- @dblinter ignore(g-3330): intentional autonomous transaction; failed/timeout state checkpoints must persist even when the run rolls back
     pragma autonomous_transaction;
     l_output_result clob;
   begin
@@ -338,6 +341,7 @@ create or replace package body uc_ai_agents_api as
     p_last_step     in varchar2 default null
   )
   as
+    -- @dblinter ignore(g-3330): intentional autonomous transaction; lets other sessions monitor running workflows and preserves last-known state of crashed runs
     pragma autonomous_transaction;
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'checkpoint_execution';
     l_state json_object_t;
@@ -363,7 +367,7 @@ create or replace package body uc_ai_agents_api as
     when others then
       -- best-effort telemetry: a checkpoint failure must never abort the run
       rollback;
-      uc_ai_logger.log_error('Error writing execution checkpoint for execution ' || p_exec_id, l_scope, sqlerrm);
+      uc_ai_logger.log_error('Error writing execution checkpoint for execution ' || p_exec_id, l_scope, sqlerrm || chr(10) || sys.dbms_utility.format_error_backtrace);
   end checkpoint_execution;
 
 

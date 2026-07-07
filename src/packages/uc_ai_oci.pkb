@@ -15,6 +15,8 @@ create or replace package body uc_ai_oci as
   -- OCI Generative AI reference: https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/
   function get_text_content_generic (
     p_message in json_object_t
+  -- @dblinter ignore(g-7170): in out kept for a uniform signature across the get_*_content accumulator family
+  -- @dblinter ignore(g-7440): pio_state is a run-state accumulator threaded through the call, so in out is intentional
   , pio_state in out nocopy uc_ai_settings.t_run_state
   ) return json_object_t
   as
@@ -52,6 +54,8 @@ create or replace package body uc_ai_oci as
 
   function get_text_content_cohere (
     p_chat_response in json_object_t
+  -- @dblinter ignore(g-7170): in out kept for a uniform signature across the get_*_content accumulator family
+  -- @dblinter ignore(g-7440): pio_state is a run-state accumulator threaded through the call, so in out is intentional
   , pio_state in out nocopy uc_ai_settings.t_run_state
   ) return json_object_t
   as

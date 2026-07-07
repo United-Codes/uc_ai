@@ -13,6 +13,8 @@ create or replace package body uc_ai as
   , p_model                 in model_type
   , p_max_tool_calls        in pls_integer
   , p_response_json_schema  in json_object_t
+  -- @dblinter ignore(g-7440): the settings record must round-trip through this dispatch, so in out is intentional
+  -- @dblinter ignore(g-9110): kept as p_settings for consistency with the providers, where the same record is passed in
   , p_settings              in out nocopy uc_ai_settings.t_settings
   ) return json_object_t
   as
@@ -230,6 +232,8 @@ create or replace package body uc_ai as
     p_input    in json_array_t
   , p_provider in provider_type
   , p_model    in model_type
+  -- @dblinter ignore(g-7440): the settings record must round-trip through this dispatch, so in out is intentional
+  -- @dblinter ignore(g-9110): kept as p_settings for consistency with the providers, where the same record is passed in
   , p_settings in out nocopy uc_ai_settings.t_settings
   ) return json_array_t
   as

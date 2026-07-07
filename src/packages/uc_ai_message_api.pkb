@@ -209,6 +209,7 @@ create or replace package body uc_ai_message_api as
     end if;
 
     if p_files is not null then
+      <<files_loop>>
       for i in 1 .. p_files.count loop
         l_content_array.append(
           create_file_content(
@@ -218,7 +219,7 @@ create or replace package body uc_ai_message_api as
             p_provider_options => p_files(i).provider_options
           )
         );
-      end loop;
+      end loop files_loop;
     end if;
 
     return create_user_message(l_content_array);
