@@ -117,5 +117,10 @@ create or replace package test_uc_ai_agent_validation as
   --%throws(-20503)
   procedure ctx_invalid_override_key;
 
+  -- execute_agent transaction visibility -------------------------------------
+
+  --%test(Executing an uncommitted agent raises a clear config error, not ORA-00060)
+  procedure exec_uncommitted_agent_clear_err;
+
 end test_uc_ai_agent_validation;
 /

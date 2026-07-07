@@ -530,5 +530,47 @@ create or replace package body test_uc_ai_agent_validation as
     );
   end ctx_invalid_override_key;
 
+
+  -- execute_agent transaction visibility -------------------------------------
+
+  procedure exec_uncommitted_agent_clear_err
+  as
+    l_id      number;
+    l_result  json_object_t;
+    l_sqlcode number;
+    l_sqlerrm varchar2(4000 char);
+  begin
+    -- Create an agent but deliberately DO NOT commit it. Execution telemetry is
+    -- written in an autonomous transaction whose agent_id FK cannot see this
+    -- still-uncommitted row, so the autonomous insert self-deadlocks (ORA-00060)
+    -- while the calling transaction is suspended waiting for it. create_execution
+    -- must translate that into a clear config error telling the caller to commit.
+    l_id := uc_ai_agents_api.create_agent(
+      p_code                => 'TEST_VAL_UNCOMMITTED',
+      p_description         => 'Uncommitted profile agent',
+      p_agent_type          => uc_ai_agents_api.c_type_profile,
+      p_prompt_profile_code => gc_profile_code,
+      p_status              => uc_ai_agents_api.c_status_active
+    );
+
+    begin
+      l_result := uc_ai_agents_api.execute_agent(
+        p_agent_code       => 'TEST_VAL_UNCOMMITTED',
+        p_input_parameters => json_object_t()
+      );
+      ut.fail('execute_agent should have raised for an uncommitted agent');
+    exception
+      when others then
+        l_sqlcode := sqlcode;
+        l_sqlerrm := sqlerrm;
+    end;
+
+    -- A clear config error (-20503), not a raw ORA-00060 deadlock
+    ut.expect(l_sqlcode).to_equal(-20503);
+    ut.expect(l_sqlerrm).to_be_like('%must be committed before execution%');
+
+    rollback;  -- discard the uncommitted agent
+  end exec_uncommitted_agent_clear_err;
+
 end test_uc_ai_agent_validation;
 /

@@ -221,6 +221,11 @@ create or replace package body uc_ai_agents_api as
     l_params clob;
     e_fk_violation exception;
     pragma exception_init(e_fk_violation, -2291);
+    -- Self-deadlock: the autonomous insert blocks on the agent_id FK because the
+    -- referenced agent row is still uncommitted in the calling transaction, which
+    -- is in turn suspended waiting for this autonomous transaction to return.
+    e_deadlock exception;
+    pragma exception_init(e_deadlock, -60);
   begin
     if p_input_parameters is not null then
       l_params := p_input_parameters.to_clob;
@@ -279,6 +284,14 @@ create or replace package body uc_ai_agents_api as
       , p_scope      => l_scope
       , p0           => 'execution'
       , p1           => 'agent (id ' || p_agent_id || ') must be committed before execution because execution telemetry uses autonomous transactions'
+      );
+    when e_deadlock then
+      rollback;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'execution'
+      , p1           => 'agent (id ' || p_agent_id || ') and any parent records must be committed before execution: execution telemetry runs in an autonomous transaction that cannot see rows still uncommitted in the calling transaction (raised ORA-00060 self-deadlock)'
       );
     when others then
       rollback;
