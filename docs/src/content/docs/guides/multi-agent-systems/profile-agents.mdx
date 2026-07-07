@@ -87,6 +87,38 @@ END;
 
 The `p_input_parameters` are passed as prompt profile parameters - each key maps to a `{placeholder}` in the profile templates.
 
+## Attaching files (documents & images)
+
+Profile and orchestrator agents can accept files (PDFs, images, …) alongside the text input via
+the `p_files` parameter. The files are attached to the user message, so the model can analyse them
+in the same call. Build the collection with `uc_ai_message_api.t_files` and the model must be
+multimodal (see [file analysis](/products/uc-ai/docs/guides/file_analysis/)).
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_files  uc_ai_message_api.t_files := uc_ai_message_api.t_files();
+BEGIN
+  l_files.extend;
+  l_files(1).media_type := 'application/pdf';
+  l_files(1).data_blob  := (SELECT blob_content FROM my_docs WHERE id = 1);
+  l_files(1).filename   := 'report.pdf';
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'doc_agent',
+    p_input_parameters => json_object_t('{"question": "Summarize the attached report."}'),
+    p_files            => l_files
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+`p_files` also works with `p_follow_up_message` to attach files to a follow-up turn. It is only
+supported for **profile** and **orchestrator** agents; passing files to a workflow or handoff
+agent raises an error.
+
 ## Execution tracking
 
 Every call to `execute_agent` creates a row in `uc_ai_agent_executions`. You can query this table to see what happened:

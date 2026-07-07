@@ -338,6 +338,8 @@ as
    * @param p_session_id        Optional session ID for grouping executions (required when using p_follow_up_message)
    * @param p_parent_exec_id    Optional parent execution ID for nested calls
    * @param p_response_schema   Optional JSON schema for response validation (profile agents only)
+   * @param p_files             Optional files (documents/images) to attach to the user message
+   *                            (profile/orchestrator agents only). Build with uc_ai_message_api.t_files.
    *
    * @return                    JSON result object
    */
@@ -348,7 +350,8 @@ as
     p_follow_up_message in clob default null,
     p_session_id        in varchar2 default null,
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
-    p_response_schema   in json_object_t default null
+    p_response_schema   in json_object_t default null,
+    p_files             in uc_ai_message_api.t_files default null
   ) return json_object_t;
 
 
@@ -361,6 +364,8 @@ as
    * @param p_session_id        Optional session ID for grouping executions (required when using p_follow_up_message)
    * @param p_parent_exec_id    Optional parent execution ID for nested calls
    * @param p_response_schema   Optional JSON schema for response validation (profile agents only)
+   * @param p_files             Optional files (documents/images) to attach to the user message
+   *                            (profile/orchestrator agents only). Build with uc_ai_message_api.t_files.
    *
    * @return                    JSON result object
    */
@@ -370,7 +375,8 @@ as
     p_follow_up_message in clob default null,
     p_session_id        in varchar2 default null,
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
-    p_response_schema   in json_object_t default null
+    p_response_schema   in json_object_t default null,
+    p_files             in uc_ai_message_api.t_files default null
   ) return json_object_t;
 
 

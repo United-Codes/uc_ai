@@ -196,6 +196,34 @@ create or replace package body uc_ai_message_api as
     return create_user_message(l_content_array);
   end create_simple_user_message;
 
+  function create_user_message(
+    p_text  in clob,
+    p_files in t_files
+  ) return json_object_t is
+    l_content_array json_array_t;
+  begin
+    l_content_array := json_array_t();
+
+    if p_text is not null then
+      l_content_array.append(create_text_content(p_text));
+    end if;
+
+    if p_files is not null then
+      for i in 1 .. p_files.count loop
+        l_content_array.append(
+          create_file_content(
+            p_media_type       => p_files(i).media_type,
+            p_data_blob        => p_files(i).data_blob,
+            p_filename         => p_files(i).filename,
+            p_provider_options => p_files(i).provider_options
+          )
+        );
+      end loop;
+    end if;
+
+    return create_user_message(l_content_array);
+  end create_user_message;
+
   function create_simple_assistant_message(
     p_text in clob
   ) return json_object_t is

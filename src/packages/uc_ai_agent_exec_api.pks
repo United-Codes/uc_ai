@@ -56,6 +56,7 @@ as
    * @param p_response_schema   Optional JSON schema for response validation
    * @param p_follow_up_message Optional follow-up message for conversation continuation
    * @param p_session_id        Session ID (required for conversation continuation)
+   * @param p_files             Optional files (documents/images) to attach to the user message
    * @return JSON result from prompt profile execution
    */
   function execute_profile_agent(
@@ -64,7 +65,8 @@ as
     p_exec_id           in uc_ai_agent_executions.id%type,
     p_response_schema   in json_object_t default null,
     p_follow_up_message in clob default null,
-    p_session_id        in varchar2 default null
+    p_session_id        in varchar2 default null,
+    p_files             in uc_ai_message_api.t_files default null
   ) return json_object_t;
 
 
@@ -93,6 +95,7 @@ as
    * @param p_session_id        Session ID for grouping executions
    * @param p_exec_id           Execution ID for tracking
    * @param p_follow_up_message Optional follow-up message for conversation continuation
+   * @param p_files             Optional files (documents/images) to attach to the user message
    * @return JSON result from orchestration
    */
   function execute_orchestrator_agent(
@@ -100,7 +103,8 @@ as
     p_input_params      in json_object_t,
     p_session_id        in varchar2,
     p_exec_id           in uc_ai_agent_executions.id%type,
-    p_follow_up_message in clob default null
+    p_follow_up_message in clob default null,
+    p_files             in uc_ai_message_api.t_files default null
   ) return json_object_t;
 
 

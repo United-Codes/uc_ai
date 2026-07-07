@@ -221,5 +221,87 @@ create or replace package body test_uc_ai_message_api as
     ut.expect(l_element.get_string('text')).to_equal('It is 2.');
   end simple_assistant_message;
 
+
+  procedure user_message_with_files
+  as
+    l_files   uc_ai_message_api.t_files;
+    l_message json_object_t;
+    l_content json_array_t;
+    l_text    json_object_t;
+    l_file    json_object_t;
+    l_decoded blob;
+    l_source  blob;
+  begin
+    l_source := to_blob(utl_raw.cast_to_raw('PDF bytes here'));
+
+    l_files := uc_ai_message_api.t_files();
+    l_files.extend;
+    l_files(1).media_type := 'application/pdf';
+    l_files(1).data_blob  := l_source;
+    l_files(1).filename   := 'report.pdf';
+
+    l_message := uc_ai_message_api.create_user_message('Summarize this', l_files);
+
+    ut.expect(l_message.get_string('role')).to_equal('user');
+
+    l_content := l_message.get_array('content');
+    -- text block first, then one file block
+    ut.expect(l_content.get_size).to_equal(2);
+
+    l_text := treat(l_content.get(0) as json_object_t);
+    ut.expect(l_text.get_string('type')).to_equal('text');
+    ut.expect(l_text.get_string('text')).to_equal('Summarize this');
+
+    l_file := treat(l_content.get(1) as json_object_t);
+    ut.expect(l_file.get_string('type')).to_equal('file');
+    ut.expect(l_file.get_string('mediaType')).to_equal('application/pdf');
+    ut.expect(l_file.get_string('filename')).to_equal('report.pdf');
+
+    -- base64 data must decode back to the original bytes
+    l_decoded := apex_web_service.clobbase642blob(l_file.get_clob('data'));
+    ut.expect(sys.dbms_lob.compare(l_decoded, l_source)).to_equal(0);
+  end user_message_with_files;
+
+
+  procedure user_message_empty_files
+  as
+    l_files   uc_ai_message_api.t_files := uc_ai_message_api.t_files();
+    l_message json_object_t;
+    l_element json_object_t;
+  begin
+    -- empty collection behaves like create_simple_user_message
+    l_message := uc_ai_message_api.create_user_message('Just text', l_files);
+
+    ut.expect(l_message.get_string('role')).to_equal('user');
+    ut.expect(l_message.get_array('content').get_size).to_equal(1);
+
+    l_element := treat(l_message.get_array('content').get(0) as json_object_t);
+    ut.expect(l_element.get_string('type')).to_equal('text');
+    ut.expect(l_element.get_string('text')).to_equal('Just text');
+  end user_message_empty_files;
+
+
+  procedure user_message_files_no_text
+  as
+    l_files   uc_ai_message_api.t_files;
+    l_message json_object_t;
+    l_element json_object_t;
+  begin
+    l_files := uc_ai_message_api.t_files();
+    l_files.extend;
+    l_files(1).media_type := 'image/png';
+    l_files(1).data_blob  := to_blob(utl_raw.cast_to_raw('png'));
+
+    -- null text -> only the file block, no empty text block
+    l_message := uc_ai_message_api.create_user_message(null, l_files);
+
+    ut.expect(l_message.get_array('content').get_size).to_equal(1);
+
+    l_element := treat(l_message.get_array('content').get(0) as json_object_t);
+    ut.expect(l_element.get_string('type')).to_equal('file');
+    ut.expect(l_element.get_string('mediaType')).to_equal('image/png');
+    ut.expect(l_element.has('filename')).to_be_false();
+  end user_message_files_no_text;
+
 end test_uc_ai_message_api;
 /

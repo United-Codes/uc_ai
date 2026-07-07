@@ -45,5 +45,14 @@ create or replace package test_uc_ai_message_api as
   --%test(create_simple_assistant_message wraps text in a one-element content array)
   procedure simple_assistant_message;
 
+  --%test(create_user_message with files appends text and file content blocks)
+  procedure user_message_with_files;
+
+  --%test(create_user_message with empty files matches simple_user_message)
+  procedure user_message_empty_files;
+
+  --%test(create_user_message with null text and files omits the text block)
+  procedure user_message_files_no_text;
+
 end test_uc_ai_message_api;
 /

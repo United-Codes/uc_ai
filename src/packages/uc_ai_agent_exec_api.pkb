@@ -399,7 +399,8 @@ create or replace package body uc_ai_agent_exec_api as
     p_exec_id           in uc_ai_agent_executions.id%type,
     p_response_schema   in json_object_t default null,
     p_follow_up_message in clob default null,
-    p_session_id        in varchar2 default null
+    p_session_id        in varchar2 default null,
+    p_files             in uc_ai_message_api.t_files default null
   ) return json_object_t
   as
     l_scope           uc_ai_logger.scope := gc_scope_prefix || 'execute_profile_agent';
@@ -433,8 +434,8 @@ create or replace package body uc_ai_agent_exec_api as
       -- Apply history management
       l_messages := apply_history_management(l_messages, p_agent, p_session_id);
 
-      -- Append new user message
-      l_messages.append(uc_ai_message_api.create_simple_user_message(p_follow_up_message));
+      -- Append new user message (with any attached files)
+      l_messages.append(uc_ai_message_api.create_user_message(p_follow_up_message, p_files));
 
       -- Prepare profile context (applies model config, returns provider/model/schema)
       if p_response_schema is not null then
@@ -484,7 +485,8 @@ create or replace package body uc_ai_agent_exec_api as
       p_code            => p_agent.prompt_profile_code,
       p_version         => p_agent.prompt_profile_version,
       p_parameters      => p_input_params,
-      p_config_override => l_config
+      p_config_override => l_config,
+      p_files           => p_files
     );
 
     if p_response_schema is not null then
@@ -665,7 +667,8 @@ end;!';
     p_input_params      in json_object_t,
     p_session_id        in varchar2,
     p_exec_id           in uc_ai_agent_executions.id%type,
-    p_follow_up_message in clob default null
+    p_follow_up_message in clob default null,
+    p_files             in uc_ai_message_api.t_files default null
   ) return json_object_t
   as
     l_scope            uc_ai_logger.scope := gc_scope_prefix || 'execute_orchestrator_agent';
@@ -749,8 +752,8 @@ end;!';
         -- Apply history management
         l_messages := apply_history_management(l_messages, p_agent, p_session_id);
 
-        -- Append new user message
-        l_messages.append(uc_ai_message_api.create_simple_user_message(p_follow_up_message));
+        -- Append new user message (with any attached files)
+        l_messages.append(uc_ai_message_api.create_user_message(p_follow_up_message, p_files));
 
         -- Prepare profile context
         uc_ai_prompt_profiles_api.prepare_profile_context(
@@ -774,7 +777,8 @@ end;!';
         l_result := uc_ai_prompt_profiles_api.execute_profile(
           p_code              => l_profile_code,
           p_parameters        => p_input_params,
-          p_config_override   => l_profile_config
+          p_config_override   => l_profile_config,
+          p_files             => p_files
         );
       end if;
 

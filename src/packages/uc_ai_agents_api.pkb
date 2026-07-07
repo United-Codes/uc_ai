@@ -1295,7 +1295,8 @@ create or replace package body uc_ai_agents_api as
     p_follow_up_message in clob default null,
     p_session_id        in varchar2 default null,
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
-    p_response_schema   in json_object_t default null
+    p_response_schema   in json_object_t default null,
+    p_files             in uc_ai_message_api.t_files default null
   ) return json_object_t
   as
     l_scope         uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -1352,6 +1353,17 @@ create or replace package body uc_ai_agents_api as
       end if;
     end if;
 
+    -- Validate file input usage (only profile/orchestrator agents build a user message)
+    if p_files is not null and p_files.count > 0
+       and l_agent.agent_type not in (c_type_profile, c_type_orchestrator) then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'files'
+      , p1           => 'can only be used with profile or orchestrator agents, not ' || l_agent.agent_type
+      );
+    end if;
+
     -- Generate session ID if not provided
     l_session_id := coalesce(p_session_id, generate_session_id());
 
@@ -1363,13 +1375,13 @@ create or replace package body uc_ai_agents_api as
       -- Execute based on agent type (delegating to sub-package)
       case l_agent.agent_type
         when c_type_profile then
-          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema, p_follow_up_message, l_session_id);
+          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema, p_follow_up_message, l_session_id, p_files);
 
         when c_type_workflow then
           l_result := uc_ai_agent_exec_api.execute_workflow_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
 
         when c_type_orchestrator then
-          l_result := uc_ai_agent_exec_api.execute_orchestrator_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message);
+          l_result := uc_ai_agent_exec_api.execute_orchestrator_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message, p_files);
 
         when c_type_handoff then
           l_result := uc_ai_agent_exec_api.execute_handoff_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
@@ -1448,7 +1460,8 @@ create or replace package body uc_ai_agents_api as
     p_follow_up_message in clob default null,
     p_session_id        in varchar2 default null,
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
-    p_response_schema   in json_object_t default null
+    p_response_schema   in json_object_t default null,
+    p_files             in uc_ai_message_api.t_files default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -1463,7 +1476,8 @@ create or replace package body uc_ai_agents_api as
       p_follow_up_message => p_follow_up_message,
       p_session_id        => p_session_id,
       p_parent_exec_id    => p_parent_exec_id,
-      p_response_schema   => p_response_schema
+      p_response_schema   => p_response_schema,
+      p_files             => p_files
     );
   exception
     when others then

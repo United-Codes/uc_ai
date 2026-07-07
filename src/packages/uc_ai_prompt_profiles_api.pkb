@@ -926,7 +926,8 @@ create or replace package body uc_ai_prompt_profiles_api as
     p_parameters        in json_object_t default null,
     p_provider_override in uc_ai_prompt_profiles.provider%type default null,
     p_model_override    in uc_ai_prompt_profiles.model%type default null,
-    p_config_override   in json_object_t default null
+    p_config_override   in json_object_t default null,
+    p_files             in uc_ai_message_api.t_files default null
   ) return json_object_t
   as
     l_scope          uc_ai_logger.scope := gc_scope_prefix || 'execute_profile';
@@ -937,6 +938,7 @@ create or replace package body uc_ai_prompt_profiles_api as
     l_model          uc_ai_prompt_profiles.model%type;
     l_config         json_object_t;
     l_response_schema json_object_t;
+    l_messages       json_array_t;
   begin
     -- Get profile
     l_profile := get_prompt_profile(p_code, p_version);
@@ -976,6 +978,26 @@ create or replace package body uc_ai_prompt_profiles_api as
     end if;
 
     -- Call uc_ai.generate_text
+    -- When files are provided, build a multimodal message array so the file
+    -- content is attached to the user message; otherwise use the plain prompt path.
+    if p_files is not null and p_files.count > 0 then
+      l_messages := json_array_t();
+
+      if l_system_prompt is not null then
+        l_messages.append(uc_ai_message_api.create_system_message(l_system_prompt));
+      end if;
+
+      l_messages.append(uc_ai_message_api.create_user_message(l_user_prompt, p_files));
+
+      return uc_ai.generate_text(
+        p_messages             => l_messages,
+        p_provider             => l_provider,
+        p_model                => l_model,
+        p_max_tool_calls       => uc_ai.g_max_tool_calls,
+        p_response_json_schema => l_response_schema
+      );
+    end if;
+
     return uc_ai.generate_text(
       p_user_prompt          => l_user_prompt,
       p_system_prompt        => l_system_prompt,
