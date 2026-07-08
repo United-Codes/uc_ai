@@ -11,6 +11,7 @@ import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
 - Oracle Database 12.2 or later
 - Oracle APEX (older versions are fine, this project uses some of the APIs)
+- Outbound HTTPS access to your AI provider. On on-premises / self-managed databases you will likely need to configure network ACLs and a TLS wallet first — see [Network Setup (ACL & Wallet)](/products/uc-ai/docs/guides/network-setup/).
 
 ## Installing UC AI
 
@@ -138,6 +139,11 @@ Please still keep an eye on the [release notes](https://github.com/United-Codes/
 Now that UC AI is installed, here is a suggested reading order:
 
 <CardGrid>
+  <LinkCard
+    title="Network Setup (ACL & Wallet)"
+    description="Configure Oracle network ACLs and a TLS wallet so calls to providers can go through."
+    href="/products/uc-ai/docs/guides/network-setup/"
+  />
   <LinkCard
     title="Quickstart"
     description="Go from a plain text call to your first tool-calling agent in ~10 minutes."

@@ -60,6 +60,7 @@ export default defineConfig({
 					collapsed: false,
 					items: [
 						"guides/installation",
+						"guides/network-setup",
 						"guides/quickstart",
 						"guides/use-cases",
 						"guides/providers",
