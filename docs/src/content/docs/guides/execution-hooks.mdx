@@ -1,0 +1,90 @@
+---
+title: Execution Hooks
+description: Register a PL/SQL package that runs before and after agent executions — for budgeting, auditing, rate-limiting, and other cross-cutting concerns.
+sidebar:
+  order: 75
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**Execution hooks let you plug custom logic into `uc_ai_agents_api.execute_agent` without changing UC AI.**
+
+A hook is a PL/SQL package you provide that UC AI calls at the top level of every agent execution — once *before* the run starts and once *after* it finishes. UC AI stays agnostic about what your hook does; typical uses are:
+
+- **Budgeting / cost control** — veto a run before it spends tokens when a limit is reached.
+- **Auditing** — record who ran which agent, when, and how many tokens it used.
+- **Rate limiting** — reject a run when a caller exceeds an allowed frequency.
+
+<Aside type="note">
+Hooks fire only at the **top level** of `execute_agent`. Nested/child executions (workflow steps, orchestrated sub-agents) do not fire their own hooks — the top-level call covers the whole tree.
+</Aside>
+
+## The hook contract
+
+Your hook package must implement two procedures with exactly these signatures:
+
+```sql
+create or replace package my_ai_hook as
+
+  -- Called BEFORE any execution row is created or tokens are spent.
+  -- Raise to VETO the run: the exception propagates out of execute_agent
+  -- and no execution happens.
+  procedure before_execution(
+    p_agent_id    in number,     -- uc_ai_agents.id
+    p_agent_code  in varchar2,   -- uc_ai_agents.code
+    p_created_by  in varchar2,   -- coalesce(APEX user, DB user) of the caller
+    p_apex_app_id in number,     -- APEX application id (null outside APEX)
+    p_session_id  in varchar2    -- execution session id
+  );
+
+  -- Called AFTER the top-level execution finishes (success or failure).
+  -- Best-effort: any exception raised here is logged and swallowed, so a
+  -- completed run is never turned into a failure by the hook.
+  procedure after_execution(
+    p_exec_id       in number,   -- top-level uc_ai_agent_executions.id
+    p_status        in varchar2, -- 'completed' or 'failed'
+    p_input_tokens  in number,
+    p_output_tokens in number
+  );
+
+end my_ai_hook;
+/
+```
+
+### `before_execution`
+
+Runs after the agent is resolved but **before** the execution row is created and before any provider call. Raising here vetoes the run — the exception is what the caller of `execute_agent` receives, and no tokens are spent. This is the enforcement point for hard limits.
+
+### `after_execution`
+
+Runs once the top-level execution has finished, on both the success and failure paths. It is **best-effort**: if it raises, UC AI logs the error and continues, so bookkeeping (cost recording, audit writes) can never convert a finished run into a failure. Because it fires at the top level, `p_exec_id` is the root execution — walk `uc_ai_agent_executions` by `parent_execution_id` if you need the whole tree.
+
+## Registering a hook
+
+### By convention (recommended)
+
+If a **valid** package named `UC_AI_HOOK` exists in the current schema, UC AI dispatches to it automatically — no registration call needed. Installing an extension that provides `UC_AI_HOOK` activates it for every session.
+
+### By explicit override
+
+Register any package name at runtime (session-scoped):
+
+```sql
+-- point the hook at a specific package (schema-qualified names allowed)
+begin
+  uc_ai_agents_api.set_execution_hook('MY_AI_HOOK');
+end;
+/
+
+-- clear the override and fall back to the UC_AI_HOOK convention
+begin
+  uc_ai_agents_api.set_execution_hook(null);
+end;
+/
+```
+
+The resolved package name is cached per session and re-resolved whenever you call `set_execution_hook`.
+
+<Aside type="caution">
+`before_execution` runs **fail-closed**: if your hook package is registered but broken (missing procedure, compile error, unexpected exception), the error propagates and the run is aborted. Keep the hook robust, and prefer clearing the override to disabling a half-working hook.
+</Aside>

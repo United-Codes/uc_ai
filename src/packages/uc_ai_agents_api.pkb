@@ -32,10 +32,128 @@ create or replace package body uc_ai_agents_api as
   g_exec_env   t_exec_env;
   g_exec_depth pls_integer := 0;
 
+  -- Execution hook: a package implementing before_execution/after_execution
+  -- (see the spec's "Execution Hooks" section) that execute_agent dispatches to
+  -- at the top level. Resolved by convention to a VALID package named UC_AI_HOOK
+  -- unless an explicit override is registered via set_execution_hook.
+  c_hook_convention constant varchar2(128 char) := 'UC_AI_HOOK';
+  -- @dblinter ignore(g-7230): allow use of global variables
+  g_hook_override   varchar2(128 char);          -- explicit override (null = use convention)
+  g_hook_pkg        varchar2(128 char);           -- resolved package name (null = no hook)
+  g_hook_resolved   boolean := false;             -- whether convention resolution has run this session
+
 
   -- ============================================================================
   -- Private Helper Functions
   -- ============================================================================
+
+  /*
+   * Resolves the execution hook package name: an explicit override wins;
+   * otherwise the convention (a VALID package named UC_AI_HOOK in this schema),
+   * resolved once and cached per session. Returns null when no hook exists.
+   */
+  function resolve_hook_pkg return varchar2
+  as
+  begin
+    if g_hook_override is not null then
+      return g_hook_override;
+    end if;
+
+    if not g_hook_resolved then
+      begin
+        select object_name
+          into g_hook_pkg
+          from user_objects
+         where object_type = 'PACKAGE'
+           and object_name = c_hook_convention
+           and status = 'VALID';
+      exception
+        when no_data_found then
+          g_hook_pkg := null;
+      end;
+      g_hook_resolved := true;
+    end if;
+
+    return g_hook_pkg;
+  end resolve_hook_pkg;
+
+
+  /*
+   * Fires the pre-execution hook (top-level only). Exceptions PROPAGATE by
+   * design: a hook raising here (e.g. a budget hard-cap) vetoes the execution
+   * before any row is created or tokens are spent.
+   */
+  procedure fire_before_hook(
+    p_agent_id    in uc_ai_agent_executions.agent_id%type,
+    p_agent_code  in uc_ai_agents.code%type,
+    p_created_by  in uc_ai_agent_executions.created_by%type,
+    p_apex_app_id in uc_ai_agent_executions.apex_app_id%type,
+    p_session_id  in uc_ai_agent_executions.session_id%type
+  )
+  as
+    l_pkg  varchar2(128 char);
+    l_stmt varchar2(500 char);
+  begin
+    l_pkg := resolve_hook_pkg();
+    if l_pkg is null then
+      return;
+    end if;
+
+    l_stmt := 'begin ' || l_pkg || '.before_execution(:1, :2, :3, :4, :5); end;';
+    execute immediate l_stmt
+      using in p_agent_id, in p_agent_code, in p_created_by, in p_apex_app_id, in p_session_id;
+  end fire_before_hook;
+
+
+  /*
+   * Fires the post-execution hook (top-level only). Best-effort: any error is
+   * logged and swallowed so cost/audit recording can never fail a finished run.
+   */
+  procedure fire_after_hook(
+    p_exec_id       in uc_ai_agent_executions.id%type,
+    p_status        in varchar2,
+    p_input_tokens  in number,
+    p_output_tokens in number
+  )
+  as
+    l_scope uc_ai_logger.scope := gc_scope_prefix || 'fire_after_hook';
+    l_pkg   varchar2(128 char);
+    l_stmt  varchar2(500 char);
+  begin
+    l_pkg := resolve_hook_pkg();
+    if l_pkg is null then
+      return;
+    end if;
+
+    l_stmt := 'begin ' || l_pkg || '.after_execution(:1, :2, :3, :4); end;';
+    execute immediate l_stmt
+      using in p_exec_id, in p_status, in p_input_tokens, in p_output_tokens;
+  exception
+    when others then
+      uc_ai_logger.log_error(
+        p_text  => 'after_execution hook failed for execution ' || p_exec_id
+      , p_scope => l_scope
+      , p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+      );
+  end fire_after_hook;
+
+
+  /*
+   * Registers/overrides/clears the execution hook package. See the spec.
+   */
+  procedure set_execution_hook(p_package_name in varchar2 default null)
+  as
+  begin
+    if p_package_name is null then
+      g_hook_override := null;
+    else
+      -- validates SCHEMA.PACKAGE syntax (raises ORA-44003 on bad input); no existence check
+      g_hook_override := sys.dbms_assert.qualified_sql_name(p_package_name);
+    end if;
+    -- force convention re-resolution on next dispatch
+    g_hook_resolved := false;
+    g_hook_pkg      := null;
+  end set_execution_hook;
 
   /*
    * Extracts all agent_code references from a JSON object recursively
@@ -1083,18 +1201,37 @@ create or replace package body uc_ai_agents_api as
       return l_result;
     end if;
     
-    -- Validate each step has agent_code
+    -- Validate each step: agent steps need agent_code, PL/SQL steps need plsql_function_call
     <<step_loop>>
     for i in 0 .. l_steps.get_size - 1 loop
       declare
-        l_step json_object_t := treat(l_steps.get(i) as json_object_t);
+        l_step      json_object_t := treat(l_steps.get(i) as json_object_t);
+        l_step_type varchar2(20 char);
       begin
-        if not l_step.has('agent_code') then
-          l_result.is_valid := false;
-          l_result.error_reason := 'Step ' || i || ' missing required field: agent_code';
-          uc_ai_logger.log_error(l_result.error_reason, l_scope);
-          return l_result;
-        end if;
+        l_step_type := coalesce(l_step.get_string('step_type'), uc_ai_agent_exec_api.c_step_agent);
+
+        case l_step_type
+          when uc_ai_agent_exec_api.c_step_agent then
+            if not l_step.has('agent_code') then
+              l_result.is_valid := false;
+              l_result.error_reason := 'Step ' || i || ' missing required field: agent_code';
+              uc_ai_logger.log_error(l_result.error_reason, l_scope);
+              return l_result;
+            end if;
+          when uc_ai_agent_exec_api.c_step_plsql then
+            -- agent_code and output_key are optional for PL/SQL steps
+            if not l_step.has('plsql_function_call') or l_step.get_clob('plsql_function_call') is null then
+              l_result.is_valid := false;
+              l_result.error_reason := 'Step ' || i || ' (plsql) missing required field: plsql_function_call';
+              uc_ai_logger.log_error(l_result.error_reason, l_scope);
+              return l_result;
+            end if;
+          else
+            l_result.is_valid := false;
+            l_result.error_reason := 'Step ' || i || ' has invalid step_type: ' || l_step_type || '. Must be one of: agent, plsql';
+            uc_ai_logger.log_error(l_result.error_reason, l_scope);
+            return l_result;
+        end case;
 
         -- condition must be a string holding a PL/SQL boolean expression;
         -- other types would be silently ignored at execution time
@@ -1324,12 +1461,14 @@ create or replace package body uc_ai_agents_api as
     l_usage         json_object_t;
     l_input_tokens  number := 0;
     l_output_tokens number := 0;
+    l_is_top_level  boolean;
   begin
     uc_ai_logger.log('Executing agent: ' || p_agent_code, l_scope);
 
     -- Capture caller context once per top-level execution, before the
     -- synthetic APEX session masks it; nested executions reuse it
-    if g_exec_depth = 0 then
+    l_is_top_level := (g_exec_depth = 0);
+    if l_is_top_level then
       g_exec_env := snapshot_exec_env();
     end if;
     g_exec_depth := g_exec_depth + 1;
@@ -1383,6 +1522,18 @@ create or replace package body uc_ai_agents_api as
 
     -- Generate session ID if not provided
     l_session_id := coalesce(p_session_id, generate_session_id());
+
+    -- Fire the pre-execution hook (top-level only). A hook may veto by raising,
+    -- aborting before any execution row is created or tokens are spent.
+    if l_is_top_level then
+      fire_before_hook(
+        p_agent_id    => l_agent.id
+      , p_agent_code  => p_agent_code
+      , p_created_by  => g_exec_env.created_by
+      , p_apex_app_id => g_exec_env.apex_app_id
+      , p_session_id  => l_session_id
+      );
+    end if;
 
     -- Create execution record
     l_exec_id := create_execution(l_agent.id, l_session_id, p_parent_exec_id, p_input_parameters);
@@ -1446,7 +1597,12 @@ create or replace package body uc_ai_agents_api as
         p_input_tokens   => l_input_tokens,
         p_output_tokens  => l_output_tokens
       );
-      
+
+      -- Fire the post-execution hook (top-level only); best-effort, never raises.
+      if l_is_top_level then
+        fire_after_hook(l_exec_id, c_exec_completed, l_input_tokens, l_output_tokens);
+      end if;
+
     exception
       when others then
         -- Update execution as failed
@@ -1455,6 +1611,12 @@ create or replace package body uc_ai_agents_api as
           p_status        => c_exec_failed,
           p_error_message => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
         );
+
+        -- Fire the post-execution hook for the failed run (top-level only).
+        if l_is_top_level then
+          fire_after_hook(l_exec_id, c_exec_failed, l_input_tokens, l_output_tokens);
+        end if;
+
         raise;
     end;
 

@@ -7,3 +7,9 @@ install_uc_ai_complete_with_logger_noop.sql
 .dblinter/
 .env
 uc_ai_uninstall.log
+
+# Paid "pro" extensions live in a SEPARATE PRIVATE repo, mounted here as a git
+# submodule for paying support-pack customers. Ignored so the paid source can
+# never be committed into this public (LGPL) repo. When wiring the real
+# submodule, `git submodule add` records it via .gitmodules regardless of this.
+/ext/

@@ -325,6 +325,50 @@ as
 
 
   -- ============================================================================
+  -- Execution Hooks (generic extension point)
+  -- ============================================================================
+
+  /*
+   * Registers a package that receives execution lifecycle callbacks around the
+   * top-level of execute_agent. This is a general-purpose extension point
+   * (budgeting, auditing, rate-limiting, ...); this package stays agnostic of
+   * what the hook does.
+   *
+   * The hook package must implement:
+   *
+   *   procedure before_execution(
+   *     p_agent_id    in number,     -- uc_ai_agents.id
+   *     p_agent_code  in varchar2,   -- uc_ai_agents.code
+   *     p_created_by  in varchar2,   -- coalesce(APEX user, DB user) of the caller
+   *     p_apex_app_id in number,     -- APEX application id (null outside APEX)
+   *     p_session_id  in varchar2    -- execution session id
+   *   );
+   *   -- Called before any execution row is created or tokens are spent.
+   *   -- May RAISE to veto the execution (e.g. a budget hard-cap); the exception
+   *   -- propagates out of execute_agent and no run happens.
+   *
+   *   procedure after_execution(
+   *     p_exec_id       in number,   -- top-level uc_ai_agent_executions.id
+   *     p_status        in varchar2, -- 'completed' or 'failed'
+   *     p_input_tokens  in number,
+   *     p_output_tokens in number
+   *   );
+   *   -- Called after the top-level execution finishes (success or failure).
+   *   -- Best-effort: exceptions raised here are logged and swallowed so a
+   *   -- completed run is never turned into a failure by the hook.
+   *
+   * Resolution: if no override is set, the hook is auto-resolved by convention
+   * to a VALID package named UC_AI_HOOK in the current schema (so simply
+   * installing an extension that provides UC_AI_HOOK activates it, with no
+   * per-session registration). Pass an explicit name to override the
+   * convention; pass NULL to clear the override and fall back to the convention.
+   *
+   * @param p_package_name Hook package name (schema-qualified allowed). Null clears the override.
+   */
+  procedure set_execution_hook(p_package_name in varchar2 default null);
+
+
+  -- ============================================================================
   -- Agent Execution
   -- ============================================================================
 
