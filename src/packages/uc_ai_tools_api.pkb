@@ -576,19 +576,8 @@ create or replace package body uc_ai_tools_api as
   , p_arguments in json_object_t
   ) return clob
   as
-    l_scope uc_ai_logger.scope := gc_scope_prefix || 'execute_tool';
-
-    l_fc_code      clob;
-    l_found_binds  apex_t_varchar2 := apex_t_varchar2();
-    l_bind_list    apex_plugin_util.t_bind_list := apex_plugin_util.c_empty_bind_list;
-    l_bind         apex_plugin_util.t_bind;
-    l_return       clob;
-
-    l_clob         clob;
-    l_cursor_id    pls_integer;
-    l_rows_fetched pls_integer;
-    l_bind_value   clob;
-    l_plsql_block  varchar2(32767 char);
+    l_scope   uc_ai_logger.scope := gc_scope_prefix || 'execute_tool';
+    l_fc_code clob;
   begin
     begin
       select function_call
@@ -603,6 +592,37 @@ create or replace package body uc_ai_tools_api as
         , p0           => p_tool_code
         );
     end;
+
+    return exec_function_call(
+      p_function_call => l_fc_code
+    , p_arguments     => p_arguments
+    );
+  exception
+    when others then
+      uc_ai_logger.log_error('Error in execute_tool: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      raise;
+  end execute_tool;
+
+
+  function exec_function_call(
+    p_function_call in clob
+  , p_arguments     in json_object_t
+  ) return clob
+  as
+    l_scope uc_ai_logger.scope := gc_scope_prefix || 'exec_function_call';
+
+    l_fc_code      clob := p_function_call;
+    l_found_binds  apex_t_varchar2 := apex_t_varchar2();
+    l_bind_list    apex_plugin_util.t_bind_list := apex_plugin_util.c_empty_bind_list;
+    l_bind         apex_plugin_util.t_bind;
+    l_return       clob;
+
+    l_clob         clob;
+    l_cursor_id    pls_integer;
+    l_rows_fetched pls_integer;
+    l_bind_value   clob;
+    l_plsql_block  varchar2(32767 char);
+  begin
 
     -- Extract bind variables from the PL/SQL function call
     -- Security: Only allow ONE bind variable to prevent complex injection attacks
@@ -654,7 +674,7 @@ create or replace package body uc_ai_tools_api as
           p_error_code => uc_ai_error.c_err_invalid_config
         , p_scope      => l_scope
         , p0           => 'tool execution'
-        , p1           => 'Tool execution returned NULL for tool code ' || p_tool_code
+        , p1           => 'Function call execution returned NULL'
         );
       end if;
 
@@ -729,10 +749,10 @@ create or replace package body uc_ai_tools_api as
     return l_return;
   exception
     when others then
-      uc_ai_logger.log_error('Error in execute_tool: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      uc_ai_logger.log_error('Error in exec_function_call: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;
 
-  end execute_tool;
+  end exec_function_call;
 
 
   function get_tools_object_param_name (

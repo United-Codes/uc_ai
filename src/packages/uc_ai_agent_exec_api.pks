@@ -28,6 +28,15 @@ as
 
 
   -- ============================================================================
+  -- Workflow Step Types
+  -- ============================================================================
+
+  -- A step either delegates to an agent (default) or runs an inline PL/SQL snippet
+  c_step_agent constant varchar2(20 char) := 'agent';
+  c_step_plsql constant varchar2(20 char) := 'plsql';
+
+
+  -- ============================================================================
   -- Conversation Modes
   -- ============================================================================
 

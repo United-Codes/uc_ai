@@ -327,6 +327,84 @@ For simpler loops, you can put everything in `steps` and use the `optional` flag
 
 In the first iteration, `feedback` doesn't exist yet so it is omitted. From the second iteration onwards, the rater's feedback is passed to the creator.
 
+## PL/SQL steps
+
+Not every step needs an LLM. A **PL/SQL step** runs your own code in the middle of a workflow — to reshape one agent's output before the next agent sees it, look something up in a table, do arithmetic or formatting, or gate the rest of the pipeline. It costs nothing (no model call) and is fully deterministic.
+
+Set `"step_type": "plsql"` and provide a `plsql_function_call`: a PL/SQL function body that returns a `CLOB`, exactly like a [tool](/products/uc-ai/docs/guides/tools/). It may contain **at most one** bind variable (conventionally `:parameters`), which receives the **entire workflow state** as a JSON CLOB — `{ "input": {...}, "steps": {...} }`. There is no `input_mapping`; the snippet reads whatever it needs from the state itself.
+
+```sql
+DECLARE
+  l_workflow_id  NUMBER;
+  l_result       json_object_t;
+  l_workflow_def CLOB;
+BEGIN
+  l_workflow_def := q'[{
+    "workflow_type": "sequential",
+    "steps": [
+      {
+        "agent_code": "extractor_agent",
+        "input_mapping": { "text": "{$.input.document}" },
+        "output_key": "extracted"
+      },
+      {
+        "step_type": "plsql",
+        "plsql_function_call": "declare s json_object_t := json_object_t(:parameters); o json_object_t := json_object_t(); begin o.put('amount_eur', s.get_object('steps').get_object('extracted').get_number('amount') * 1.08); return o.to_clob; end;",
+        "output_key": "converted"
+      },
+      {
+        "agent_code": "report_agent",
+        "input_mapping": { "amount": "{$.steps.converted.amount_eur}" },
+        "output_key": "report"
+      }
+    ]
+  }]';
+
+  l_workflow_id := uc_ai_agents_api.create_agent(
+    p_code                => 'invoice_pipeline',
+    p_description         => 'Extract, convert currency in PL/SQL, then report',
+    p_agent_type          => uc_ai_agents_api.c_type_workflow,
+    p_workflow_definition => l_workflow_def,
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+  commit;
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'invoice_pipeline',
+    p_input_parameters => json_object_t('{"document": "Invoice total: 100 USD"}'),
+    p_session_id       => uc_ai_agents_api.generate_session_id
+  );
+END;
+/
+```
+
+**Return value → real JSON type.** The returned `CLOB` is parsed and stored under `output_key` as its actual type, so downstream steps can navigate it:
+
+| Snippet returns        | Stored as        | Referenced by                     |
+| ---------------------- | ---------------- | --------------------------------- |
+| `return '42';`         | number `42`      | `{$.steps.key}`                   |
+| `return o.to_clob;` (a JSON object) | object | `{$.steps.key.field}`             |
+| `return 'done';`       | string `"done"`  | `{$.steps.key}`                   |
+
+Text that is not valid JSON is stored as a plain string.
+
+**`output_key` is optional** for PL/SQL steps. Omit it for a pure side-effect step (e.g. writing to a table). The snippet must still return a non-null value.
+
+**Gating the rest of the workflow.** A PL/SQL step participates in normal `condition` gating (its own, and downstream steps can gate on its output). In addition, if it returns an object containing `"__control__": "stop"`, the workflow halts immediately — no remaining steps run:
+
+```json
+{
+  "step_type": "plsql",
+  "plsql_function_call": "declare s json_object_t := json_object_t(:parameters); o json_object_t := json_object_t(); begin if s.get_object('steps').get_object('review').get_number('score') < 3 then o.put('__control__', 'stop'); end if; return o.to_clob; end;",
+  "output_key": "gate"
+}
+```
+
+<Aside type="caution">
+  A `plsql_function_call` runs arbitrary PL/SQL, just like a tool or a
+  `condition`. Treat workflow definitions as trusted, authored content.
+</Aside>
+
 ## Input mapping reference
 
 A string value that resolves a path from the workflow state:

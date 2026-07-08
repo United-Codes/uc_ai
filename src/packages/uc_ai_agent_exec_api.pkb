@@ -8,8 +8,118 @@ create or replace package body uc_ai_agent_exec_api as
   -- ============================================================================
 
   /*
-   * Executes a single workflow step with input mapping and optional condition checking
-   * Sets po_step_output to null if the step was skipped due to a condition
+   * True once a PL/SQL step has requested the workflow to stop via a
+   * {"__control__": "stop"} return value (recorded as _control_stop in state).
+   */
+  function is_stopped(
+    p_workflow_state in json_object_t
+  ) return boolean
+  as
+  begin
+    return p_workflow_state.has('_control_stop') and p_workflow_state.get_boolean('_control_stop');
+  end is_stopped;
+
+
+  /*
+   * Executes an inline PL/SQL step. The whole workflow state is passed to the
+   * snippet's single bind (conventionally :parameters) as a JSON CLOB - the
+   * snippet navigates $.input / $.steps itself; there is no input_mapping.
+   *
+   * The returned CLOB is parsed to its real JSON type (object/array/scalar) and,
+   * when output_key is present, stored under $.steps.<output_key> so downstream
+   * steps can reference it. A returned object carrying "__control__": "stop"
+   * halts the remaining workflow steps.
+   *
+   * po_step_output mirrors the agent step shape ({ final_message: <text> }) so the
+   * shared executor logic (final message, iteration tracking) works unchanged.
+   */
+  procedure run_plsql_step(
+    p_step             in json_object_t,
+    pio_workflow_state in out nocopy json_object_t,
+    po_step_output     out nocopy json_object_t
+  )
+  as
+    l_scope       uc_ai_logger.scope := gc_scope_prefix || 'run_plsql_step';
+    l_fc          clob;
+    l_result_clob clob;
+    l_result_elem json_element_t;
+    l_output_key  varchar2(4000 char);
+    l_steps_state json_object_t;
+    l_control_obj json_object_t;
+  begin
+    l_fc := p_step.get_clob('plsql_function_call');
+    uc_ai_logger.log('Executing PL/SQL step', l_scope, l_fc);
+
+    begin
+      l_result_clob := uc_ai_tools_api.exec_function_call(
+        p_function_call => l_fc,
+        p_arguments     => pio_workflow_state
+      );
+    exception
+      when others then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_plsql_step_eval
+        , p_scope      => l_scope
+        , p0           => sqlerrm
+        , p_extra      => l_fc || chr(10) || sys.dbms_utility.format_error_backtrace
+        );
+    end;
+
+    uc_ai_logger.log('PL/SQL step result', l_scope, l_result_clob);
+
+    -- Parse the result to its real JSON type so downstream steps see a number,
+    -- boolean, object or array - not just text.
+    begin
+      -- objects and arrays parse directly
+      l_result_elem := json_element_t.parse(l_result_clob);
+    exception
+      when others then -- @dblinter ignore(g-5040): parse failure is expected; fall back to scalar/string typing
+        begin
+          -- bare scalars (42, true, null) are not valid standalone JSON documents
+          -- in some DB versions; wrap in an array to recover their real type
+          l_result_elem := json_array_t.parse('[' || l_result_clob || ']').get(0);
+        exception
+          when others then -- @dblinter ignore(g-5040): not JSON at all; keep it as a plain string value
+            declare
+              l_wrap json_array_t := json_array_t();
+            begin
+              l_wrap.append(l_result_clob);
+              l_result_elem := l_wrap.get(0);
+            end;
+        end;
+    end;
+
+    -- Store the typed result under output_key (optional for PL/SQL steps)
+    if p_step.has('output_key') then
+      l_output_key := p_step.get_string('output_key');
+      if pio_workflow_state.has('steps') then
+        l_steps_state := treat(pio_workflow_state.get('steps') as json_object_t);
+      else
+        l_steps_state := json_object_t();
+      end if;
+      l_steps_state.put(l_output_key, l_result_elem);
+      pio_workflow_state.put('steps', l_steps_state);
+    end if;
+
+    -- Detect the stop directive
+    if l_result_elem.is_object then
+      l_control_obj := treat(l_result_elem as json_object_t);
+      if l_control_obj.has('__control__') and l_control_obj.get_string('__control__') = 'stop' then
+        pio_workflow_state.put('_control_stop', true);
+        uc_ai_logger.log('PL/SQL step requested workflow stop', l_scope);
+      end if;
+    end if;
+
+    -- Mirror the agent step output shape so the executors can treat it uniformly
+    po_step_output := json_object_t();
+    po_step_output.put('final_message', l_result_clob);
+  end run_plsql_step;
+
+
+  /*
+   * Executes a single workflow step. A step either delegates to an agent (default,
+   * step_type = 'agent') or runs an inline PL/SQL snippet (step_type = 'plsql').
+   * Sets po_step_output to null if the step was skipped due to a condition.
    */
   procedure run_step(
     p_step             in json_object_t,
@@ -22,62 +132,91 @@ create or replace package body uc_ai_agent_exec_api as
   )
   as
     l_scope            uc_ai_logger.scope := gc_scope_prefix || 'run_step';
+    l_step_type        varchar2(20 char);
     l_step_agent       varchar2(255 char);
+    l_step_label       varchar2(255 char);
     l_input_mapping    json_object_t;
     l_step_input       json_object_t;
     l_condition        varchar2(32676 char);
     l_condition_result boolean;
     l_log_msg          varchar2(4000 char);
   begin
+    l_step_type  := coalesce(p_step.get_string('step_type'), uc_ai_agent_exec_api.c_step_agent);
     l_step_agent := p_step.get_string('agent_code');
-    
+
+    -- Step label used for logging and checkpointing (agent_code is not present on PL/SQL steps)
+    l_step_label := coalesce(
+      p_step.get_string('step_id'),
+      l_step_agent,
+      p_step.get_string('output_key'),
+      l_step_type
+    );
+
     -- Check condition if requested and present
     if p_check_condition and p_step.has('condition') then
       l_condition := p_step.get_string('condition');
       l_condition_result := uc_ai_agent_workflow_api.evaluate_condition(l_condition, pio_workflow_state);
-      uc_ai_logger.log('Evaluating condition for step ' || l_step_agent || ': ' || case when l_condition_result then 'TRUE' else 'FALSE' end, l_scope);
+      uc_ai_logger.log('Evaluating condition for step ' || l_step_label || ': ' || case when l_condition_result then 'TRUE' else 'FALSE' end, l_scope);
       if not l_condition_result then
-        uc_ai_logger.log('Skipping step due to condition: ' || l_step_agent, l_scope);
+        uc_ai_logger.log('Skipping step due to condition: ' || l_step_label, l_scope);
         po_step_output := null;
         return;
       end if;
     end if;
-    
-    -- Map inputs
-    if p_step.has('input_mapping') then
-      l_input_mapping := treat(p_step.get('input_mapping') as json_object_t);
-    else
-      l_input_mapping := null;
-    end if;
-    l_step_input := uc_ai_agent_workflow_api.map_inputs(l_input_mapping, pio_workflow_state);
-    
-    -- Log execution
-    l_log_msg := case when p_log_prefix is not null then p_log_prefix || ', executing' else 'Executing' end ||
-                 ' step: ' || l_step_agent || ' with input:';
-    uc_ai_logger.log(l_log_msg, l_scope, case when l_step_input is not null then l_step_input.to_clob else 'null' end);
-    
-    -- Execute step agent
-    po_step_output := uc_ai_agents_api.execute_agent(
-      p_agent_code       => l_step_agent,
-      p_input_parameters => l_step_input,
-      p_session_id       => p_session_id,
-      p_parent_exec_id   => p_exec_id
-    );
-    
-    uc_ai_logger.log('Step ' || l_step_agent || ' completed with output:', l_scope, po_step_output.to_clob);
-    
-    -- Add result to workflow state
-    uc_ai_agent_workflow_api.add_result_to_workflow_state(
-      p_step             => p_step,
-      p_step_output      => po_step_output,
-      pio_workflow_state => pio_workflow_state
-    );
+
+    case l_step_type
+      when uc_ai_agent_exec_api.c_step_plsql then
+        run_plsql_step(
+          p_step             => p_step,
+          pio_workflow_state => pio_workflow_state,
+          po_step_output     => po_step_output
+        );
+
+      when uc_ai_agent_exec_api.c_step_agent then
+        -- Map inputs
+        if p_step.has('input_mapping') then
+          l_input_mapping := treat(p_step.get('input_mapping') as json_object_t);
+        else
+          l_input_mapping := null;
+        end if;
+        l_step_input := uc_ai_agent_workflow_api.map_inputs(l_input_mapping, pio_workflow_state);
+
+        -- Log execution
+        l_log_msg := case when p_log_prefix is not null then p_log_prefix || ', executing' else 'Executing' end ||
+                     ' step: ' || l_step_label || ' with input:';
+        uc_ai_logger.log(l_log_msg, l_scope, case when l_step_input is not null then l_step_input.to_clob else 'null' end);
+
+        -- Execute step agent
+        po_step_output := uc_ai_agents_api.execute_agent(
+          p_agent_code       => l_step_agent,
+          p_input_parameters => l_step_input,
+          p_session_id       => p_session_id,
+          p_parent_exec_id   => p_exec_id
+        );
+
+        uc_ai_logger.log('Step ' || l_step_label || ' completed with output:', l_scope, po_step_output.to_clob);
+
+        -- Add result to workflow state
+        uc_ai_agent_workflow_api.add_result_to_workflow_state(
+          p_step             => p_step,
+          p_step_output      => po_step_output,
+          pio_workflow_state => pio_workflow_state
+        );
+
+      else
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'step_type'
+        , p1           => 'Unknown step_type: ' || l_step_type
+        );
+    end case;
 
     -- persist state so running workflows can be monitored and failed ones diagnosed
     uc_ai_agents_api.checkpoint_execution(
       p_exec_id       => p_exec_id,
       p_current_state => pio_workflow_state,
-      p_last_step     => l_step_agent
+      p_last_step     => l_step_label
     );
   end run_step;
 
@@ -114,8 +253,11 @@ create or replace package body uc_ai_agent_exec_api as
     -- Execute steps in order
     <<step_loop>>
     for i in 0 .. l_steps.get_size - 1 loop
+      -- A prior PL/SQL step may have requested the workflow to stop
+      exit step_loop when is_stopped(l_workflow_state);
+
       l_step := treat(l_steps.get(i) as json_object_t);
-      
+
       run_step(
         p_step             => l_step,
         pio_workflow_state => l_workflow_state,
@@ -124,7 +266,7 @@ create or replace package body uc_ai_agent_exec_api as
         p_check_condition  => true,
         po_step_output     => l_step_output
       );
-      
+
       -- Track output if step was executed (not skipped)
       if l_step_output is not null then
         l_last_output := l_step_output;
@@ -201,6 +343,7 @@ create or replace package body uc_ai_agent_exec_api as
       l_steps := l_workflow_def.get_array('pre_steps');
       <<pre_step_loop>>
       for i in 0 .. l_steps.get_size - 1 loop
+        exit pre_step_loop when is_stopped(l_workflow_state);
         l_step := treat(l_steps.get(i) as json_object_t);
 
         run_step(
@@ -224,8 +367,11 @@ create or replace package body uc_ai_agent_exec_api as
       -- Execute all steps
       <<step_loop>>
       for i in 0 .. l_steps.get_size - 1 loop
+        -- A PL/SQL step may request the whole workflow to stop
+        exit iteration_loop when is_stopped(l_workflow_state);
+
         l_step := treat(l_steps.get(i) as json_object_t);
-        
+
         run_step(
           p_step             => l_step,
           pio_workflow_state => l_workflow_state,
@@ -261,6 +407,7 @@ create or replace package body uc_ai_agent_exec_api as
       l_steps := l_workflow_def.get_array('post_steps');
       <<post_step_loop>>
       for i in 0 .. l_steps.get_size - 1 loop
+        exit post_step_loop when is_stopped(l_workflow_state);
         l_step := treat(l_steps.get(i) as json_object_t);
 
         run_step(

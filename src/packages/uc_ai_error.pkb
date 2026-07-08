@@ -30,6 +30,7 @@ create or replace package body uc_ai_error as
       when c_err_final_message_eval     then c_msg_final_message_eval
       when c_err_apex_session           then c_msg_apex_session
       when c_err_jsonpath_resolve       then c_msg_jsonpath_resolve
+      when c_err_plsql_step_eval        then c_msg_plsql_step_eval
       -- Validation
       when c_err_not_found              then c_msg_not_found
       when c_err_invalid_status         then c_msg_invalid_status

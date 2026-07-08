@@ -40,6 +40,24 @@ as
 
 
   /*
+   * Executes an inline PL/SQL function-call snippet (same contract as a tool's
+   * function_call) without requiring a registered tool.
+   *
+   * Scans the snippet for bind variables (:PARAM_NAME) - only ONE is allowed for
+   * security - binds the entire p_arguments JSON object to it, runs the snippet and
+   * returns its CLOB result. Used by execute_tool and by workflow PL/SQL steps.
+   *
+   * @param p_function_call  PL/SQL function body returning a CLOB (e.g. 'return f(:parameters);')
+   * @param p_arguments      JSON object bound to the single parameter
+   * @return the CLOB returned by the snippet
+   */
+  function exec_function_call(
+    p_function_call in clob
+  , p_arguments     in json_object_t
+  ) return clob;
+
+
+  /*
    * Returns the name of the tool's parent parameter that contains the JSON object
    * with the tool's arguments.
    */
