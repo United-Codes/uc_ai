@@ -73,21 +73,27 @@ begin
 end uc_ai_agents_biu;
 /
 
-create or replace trigger uc_ai_agent_executions_bi
-    before insert on uc_ai_agent_executions
+create or replace trigger uc_ai_agent_executions_biu
+    before insert or update on uc_ai_agent_executions
     for each row
 begin
-    :new.started_at := systimestamp;
-
-    -- fallbacks for inserts outside the API; API-captured values win
-    if :new.created_by is null
+    if inserting
     then
-        :new.created_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+        :new.started_at := systimestamp;
+
+        -- fallbacks for inserts outside the API; API-captured values win
+        if :new.created_by is null
+        then
+            :new.created_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+        end if;
+
+        if :new.db_user is null
+        then
+            :new.db_user := user;
+        end if;
     end if;
 
-    if :new.db_user is null
-    then
-        :new.db_user := user;
-    end if;
-end uc_ai_agent_executions_bi;
+    -- audit every state change (checkpoint, completion, failure)
+    :new.updated_at := systimestamp;
+end uc_ai_agent_executions_biu;
 /

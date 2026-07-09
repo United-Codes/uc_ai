@@ -4,14 +4,43 @@ create or replace package body uc_ai_agent_workflow_api as
 
 
   /*
+   * Escapes a resolved string value so it cannot break out of the single-quoted
+   * PL/SQL string literal it is substituted into. Only the quote character is
+   * doubled - no surrounding quotes are added, so the documented authoring
+   * convention (string tokens are wrapped in quotes by the expression author,
+   * numeric/boolean tokens are not) keeps working unchanged. This is the guard
+   * that stops untrusted state values (LLM output, tool results, user input)
+   * from injecting PL/SQL into conditions and PL/SQL-expression mappings.
+   */
+  function escape_plsql_string_value(
+    p_value in clob
+  ) return clob
+  as
+  begin
+    if p_value is null then
+      return p_value;
+    end if;
+    return replace(p_value, '''', '''''');
+  end escape_plsql_string_value;
+
+
+  /*
    * Resolves a single path (e.g. $.steps.step_name.field, $.steps.list[1])
    * by walking the workflow state DOM directly. Array indexes are 1-based
    * (matching apex_json path semantics). Returns null when the path does not
    * resolve or points to a non-scalar value.
+   *
+   * When p_escape_for_plsql is true, resolved *string* values have embedded
+   * single quotes doubled so they are safe to embed inside a PL/SQL string
+   * literal. Numbers and booleans never need escaping. Callers that feed the
+   * result into a PL/SQL expression (conditions, PL/SQL-expression mappings)
+   * must pass true; callers that substitute into plain text / JSON must pass
+   * false so the raw value is preserved.
    */
   function resolve_path_value(
-    p_path           in varchar2,
-    p_workflow_state in json_object_t
+    p_path             in varchar2,
+    p_workflow_state   in json_object_t,
+    p_escape_for_plsql in boolean default false
   ) return clob
   as
     l_path     varchar2(4000 char);
@@ -76,7 +105,7 @@ create or replace package body uc_ai_agent_workflow_api as
           if l_leaf is null then
             return null;
           elsif l_leaf.is_string then
-            return l_arr.get_clob(l_idx);
+            return case when p_escape_for_plsql then escape_plsql_string_value(l_arr.get_clob(l_idx)) else l_arr.get_clob(l_idx) end;
           elsif l_leaf.is_number then
             return to_clob(to_char(l_arr.get_number(l_idx)));
           elsif l_leaf.is_boolean then
@@ -99,7 +128,7 @@ create or replace package body uc_ai_agent_workflow_api as
           if l_leaf is null then
             return null;
           elsif l_leaf.is_string then
-            return l_obj.get_clob(l_acc);
+            return case when p_escape_for_plsql then escape_plsql_string_value(l_obj.get_clob(l_acc)) else l_obj.get_clob(l_acc) end;
           elsif l_leaf.is_number then
             return to_clob(to_char(l_obj.get_number(l_acc)));
           elsif l_leaf.is_boolean then
@@ -121,8 +150,9 @@ create or replace package body uc_ai_agent_workflow_api as
    * Supports: $.input.field, $.steps.step_name.field
    */
   function resolve_jsonpath_values(
-    p_expression     in clob,
-    p_workflow_state in json_object_t
+    p_expression       in clob,
+    p_workflow_state   in json_object_t,
+    p_escape_for_plsql in boolean default false
   ) return clob
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'resolve_jsonpath_values';
@@ -147,7 +177,7 @@ create or replace package body uc_ai_agent_workflow_api as
     for i in 1 .. l_count loop
       l_expr := regexp_substr(p_expression, '\{(\$\.[^\}]+)\}', 1, i, null, 1);
 
-      l_eval := resolve_path_value(l_expr, p_workflow_state);
+      l_eval := resolve_path_value(l_expr, p_workflow_state, p_escape_for_plsql);
 
       if l_eval is null then
         uc_ai_logger.log('JSONPath expression did not resolve any value: ' || l_expr, l_scope, p_workflow_state.to_clob);
@@ -215,7 +245,9 @@ create or replace package body uc_ai_agent_workflow_api as
         l_is_plsqlsql := false;
       end if;
 
-      l_resolved := resolve_jsonpath_values(l_mapping, p_workflow_state);
+      -- escape resolved string values only when the result feeds a PL/SQL
+      -- expression; plain mappings must keep the raw value for JSON output
+      l_resolved := resolve_jsonpath_values(l_mapping, p_workflow_state, p_escape_for_plsql => l_is_plsqlsql);
 
       if l_is_plsqlsql then
         -- Evaluate as PL/SQL expression
@@ -291,7 +323,9 @@ create or replace package body uc_ai_agent_workflow_api as
       end if;
     end if;
 
-    l_tmp := resolve_jsonpath_values(l_expr, p_workflow_state);
+    -- escape resolved string values only when evaluated as a PL/SQL expression;
+    -- plain final messages must keep the raw value
+    l_tmp := resolve_jsonpath_values(l_expr, p_workflow_state, p_escape_for_plsql => l_is_plsqlsql);
 
     uc_ai_logger.log('Evaluating final_message. Expression: ' || substr(l_expr, 1, 2000) || ' Resolved: ' || substr(l_tmp, 1, 2000), l_scope, p_workflow_state.to_clob);
 
@@ -345,7 +379,9 @@ create or replace package body uc_ai_agent_workflow_api as
       return true;  -- No condition means always execute
     end if;
 
-    l_expression := resolve_jsonpath_values(p_condition, p_workflow_state);
+    -- conditions are always evaluated as PL/SQL boolean expressions, so resolved
+    -- string values must be escaped to prevent injection via untrusted state
+    l_expression := resolve_jsonpath_values(p_condition, p_workflow_state, p_escape_for_plsql => true);
 
     if sys.dbms_lob.getlength(l_expression) > 32767 then
       uc_ai_error.raise_error(

@@ -37,6 +37,17 @@ as
 
 
   -- ============================================================================
+  -- Default execution limits
+  -- ============================================================================
+  -- Fallbacks used when a workflow / orchestration config (and, for loops, the
+  -- agent's max_iterations) does not specify its own limit.
+
+  c_default_max_iterations constant pls_integer := 10;  -- loop workflows
+  c_default_max_handoffs   constant pls_integer := 3;   -- handoff agents
+  c_default_max_turns      constant pls_integer := 10;  -- conversation agents
+
+
+  -- ============================================================================
   -- Conversation Modes
   -- ============================================================================
 

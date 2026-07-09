@@ -32,6 +32,11 @@ create or replace package body uc_ai_agents_api as
   g_exec_env   t_exec_env;
   g_exec_depth pls_integer := 0;
 
+  -- Guards against runaway / circular agent nesting (an agent that ultimately
+  -- delegates back to itself). Bounds the recursion of nested execute_agent
+  -- calls before the PL/SQL call stack overflows or costs run away.
+  c_max_exec_depth constant pls_integer := 25;
+
   -- Execution hook: a package implementing before_execution/after_execution
   -- (see the spec's "Execution Hooks" section) that execute_agent dispatches to
   -- at the top level. Resolved by convention to a VALID package named UC_AI_HOOK
@@ -1472,6 +1477,16 @@ create or replace package body uc_ai_agents_api as
       g_exec_env := snapshot_exec_env();
     end if;
     g_exec_depth := g_exec_depth + 1;
+
+    -- Bail out before creating an execution row if nesting is too deep. The
+    -- outer exception handler below decrements g_exec_depth as it unwinds.
+    if g_exec_depth > c_max_exec_depth then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_max_exec_depth
+      , p_scope      => l_scope
+      , p0           => c_max_exec_depth
+      );
+    end if;
 
     uc_ai_agent_exec_api.create_apex_session_if_needed;
 

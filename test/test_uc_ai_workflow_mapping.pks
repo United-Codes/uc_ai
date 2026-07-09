@@ -96,5 +96,17 @@ create or replace package test_uc_ai_workflow_mapping as
   --%test(Unknown history strategy passes history through)
   procedure history_unknown_strategy_passthrough;
 
+  --%test(A malicious state value cannot inject PL/SQL into a condition)
+  procedure condition_injection_blocked;
+
+  --%test(A legitimate value containing a quote compares correctly)
+  procedure condition_quoted_value_matches;
+
+  --%test(Plain mappings preserve quotes in the resolved value)
+  procedure map_inputs_plain_keeps_raw_quotes;
+
+  --%test(PL/SQL-expression mappings escape quotes and still evaluate)
+  procedure map_inputs_plsql_escapes_quotes;
+
 end test_uc_ai_workflow_mapping;
 /

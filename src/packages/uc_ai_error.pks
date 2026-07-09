@@ -60,6 +60,7 @@ as
   c_err_agent_retrieval        constant number := -20402;
   c_err_speaker_not_found      constant number := -20403;
   c_err_unknown_conv_mode      constant number := -20404;
+  c_err_max_exec_depth         constant number := -20405;
 
   -- Workflow errors
   c_err_missing_output_key     constant number := -20450;
@@ -102,6 +103,7 @@ as
   c_msg_agent_retrieval        constant varchar2(200 char) := 'Error retrieving agent: %0';
   c_msg_speaker_not_found      constant varchar2(200 char) := 'Next speaker "%0" not found among participants';
   c_msg_unknown_conv_mode      constant varchar2(200 char) := 'Unknown conversation mode: %0';
+  c_msg_max_exec_depth         constant varchar2(200 char) := 'Maximum agent nesting depth exceeded (limit: %0). Check for a circular agent reference (an agent that delegates back to itself).';
 
   -- Workflow messages
   c_msg_missing_output_key     constant varchar2(200 char) := 'Step definition missing output_key';

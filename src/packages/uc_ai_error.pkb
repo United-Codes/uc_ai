@@ -23,6 +23,7 @@ create or replace package body uc_ai_error as
       when c_err_agent_retrieval        then c_msg_agent_retrieval
       when c_err_speaker_not_found      then c_msg_speaker_not_found
       when c_err_unknown_conv_mode      then c_msg_unknown_conv_mode
+      when c_err_max_exec_depth         then c_msg_max_exec_depth
       -- Workflow
       when c_err_missing_output_key     then c_msg_missing_output_key
       when c_err_condition_eval         then c_msg_condition_eval

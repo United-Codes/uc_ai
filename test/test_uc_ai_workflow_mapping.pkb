@@ -550,5 +550,74 @@ create or replace package body test_uc_ai_workflow_mapping as
     ut.expect(l_result.get_size).to_equal(5);
   end history_unknown_strategy_passthrough;
 
+
+  -- --------------------------------------------------------------------------
+  -- PL/SQL-expression injection resistance
+  -- --------------------------------------------------------------------------
+
+  procedure condition_injection_blocked
+  as
+    l_state json_object_t;
+  begin
+    uc_ai_agent_exec_api.create_apex_session_if_needed;
+
+    -- an untrusted state value crafted to break out of its string literal and
+    -- force the condition true must instead be treated as a plain string
+    l_state := json_object_t('{"steps":{"s":"x'' or ''a''=''a"}}');
+
+    ut.expect(
+      uc_ai_agent_workflow_api.evaluate_condition('''{$.steps.s}'' = ''safe''', l_state)
+    ).to_be_false();
+  end condition_injection_blocked;
+
+
+  procedure condition_quoted_value_matches
+  as
+    l_state json_object_t;
+  begin
+    uc_ai_agent_exec_api.create_apex_session_if_needed;
+
+    -- a legitimate value containing an apostrophe must compare correctly once
+    -- both sides are escaped consistently
+    l_state := json_object_t('{"steps":{"name":"O''Brien"}}');
+
+    ut.expect(
+      uc_ai_agent_workflow_api.evaluate_condition('''{$.steps.name}'' = ''O''''Brien''', l_state)
+    ).to_be_true();
+  end condition_quoted_value_matches;
+
+
+  procedure map_inputs_plain_keeps_raw_quotes
+  as
+    l_state  json_object_t;
+    l_result json_object_t;
+  begin
+    -- plain (non-PL/SQL) mappings feed JSON output, not code, so quotes must be
+    -- preserved verbatim and never doubled
+    l_state  := json_object_t('{"steps":{"name":"O''Brien"}}');
+    l_result := uc_ai_agent_workflow_api.map_inputs(
+      json_object_t('{"name":"{$.steps.name}"}'), l_state);
+
+    ut.expect(l_result.get_string('name')).to_equal(q'[O'Brien]');
+  end map_inputs_plain_keeps_raw_quotes;
+
+
+  procedure map_inputs_plsql_escapes_quotes
+  as
+    l_state  json_object_t;
+    l_result json_object_t;
+  begin
+    uc_ai_agent_exec_api.create_apex_session_if_needed;
+
+    -- PL/SQL-expression mappings must escape the resolved value so an embedded
+    -- quote cannot break the expression, and still evaluate correctly
+    l_state  := json_object_t('{"steps":{"name":"o''brien"}}');
+    l_result := uc_ai_agent_workflow_api.map_inputs(
+      json_object_t('{"name":{"expression":"upper(''{$.steps.name}'')","is_plsql_expression":true}}'),
+      l_state);
+
+    ut.expect(l_result.get_string('name')).to_equal(q'[O'BRIEN]');
+  end map_inputs_plsql_escapes_quotes;
+
 end test_uc_ai_workflow_mapping;
 /

@@ -146,6 +146,16 @@ Conditions can also reference the output of previous steps. A common pattern is 
 
 Since the condition is a PL/SQL expression, any boolean expression works, e.g. numeric comparisons like `"{$.steps.classification.confidence} >= 0.8"` or function calls.
 
+Wrap **string** references in single quotes (`'{$.steps.x}'`, as above) and leave **numeric** references unquoted (`{$.steps.x} >= 8`) — the same convention applies to `exit_condition` and to `input_mapping` entries marked `"is_plsql_expression": true`.
+
+<Aside type="tip">
+  Resolved string values are automatically escaped before the expression is
+  evaluated (embedded single quotes are doubled), so untrusted content —
+  model output, tool results, user input — cannot break out of its quotes and
+  inject PL/SQL. You still author the surrounding quotes as shown; the escaping
+  only protects the substituted value.
+</Aside>
+
 <Aside type="caution">
   The `condition` value must be a string. If every step's condition evaluates
   to false, the workflow still completes successfully, but with no

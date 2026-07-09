@@ -199,8 +199,16 @@ create table uc_ai_agents (
   constraint uc_ai_agents_pk primary key (id),
   constraint uc_ai_agents_uk unique (code, version),
   constraint uc_ai_agents_status_ck check (status in ('draft', 'active', 'archived')),
-  constraint uc_ai_agents_type_ck check (agent_type in 
-    ('profile', 'workflow', 'orchestrator', 'handoff', 'conversation'))
+  constraint uc_ai_agents_type_ck check (agent_type in
+    ('profile', 'workflow', 'orchestrator', 'handoff', 'conversation')),
+  -- Each agent type requires its own configuration column to be populated
+  constraint uc_ai_agents_profile_ck check (
+    agent_type <> 'profile' or prompt_profile_code is not null),
+  constraint uc_ai_agents_workflow_ck check (
+    agent_type <> 'workflow' or workflow_definition is not null),
+  constraint uc_ai_agents_orch_ck check (
+    agent_type not in ('orchestrator', 'handoff', 'conversation')
+    or orchestration_config is not null)
 );
 
 -- Ensure only one active version per code
@@ -237,6 +245,7 @@ create table uc_ai_agent_executions (
   
   started_at             timestamp not null,
   completed_at           timestamp,
+  updated_at             timestamp,
   error_message          varchar2(4000 char),
 
   -- Environment/session context (captured at top-level execution start)
@@ -260,13 +269,17 @@ create table uc_ai_agent_executions (
     references uc_ai_agents(id),
   constraint uc_ai_agent_exec_parent_fk foreign key (parent_execution_id) 
     references uc_ai_agent_executions(id),
-  constraint uc_ai_agent_exec_status_ck check (status in 
-    ('pending', 'running', 'completed', 'failed', 'timeout'))
+  constraint uc_ai_agent_exec_status_ck check (status in
+    ('pending', 'running', 'completed', 'failed', 'timeout')),
+  -- A finished execution must record when it finished
+  constraint uc_ai_agent_exec_done_ck check (
+    status not in ('completed', 'failed', 'timeout') or completed_at is not null)
 );
 
 create index uc_ai_agent_exec_session_idx on uc_ai_agent_executions(session_id);
 create index uc_ai_agent_exec_status_idx on uc_ai_agent_executions(status, started_at);
 create index uc_ai_agent_exec_agent_idx on uc_ai_agent_executions(agent_id);
+create index uc_ai_agent_exec_parent_idx on uc_ai_agent_executions(parent_execution_id);
 
 comment on column uc_ai_agent_executions.created_by is 'coalesce(real APEX user, DB user) at top-level execution start';
 comment on column uc_ai_agent_executions.db_user is 'SYS_CONTEXT USERENV SESSION_USER';

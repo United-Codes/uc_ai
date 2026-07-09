@@ -328,7 +328,7 @@ create or replace package body uc_ai_agent_exec_api as
     l_max_iterations := coalesce(
       l_max_it_json,
       p_agent.max_iterations,
-      10
+      c_default_max_iterations
     );
     
     if l_loop_config.has('exit_condition') then
@@ -431,10 +431,13 @@ create or replace package body uc_ai_agent_exec_api as
       );
       l_workflow_state.put('final_message', l_final_msg);
     else
-      -- Default final message from last step
-      l_workflow_state.put('final_message', l_step_output.get_clob('final_message'));
+      -- Default final message from last executed step. l_step_output is null when
+      -- no step ran (e.g. zero iterations / empty step list) - guard against it.
+      if l_step_output is not null and l_step_output.has('final_message') then
+        l_workflow_state.put('final_message', l_step_output.get_clob('final_message'));
+      end if;
     end if;
-    
+
     return l_workflow_state;
   exception
     when others then
@@ -690,10 +693,18 @@ create or replace package body uc_ai_agent_exec_api as
         return execute_sequential_workflow(p_agent, p_input_params, p_session_id, p_exec_id);
         
       when c_workflow_parallel then
-        -- For now, parallel executes sequentially (DBMS_PARALLEL_EXECUTE requires more setup)
-        -- TODO: Implement true parallel execution
-        uc_ai_logger.log_warn('Parallel workflow executing sequentially (parallel not yet implemented)', l_scope);
-        return execute_sequential_workflow(p_agent, p_input_params, p_session_id, p_exec_id);
+        -- True parallel execution is not implemented yet (DBMS_PARALLEL_EXECUTE /
+        -- scheduler jobs). Steps run sequentially, in definition order. This is
+        -- surfaced both in the log and in the returned state so callers are not
+        -- misled into assuming concurrency.
+        declare
+          l_result json_object_t;
+        begin
+          uc_ai_logger.log_warn('Parallel workflow executing sequentially (parallel not yet implemented)', l_scope);
+          l_result := execute_sequential_workflow(p_agent, p_input_params, p_session_id, p_exec_id);
+          l_result.put('_executed_sequentially', true);
+          return l_result;
+        end;
         
       else
         uc_ai_error.raise_error(
@@ -719,10 +730,14 @@ create or replace package body uc_ai_agent_exec_api as
     p_session_id       in varchar2
   ) return uc_ai_tools.id%type
   as
-    l_scope         uc_ai_logger.scope := gc_scope_prefix || 'register_agent_as_tool';
-    l_tool_id       uc_ai_tools.id%type;
-    l_function_call clob;
-    l_agent         uc_ai_agents%rowtype;
+    l_scope           uc_ai_logger.scope := gc_scope_prefix || 'register_agent_as_tool';
+    l_tool_id         uc_ai_tools.id%type;
+    l_function_call   clob;
+    l_agent           uc_ai_agents%rowtype;
+    -- values are baked into the generated PL/SQL body as single-quoted literals;
+    -- double any embedded quote so they cannot break out of the literal
+    l_safe_agent_code varchar2(4000 char) := replace(p_agent_code, '''', '''''');
+    l_safe_session_id varchar2(4000 char) := replace(p_session_id, '''', '''''');
   begin
     uc_ai_logger.log('Registering agent as tool: ' || p_agent_code, l_scope);
     
@@ -750,9 +765,9 @@ begin
   l_input := json_object_t(l_input_clob);
 
   l_result := uc_ai_agents_api.execute_agent(
-    p_agent_code       => '!' || p_agent_code || q'!',
+    p_agent_code       => '!' || l_safe_agent_code || q'!',
     p_input_parameters => l_input,
-    p_session_id       => '!' || p_session_id || q'!',
+    p_session_id       => '!' || l_safe_session_id || q'!',
     p_parent_exec_id   => !' || p_exec_id || q'!
   );
 
@@ -848,9 +863,11 @@ end;!';
       p_code    => l_profile_code
     );
 
-    -- Save original tool settings
-    --l_original_tools := uc_ai.g_enable_tools;
-    --l_original_tags := uc_ai.g_tool_tags;
+    -- Save original tool settings so they can be restored afterwards. Without
+    -- this, the session-level tool globals leak (get nulled) after every
+    -- orchestrator run and corrupt any later generate_text call in the session.
+    l_original_tools := uc_ai.g_enable_tools;
+    l_original_tags  := uc_ai.g_tool_tags;
 
     begin
       -- Register delegate agents as tools
@@ -934,8 +951,9 @@ end;!';
         -- Always cleanup, even on error
         uc_ai_logger.log_error('Error during orchestrator execution', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
         cleanup_agent_tools(l_tool_ids);
-        --uc_ai.g_enable_tools := l_original_tools;
-        --uc_ai.g_tool_tags := l_original_tags;
+        -- Restore original tool settings before propagating the error
+        uc_ai.g_enable_tools := l_original_tools;
+        uc_ai.g_tool_tags := l_original_tags;
         raise;
     end;
 
@@ -979,7 +997,7 @@ end;!';
     
     l_config := json_object_t.parse(p_agent.orchestration_config);
     l_current_agent := l_config.get_string('initial_agent_code');
-    l_max_handoffs := coalesce(l_config.get_number('max_handoffs'), 3);
+    l_max_handoffs := coalesce(l_config.get_number('max_handoffs'), c_default_max_handoffs);
     
     if l_config.has('history_management') then
       l_history_mgmt := l_config.get_object('history_management');
@@ -1068,7 +1086,7 @@ end;!';
     return l_result;
   exception
     when others then
-      uc_ai_logger.log_error('Error executing handoff agent', l_scope);
+      uc_ai_logger.log_error('Error executing handoff agent', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end execute_handoff_agent;
 
@@ -1117,7 +1135,7 @@ end;!';
     l_config := json_object_t.parse(p_agent.orchestration_config);
     l_mode := l_config.get_string('conversation_mode');
     l_participants := l_config.get_array('agents');
-    l_max_turns := coalesce(l_config.get_number('max_turns'), 10);
+    l_max_turns := coalesce(l_config.get_number('max_turns'), c_default_max_turns);
     
     if l_config.has('history_management') then
       l_history_mgmt := l_config.get_object('history_management');
