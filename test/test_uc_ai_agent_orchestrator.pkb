@@ -166,6 +166,105 @@ create or replace package body test_uc_ai_agent_orchestrator as
     -- Should contain travel recommendations
     ut.expect(lower(l_final_msg)).to_be_like('%flight%');
     ut.expect(lower(l_final_msg)).to_be_like('%hotel%');
+
+    -- ------------------------------------------------------------------
+    -- Session rollup: one header, tokens summed across orchestrator + its
+    -- delegate sub-agents via session_id, with no parent/child double count.
+    -- ------------------------------------------------------------------
+    declare
+      l_sess_count    number;
+      l_turn_count    number;
+      l_status_hdr    varchar2(50 char);
+      l_top_index     number;
+      l_child_count   number;
+      l_bad_child_idx number;
+      l_bad_child_sid number;
+      l_orch_own_in   number;
+      l_child_own_in  number;
+      l_sess_in       number;
+      l_sess_out      number;
+      l_exec_in       number;
+      l_exec_out      number;
+    begin
+      select count(*) into l_sess_count
+        from uc_ai_agent_sessions where session_id = l_session_id;
+      ut.expect(l_sess_count, 'One session header for the orchestrator run').to_equal(1);
+
+      select turn_count, status into l_turn_count, l_status_hdr
+        from uc_ai_agent_sessions where session_id = l_session_id;
+      ut.expect(l_turn_count, 'Only the top-level orchestrator run counts as a turn').to_equal(1);
+      ut.expect(l_status_hdr, 'Session status completed').to_equal(uc_ai_agents_api.c_exec_completed);
+
+      -- Top-level orchestrator execution is turn 1
+      select turn_index into l_top_index
+        from uc_ai_agent_executions
+       where session_id = l_session_id and parent_execution_id is null;
+      ut.expect(l_top_index, 'Top-level execution is turn 1').to_equal(1);
+
+      -- Delegate sub-agents run under the same session, as nested (turn_index null)
+      select count(*),
+             count(case when turn_index is not null then 1 end),
+             count(case when session_id <> l_session_id then 1 end)
+        into l_child_count, l_bad_child_idx, l_bad_child_sid
+        from uc_ai_agent_executions
+       where parent_execution_id is not null
+         and session_id = l_session_id;
+      ut.expect(l_child_count, 'Orchestrator spawned delegate sub-agent executions').to_be_greater_than(0);
+      ut.expect(l_bad_child_idx, 'Nested executions carry no turn_index').to_equal(0);
+      ut.expect(l_bad_child_sid, 'Nested executions share the session_id').to_equal(0);
+
+      -- Both the orchestrator and its delegates recorded their OWN tokens
+      select total_input_tokens into l_orch_own_in
+        from uc_ai_agent_executions
+       where session_id = l_session_id and parent_execution_id is null;
+      ut.expect(l_orch_own_in, 'Orchestrator recorded its own input tokens').to_be_greater_than(0);
+
+      select nvl(sum(total_input_tokens), 0) into l_child_own_in
+        from uc_ai_agent_executions
+       where session_id = l_session_id and parent_execution_id is not null;
+      ut.expect(l_child_own_in, 'Delegate sub-agents recorded their own input tokens').to_be_greater_than(0);
+
+      -- Session total = SUM of every execution's own tokens (orchestrator + children)
+      select total_input_tokens, total_output_tokens into l_sess_in, l_sess_out
+        from uc_ai_agent_sessions where session_id = l_session_id;
+      select nvl(sum(total_input_tokens), 0), nvl(sum(total_output_tokens), 0)
+        into l_exec_in, l_exec_out
+        from uc_ai_agent_executions where session_id = l_session_id;
+
+      ut.expect(l_sess_in, 'Session input = SUM of orchestrator + delegate own tokens').to_equal(l_exec_in);
+      ut.expect(l_sess_out, 'Session output = SUM of orchestrator + delegate own tokens').to_equal(l_exec_out);
+      ut.expect(l_sess_in, 'Session input = orchestrator own + delegates own').to_equal(l_orch_own_in + l_child_own_in);
+    end;
+
+    -- ------------------------------------------------------------------
+    -- Message log: delegate calls are persisted as tool_call/tool_result rows
+    -- with their tool metadata (the mapping apex-chat now depends on).
+    -- ------------------------------------------------------------------
+    declare
+      l_tool_calls    number;
+      l_tool_results  number;
+      l_calls_no_name number;
+      l_res_no_name   number;
+      l_msg_rows      number;
+      l_hdr_count     number;
+    begin
+      select count(case when role = 'tool_call' then 1 end),
+             count(case when role = 'tool_result' then 1 end),
+             count(case when role = 'tool_call' and tool_name is null then 1 end),
+             count(case when role = 'tool_result' and tool_name is null then 1 end),
+             count(*)
+        into l_tool_calls, l_tool_results, l_calls_no_name, l_res_no_name, l_msg_rows
+        from uc_ai_agent_messages where session_id = l_session_id;
+
+      ut.expect(l_tool_calls, 'Delegate tool_call rows persisted').to_be_greater_than(0);
+      ut.expect(l_tool_results, 'Delegate tool_result rows persisted').to_be_greater_than(0);
+      ut.expect(l_calls_no_name, 'Every tool_call row has a tool_name').to_equal(0);
+      ut.expect(l_res_no_name, 'Every tool_result row has a tool_name').to_equal(0);
+
+      select message_count into l_hdr_count
+        from uc_ai_agent_sessions where session_id = l_session_id;
+      ut.expect(l_hdr_count, 'Header message_count matches persisted rows').to_equal(l_msg_rows);
+    end;
   end execute_orchestrator_routing;
 
   procedure execute_orchestrator_follow_up
