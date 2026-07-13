@@ -273,6 +273,121 @@ create or replace package body test_uc_ai_agent_profile as
     end;
   end execute_follow_up_message;
 
+  procedure session_header_and_messages
+  as
+    l_agent_id   number;
+    l_session_id varchar2(100 char);
+    l_result     json_object_t;
+    l_follow_up  json_object_t;
+    l_agent_code constant varchar2(50 char) := gc_profile_agent_code || '_SESSION';
+  begin
+    -- Create profile agent
+    begin
+      select id into l_agent_id
+        from uc_ai_agents
+       where code = l_agent_code
+         and status = 'active';
+    exception
+      when no_data_found then
+        l_agent_id := uc_ai_agents_api.create_agent(
+          p_code                => l_agent_code,
+          p_description         => 'Test profile agent for session aggregation',
+          p_agent_type          => uc_ai_agents_api.c_type_profile,
+          p_prompt_profile_code => 'TEST_AGENT_MATH',
+          p_status              => uc_ai_agents_api.c_status_active
+        );
+        commit;
+    end;
+
+    -- Two turns in one session
+    l_session_id := uc_ai_agents_api.generate_session_id;
+    l_result := uc_ai_agents_api.execute_agent(
+      p_agent_code       => l_agent_code,
+      p_input_parameters => json_object_t('{"question": "What is 15 + 27?"}'),
+      p_session_id       => l_session_id
+    );
+    uc_ai_test_agent_utils.validate_agent_result(l_result, 'Session initial call');
+
+    l_follow_up := uc_ai_agents_api.execute_agent(
+      p_agent_code        => l_agent_code,
+      p_follow_up_message => 'Now multiply that result by 2',
+      p_session_id        => l_session_id
+    );
+    uc_ai_test_agent_utils.validate_agent_result(l_follow_up, 'Session follow-up call');
+
+    -- Exactly one session header, aggregating both turns
+    declare
+      l_sess_count   number;
+      l_turn_count   number;
+      l_msg_count    number;
+      l_status       varchar2(50 char);
+      l_sess_in      number;
+      l_sess_out     number;
+    begin
+      select count(*) into l_sess_count
+        from uc_ai_agent_sessions where session_id = l_session_id;
+      ut.expect(l_sess_count, 'Exactly one session header row').to_equal(1);
+
+      select turn_count, message_count, status, total_input_tokens, total_output_tokens
+        into l_turn_count, l_msg_count, l_status, l_sess_in, l_sess_out
+        from uc_ai_agent_sessions where session_id = l_session_id;
+
+      ut.expect(l_turn_count, 'Session should record 2 turns').to_equal(2);
+      ut.expect(l_status, 'Session status should be completed').to_equal(uc_ai_agents_api.c_exec_completed);
+      ut.expect(l_msg_count, 'Session should have a message log').to_be_greater_than(0);
+      ut.expect(l_sess_in, 'Session input tokens should be > 0').to_be_greater_than(0);
+      ut.expect(l_sess_out, 'Session output tokens should be > 0').to_be_greater_than(0);
+    end;
+
+    -- Session totals must equal the SUM of the executions' own tokens (no double count)
+    declare
+      l_exec_in    number;
+      l_exec_out   number;
+      l_sess_in    number;
+      l_sess_out   number;
+    begin
+      select nvl(sum(total_input_tokens), 0), nvl(sum(total_output_tokens), 0)
+        into l_exec_in, l_exec_out
+        from uc_ai_agent_executions where session_id = l_session_id;
+
+      select total_input_tokens, total_output_tokens
+        into l_sess_in, l_sess_out
+        from uc_ai_agent_sessions where session_id = l_session_id;
+
+      ut.expect(l_sess_in, 'Session input = SUM of execution own tokens').to_equal(l_exec_in);
+      ut.expect(l_sess_out, 'Session output = SUM of execution own tokens').to_equal(l_exec_out);
+    end;
+
+    -- Message log: both user turns captured, ordered, and count matches header
+    declare
+      l_user_count number;
+      l_asst_count number;
+      l_total      number;
+      l_min_seq    number;
+      l_max_seq    number;
+      l_distinct   number;
+      l_hdr_count  number;
+    begin
+      select count(case when role = 'user' then 1 end),
+             count(case when role = 'assistant' then 1 end),
+             count(*),
+             min(seq),
+             max(seq),
+             count(distinct seq)
+        into l_user_count, l_asst_count, l_total, l_min_seq, l_max_seq, l_distinct
+        from uc_ai_agent_messages where session_id = l_session_id;
+
+      ut.expect(l_user_count, 'Both user turns persisted').to_equal(2);
+      ut.expect(l_asst_count, 'At least two assistant messages persisted').to_be_greater_or_equal(2);
+      ut.expect(l_distinct, 'seq values are unique').to_equal(l_total);
+      ut.expect(l_max_seq - l_min_seq + 1, 'seq is a gap-free run').to_equal(l_total);
+
+      select message_count into l_hdr_count
+        from uc_ai_agent_sessions where session_id = l_session_id;
+      ut.expect(l_hdr_count, 'Header message_count matches persisted rows').to_equal(l_total);
+    end;
+  end session_header_and_messages;
+
   procedure follow_up_no_session_error
   as
     l_agent_id number;

@@ -230,7 +230,10 @@ create table uc_ai_agent_executions (
   agent_id               number not null,
   parent_execution_id    number,
   session_id             varchar2(255 char),
-  
+  -- Sequential turn number within the session; only set for top-level
+  -- executions (parent_execution_id is null). Nested sub-agent runs leave it null.
+  turn_index             number,
+
   input_parameters       clob,
   current_state          clob,
   output_result          clob,
@@ -288,3 +291,108 @@ comment on column uc_ai_agent_executions.apex_session_id is 'APEX APP_SESSION';
 comment on column uc_ai_agent_executions.apex_app_id is 'APEX application ID';
 comment on column uc_ai_agent_executions.apex_page_id is 'APEX page ID';
 comment on column uc_ai_agent_executions.env_context is 'JSON dump of SYS_CONTEXT USERENV + APEX session values';
+comment on column uc_ai_agent_executions.turn_index is 'Sequential turn number within the session (top-level executions only; null for nested sub-agent runs)';
+
+
+-- ============================================================================
+-- AGENT SESSIONS: conversation header, one row per session_id
+-- ============================================================================
+-- A session groups all executions (turns + their nested sub-agent runs) of a
+-- single conversation. Aggregates (token totals, turn/message counts, status)
+-- are maintained by the API in the top-level completion path.
+create table uc_ai_agent_sessions (
+  session_id             varchar2(255 char) not null,
+  root_agent_id          number,
+
+  status                 varchar2(50 char),
+  turn_count             number default on null 0 not null,
+  message_count          number default on null 0 not null,
+
+  -- Sum of the OWN tokens of every execution in the session (no double count:
+  -- each execution records only the tokens of the LLM calls it made itself).
+  total_input_tokens     number default on null 0 not null,
+  total_output_tokens    number default on null 0 not null,
+
+  started_at             timestamp,
+  last_activity_at       timestamp,
+  updated_at             timestamp,
+
+  -- Environment/session context, snapshotted from the first (opening) turn
+  created_by             varchar2(255 char),
+  db_user                varchar2(255 char),
+  apex_user              varchar2(255 char),
+  apex_session_id        number,
+  apex_app_id            number,
+  apex_page_id           number,
+  os_user                varchar2(255 char),
+  host                   varchar2(255 char),
+  ip_address             varchar2(64 char),
+  module                 varchar2(255 char),
+  action                 varchar2(255 char),
+  client_identifier      varchar2(255 char),
+  sid                    number,
+  env_context            clob,
+
+  constraint uc_ai_agent_sessions_pk primary key (session_id),
+  constraint uc_ai_agent_sess_agent_fk foreign key (root_agent_id)
+    references uc_ai_agents(id),
+  constraint uc_ai_agent_sess_status_ck check (status in
+    ('pending', 'running', 'completed', 'failed', 'timeout'))
+);
+
+create index uc_ai_agent_sess_activity_idx on uc_ai_agent_sessions(last_activity_at);
+create index uc_ai_agent_sess_agent_idx on uc_ai_agent_sessions(root_agent_id);
+
+comment on table uc_ai_agent_sessions is 'Conversation header: one row per session_id grouping all executions (turns + nested sub-agent runs)';
+comment on column uc_ai_agent_sessions.root_agent_id is 'Agent that opened the session (first top-level turn)';
+comment on column uc_ai_agent_sessions.status is 'Status of the most recent top-level turn';
+comment on column uc_ai_agent_sessions.total_input_tokens is 'SUM of own input tokens across all executions in the session';
+comment on column uc_ai_agent_sessions.total_output_tokens is 'SUM of own output tokens across all executions in the session';
+
+
+-- ============================================================================
+-- AGENT MESSAGES: normalized, untrimmed per-message conversation log
+-- ============================================================================
+-- One row per message content item, in conversation order (seq). Written per
+-- turn as the delta of new messages, so history-window trimming (which only
+-- governs what is sent to the LLM) never erodes the persisted record.
+create sequence uc_ai_agent_messages_seq;
+
+create table uc_ai_agent_messages (
+  id                     number default on null uc_ai_agent_messages_seq.nextval not null,
+  session_id             varchar2(255 char) not null,
+  execution_id           number not null,
+
+  -- Global, gap-tolerant ordering within the session
+  seq                    number not null,
+
+  -- user | assistant | tool_call | tool_result | reasoning | system
+  role                   varchar2(50 char) not null,
+  content                clob,
+
+  tool_name              varchar2(255 char),
+  tool_input             clob,
+  tool_output            clob,
+  tool_status            varchar2(50 char),
+
+  -- Reserved for future per-message attribution; aggregates live on the
+  -- execution/session rows for now.
+  input_tokens           number,
+  output_tokens          number,
+
+  created_at             timestamp not null,
+
+  constraint uc_ai_agent_messages_pk primary key (id),
+  constraint uc_ai_agent_msg_session_fk foreign key (session_id)
+    references uc_ai_agent_sessions(session_id),
+  constraint uc_ai_agent_msg_exec_fk foreign key (execution_id)
+    references uc_ai_agent_executions(id),
+  constraint uc_ai_agent_msg_role_ck check (role in
+    ('user', 'assistant', 'tool_call', 'tool_result', 'reasoning', 'system'))
+);
+
+create index uc_ai_agent_msg_session_idx on uc_ai_agent_messages(session_id, seq);
+create index uc_ai_agent_msg_exec_idx on uc_ai_agent_messages(execution_id);
+
+comment on table uc_ai_agent_messages is 'Normalized, untrimmed per-message conversation log (one row per content item)';
+comment on column uc_ai_agent_messages.seq is 'Ordering within the session; assigned as running max(seq)+1 per persisted message';

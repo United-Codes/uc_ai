@@ -504,7 +504,18 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
       p_status                => 'active'
     );
 
-    -- Delete test executions first (FK constraint, includes child executions)
+    -- Delete test messages first (FK to executions), then executions
+    -- (FK constraint, includes child executions).
+    delete from uc_ai_agent_messages
+     where execution_id in (
+       select e.id
+         from uc_ai_agent_executions e
+        start with e.agent_id in (
+          select a.id from uc_ai_agents a where a.code like 'TEST_%'
+        )
+      connect by nocycle prior e.id = e.parent_execution_id
+     );
+
     delete from uc_ai_agent_executions
      where id in (
        select e.id
@@ -522,6 +533,25 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
   )
   as
   begin
+    -- Messages first: they FK to both executions and sessions. Cover messages
+    -- of the executions about to be removed and of the sessions about to be
+    -- removed (root agent matches the pattern).
+    delete from uc_ai_agent_messages
+     where execution_id in (
+       select e.id
+         from uc_ai_agent_executions e
+        start with e.agent_id in (
+          select a.id from uc_ai_agents a where a.code like p_code_pattern
+        )
+      connect by nocycle prior e.id = e.parent_execution_id
+     )
+        or session_id in (
+       select s.session_id from uc_ai_agent_sessions s
+        where s.root_agent_id in (
+          select a.id from uc_ai_agents a where a.code like p_code_pattern
+        )
+     );
+
     -- Single statement so the self-referencing parent_execution_id FK is
     -- checked after all hierarchy rows (parents and children) are gone.
     -- The connect by also catches child executions that belong to OTHER
@@ -534,6 +564,11 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
           select a.id from uc_ai_agents a where a.code like p_code_pattern
         )
       connect by nocycle prior e.id = e.parent_execution_id
+     );
+
+    delete from uc_ai_agent_sessions
+     where root_agent_id in (
+       select a.id from uc_ai_agents a where a.code like p_code_pattern
      );
 
     delete from uc_ai_agents where code like p_code_pattern;

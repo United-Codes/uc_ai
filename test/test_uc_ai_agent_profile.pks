@@ -23,6 +23,9 @@ create or replace package test_uc_ai_agent_profile as
   --%test(Continue conversation with follow-up message)
   procedure execute_follow_up_message;
 
+  --%test(Multi-turn conversation records one session header with summed tokens and message log)
+  procedure session_header_and_messages;
+
   --%test(Follow-up without session_id raises error)
   --%throws(-20503)
   procedure follow_up_no_session_error;
