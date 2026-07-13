@@ -13,6 +13,7 @@ create or replace package test_uc_ai_hook_stub as
   -- distinctive error codes so the suite can tell veto/after errors apart
   c_before_veto_code constant pls_integer := -20099;
   c_after_fail_code   constant pls_integer := -20098;
+  c_tool_veto_code    constant pls_integer := -20097;
 
   -- recorded call state
   g_before_count      pls_integer;
@@ -31,9 +32,16 @@ create or replace package test_uc_ai_hook_stub as
   g_last_in_tokens    number;
   g_last_out_tokens   number;
 
+  -- last before_tool_call args
+  g_tool_count        pls_integer;
+  g_last_tool_code    varchar2(255 char);
+  g_last_tool_agent   varchar2(255 char);
+  g_last_tool_user    varchar2(255 char);
+
   -- behaviour switches
   g_before_raise      boolean;
   g_after_raise       boolean;
+  g_tool_raise        boolean;
 
   -- Reset all recorded state and behaviour switches
   procedure reset;
@@ -52,6 +60,15 @@ create or replace package test_uc_ai_hook_stub as
     p_status        in varchar2,
     p_input_tokens  in number,
     p_output_tokens in number
+  );
+
+  procedure before_tool_call(
+    p_agent_id    in number,
+    p_agent_code  in varchar2,
+    p_tool_code   in varchar2,
+    p_created_by  in varchar2,
+    p_session_id  in varchar2,
+    p_apex_app_id in number
   );
 
 end test_uc_ai_hook_stub;

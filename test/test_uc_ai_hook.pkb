@@ -13,8 +13,17 @@ create or replace package body test_uc_ai_hook as
   procedure delete_test_rows
   as
   begin
+    delete from uc_ai_agent_messages
+     where execution_id in (
+       select id from uc_ai_agent_executions
+        where agent_id in (select id from uc_ai_agents where code like 'TEST_HOOK_%'))
+        or session_id in (
+       select session_id from uc_ai_agent_sessions
+        where root_agent_id in (select id from uc_ai_agents where code like 'TEST_HOOK_%'));
     delete from uc_ai_agent_executions
      where agent_id in (select id from uc_ai_agents where code like 'TEST_HOOK_%');
+    delete from uc_ai_agent_sessions
+     where root_agent_id in (select id from uc_ai_agents where code like 'TEST_HOOK_%');
     delete from uc_ai_agents where code like 'TEST_HOOK_%';
     commit;
   end delete_test_rows;
@@ -68,8 +77,14 @@ create or replace package body test_uc_ai_hook as
     test_uc_ai_hook_stub.reset;
     uc_ai_agents_api.set_execution_hook(null);
     -- start from a clean execution history for row-count assertions
+    delete from uc_ai_agent_messages
+     where execution_id in (
+       select id from uc_ai_agent_executions
+        where agent_id in (select id from uc_ai_agents where code = gc_agent_code));
     delete from uc_ai_agent_executions
      where agent_id in (select id from uc_ai_agents where code = gc_agent_code);
+    delete from uc_ai_agent_sessions
+     where root_agent_id in (select id from uc_ai_agents where code = gc_agent_code);
     commit;
   end before_each;
 
@@ -196,6 +211,78 @@ create or replace package body test_uc_ai_hook as
     ut.expect(test_uc_ai_hook_stub.g_before_count).to_equal(0);
     ut.expect(test_uc_ai_hook_stub.g_after_count).to_equal(0);
   end cleared_hook_not_called;
+
+
+  -- Builds a settings record carrying the given execution context, as the agent
+  -- layer would publish it, for driving before_tool_call without an LLM call.
+  function tool_settings(
+    p_agent_code in varchar2,
+    p_created_by in varchar2
+  ) return uc_ai_settings.t_settings
+  as
+    l_s uc_ai_settings.t_settings;
+  begin
+    l_s.ctx_agent_id   := 42;
+    l_s.ctx_agent_code := p_agent_code;
+    l_s.ctx_created_by := p_created_by;
+    l_s.ctx_session_id := 'SESS-1';
+    return l_s;
+  end tool_settings;
+
+
+  procedure tool_hook_fires_with_context
+  as
+  begin
+    uc_ai_agents_api.set_execution_hook(gc_stub_pkg);
+
+    uc_ai_tools_api.before_tool_call(
+      p_tool_code => 'GET_WEATHER'
+    , p_settings  => tool_settings('WEATHER_AGENT', 'alice')
+    );
+
+    ut.expect(test_uc_ai_hook_stub.g_tool_count).to_equal(1);
+    ut.expect(test_uc_ai_hook_stub.g_last_tool_code).to_equal('GET_WEATHER');
+    ut.expect(test_uc_ai_hook_stub.g_last_tool_agent).to_equal('WEATHER_AGENT');
+    ut.expect(test_uc_ai_hook_stub.g_last_tool_user).to_equal('alice');
+  end tool_hook_fires_with_context;
+
+
+  procedure tool_hook_veto_raises
+  as
+  begin
+    test_uc_ai_hook_stub.g_tool_raise := true;
+    uc_ai_agents_api.set_execution_hook(gc_stub_pkg);
+
+    begin
+      uc_ai_tools_api.before_tool_call(
+        p_tool_code => 'GET_WEATHER'
+      , p_settings  => tool_settings('WEATHER_AGENT', 'alice')
+      );
+      ut.fail('Expected the tool hook veto to raise');
+    exception
+      when others then
+        ut.expect(sqlcode).to_equal(test_uc_ai_hook_stub.c_tool_veto_code);
+    end;
+
+    ut.expect(test_uc_ai_hook_stub.g_tool_count).to_equal(1);
+  end tool_hook_veto_raises;
+
+
+  procedure tool_hook_optional_when_absent
+  as
+  begin
+    -- Point the hook at a valid package that does NOT implement before_tool_call.
+    -- The existence probe must skip it silently rather than raising.
+    uc_ai_agents_api.set_execution_hook('UC_AI');
+    test_uc_ai_hook_stub.g_tool_raise := true;  -- would veto IF the stub were called
+
+    uc_ai_tools_api.before_tool_call(
+      p_tool_code => 'GET_WEATHER'
+    , p_settings  => tool_settings('WEATHER_AGENT', 'alice')
+    );
+
+    ut.expect(test_uc_ai_hook_stub.g_tool_count).to_equal(0);
+  end tool_hook_optional_when_absent;
 
 end test_uc_ai_hook;
 /

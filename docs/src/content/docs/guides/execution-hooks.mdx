@@ -47,6 +47,19 @@ create or replace package my_ai_hook as
     p_output_tokens in number
   );
 
+  -- OPTIONAL. Called BEFORE each tool call inside a generate_text tool-calling
+  -- loop. Raise to VETO the tool call mid-run: the exception propagates out of
+  -- generate_text and stops the run. A hook that does not implement this
+  -- procedure is detected and simply not called, so it stays fully optional.
+  procedure before_tool_call(
+    p_agent_id    in number,     -- uc_ai_agents.id  (null if standalone generate_text)
+    p_agent_code  in varchar2,   -- uc_ai_agents.code (null if standalone)
+    p_tool_code   in varchar2,   -- uc_ai_tools.code about to run
+    p_created_by  in varchar2,   -- coalesce(APEX user, DB user) of the caller
+    p_session_id  in varchar2,   -- execution session id (null if standalone)
+    p_apex_app_id in number      -- APEX application id (null outside APEX)
+  );
+
 end my_ai_hook;
 /
 ```
@@ -58,6 +71,10 @@ Runs after the agent is resolved but **before** the execution row is created and
 ### `after_execution`
 
 Runs once the top-level execution has finished, on both the success and failure paths. It is **best-effort**: if it raises, UC AI logs the error and continues, so bookkeeping (cost recording, audit writes) can never convert a finished run into a failure. Because it fires at the top level, `p_exec_id` is the root execution — walk `uc_ai_agent_executions` by `parent_execution_id` if you need the whole tree.
+
+### `before_tool_call` (optional)
+
+Runs **before every individual tool call** inside a `generate_text` tool-calling loop, giving you a mid-run enforcement point that `before_execution` (which only fires once, at the start) cannot. Raising here vetoes the tool call and stops the run immediately — use it for per-tool-call rate limits or to block specific tools dynamically. It fires for agent runs and for standalone `generate_text` calls alike; the agent context fields are null in the standalone case, and `p_created_by` falls back to the database session user. The procedure is **optional**: UC AI probes once (cached per session) whether your hook package declares it, so hooks that only implement `before_execution`/`after_execution` are unaffected.
 
 ## Registering a hook
 

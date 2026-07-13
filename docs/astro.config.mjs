@@ -82,6 +82,16 @@ export default defineConfig({
 								{ autogenerate: { directory: "guides/multi-agent-systems" } },
 							],
 						},
+						{
+							label: "Guardrails",
+							badge: {
+								text: "Pro",
+								variant: "tip",
+							},
+							items: [
+								{ autogenerate: { directory: "guides/guardrails" } },
+							],
+						},
 					],
 				},
 				{

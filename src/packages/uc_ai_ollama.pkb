@@ -434,6 +434,9 @@ create or replace package body uc_ai_ollama as
           uc_ai_logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name || ', Tool ID: ' || l_tool_call_id);
           uc_ai_logger.log('Tool input', l_scope, 'Input: ' || l_tool_input.to_clob);
 
+          -- Fire the per-tool-call hook (may veto by raising, stopping the run)
+          uc_ai_tools_api.before_tool_call(p_tool_code => l_tool_name, p_settings => p_settings);
+
           -- Execute the tool and get result
           l_tool_result := uc_ai_tools_api.execute_tool(
             p_tool_code          => l_tool_name

@@ -12,6 +12,13 @@ as
   begin
     l_s.initialized                    := true;
 
+    -- execution context: not part of the config surface, always null here
+    l_s.ctx_agent_id                   := null;
+    l_s.ctx_agent_code                 := null;
+    l_s.ctx_created_by                 := null;
+    l_s.ctx_session_id                 := null;
+    l_s.ctx_apex_app_id                := null;
+
     -- common
     l_s.base_url                       := null;
     l_s.provider_override              := null;
@@ -77,9 +84,17 @@ as
 
   function build_from_globals return t_settings
   as
-    l_s t_settings;
+    l_s   t_settings;
+    l_ctx uc_ai.t_exec_context := uc_ai.get_exec_context;
   begin
     l_s.initialized                    := true;
+
+    -- execution context (published by the agent layer around a run)
+    l_s.ctx_agent_id                   := l_ctx.agent_id;
+    l_s.ctx_agent_code                 := l_ctx.agent_code;
+    l_s.ctx_created_by                 := l_ctx.created_by;
+    l_s.ctx_session_id                 := l_ctx.session_id;
+    l_s.ctx_apex_app_id                := l_ctx.apex_app_id;
 
     -- common
     l_s.base_url                       := uc_ai.g_base_url;

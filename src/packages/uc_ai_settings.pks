@@ -35,6 +35,15 @@ as
   -- consumer that reads it from the record.
   type t_settings is record (
     initialized                    boolean
+    -- execution context (from uc_ai.get_exec_context; null outside an agent run).
+    -- Threaded down so the per-tool-call hook can attribute a tool call to its
+    -- agent and caller. Not part of the JSON config surface (build_from_config
+    -- leaves these null).
+  , ctx_agent_id                   number
+  , ctx_agent_code                 varchar2(255 char)
+  , ctx_created_by                 varchar2(255 char)
+  , ctx_session_id                 varchar2(255 char)
+  , ctx_apex_app_id                number
     -- common (from uc_ai.g_*)
   , base_url                       varchar2(4000 char)
   , provider_override              varchar2(4000 char)

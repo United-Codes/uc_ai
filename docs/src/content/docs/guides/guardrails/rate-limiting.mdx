@@ -1,0 +1,131 @@
+---
+title: Rate limiting
+description: Cap how often AI runs happen — agent runs, tool calls, and concurrent runs per user, agent, or app — with rolling or calendar windows, enforced mid-run.
+sidebar:
+  order: 20
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+**Rate limiting caps the frequency of AI usage — how many runs, how many tool calls, and how many concurrent runs a user, agent, or app may have.** It stops abuse, retry storms, and runaway tool loops that a cost budget alone would only catch after the money is spent.
+
+<Aside type="note" title="Pro add-on">
+Rate limiting is part of the paid UC AI Pro layer. See [about guardrails](/products/uc-ai/docs/guides/guardrails/) for how the Pro layer installs and plugs into core.
+</Aside>
+
+## Limit types
+
+A limit caps one of three counts, over a [scope](/products/uc-ai/docs/guides/guardrails/#scope) and window:
+
+| `limit_type` | Counts | Enforced |
+| ------------ | ------ | -------- |
+| `AGENT_EXEC` | Top-level agent runs started in the window | Before a run starts (`before_execution`) |
+| `TOOL_CALL` | Tool calls made in the window | Before each tool call, **mid-run** (`before_tool_call`) |
+| `CONCURRENCY` | Runs currently `running` | Before a run starts |
+
+`AGENT_EXEC` counts *top-level* runs — a run that delegates to nested agents still counts once. `CONCURRENCY` likewise counts in-flight top-level runs.
+
+## Windows
+
+Rate limits use one of two window kinds:
+
+| `window_kind` | Configured by | Meaning |
+| ------------- | ------------- | ------- |
+| `rolling` | `window_seconds` | The last *N* seconds up to now (e.g. `3600` = last hour) |
+| `calendar` | `period` | The current `day` / `week` / `month`, or `total` (all time) |
+
+Rolling windows are the natural fit for rate limiting ("100 runs per hour"); calendar windows mirror the [budget periods](/products/uc-ai/docs/guides/guardrails/budget/#periods). `CONCURRENCY` ignores the window — it is a point-in-time count.
+
+## Define a limit
+
+Limits are rows in `uc_ai_rate_limits`. Example — at most 100 runs per user per rolling hour, hard:
+
+```sql
+insert into uc_ai_rate_limits (
+  code, description, scope_type, scope_value,
+  limit_type, limit_count, window_kind, window_seconds, enforcement_mode
+) values (
+  'USER_RUNS_HOUR', 'Max 100 runs/user/hour',
+  'user', 'ANNA',
+  'AGENT_EXEC', 100, 'rolling', 3600, 'hard'
+);
+commit;
+```
+
+More shapes:
+
+```sql
+-- Max 500 tool calls per app per hour (enforced mid-run, hard)
+insert into uc_ai_rate_limits (code, scope_type, scope_value, limit_type, limit_count, window_kind, window_seconds, enforcement_mode)
+values ('APP_TOOLS_HOUR', 'app', '512', 'TOOL_CALL', 500, 'rolling', 3600, 'hard');
+
+-- Max 5 concurrent runs per user
+insert into uc_ai_rate_limits (code, scope_type, scope_value, limit_type, limit_count, enforcement_mode)
+values ('USER_CONCURRENCY', 'user', 'ANNA', 'CONCURRENCY', 5, 'hard');
+
+-- Org-wide daily run cap, warn only
+insert into uc_ai_rate_limits (code, scope_type, scope_value, limit_type, limit_count, window_kind, period, enforcement_mode)
+values ('ORG_RUNS_DAY', 'global', null, 'AGENT_EXEC', 10000, 'calendar', 'day', 'soft');
+commit;
+```
+
+When a hard limit is hit, the caller receives one of these, depending on the type:
+
+| `limit_type` | Error |
+| ------------ | ----- |
+| `AGENT_EXEC` | `ORA-20411` |
+| `TOOL_CALL` | `ORA-20412` |
+| `CONCURRENCY` | `ORA-20413` |
+
+```text
+ORA-20411: Rate limit "USER_RUNS_HOUR" (AGENT_EXEC) exceeded: 100 of 100 allowed
+```
+
+## Mid-run tool-call enforcement
+
+`TOOL_CALL` limits are checked **before every tool call**, so a run can be stopped part-way through instead of only at its boundary. This is what makes the [core `before_tool_call` hook](/products/uc-ai/docs/guides/execution-hooks/#before_tool_call-optional) worthwhile: the moment the window's tool-call count reaches the cap, the next tool call raises `ORA-20412` and the run stops.
+
+<Aside type="caution" title="What the tool-call count includes">
+A tool call's count is written to `uc_ai_agent_executions.tool_calls_count` when its execution **completes**. So the `TOOL_CALL` window total reflects *completed* executions — an in-flight run's own calls are not yet in the total (that run is bounded separately by the core `max_tool_calls` setting). In practice this means a `TOOL_CALL` limit stops a run mid-flight once *prior* runs in the window have used up the allowance; it is a period-level cap, not a within-single-run counter.
+</Aside>
+
+## Concurrency and stuck runs
+
+`CONCURRENCY` counts rows still in `running` status for the scope. If a run crashes without being marked complete, its row could linger and inflate the count forever — so each limit has a `max_run_age_seconds` (default `3600`): running rows older than that are treated as stuck and excluded from the count.
+
+```sql
+-- Max 3 concurrent runs per user; forget "running" rows older than 30 minutes
+insert into uc_ai_rate_limits (code, scope_type, scope_value, limit_type, limit_count, max_run_age_seconds, enforcement_mode)
+values ('USER_CONC_3', 'user', 'ANNA', 'CONCURRENCY', 3, 1800, 'hard');
+commit;
+```
+
+## Reporting
+
+Inspect live limit usage with the status view or the API:
+
+```sql
+-- Which limits are close to their cap?
+select code, scope_type, scope_value, limit_type,
+       used, limit_count, pct, remaining, state   -- state: ok | warn | over
+  from uc_ai_v_rate_limit_status
+ order by pct desc nulls last;
+
+-- Ad-hoc: how many runs has a user started in the last hour?
+select uc_ai_ratelimit_api.current_count(
+         p_scope_type     => 'user',
+         p_scope_value    => 'ANNA',
+         p_limit_type     => 'AGENT_EXEC',
+         p_window_kind    => 'rolling',
+         p_window_seconds => 3600
+       ) as runs_last_hour
+  from dual;
+```
+
+<Aside type="tip">
+The same race window as budgets applies: two runs starting at the same instant can both pass a count check before either row exists, so a hard cap of N may briefly allow N+1. Rate limits are a guardrail against abuse and runaway loops, not a hard transactional quota.
+</Aside>
+
+## Concurrency of features
+
+Rate limiting registers ahead of [budgets](/products/uc-ai/docs/guides/guardrails/budget/) (`sort_order` 50 vs 100), so a rate-limit denial short-circuits before any cost pricing runs. Use both together for complete governance: rate limits bound *how often*, budgets bound *how much*.

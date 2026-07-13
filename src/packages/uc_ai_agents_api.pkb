@@ -46,6 +46,10 @@ create or replace package body uc_ai_agents_api as
   g_hook_override   varchar2(128 char);          -- explicit override (null = use convention)
   g_hook_pkg        varchar2(128 char);           -- resolved package name (null = no hook)
   g_hook_resolved   boolean := false;             -- whether convention resolution has run this session
+  -- before_tool_call is optional; cache whether the resolved hook implements it
+  -- so we never execute-immediate a missing procedure (which would break every
+  -- tool call for a hook that only implements before/after_execution).
+  g_hook_tool_cb          pls_integer;            -- 1 = has before_tool_call, 0 = not, null = unknown
 
 
   -- ============================================================================
@@ -158,7 +162,62 @@ create or replace package body uc_ai_agents_api as
     -- force convention re-resolution on next dispatch
     g_hook_resolved := false;
     g_hook_pkg      := null;
+    g_hook_tool_cb  := null;
   end set_execution_hook;
+
+
+  /*
+   * Fires the optional per-tool-call hook. See the spec. Exceptions propagate
+   * (a raise vetoes the tool call). The before_tool_call procedure is optional:
+   * its presence on the resolved hook package is probed once and cached, so a
+   * hook that only implements before/after_execution is simply never called here.
+   */
+  procedure fire_before_tool_hook(
+    p_tool_code   in varchar2
+  , p_agent_id    in number   default null
+  , p_agent_code  in varchar2 default null
+  , p_created_by  in varchar2 default null
+  , p_session_id  in varchar2 default null
+  , p_apex_app_id in number   default null
+  )
+  as
+    l_pkg   varchar2(128 char);
+    l_stmt  varchar2(500 char);
+    l_owner varchar2(128 char);
+    l_name  varchar2(128 char);
+  begin
+    l_pkg := resolve_hook_pkg();
+    if l_pkg is null then
+      return;
+    end if;
+
+    -- Probe once whether the resolved hook implements before_tool_call. Split a
+    -- schema-qualified override (SCHEMA.PKG) so the lookup finds cross-schema hooks.
+    if g_hook_tool_cb is null then
+      if instr(l_pkg, '.') > 0 then
+        l_owner := upper(substr(l_pkg, 1, instr(l_pkg, '.') - 1));
+        l_name  := upper(substr(l_pkg, instr(l_pkg, '.') + 1));
+      else
+        l_owner := sys_context('userenv', 'current_schema');
+        l_name  := upper(l_pkg);
+      end if;
+
+      select count(*)
+        into g_hook_tool_cb
+        from all_procedures
+       where owner          = l_owner
+         and object_name    = l_name
+         and procedure_name = 'BEFORE_TOOL_CALL';
+    end if;
+
+    if g_hook_tool_cb = 0 then
+      return;
+    end if;
+
+    l_stmt := 'begin ' || l_pkg || '.before_tool_call(:1, :2, :3, :4, :5, :6); end;';
+    execute immediate l_stmt
+      using in p_agent_id, in p_agent_code, in p_tool_code, in p_created_by, in p_session_id, in p_apex_app_id;
+  end fire_before_tool_hook;
 
   /*
    * Extracts all agent_code references from a JSON object recursively
@@ -342,6 +401,7 @@ create or replace package body uc_ai_agents_api as
     l_scope   uc_ai_logger.scope := gc_scope_prefix || 'create_execution';
     l_exec_id uc_ai_agent_executions.id%type;
     l_params clob;
+    l_turn_index uc_ai_agent_executions.turn_index%type;
     e_fk_violation exception;
     pragma exception_init(e_fk_violation, -2291);
     -- Self-deadlock: the autonomous insert blocks on the agent_id FK because the
@@ -354,10 +414,38 @@ create or replace package body uc_ai_agents_api as
       l_params := p_input_parameters.to_clob;
     end if;
 
+    -- Top-level turn: make sure the conversation header exists and assign the
+    -- next turn number. Nested sub-agent runs (p_parent_exec_id set) inherit the
+    -- session their parent already created and leave turn_index null, so their
+    -- own tokens still roll into the session total without being counted as turns.
+    if p_parent_exec_id is null then
+      merge into uc_ai_agent_sessions s
+      using (select p_session_id as session_id from sys.dual) src
+      on (s.session_id = src.session_id)
+      when not matched then insert (
+        session_id, root_agent_id, status, started_at, last_activity_at,
+        created_by, db_user, apex_user, apex_session_id, apex_app_id, apex_page_id,
+        os_user, host, ip_address, module, action, client_identifier, sid, env_context
+      ) values (
+        p_session_id, p_agent_id, c_exec_running, systimestamp, systimestamp,
+        g_exec_env.created_by, g_exec_env.db_user, g_exec_env.apex_user,
+        g_exec_env.apex_session_id, g_exec_env.apex_app_id, g_exec_env.apex_page_id,
+        g_exec_env.os_user, g_exec_env.host, g_exec_env.ip_address,
+        g_exec_env.module, g_exec_env.action, g_exec_env.client_identifier,
+        g_exec_env.sid, g_exec_env.env_context
+      );
+
+      select coalesce(max(turn_index), 0) + 1
+        into l_turn_index
+        from uc_ai_agent_executions
+       where session_id = p_session_id;
+    end if;
+
     insert into uc_ai_agent_executions (
       agent_id,
       parent_execution_id,
       session_id,
+      turn_index,
       input_parameters,
       status,
       created_by,
@@ -378,6 +466,7 @@ create or replace package body uc_ai_agents_api as
       p_agent_id,
       p_parent_exec_id,
       p_session_id,
+      l_turn_index,
       l_params,
       c_exec_running,
       g_exec_env.created_by,
@@ -463,6 +552,196 @@ create or replace package body uc_ai_agents_api as
       rollback;
       raise;
   end complete_execution;
+
+
+  /*
+   * Recomputes and stores the conversation header aggregates for a session.
+   * Runs top-level only, once per turn, after complete_execution and message
+   * persistence have committed. Token totals SUM the OWN tokens of every
+   * execution in the session (each row holds only the tokens of the LLM calls
+   * it made itself, so nested sub-agent runs add in without double counting).
+   * Best-effort: never raises (audit/reporting must not fail a finished run).
+   */
+  procedure maintain_session(
+    p_session_id in varchar2,
+    p_status     in varchar2
+  )
+  as
+    -- @dblinter ignore(g-3330): intentional autonomous transaction; session telemetry must survive a rollback of the calling transaction, like create_execution/complete_execution
+    pragma autonomous_transaction;
+    l_scope uc_ai_logger.scope := gc_scope_prefix || 'maintain_session';
+  begin
+    if p_session_id is null then
+      return;
+    end if;
+
+    update uc_ai_agent_sessions s
+       set s.status              = p_status,
+           s.last_activity_at    = systimestamp,
+           s.turn_count          = (select count(*)
+                                      from uc_ai_agent_executions e
+                                     where e.session_id = p_session_id
+                                       and e.turn_index is not null),
+           s.total_input_tokens  = (select nvl(sum(e.total_input_tokens), 0)
+                                      from uc_ai_agent_executions e
+                                     where e.session_id = p_session_id),
+           s.total_output_tokens = (select nvl(sum(e.total_output_tokens), 0)
+                                      from uc_ai_agent_executions e
+                                     where e.session_id = p_session_id),
+           s.message_count       = (select count(*)
+                                      from uc_ai_agent_messages m
+                                     where m.session_id = p_session_id)
+     where s.session_id = p_session_id;
+
+    commit;
+  exception
+    when others then
+      rollback;
+      uc_ai_logger.log_error(
+        p_text  => 'Failed to maintain session ' || p_session_id
+      , p_scope => l_scope
+      , p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+      );
+  end maintain_session;
+
+
+  /*
+   * Persists the current turn's NEW messages into uc_ai_agent_messages, in
+   * conversation order. The framework returns the full accumulated messages
+   * array on follow-ups, so we only persist from the last 'user' message
+   * onward (this turn's delta); earlier turns were persisted when they ran.
+   *
+   * Because trimming (apply_history_management) only governs what is sent to
+   * the LLM, the delta persisted here is the complete, untrimmed record.
+   * Best-effort: never raises.
+   */
+  procedure persist_turn_messages(
+    p_exec_id    in uc_ai_agent_executions.id%type,
+    p_session_id in varchar2,
+    p_result     in json_object_t
+  )
+  as
+    -- @dblinter ignore(g-3330): intentional autonomous transaction; message log must survive a rollback of the calling transaction
+    pragma autonomous_transaction;
+    l_scope        uc_ai_logger.scope := gc_scope_prefix || 'persist_turn_messages';
+    l_messages     json_array_t;
+    l_msg          json_object_t;
+    l_content      json_element_t;
+    l_content_arr  json_array_t;
+    l_item         json_object_t;
+    l_role         varchar2(50 char);
+    l_type         varchar2(50 char);
+    l_start_idx    pls_integer := 0;
+    l_seq          number;
+
+    procedure ins(
+      p_role        in varchar2,
+      p_content     in clob     default null,
+      p_tool_name   in varchar2 default null,
+      p_tool_input  in clob     default null,
+      p_tool_output in clob     default null,
+      p_tool_status in varchar2 default null
+    )
+    as
+    begin
+      l_seq := l_seq + 1;
+      insert into uc_ai_agent_messages (
+        session_id, execution_id, seq, role, content,
+        tool_name, tool_input, tool_output, tool_status
+      ) values (
+        p_session_id, p_exec_id, l_seq, p_role, p_content,
+        p_tool_name, p_tool_input, p_tool_output, p_tool_status
+      );
+    end ins;
+  begin
+    if p_session_id is null or p_result is null then
+      return;
+    end if;
+
+    -- Continue the session's global ordering
+    select nvl(max(seq), 0)
+      into l_seq
+      from uc_ai_agent_messages
+     where session_id = p_session_id;
+
+    -- No structured message array (e.g. some workflow agents): store the
+    -- final_message as a single assistant row so the turn is not lost.
+    if not p_result.has('messages') then
+      if p_result.has('final_message') then
+        ins(p_role => 'assistant', p_content => p_result.get_clob('final_message'));
+        commit;
+      end if;
+      return;
+    end if;
+
+    l_messages := p_result.get_array('messages');
+
+    -- Find this turn's start: the index of the LAST 'user' message.
+    <<find_turn_start>>
+    for i in 0 .. l_messages.get_size - 1 loop
+      l_msg := treat(l_messages.get(i) as json_object_t);
+      if l_msg.has('role') and l_msg.get_string('role') = 'user' then
+        l_start_idx := i;
+      end if;
+    end loop find_turn_start;
+
+    <<turn_messages>>
+    for i in l_start_idx .. l_messages.get_size - 1 loop
+      l_msg  := treat(l_messages.get(i) as json_object_t);
+      l_role := l_msg.get_string('role');
+
+      if not l_msg.has('content') then
+        continue;
+      end if;
+
+      l_content := l_msg.get('content');
+
+      -- Content may be a plain string or an array of typed content items.
+      if not l_content.is_array then
+        ins(p_role => l_role, p_content => l_msg.get_clob('content'));
+        continue;
+      end if;
+
+      l_content_arr := treat(l_content as json_array_t);
+      <<content_items>>
+      for j in 0 .. l_content_arr.get_size - 1 loop
+        l_item := treat(l_content_arr.get(j) as json_object_t);
+        l_type := l_item.get_string('type');
+
+        case l_type
+          when 'text' then
+            ins(p_role => l_role, p_content => l_item.get_clob('text'));
+          when 'reasoning' then
+            ins(p_role => 'reasoning', p_content => l_item.get_clob('text'));
+          when 'tool_call' then
+            ins(
+              p_role       => 'tool_call',
+              p_tool_name  => l_item.get_string('toolName'),
+              p_tool_input => l_item.get_clob('args')
+            );
+          when 'tool_result' then
+            ins(
+              p_role        => 'tool_result',
+              p_tool_name   => l_item.get_string('toolName'),
+              p_tool_output => l_item.get_clob('result'),
+              p_tool_status => 'success'
+            );
+          else
+            null; -- ignore unknown content types
+        end case;
+      end loop content_items;
+    end loop turn_messages;
+
+    commit;
+  exception
+    when others then
+      rollback;
+      uc_ai_logger.log_error(
+        p_text  => 'Failed to persist messages for execution ' || p_exec_id
+      , p_scope => l_scope
+      , p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+      );
+  end persist_turn_messages;
 
 
   /*
@@ -1467,6 +1746,8 @@ create or replace package body uc_ai_agents_api as
     l_input_tokens  number := 0;
     l_output_tokens number := 0;
     l_is_top_level  boolean;
+    l_prev_ctx      uc_ai.t_exec_context;
+    l_this_ctx      uc_ai.t_exec_context;
   begin
     uc_ai_logger.log('Executing agent: ' || p_agent_code, l_scope);
 
@@ -1553,6 +1834,17 @@ create or replace package body uc_ai_agents_api as
     -- Create execution record
     l_exec_id := create_execution(l_agent.id, l_session_id, p_parent_exec_id, p_input_parameters);
 
+    -- Publish this agent's context so the per-tool-call hook (fired deep inside
+    -- generate_text) can attribute a tool call to its agent and caller. Set per
+    -- execution (not just top-level) so a nested agent reports its own code;
+    -- save the caller's context and restore it on every exit below.
+    l_prev_ctx             := uc_ai.get_exec_context;
+    l_this_ctx.agent_id    := l_agent.id;
+    l_this_ctx.agent_code  := p_agent_code;
+    l_this_ctx.created_by  := g_exec_env.created_by;
+    l_this_ctx.session_id  := l_session_id;
+    l_this_ctx.apex_app_id := g_exec_env.apex_app_id;
+    uc_ai.set_exec_context(l_this_ctx);
 
     begin
       -- Execute based on agent type (delegating to sub-package)
@@ -1588,20 +1880,17 @@ create or replace package body uc_ai_agents_api as
 
       uc_ai_logger.log('Agent execution completed: ' || p_agent_code, l_scope, l_result.to_clob);
 
-      -- Extract token usage from result
+      -- Extract token usage from result. Each execution records only the OWN
+      -- tokens of the LLM calls it made itself: profile and orchestrator agents
+      -- return a generate_text() usage object, while workflow/handoff/
+      -- conversation agents make no direct LLM calls (all their tokens live on
+      -- their child executions) and therefore keep their own totals at 0.
+      -- Conversation-wide totals are the SUM across every execution in the
+      -- session and are maintained on the session header (see maintain_session).
       if l_result.has('usage') then
-        -- Profile and orchestrator agents return generate_text() result with usage object
         l_usage := l_result.get_object('usage');
         l_input_tokens := nvl(l_usage.get_number('prompt_tokens'), 0);
         l_output_tokens := nvl(l_usage.get_number('completion_tokens'), 0);
-      else
-        -- Workflow, handoff, and conversation agents have child executions — aggregate their tokens
-        select nvl(sum(total_input_tokens), 0),
-               nvl(sum(total_output_tokens), 0)
-          into l_input_tokens,
-               l_output_tokens
-          from uc_ai_agent_executions
-         where parent_execution_id = l_exec_id;
       end if;
 
       -- Update execution as completed
@@ -1612,6 +1901,15 @@ create or replace package body uc_ai_agents_api as
         p_input_tokens   => l_input_tokens,
         p_output_tokens  => l_output_tokens
       );
+
+      -- Persist this turn's messages and refresh the conversation header
+      -- (top-level only; nested sub-agent runs are captured via their parent
+      -- turn's result). Message persistence runs before maintain_session so the
+      -- header's message_count includes the messages just written.
+      if l_is_top_level then
+        persist_turn_messages(l_exec_id, l_session_id, l_result);
+        maintain_session(l_session_id, c_exec_completed);
+      end if;
 
       -- Fire the post-execution hook (top-level only); best-effort, never raises.
       if l_is_top_level then
@@ -1627,14 +1925,24 @@ create or replace package body uc_ai_agents_api as
           p_error_message => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
         );
 
+        -- Refresh the conversation header to reflect the failed turn (top-level
+        -- only). No messages are persisted: the turn produced no usable result.
+        if l_is_top_level then
+          maintain_session(l_session_id, c_exec_failed);
+        end if;
+
         -- Fire the post-execution hook for the failed run (top-level only).
         if l_is_top_level then
           fire_after_hook(l_exec_id, c_exec_failed, l_input_tokens, l_output_tokens);
         end if;
 
+        -- Restore the caller's execution context before unwinding.
+        uc_ai.set_exec_context(l_prev_ctx);
         raise;
     end;
 
+    -- Restore the caller's execution context (nested runs) / clear it (top level).
+    uc_ai.set_exec_context(l_prev_ctx);
     g_exec_depth := g_exec_depth - 1;
     return l_result;
   exception
@@ -1802,6 +2110,90 @@ create or replace package body uc_ai_agents_api as
       uc_ai_logger.log_error('Error getting execution details', l_scope);
       raise;
   end get_execution_details;
+
+
+  /*
+   * Lists conversation sessions (one row per session_id) with maintained
+   * aggregates. This is the conversation-level counterpart to
+   * get_execution_history, which drills down into the individual turns and
+   * nested sub-agent runs of a session.
+   */
+  function list_sessions(
+    p_agent_code in uc_ai_agents.code%type default null,
+    p_status     in varchar2 default null,
+    p_created_by in varchar2 default null,
+    p_start_date in timestamp default null,
+    p_end_date   in timestamp default null
+  ) return sys_refcursor
+  as
+    l_scope    uc_ai_logger.scope := gc_scope_prefix || 'list_sessions';
+    l_cur      sys_refcursor;
+  begin
+    open l_cur for
+      select s.session_id,
+             s.root_agent_id,
+             a.code as agent_code,
+             a.version as agent_version,
+             a.agent_type,
+             s.status,
+             s.turn_count,
+             s.message_count,
+             s.total_input_tokens,
+             s.total_output_tokens,
+             s.started_at,
+             s.last_activity_at,
+             s.created_by
+      from uc_ai_agent_sessions s
+      left join uc_ai_agents a on a.id = s.root_agent_id
+      where (p_agent_code is null or a.code = p_agent_code)
+        and (p_status is null or s.status = p_status)
+        and (p_created_by is null or s.created_by = p_created_by)
+        and (p_start_date is null or s.started_at >= p_start_date)
+        and (p_end_date is null or s.started_at <= p_end_date)
+      order by s.last_activity_at desc;
+
+    return l_cur;
+  exception
+    when others then
+      uc_ai_logger.log_error('Error listing sessions', l_scope);
+      raise;
+  end list_sessions;
+
+
+  /*
+   * Returns the full, untrimmed message log of a session in conversation order.
+   */
+  function get_session_messages(
+    p_session_id in varchar2
+  ) return sys_refcursor
+  as
+    l_scope uc_ai_logger.scope := gc_scope_prefix || 'get_session_messages';
+    l_cur   sys_refcursor;
+  begin
+    open l_cur for
+      select m.id,
+             m.session_id,
+             m.execution_id,
+             m.seq,
+             m.role,
+             m.content,
+             m.tool_name,
+             m.tool_input,
+             m.tool_output,
+             m.tool_status,
+             m.input_tokens,
+             m.output_tokens,
+             m.created_at
+      from uc_ai_agent_messages m
+      where m.session_id = p_session_id
+      order by m.seq;
+
+    return l_cur;
+  exception
+    when others then
+      uc_ai_logger.log_error('Error getting session messages', l_scope);
+      raise;
+  end get_session_messages;
 
 end uc_ai_agents_api;
 /

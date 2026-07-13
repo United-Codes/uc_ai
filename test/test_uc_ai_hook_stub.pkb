@@ -17,8 +17,13 @@ create or replace package body test_uc_ai_hook_stub as
     g_last_status      := null;
     g_last_in_tokens   := null;
     g_last_out_tokens  := null;
+    g_tool_count       := 0;
+    g_last_tool_code   := null;
+    g_last_tool_agent  := null;
+    g_last_tool_user   := null;
     g_before_raise     := false;
     g_after_raise      := false;
+    g_tool_raise       := false;
   end reset;
 
 
@@ -62,6 +67,27 @@ create or replace package body test_uc_ai_hook_stub as
       raise_application_error(c_after_fail_code, 'stub after failure');
     end if;
   end after_execution;
+
+
+  procedure before_tool_call(
+    p_agent_id    in number,
+    p_agent_code  in varchar2,
+    p_tool_code   in varchar2,
+    p_created_by  in varchar2,
+    p_session_id  in varchar2,
+    p_apex_app_id in number
+  )
+  as
+  begin
+    g_tool_count      := nvl(g_tool_count, 0) + 1;
+    g_last_tool_code  := p_tool_code;
+    g_last_tool_agent := p_agent_code;
+    g_last_tool_user  := p_created_by;
+
+    if g_tool_raise then
+      raise_application_error(c_tool_veto_code, 'stub tool veto');
+    end if;
+  end before_tool_call;
 
 end test_uc_ai_hook_stub;
 /

@@ -460,6 +460,9 @@ create or replace package body uc_ai_anthropic as
                 l_tool_input := json_object_t();
               end if;
    
+              -- Fire the per-tool-call hook (may veto by raising, stopping the run)
+              uc_ai_tools_api.before_tool_call(p_tool_code => l_tool_name, p_settings => p_settings);
+
               -- Execute the tool and get result
               l_tool_result := uc_ai_tools_api.execute_tool(
                 p_tool_code          => l_tool_name

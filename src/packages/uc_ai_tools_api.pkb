@@ -571,6 +571,28 @@ create or replace package body uc_ai_tools_api as
    * Security: Only one bind variable allowed to prevent SQL injection
    * The PL/SQL function should parse the JSON and extract needed values
    */
+  procedure before_tool_call(
+    p_tool_code in uc_ai_tools.code%type
+  , p_settings  in uc_ai_settings.t_settings default null
+  )
+  as
+  begin
+    uc_ai_agents_api.fire_before_tool_hook(
+      p_tool_code   => p_tool_code
+    , p_agent_id    => p_settings.ctx_agent_id
+    , p_agent_code  => p_settings.ctx_agent_code
+      -- attribute standalone (non-agent) tool calls to the DB session user
+    , p_created_by  => coalesce(
+                         p_settings.ctx_created_by
+                       , sys_context('APEX$SESSION', 'app_user')
+                       , sys_context('userenv', 'session_user')
+                       )
+    , p_session_id  => p_settings.ctx_session_id
+    , p_apex_app_id => p_settings.ctx_apex_app_id
+    );
+  end before_tool_call;
+
+
   function execute_tool(
     p_tool_code in uc_ai_tools.code%type
   , p_arguments in json_object_t

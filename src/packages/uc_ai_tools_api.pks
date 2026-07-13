@@ -40,6 +40,25 @@ as
 
 
   /*
+   * Fires the optional per-tool-call execution hook for a tool that is about to
+   * run, extracting the caller/agent context from the per-call settings record.
+   *
+   * Providers MUST call this immediately before execute_tool, OUTSIDE any local
+   * error handling that swallows tool failures (some providers turn a failed tool
+   * into an error-string result and continue) — otherwise a hook veto meant to
+   * stop the run would be swallowed. A raise from the hook propagates out of
+   * generate_text and stops the run mid-flight. No-ops when no hook is installed.
+   *
+   * @param p_tool_code  uc_ai_tools.code about to be executed
+   * @param p_settings   the current per-call settings (carries the exec context)
+   */
+  procedure before_tool_call(
+    p_tool_code in uc_ai_tools.code%type
+  , p_settings  in uc_ai_settings.t_settings default null
+  );
+
+
+  /*
    * Executes an inline PL/SQL function-call snippet (same contract as a tool's
    * function_call) without requiring a registered tool.
    *

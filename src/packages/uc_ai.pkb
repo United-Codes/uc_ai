@@ -3,6 +3,11 @@ create or replace package body uc_ai as
   c_scope_prefix           constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_default_max_tool_calls constant pls_integer := 10;
 
+  -- Current execution context (see uc_ai.t_exec_context). Session-scoped and set
+  -- by the agent layer around a run; null outside an agent execution.
+  -- @dblinter ignore(g-7230): allow use of global variables
+  g_exec_context t_exec_context;
+
   -- Shared dispatch for all generate_text overloads. The caller builds the
   -- settings record (from globals or from a JSON config) and hands it in; this
   -- routes to the provider, threading the record so a nested call cannot corrupt
@@ -409,6 +414,25 @@ create or replace package body uc_ai as
   begin
     g_event_callback := null;
   end clear_event_callback;
+
+  function get_exec_context return t_exec_context
+  as
+  begin
+    return g_exec_context;
+  end get_exec_context;
+
+  procedure set_exec_context(p_context in t_exec_context)
+  as
+  begin
+    g_exec_context := p_context;
+  end set_exec_context;
+
+  procedure clear_exec_context
+  as
+    l_empty t_exec_context;
+  begin
+    g_exec_context := l_empty;
+  end clear_exec_context;
 
   procedure fire_event(
     p_event_type in varchar2

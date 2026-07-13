@@ -357,6 +357,23 @@ as
    *   -- Best-effort: exceptions raised here are logged and swallowed so a
    *   -- completed run is never turned into a failure by the hook.
    *
+   * The hook package MAY additionally implement (optional — a package without it
+   * is detected and simply not called, so existing hooks keep working):
+   *
+   *   procedure before_tool_call(
+   *     p_agent_id    in number,     -- uc_ai_agents.id (null if called standalone)
+   *     p_agent_code  in varchar2,   -- uc_ai_agents.code (null if called standalone)
+   *     p_tool_code   in varchar2,   -- uc_ai_tools.code about to be executed
+   *     p_created_by  in varchar2,   -- coalesce(APEX user, DB user) of the caller
+   *     p_session_id  in varchar2,   -- execution session id (null if standalone)
+   *     p_apex_app_id in number      -- APEX application id (null outside APEX)
+   *   );
+   *   -- Called before EACH tool call inside a generate_text tool-calling loop
+   *   -- (fired at the provider call sites, before provider-local error handling).
+   *   -- May RAISE to veto the tool call mid-run; the exception propagates out of
+   *   -- generate_text and stops the run. Fires for agent runs and standalone
+   *   -- generate_text tool calls alike (context fields null in the latter).
+   *
    * Resolution: if no override is set, the hook is auto-resolved by convention
    * to a VALID package named UC_AI_HOOK in the current schema (so simply
    * installing an extension that provides UC_AI_HOOK activates it, with no
@@ -366,6 +383,30 @@ as
    * @param p_package_name Hook package name (schema-qualified allowed). Null clears the override.
    */
   procedure set_execution_hook(p_package_name in varchar2 default null);
+
+  /*
+   * Fires the optional per-tool-call hook (before_tool_call) on the resolved hook
+   * package, if that package implements it. Called by uc_ai_tools_api at each
+   * provider tool-call site, immediately before a tool runs. Exceptions PROPAGATE
+   * by design: a hook raising here (e.g. a rate-limit hard-cap) vetoes the tool
+   * call and stops the run. No-ops when no hook is resolved or the hook package
+   * does not implement before_tool_call.
+   *
+   * @param p_tool_code   uc_ai_tools.code about to be executed
+   * @param p_agent_id    calling agent id (null if standalone generate_text)
+   * @param p_agent_code  calling agent code (null if standalone generate_text)
+   * @param p_created_by  caller (coalesced to the DB session user if unknown)
+   * @param p_session_id  execution session id (null if standalone)
+   * @param p_apex_app_id APEX application id (null outside APEX)
+   */
+  procedure fire_before_tool_hook(
+    p_tool_code   in varchar2
+  , p_agent_id    in number   default null
+  , p_agent_code  in varchar2 default null
+  , p_created_by  in varchar2 default null
+  , p_session_id  in varchar2 default null
+  , p_apex_app_id in number   default null
+  );
 
 
   -- ============================================================================
@@ -478,6 +519,41 @@ as
   function get_execution_details(
     p_execution_id in uc_ai_agent_executions.id%type
   ) return json_object_t;
+
+
+  /*
+   * Lists conversation sessions (one row per session_id) with maintained
+   * aggregates (turn/message counts, summed token usage, last status/activity).
+   * The conversation-level counterpart to get_execution_history.
+   *
+   * @param p_agent_code  Filter by the session's root agent code
+   * @param p_status      Filter by the session's latest status
+   * @param p_created_by  Filter by the opening user
+   * @param p_start_date  Filter by session start date (from)
+   * @param p_end_date    Filter by session start date (to)
+   *
+   * @return              Cursor with one row per session
+   */
+  function list_sessions(
+    p_agent_code in uc_ai_agents.code%type default null,
+    p_status     in varchar2 default null,
+    p_created_by in varchar2 default null,
+    p_start_date in timestamp default null,
+    p_end_date   in timestamp default null
+  ) return sys_refcursor;
+
+
+  /*
+   * Returns the full, untrimmed message log of a session in conversation order
+   * (one row per message content item).
+   *
+   * @param p_session_id  The session to read
+   *
+   * @return              Cursor with the ordered message rows
+   */
+  function get_session_messages(
+    p_session_id in varchar2
+  ) return sys_refcursor;
 
 end uc_ai_agents_api;
 /

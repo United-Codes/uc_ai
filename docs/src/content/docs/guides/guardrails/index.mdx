@@ -1,0 +1,107 @@
+---
+title: About guardrails
+description: Governance for AI spend and frequency — cost budgets and rate limits enforced around every agent execution, built on UC AI's execution hooks.
+sidebar:
+  order: 1
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+**Guardrails put governance around AI usage — a hard ceiling on what a user, agent, or app can spend and how often they can run — enforced automatically around every agent execution.**
+
+Guardrails are part of the paid **UC AI Pro** layer. They install alongside core UC AI and activate automatically, with no changes to your agents or `generate_text` calls.
+
+<Aside type="note" title="Pro add-on">
+Guardrails ship in the commercial UC AI Pro layer, available to support-pack customers. Core UC AI (the LGPL package) exposes the generic [execution hooks](/products/uc-ai/docs/guides/execution-hooks/) that Pro builds on — so the enforcement mechanism is open, and the guardrail features that plug into it are the paid part.
+</Aside>
+
+## The two features
+
+<CardGrid>
+  <LinkCard
+    title="Budget guardrails"
+    description="Cap monetary cost per user / agent / app over a period; track spend and forecast overruns"
+    href="/products/uc-ai/docs/guides/guardrails/budget/"
+  />
+  <LinkCard
+    title="Rate limiting"
+    description="Cap how often runs happen: agent runs, tool calls, and concurrent runs per period"
+    href="/products/uc-ai/docs/guides/guardrails/rate-limiting/"
+  />
+</CardGrid>
+
+| Feature | Caps | Answers |
+| ------- | ---- | ------- |
+| **Budget** | Monetary **cost** (priced from token usage) | "This app may spend at most \$100 this month" |
+| **Rate limiting** | **Counts** — runs, tool calls, concurrency | "This user may start at most 100 runs per hour" |
+
+Use them together: budgets stop runaway *cost*, rate limits stop runaway *frequency* (abuse, retry storms, infinite tool loops).
+
+## How it plugs into core
+
+Core UC AI exposes a generic [execution hook](/products/uc-ai/docs/guides/execution-hooks/): a package named `UC_AI_HOOK` that, if present and valid, is called around every top-level `execute_agent` run and before every tool call. Pro owns `UC_AI_HOOK` as a **dispatcher** that fans each callback out to every enabled feature registered in `uc_ai_pro_hook_subscribers`.
+
+```text
+uc_ai_agents_api.execute_agent
+        │  before_execution / after_execution
+        ▼
+   UC_AI_HOOK  (Pro dispatcher)
+        ├──► UC_AI_RATELIMIT_HOOK   (sort_order 50)
+        └──► UC_AI_BUDGET_HOOK      (sort_order 100)
+
+uc_ai_tools_api  (inside the tool-calling loop)
+        │  before_tool_call
+        ▼
+   UC_AI_HOOK ──► subscribers flagged tool_hook = 'Y'  (rate limiting)
+```
+
+Each feature reads token counts, identity, and timestamps straight from the public `uc_ai_agent_executions` table — the Pro layer adds no columns to core and keeps only its own configuration and (for budgets) a cost ledger.
+
+- **`before_execution`** runs *before* a run starts. A guardrail raises here to **veto** the run (a hard cap) — no tokens are spent.
+- **`before_tool_call`** runs *before each tool call*. Rate limiting raises here to stop a run **mid-flight** the moment a tool-call cap is hit.
+- **`after_execution`** runs when a run finishes. Budgets use it to price the finished execution tree into the cost ledger; it is best-effort and never turns a completed run into a failure.
+
+## Shared concepts
+
+Both features share the same governance vocabulary.
+
+### Scope
+
+Every limit targets a **scope** — who or what it applies to:
+
+| `scope_type` | `scope_value` | Applies to |
+| ------------ | ------------- | ---------- |
+| `global` | *(null)* | Every execution in the schema |
+| `user` | the `created_by` value | Runs by one user (APEX user, else DB user) |
+| `agent` | an agent `code` | Runs of one agent |
+| `app` | an APEX application id | Runs from one APEX app |
+
+All limits that match a given run are evaluated; the strictest outcome wins.
+
+### Enforcement mode
+
+| `enforcement_mode` | Behaviour when the limit is reached |
+| ------------------ | ----------------------------------- |
+| `hard` | **Deny** — raise an exception and abort the run / tool call |
+| `soft` | **Warn** — log a warning, allow the run to proceed |
+| `advisory` | **Track only** — never warn or deny |
+
+`warn_threshold_pct` (default `80`) sets when a limit starts warning — e.g. at 80% of the cap — before it denies at 100%.
+
+<Aside type="tip">
+Roll out a new limit as `advisory` first to watch real usage in the status views, promote it to `soft` to start warning, and only then flip it to `hard` once you are confident about the thresholds.
+</Aside>
+
+## Install
+
+Core UC AI must already be installed in the schema. Then run the Pro installer:
+
+```sql
+@ext/uc-ai-pro/install_uc_ai_pro.sql
+```
+
+This installs the `UC_AI_HOOK` dispatcher and subscriber registry, then each feature (budget and rate limiting). New database sessions activate the hook automatically by convention — no per-session registration.
+
+<Aside type="caution">
+Guardrails only govern **agent executions** (`uc_ai_agents_api.execute_agent`) and the tool calls made inside them. A direct `uc_ai.generate_text` call outside an agent has no agent/user context, so run-level budgets and rate limits do not apply to it (a tool call made by such a call is still seen by `before_tool_call`, attributed to the database session user).
+</Aside>

@@ -930,7 +930,10 @@ create or replace package body uc_ai_responses_api as
                   end if;
                   
                   uc_ai_logger.log('Executing tool: ' || l_tool_name, l_scope, 'Arguments: ' || l_arguments_str);
-                  
+
+                  -- Fire the per-tool-call hook (may veto by raising, stopping the run)
+                  uc_ai_tools_api.before_tool_call(p_tool_code => l_tool_name, p_settings => l_settings);
+
                   -- Execute the tool
                   l_tool_result := uc_ai_tools_api.execute_tool(
                     p_tool_code => l_tool_name,

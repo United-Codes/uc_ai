@@ -473,6 +473,10 @@ create or replace package body uc_ai_google as
             );
             l_normalized_messages.append(l_new_msg);
 
+            -- Fire the per-tool-call hook OUTSIDE the handler below (which swallows
+            -- tool errors) so a hook veto raising propagates and stops the run.
+            uc_ai_tools_api.before_tool_call(p_tool_code => l_tool_name, p_settings => p_settings);
+
             -- Execute the tool and get result
             begin
               l_tool_result := uc_ai_tools_api.execute_tool(

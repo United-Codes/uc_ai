@@ -39,5 +39,14 @@ create or replace package test_uc_ai_hook as
   --%test(clearing the hook override stops dispatch)
   procedure cleared_hook_not_called;
 
+  --%test(before_tool_call fires and receives the tool code and caller context)
+  procedure tool_hook_fires_with_context;
+
+  --%test(before_tool_call raising vetoes the tool call)
+  procedure tool_hook_veto_raises;
+
+  --%test(before_tool_call is optional: a hook without it is skipped, not errored)
+  procedure tool_hook_optional_when_absent;
+
 end test_uc_ai_hook;
 /

@@ -82,6 +82,20 @@ as
   -- internal use only
   g_provider_override varchar2(4000 char);
 
+  -- Execution context (internal use only; set by the agent layer around a run).
+  -- generate_text runs (and their tool-calling loops) originate deep below the
+  -- agent layer, where the calling agent/user is otherwise unknown. The agent
+  -- layer publishes this context here so build_from_globals can snapshot it into
+  -- the per-call settings record and the per-tool-call hook can attribute a tool
+  -- call to its agent and caller. Fields are null for standalone generate_text.
+  type t_exec_context is record (
+    agent_id    number
+  , agent_code  varchar2(255 char)
+  , created_by  varchar2(255 char)
+  , session_id  varchar2(255 char)
+  , apex_app_id number
+  );
+
   e_max_calls_exceeded exception;
   pragma exception_init(e_max_calls_exceeded, -20301);
   e_error_response exception;
@@ -203,6 +217,27 @@ as
    * Clear the registered event callback.
    */
   procedure clear_event_callback;
+
+  /*
+   * Internal: returns the current execution context (see t_exec_context). Used
+   * by uc_ai_settings.build_from_globals to snapshot the context into the
+   * per-call settings record. Fields are null when set outside an agent run.
+   */
+  function get_exec_context return t_exec_context;
+
+  /*
+   * Internal: publishes the execution context for the currently running agent.
+   * Called by the agent layer (uc_ai_agents_api.execute_agent) around a run,
+   * using save/restore so nested executions do not clobber their caller's
+   * context. Not intended for user code.
+   */
+  procedure set_exec_context(p_context in t_exec_context);
+
+  /*
+   * Internal: clears the execution context (all fields null). Equivalent to
+   * set_exec_context with an uninitialised record.
+   */
+  procedure clear_exec_context;
 
   /*
    * Internal: invokes the registered event callback. Called by uc_ai_message_api content
