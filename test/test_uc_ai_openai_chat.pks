@@ -8,6 +8,9 @@ create or replace package test_uc_ai_openai_chat as
   --%test(Basic recipe assistant - system prompt and user prompt)
   procedure basic_recipe;
 
+  --%test(g_extra_body injects temperature into the request body)
+  procedure extra_body_temperature;
+
   --%test(Tool usage - get user info)
   procedure tool_user_info;
 
