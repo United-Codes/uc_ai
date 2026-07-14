@@ -659,28 +659,48 @@ create or replace package body uc_ai_google as
       end;
     end if;
 
-    -- Get all available tools formatted for Google (function declarations)
-    if l_settings.enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_google, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools);
+    -- Get all available tools formatted for Google (function declarations).
+    -- Google expects tools as {"tools": [{"functionDeclarations": [...]}, <provider tools...>]}
+    -- so provider (server-side) tools are appended as siblings of the function
+    -- declarations wrapper, NOT via get_tools_array (which would nest them inside
+    -- functionDeclarations).
+    if l_settings.enable_tools
+       or (l_settings.provider_tools is not null and l_settings.provider_tools.get_size > 0) then
+      declare
+        l_tools_array   json_array_t := json_array_t();
+        l_tools_wrapper json_object_t;
+      begin
+        if l_settings.enable_tools then
+          l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_google, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools);
+          if l_tools.get_size > 0 then
+            l_tools_wrapper := json_object_t();
+            l_tools_wrapper.put('functionDeclarations', l_tools);
+            l_tools_array.append(l_tools_wrapper);
+          end if;
+        end if;
 
-      if l_tools.get_size > 0 then
-        -- Google expects tools in this format: {"tools": [{"functionDeclarations": [...]}]}
-        declare
-          l_tools_wrapper json_object_t := json_object_t();
-          l_tools_array json_array_t := json_array_t();
-        begin
-          l_tools_wrapper.put('functionDeclarations', l_tools);
-          l_tools_array.append(l_tools_wrapper);
+        -- Append raw provider tool definitions verbatim (e.g. {"googleSearch": {}})
+        if l_settings.provider_tools is not null then
+          <<provider_tools_loop>>
+          for i in 0 .. l_settings.provider_tools.get_size - 1 loop
+            l_tools_array.append(l_settings.provider_tools.get(i));
+          end loop provider_tools_loop;
+        end if;
+
+        if l_tools_array.get_size > 0 then
           l_input_obj.put('tools', l_tools_array);
-          uc_ai_logger.log('Tools configured', l_scope, 'Tool count: ' || l_tools.get_size);
-        end;
-      end if;
+          uc_ai_logger.log('Tools configured', l_scope, 'Entry count: ' || l_tools_array.get_size);
+        end if;
+      end;
     end if;
 
     -- Apply generation config if any settings were added
     if l_generation_config.get_keys().count > 0 then
       l_input_obj.put('generationConfig', l_generation_config);
     end if;
+
+    -- Merge user-supplied extra body properties (before messages are added)
+    uc_ai_settings.apply_extra_body(l_input_obj, l_settings);
 
     internal_generate_text(
       pio_messages         => l_google_messages

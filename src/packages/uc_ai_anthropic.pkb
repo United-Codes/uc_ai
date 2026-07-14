@@ -493,12 +493,12 @@ create or replace package body uc_ai_anthropic as
               l_new_msg := get_reasoning_content(l_content_prompt);
               l_normalized_messages.append(l_new_msg);
             else
-              uc_ai_error.raise_error(
-                p_error_code => uc_ai_error.c_err_unsupported_content
-              , p_scope      => l_scope
-              , p0           => l_content_prompt.get_string('type')
-              , p_extra      => l_content_prompt.to_clob
-              );
+              -- Server-side tool blocks (server_tool_use, web_search_tool_result,
+              -- code_execution_tool_result, ...) are produced and consumed by the
+              -- provider when g_provider_tools are used. They are already part of
+              -- the raw assistant message appended above; pass them through
+              -- without local execution or normalization instead of erroring.
+              uc_ai_logger.log('Passing through server-side content block: ' || l_content_prompt.get_string('type'), l_scope, l_content_prompt.to_clob);
           end case;
         end loop tool_use_loop;
 
@@ -548,13 +548,12 @@ create or replace package body uc_ai_anthropic as
               l_content_msg := get_reasoning_content(l_content_prompt);
               l_content_array.append(l_content_msg);
             else
-              uc_ai_error.raise_error(
-                p_error_code => uc_ai_error.c_err_unsupported_content
-              , p_scope      => l_scope
-              , p0           => l_content_type
-              , p_extra      => l_content_prompt.to_clob
-              );
-          end case; 
+              -- Server-side tool blocks (server_tool_use, web_search_tool_result,
+              -- code_execution_tool_result, ...) from g_provider_tools are executed
+              -- by the provider. Preserve them in the raw conversation (appended
+              -- below) but skip normalization instead of erroring.
+              uc_ai_logger.log('Passing through server-side content block: ' || l_content_type, l_scope, l_content_prompt.to_clob);
+          end case;
 
           pio_messages.append(l_content_prompt);
         end loop content_loop;
@@ -650,7 +649,7 @@ create or replace package body uc_ai_anthropic as
     l_input_obj.put('model', p_model);
 
     -- Get all available tools formatted for Anthropic
-    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_anthropic, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools);
+    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_anthropic, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools, p_provider_tools => l_settings.provider_tools);
 
     if l_tools.get_size > 0 then
       l_input_obj.put('tools', l_tools);
@@ -692,6 +691,9 @@ create or replace package body uc_ai_anthropic as
     end if;
 
     l_input_obj.put('max_tokens', l_settings.an_max_tokens); -- Anthropic requires max_tokens
+
+    -- Merge user-supplied extra body properties (before messages/system are added)
+    uc_ai_settings.apply_extra_body(l_input_obj, l_settings);
 
     internal_generate_text(
       pio_messages         => l_anthropic_messages

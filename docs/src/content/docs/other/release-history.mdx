@@ -9,6 +9,11 @@ sidebar:
 
 **Features**:
 
+Request customization:
+
+- **Custom request-body properties** (`uc_ai.g_extra_body`): shallow-merge arbitrary provider parameters (e.g. `top_p`, `stop_sequences`, `service_tier`, `cache_control`) into the outgoing request body for options the SDK does not wrap explicitly. Overrides framework values but protects the conversation-defining core keys (`model`, `messages`, `input`, `instructions`, `system`, `tools`). Also settable via the `g_extra_body` config key. See [generate_text](/products/uc-ai/docs/api/generate_text/#custom-request-body-properties).
+- **Provider (server-side) tools** (`uc_ai.g_provider_tools`): enable a provider's own server-side tools — Anthropic web search, OpenAI Responses API web search, Google search, etc. — by appending raw, provider-native tool definitions to the request `tools` array. Executed by the provider, not locally; sent even when local tools are disabled. Also settable via the `g_provider_tools` config key. See [generate_text](/products/uc-ai/docs/api/generate_text/#provider-server-side-tools).
+
 Multi-Agent Systems:
 
 - **Per-step execution checkpointing**: workflow, conversation, and handoff agents now write their state to `uc_ai_agent_executions.current_state` after every step/turn. Running executions can be monitored from other sessions, and failed or crashed executions keep their last known state for diagnosis (cleared automatically on success). `uc_ai_agents_api.get_execution_details` includes the checkpoint when present.

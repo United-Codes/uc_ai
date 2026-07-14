@@ -648,6 +648,14 @@ create or replace package body uc_ai_prompt_profiles_api as
               end loop extra_headers_keys;
             end;
           end if;
+        when 'g_extra_body' then
+          if l_value.is_object then
+            uc_ai.g_extra_body := treat(p_config.get(l_key) as json_object_t).clone();
+          end if;
+        when 'g_provider_tools' then
+          if l_value.is_array then
+            uc_ai.g_provider_tools := treat(p_config.get(l_key) as json_array_t).clone();
+          end if;
         when 'response_schema' then
           -- Consumed by execute_profile after apply_model_config returns.
           null;

@@ -1106,17 +1106,23 @@ create or replace package body uc_ai_oci as
       --l_chat_request.put('topK', 1);
     end if;
 
-    -- Get all available tools formatted for OCI (function declarations)
+    -- Get all available tools formatted for OCI (function declarations).
+    -- Provider (server-side) tools are appended verbatim to the same flat array.
     l_tools := uc_ai_tools_api.get_tools_array(
       uc_ai.c_provider_oci
     , case when l_mode = gc_mode_cohere then uc_ai_tools_api.gc_cohere else 'generic' end
     , p_tool_tags => l_settings.tool_tags
     , p_enable_tools => l_settings.enable_tools
+    , p_provider_tools => l_settings.provider_tools
     );
 
     if l_tools.get_size > 0 then
       l_chat_request.put('tools', l_tools);
     end if;
+
+    -- Merge user-supplied extra body properties into the chat request (OCI keeps
+    -- generation params under chatRequest; reserved keys are protected).
+    uc_ai_settings.apply_extra_body(l_chat_request, l_settings);
 
     l_input_obj.put('chatRequest', l_chat_request);
 

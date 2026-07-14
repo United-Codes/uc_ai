@@ -29,6 +29,8 @@ as
     l_s.tool_tags                      := apex_t_varchar2();
     l_s.max_tool_calls                 := null;
     l_s.extra_headers.delete();
+    l_s.extra_body                     := null;
+    l_s.provider_tools                 := null;
 
     -- openai
     l_s.oa_use_responses_api           := true;
@@ -106,6 +108,8 @@ as
     l_s.tool_tags                      := uc_ai.g_tool_tags;
     l_s.max_tool_calls                 := uc_ai.g_max_tool_calls;
     l_s.extra_headers                  := uc_ai.g_extra_headers;
+    l_s.extra_body                     := uc_ai.g_extra_body;
+    l_s.provider_tools                 := uc_ai.g_provider_tools;
 
     -- openai
     l_s.oa_use_responses_api           := uc_ai_openai.g_use_responses_api;
@@ -240,6 +244,14 @@ as
               end loop extra_headers_keys;
               l_s.extra_headers := l_headers;
             end;
+          end if;
+        when 'g_extra_body' then
+          if l_value.is_object then
+            l_s.extra_body := treat(p_config.get(l_key) as json_object_t).clone();
+          end if;
+        when 'g_provider_tools' then
+          if l_value.is_array then
+            l_s.provider_tools := treat(p_config.get(l_key) as json_array_t).clone();
           end if;
         when 'response_schema' then
           -- Not part of the settings record; pass the schema via
@@ -504,6 +516,36 @@ as
       l_name := p_settings.extra_headers.next(l_name);
     end loop extra_headers_loop;
   end apply_extra_headers;
+
+  procedure apply_extra_body(
+    pio_input_obj in out nocopy json_object_t
+  , p_settings    in t_settings
+  )
+  as
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'apply_extra_body';
+    l_keys  json_key_list;
+    l_key   varchar2(4000 char);
+  begin
+    if p_settings.extra_body is null then
+      return;
+    end if;
+
+    l_keys := p_settings.extra_body.get_keys;
+    <<extra_body_loop>>
+    for i in 1 .. l_keys.count loop
+      l_key := lower(l_keys(i));
+
+      -- Protect the conversation-defining "core" keys: the framework owns these
+      -- and lets them through the normal parameters, never via the escape hatch.
+      -- (key names cover the different provider request shapes)
+      if l_key in ('messages', 'model', 'input', 'instructions', 'system', 'tools') then
+        uc_ai_logger.log('Ignoring reserved key in g_extra_body: ' || l_keys(i), l_scope);
+        continue extra_body_loop;
+      end if;
+
+      pio_input_obj.put(l_keys(i), p_settings.extra_body.get(l_keys(i)));
+    end loop extra_body_loop;
+  end apply_extra_body;
 
   function new_run_state return t_run_state
   as

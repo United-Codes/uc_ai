@@ -345,6 +345,8 @@ create or replace package body uc_ai as
     g_provider_override := null;
     g_max_tool_calls := null;
     g_extra_headers.delete();
+    g_extra_body := null;
+    g_provider_tools := null;
     g_request_id := null;
     g_callback_fatal := false;
     -- g_event_callback intentionally preserved (long-lived registration)

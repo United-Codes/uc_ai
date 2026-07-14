@@ -613,10 +613,15 @@ create or replace package body uc_ai_openai as
       l_input_obj.put('response_format', l_response_format);
     end if;
 
-    -- Get all available tools formatted for OpenAI (if tools are enabled)
-    if l_settings.enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_openai, l_settings.provider_override, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools);
-      l_input_obj.put('tools', l_tools);
+    -- Get all available tools formatted for OpenAI. Fetch when local tools are
+    -- enabled OR when provider (server-side) tools were supplied, then attach the
+    -- array only if it is non-empty.
+    if l_settings.enable_tools
+       or (l_settings.provider_tools is not null and l_settings.provider_tools.get_size > 0) then
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_openai, l_settings.provider_override, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools, p_provider_tools => l_settings.provider_tools);
+      if l_tools.get_size > 0 then
+        l_input_obj.put('tools', l_tools);
+      end if;
     end if;
 
     if l_settings.enable_reasoning then
@@ -658,6 +663,9 @@ create or replace package body uc_ai_openai as
           l_input_obj.put('reasoning_effort', coalesce(l_settings.oa_reasoning_effort, l_settings.reasoning_level));
       end case;
     end if;
+
+    -- Merge user-supplied extra body properties (before messages are added)
+    uc_ai_settings.apply_extra_body(l_input_obj, l_settings);
 
     internal_generate_text(
       pio_messages      => l_openai_messages

@@ -453,6 +453,7 @@ create or replace package body uc_ai_tools_api as
   , p_additional_info in varchar2 default null
   , p_tool_tags       in apex_t_varchar2 default null
   , p_enable_tools    in boolean default null
+  , p_provider_tools  in json_array_t default null
   ) return json_array_t
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'get_tools_array';
@@ -482,9 +483,9 @@ create or replace package body uc_ai_tools_api as
 
     uc_ai_logger.log('Building tools array for provider: ' || p_provider, l_scope, 'enable_tools=' || case when l_enable_tools then 'true' else 'false' end || ', tool_tags=' || apex_string.join(l_tool_tags, ', '));
 
-    if not l_enable_tools then
-      return l_tools_array;
-    end if;
+    -- Local function tools are only fetched when tools are enabled. Provider
+    -- tools (appended below) are sent regardless, so we do NOT early-return here.
+    if l_enable_tools then
 
     if l_tool_tags is not null and l_tool_tags.count > 0 then
       l_enable_tool_filter := 1;
@@ -549,6 +550,18 @@ create or replace package body uc_ai_tools_api as
     end loop fetch_tools;
 
     uc_ai_logger.log('Total tools found: ' || l_found_tools, l_scope);
+
+    end if; -- l_enable_tools
+
+    -- Append raw provider/server-side tool definitions verbatim (executed by the
+    -- provider, not locally). Sent independently of enable_tools.
+    if p_provider_tools is not null then
+      <<provider_tools_loop>>
+      for i in 0 .. p_provider_tools.get_size - 1 loop
+        l_tools_array.append(p_provider_tools.get(i));
+      end loop provider_tools_loop;
+      uc_ai_logger.log('Appended ' || p_provider_tools.get_size || ' provider tool(s)', l_scope);
+    end if;
 
     return l_tools_array;
   exception

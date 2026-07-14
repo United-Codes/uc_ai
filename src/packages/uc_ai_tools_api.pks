@@ -19,12 +19,19 @@ as
    * Returns array of all active tools formatted for specific AI provider
    *
    * This is what gets sent to AI models so they know what tools are available.
+   *
+   * p_provider_tools (uc_ai.g_provider_tools) are raw, provider-native tool
+   * definitions appended verbatim after the local function tools — executed
+   * server-side by the provider, not locally. They are returned even when
+   * p_enable_tools is false (local function tools disabled), so callers should
+   * still attach the array whenever it is non-empty.
    */
   function get_tools_array (
     p_provider        in uc_ai.provider_type
   , p_additional_info in varchar2 default null
   , p_tool_tags       in apex_t_varchar2 default null
   , p_enable_tools    in boolean default null
+  , p_provider_tools  in json_array_t default null
   ) return json_array_t;
 
   /*

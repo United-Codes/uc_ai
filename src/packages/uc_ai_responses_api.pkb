@@ -709,10 +709,14 @@ create or replace package body uc_ai_responses_api as
       l_input_obj.put('text', l_text_config);
     end if;
 
-    -- Get all available tools formatted for Responses API (if tools are enabled)
-    if l_settings.enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_responses_api, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools);
-      l_input_obj.put('tools', l_tools);
+    -- Get all available tools formatted for Responses API. Fetch when local tools
+    -- are enabled OR when provider (server-side) tools were supplied.
+    if l_settings.enable_tools
+       or (l_settings.provider_tools is not null and l_settings.provider_tools.get_size > 0) then
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_responses_api, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools, p_provider_tools => l_settings.provider_tools);
+      if l_tools.get_size > 0 then
+        l_input_obj.put('tools', l_tools);
+      end if;
     end if;
 
     -- Configure reasoning
@@ -743,6 +747,10 @@ create or replace package body uc_ai_responses_api as
       l_include_array.append('reasoning.encrypted_content');
       l_input_obj.put('include', l_include_array);
     end if;
+
+    -- Merge user-supplied extra body properties (reserved keys like input/model
+    -- are protected inside apply_extra_body)
+    uc_ai_settings.apply_extra_body(l_input_obj, l_settings);
 
     -- Make the API call
     l_api_response := internal_generate_text(l_input_obj, l_settings);

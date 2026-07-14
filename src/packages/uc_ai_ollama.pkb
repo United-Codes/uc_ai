@@ -639,14 +639,19 @@ create or replace package body uc_ai_ollama as
       l_input_obj.put('format', l_format);
     end if;
 
-    -- Get all available tools formatted for Ollama (if tools are enabled)
-    if l_settings.enable_tools then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_ollama, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools);
+    -- Get all available tools formatted for Ollama. Fetch when local tools are
+    -- enabled OR when provider (server-side) tools were supplied.
+    if l_settings.enable_tools
+       or (l_settings.provider_tools is not null and l_settings.provider_tools.get_size > 0) then
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_ollama, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools, p_provider_tools => l_settings.provider_tools);
 
       if l_tools.get_size > 0 then
         l_input_obj.put('tools', l_tools);
       end if;
     end if;
+
+    -- Merge user-supplied extra body properties (before messages are added)
+    uc_ai_settings.apply_extra_body(l_input_obj, l_settings);
 
     internal_generate_text(
       pio_messages         => l_ollama_messages

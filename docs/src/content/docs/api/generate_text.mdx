@@ -423,6 +423,96 @@ authentication, provider version headers). Avoid names the framework already
 sets — a colliding user header is sent in addition to the framework one.
 `uc_ai.reset_globals` clears `g_extra_headers` like every other global.
 
+## Custom request-body properties
+
+To send provider parameters the SDK does not wrap explicitly (e.g. `top_p`,
+`stop_sequences`, `service_tier`, `metadata`, Anthropic `cache_control`), set
+`uc_ai.g_extra_body` to a JSON object. Its top-level keys are shallow-merged into
+the outgoing request body:
+
+```sql
+BEGIN
+  uc_ai.g_extra_body := json_object_t('{"top_p": 0.9, "stop_sequences": ["END"]}');
+
+  -- next generate_text call adds top_p and stop_sequences to the request body
+END;
+/
+```
+
+With the config-driven overloads, pass the same object under the `g_extra_body`
+key:
+
+```json
+{ "g_extra_body": { "top_p": 0.9, "stop_sequences": ["END"] } }
+```
+
+Notes:
+
+- The shape is **provider-specific** — you supply keys exactly as the target
+  provider's API expects them. A key you set here **overrides** the framework's
+  own value (so you can also tweak parameters the SDK does set, e.g. an
+  Anthropic-specific temperature).
+- Nested objects replace wholesale (no deep merge).
+- The conversation-defining "core" keys — `model`, `messages`, `input`,
+  `instructions`, `system`, `tools` — are **protected**: values for these in
+  `g_extra_body` are ignored (and logged) so the escape hatch cannot corrupt the
+  request the framework built. Use `p_model` / `p_messages` / `g_provider_tools`
+  for those.
+- For OCI, `g_extra_body` merges into the `chatRequest` object (where OCI keeps
+  its generation parameters), not the outermost request body.
+- `uc_ai.reset_globals` clears `g_extra_body`.
+
+## Provider (server-side) tools
+
+Beyond the local PL/SQL [tools](/products/uc-ai/docs/guides/tools/) you register,
+you can enable a provider's own **server-side tools** — executed by the provider,
+not by your database — such as Anthropic web search or the OpenAI Responses API
+web search. Set `uc_ai.g_provider_tools` to a JSON array of raw, provider-native
+tool definitions; they are appended verbatim to the request's `tools` array:
+
+```sql
+BEGIN
+  -- Anthropic server-side web search
+  uc_ai.g_provider_tools := json_array_t(
+    '[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}]'
+  );
+
+  DECLARE
+    l_result json_object_t;
+  BEGIN
+    l_result := uc_ai.generate_text(
+      p_user_prompt => 'What is the latest stable version of Oracle APEX?'
+    , p_provider    => uc_ai.c_provider_anthropic
+    , p_model       => uc_ai_anthropic.c_model_claude_4_5_haiku
+    );
+  END;
+END;
+/
+```
+
+For the OpenAI Responses API (the default OpenAI path):
+
+```json
+{ "g_provider_tools": [ { "type": "web_search_preview" } ] }
+```
+
+Notes:
+
+- Definitions are passed **as-is** — you are responsible for matching each
+  provider's exact schema (and enabling the tool on your provider account).
+  Consult the provider docs:
+  [Anthropic tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview),
+  [OpenAI tools](https://developers.openai.com/api/docs/guides/tools-web-search).
+- Provider tools are sent **even when local tools are disabled**
+  (`g_enable_tools = false`), and are combined with local tools when both are set.
+- The provider runs these tools and returns their results inline; UC AI never
+  invokes them locally. Result blocks appearing in the response
+  (`server_tool_use`, `web_search_tool_result`, …) are passed through the
+  conversation and do not count as local tool calls.
+- Google server tools (e.g. `{"googleSearch": {}}`) are appended as siblings of
+  the function-declarations entry, as the Gemini API expects.
+- `uc_ai.reset_globals` clears `g_provider_tools`.
+
 ## Return Object Overview
 
 The `uc_ai.generate_text()` function returns a comprehensive `JSON_OBJECT_T` containing detailed information about the AI interaction, including the conversation history, usage statistics, and metadata about the AI model and provider used.

@@ -408,6 +408,31 @@ end;
 /
 ```
 
+## Provider (server-side) tools
+
+The tools above run **inside your database**. Most providers also offer their own
+**server-side tools** that run on their infrastructure — Anthropic web search,
+the OpenAI Responses API web search, Google search, and more. UC AI can pass
+these through: set `uc_ai.g_provider_tools` to a JSON array of raw,
+provider-native tool definitions and they are appended verbatim to the request's
+`tools` array (executed by the provider, never locally):
+
+```sql
+BEGIN
+  uc_ai.g_provider_tools := json_array_t(
+    '[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}]'
+  );
+
+  -- next generate_text call lets the model search the web provider-side
+END;
+/
+```
+
+These combine with your local tools and are sent even when `g_enable_tools` is
+`false`. See
+[Provider (server-side) tools](/products/uc-ai/docs/api/generate_text/#provider-server-side-tools)
+for the full reference and per-provider formats.
+
 ## Tools vs. MCP
 
 MCP and tools are very similar. The main benefit is that you can tell the AI what it can do with the tools and the AI decides based on the conversation if it needs to call a tool or not.

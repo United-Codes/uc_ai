@@ -54,6 +54,8 @@ as
   , tool_tags                      apex_t_varchar2
   , max_tool_calls                 pls_integer
   , extra_headers                  uc_ai.t_extra_headers
+  , extra_body                     json_object_t
+  , provider_tools                 json_array_t
     -- openai
   , oa_use_responses_api           boolean
   , oa_reasoning_effort            varchar2(32 char)
@@ -145,6 +147,19 @@ as
    */
   procedure apply_extra_headers(
     p_settings in t_settings
+  );
+
+  /*
+   * Shallow-merge p_settings.extra_body (uc_ai.g_extra_body / "g_extra_body"
+   * config key) onto an already-built request body object. Top-level keys
+   * override whatever the framework set; nested objects replace wholesale.
+   * Call AFTER the provider set its own framework keys and BEFORE messages /
+   * model / system are added, so those reserved keys cannot be clobbered.
+   * No-op when extra_body is null.
+   */
+  procedure apply_extra_body(
+    pio_input_obj in out nocopy json_object_t
+  , p_settings    in t_settings
   );
 
   /*

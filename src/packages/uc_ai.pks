@@ -47,6 +47,23 @@ as
   -- @dblinter ignore(g-9105): public package-global collection, g_ prefix is intended (not a local var)
   g_extra_headers t_extra_headers;
 
+  -- extra top-level JSON properties shallow-merged into every provider request
+  -- body, for parameters the SDK does not wrap (e.g. top_p, stop_sequences,
+  -- service_tier, metadata, Anthropic cache_control). Applied after the
+  -- framework's own keys but BEFORE messages/model are added, so those reserved
+  -- keys cannot be clobbered. Top-level keys override; nested objects replace
+  -- wholesale. e.g. uc_ai.g_extra_body := json_object_t('{"top_p":0.9}');
+  -- @dblinter ignore(g-9105): public package-global, g_ prefix is intended (not a local var)
+  g_extra_body json_object_t;
+
+  -- raw, provider-native tool definitions appended verbatim to the request's
+  -- `tools` array. These are executed server-side by the provider, NOT locally,
+  -- so they are sent as-is with no framework wrapping. e.g.
+  --   Anthropic:         {"type":"web_search_20250305","name":"web_search"}
+  --   OpenAI Responses:  {"type":"web_search_preview"}
+  -- @dblinter ignore(g-9105): public package-global, g_ prefix is intended (not a local var)
+  g_provider_tools json_array_t;
+
   -- reasoning level constants
   c_reasoning_level_low    constant varchar2(10 char) := 'low';
   c_reasoning_level_medium constant varchar2(10 char) := 'medium';
