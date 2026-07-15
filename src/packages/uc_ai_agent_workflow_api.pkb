@@ -374,10 +374,30 @@ create or replace package body uc_ai_agent_workflow_api as
     l_scope      uc_ai_logger.scope := gc_scope_prefix || 'evaluate_condition';
     l_expression clob;
     l_result     boolean;
+    l_ref_count  pls_integer;
+    l_ref_path   varchar2(4000 char);
   begin
     if p_condition is null then
       return true;  -- No condition means always execute
     end if;
+
+    -- A condition may reference state that has not been produced yet - e.g. a
+    -- loop exit condition is checked after every step, so a condition on a
+    -- later step's output is evaluated before that step has run. Such a
+    -- reference resolves to nothing and would splice into a malformed PL/SQL
+    -- expression (" >= 8"), so treat any condition with an unresolved JSONPath
+    -- reference as NOT met: for a loop exit this keeps it iterating until the
+    -- referenced value exists; for a step condition the guarded step is skipped.
+    l_ref_count := regexp_count(p_condition, '\{\$\.[^\}]+\}');
+    <<unresolved_refs>>
+    for i in 1 .. l_ref_count loop
+      l_ref_path := regexp_substr(p_condition, '\{(\$\.[^\}]+)\}', 1, i, null, 1);
+      if resolve_path_value(l_ref_path, p_workflow_state) is null then
+        uc_ai_logger.log('Condition references unresolved path ' || l_ref_path
+          || ' - treating condition as not met', l_scope);
+        return false;
+      end if;
+    end loop unresolved_refs;
 
     -- conditions are always evaluated as PL/SQL boolean expressions, so resolved
     -- string values must be escaped to prevent injection via untrusted state

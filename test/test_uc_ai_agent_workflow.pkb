@@ -349,7 +349,7 @@ create or replace package body test_uc_ai_agent_workflow as
           "agent_code": "#' || gc_haiku_creator_agent_code || q'#",
           "input_mapping": {
             "topic": {
-              "expression": "case when '{$.steps.haiku_rating.rating_feedback}' is not null then 'Improve this haiku about {$.input.topic}. Use this feedback: {$.steps.haiku_rating.rating_feedback}. Haiku: {$.steps.haiku_result}' else '{$.input.topic}' end",
+              "expression": "case when '{$.steps.haiku_rating.feedback}' is not null then 'Improve this haiku about {$.input.topic}. Use this feedback: {$.steps.haiku_rating.feedback}. Haiku: {$.steps.haiku_result}' else '{$.input.topic}' end",
               "is_plsql_expression": true
             }
           },
@@ -393,7 +393,9 @@ create or replace package body test_uc_ai_agent_workflow as
       p_session_id       => l_session_id
     );
 
-    sys.dbms_output.put_line('Loop Workflow result JSON: ' || l_result.to_clob);
+    -- Dumping the whole result (with every per-iteration state snapshot) can
+    -- overwhelm the utPLSQL reporter, so only log a bounded slice.
+    sys.dbms_output.put_line('Loop Workflow result JSON (truncated): ' || substr(l_result.to_clob, 1, 2000));
 
     -- Validate result
     uc_ai_test_agent_utils.validate_agent_result(l_result, 'Loop Workflow');
@@ -404,6 +406,13 @@ create or replace package body test_uc_ai_agent_workflow as
     l_final_msg := l_result.get_clob('final_message');
     sys.dbms_output.put_line('Loop workflow result: ' || l_final_msg);
     ut.expect(l_final_msg).to_be_not_null();
+
+    -- _loop_iterations counts FULLY completed iterations; the loop checks its
+    -- exit condition after each step, so an early exit (the first haiku already
+    -- rates >= 8) legitimately leaves the counter at 0 while still having done
+    -- real work. Only bound it by the cap here - that the step agents actually
+    -- ran is asserted via the child executions in validate_workflow_telemetry.
+    ut.expect(l_result.get_number('_loop_iterations'), 'Loop respected its max iteration cap').to_be_less_or_equal(3);
 
     validate_workflow_telemetry(l_session_id, 'Loop workflow');
   end execute_loop_workflow;
