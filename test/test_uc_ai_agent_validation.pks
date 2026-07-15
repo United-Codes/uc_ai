@@ -78,6 +78,18 @@ create or replace package test_uc_ai_agent_validation as
   --%test(Valid handoff config passes)
   procedure orch_handoff_valid;
 
+  --%test(Handoff can_transfer_to referencing an unknown agent is invalid)
+  procedure orch_handoff_bad_edge;
+
+  --%test(Handoff can_transfer_to referencing itself is invalid)
+  procedure orch_handoff_self_edge;
+
+  --%test(Handoff can_transfer_to must be a non-empty array)
+  procedure orch_handoff_empty_edges;
+
+  --%test(Valid handoff config with can_transfer_to graph passes)
+  procedure orch_handoff_graph_valid;
+
   --%test(create_agent rejects handoff targets that are not active profile agents)
   --%throws(-20503)
   procedure create_handoff_bad_target;

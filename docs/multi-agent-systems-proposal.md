@@ -535,7 +535,8 @@ cap, no error).
   "handoff_agents": [
     {
       "agent_code": "technical_support",
-      "description": "Technical issues: debugging, bugs, errors"
+      "description": "Technical issues: debugging, bugs, errors",
+      "can_transfer_to": ["product_a_technician", "triage_agent"]
     },
     {
       "agent_code": "sales_agent",
@@ -555,6 +556,20 @@ routing instructions the AI sees. All referenced agents (initial + targets)
 must be existing ACTIVE profile agents; this is validated at `create_agent`
 time.
 
+**Transfer graph (multi-level hierarchies)**: an entry's optional
+`can_transfer_to` array restricts its outgoing edges (validated to reference
+other entries). Without it an agent may transfer to every other entry (full
+mesh). This expresses trees like triage -> product support -> product
+technician, where triage never sees the level-3 technicians. Give every
+specialist a back-edge to triage so conversations cannot get stuck.
+
+**Sticky multi-turn**: handoff agents accept `p_follow_up_message`. A
+follow-up turn resumes with the agent that answered the previous turn (read
+from the wrapper's last completed execution; falls back to
+`initial_agent_code` when it left the mesh). The resumed agent continues its
+own conversation history and keeps its transfer tools, so it can hand off
+when the topic changes.
+
 **Execution flow** (see `uc_ai_agent_exec_api.execute_handoff_agent`):
 
 1. Execute the current agent (starting with `initial_agent_code`) as a nested
@@ -571,10 +586,10 @@ time.
 4. If no transfer was recorded, that agent's answer is final.
 
 **Result fields**: `final_agent_code`, `handoff_count`, `handoff_trail`
-(`{from_agent, to_agent, context}` per hop), `conversation_history`,
-`max_handoffs_reached`. The wrapper reports zero own tokens (children own
-theirs); the combined `messages` array preserves the transfer tool calls in the
-`uc_ai_agent_messages` log.
+(`{hop, from_agent, to_agent, reason?, context}` per transfer),
+`conversation_history`, `max_handoffs_reached`. The wrapper reports zero own
+tokens (children own theirs); the combined `messages` array preserves the
+transfer tool calls in the `uc_ai_agent_messages` log.
 
 See the docs site guide `guides/multi-agent-systems/handoff.mdx` and the test
 suite `test/test_uc_ai_agent_handoff.pkb` (customer-support triage scenario).

@@ -99,11 +99,12 @@ END;
 ```
 
 <Aside type="note">
-  The engine passes `handoff_context` (the transferring agent's summary) and
+  The engine passes `handoff_context` (the transferring agent's summary),
+  `handoff_from` (the code of the transferring agent) and
   `conversation_history` (the trail of previous agent responses, TOON-encoded)
   as input parameters to every hop after the first. Specialists opt in by using
-  the `{handoff_context}` / `{conversation_history}` placeholders in their
-  templates - unused parameters are simply ignored.
+  the `{handoff_context}` / `{handoff_from}` / `{conversation_history}`
+  placeholders in their templates - unused parameters are simply ignored.
 </Aside>
 
 ### Step 2: Create the profile agents
@@ -199,13 +200,96 @@ The triage agent recognizes a shipping question, calls `transfer_to_support_ship
 
 ## Config reference
 
-| Field                | Type   | Description                                                                                        |
-| -------------------- | ------ | -------------------------------------------------------------------------------------------------- |
-| `pattern_type`       | String | Must be `"handoff"`                                                                                 |
-| `initial_agent_code` | String | Agent that receives every new request (must be an active profile agent)                            |
-| `handoff_agents`     | Array  | Transfer targets: `{"agent_code", "description"}`. Each hop gets transfer tools for all *others*   |
-| `max_handoffs`       | Number | Maximum transfers per request (default 3). The hop at the cap runs without transfer tools          |
-| `history_management` | Object | Optional trail trimming: `{"strategy": "sliding_window"\|"summarize"\|"full", "max_messages": 20}` |
+| Field                | Type   | Description                                                                                                        |
+| -------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| `pattern_type`       | String | Must be `"handoff"`                                                                                                 |
+| `initial_agent_code` | String | Agent that receives every new conversation (must be an active profile agent)                                       |
+| `handoff_agents`     | Array  | Transfer targets: `{"agent_code", "description", "can_transfer_to"?}`                                              |
+| `can_transfer_to`    | Array  | Optional per entry: agent codes this agent may transfer to. Absent = all other entries (full mesh)                 |
+| `max_handoffs`       | Number | Maximum transfers per turn (default 3). The hop at the cap runs without transfer tools                             |
+| `history_management` | Object | Optional trail trimming: `{"strategy": "sliding_window"\|"summarize"\|"full", "max_messages": 20}`                 |
+
+## Multi-level routing
+
+`can_transfer_to` restricts each agent's outgoing edges, which lets you build
+hierarchies - the entry agent only sees the department level, and each
+department delegates further down to its own specialists:
+
+```
+Customer Service Agent
+├── Product Support ──────┬── Product A Technician
+│                         └── Product B Technician
+├── Shipping & Returns ───── Return Policy Specialist
+└── Customer Details
+```
+
+```json
+{
+  "pattern_type": "handoff",
+  "initial_agent_code": "support_triage",
+  "handoff_agents": [
+    {"agent_code": "support_triage",   "description": "Triage and general support",
+     "can_transfer_to": ["support_product", "support_shipping", "support_customer"]},
+    {"agent_code": "support_product",  "description": "Products: specs, prices, technical problems",
+     "can_transfer_to": ["tech_product_a", "tech_product_b", "support_triage"]},
+    {"agent_code": "support_shipping", "description": "Shipping, delivery, returns",
+     "can_transfer_to": ["return_policy", "support_triage"]},
+    {"agent_code": "support_customer", "description": "Customer accounts and orders",
+     "can_transfer_to": ["support_triage"]},
+    {"agent_code": "tech_product_a",   "description": "Technical problems with Product A",
+     "can_transfer_to": ["support_triage"]},
+    {"agent_code": "tech_product_b",   "description": "Technical problems with Product B",
+     "can_transfer_to": ["support_triage"]},
+    {"agent_code": "return_policy",    "description": "Return window, fees, refunds",
+     "can_transfer_to": ["support_triage"]}
+  ],
+  "max_handoffs": 5
+}
+```
+
+A technical question now travels triage → product support → technician, and
+the technician answers the user directly. Every level keeps a back-edge to
+triage so the conversation never gets stuck in a specialist. Edges are
+validated at `create_agent` time (each `can_transfer_to` code must reference
+another `handoff_agents` entry).
+
+## Multi-turn conversations
+
+Handoff agents support follow-up messages with a **sticky active agent**: the
+next user message goes to whoever answered the previous turn. The resumed
+agent keeps its transfer tools, so it can hand off again when the topic
+changes.
+
+```sql
+DECLARE
+  l_result     json_object_t;
+  l_session_id VARCHAR2(100);
+BEGIN
+  l_session_id := uc_ai_agents_api.generate_session_id;
+
+  -- Turn 1: routed triage -> shipping specialist
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'customer_support',
+    p_input_parameters => json_object_t('{"prompt": "How much does standard shipping cost?"}'),
+    p_session_id       => l_session_id
+  );
+
+  -- Turn 2: resumes directly with the shipping specialist (no re-routing)
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code        => 'customer_support',
+    p_follow_up_message => 'And how much is the express option?',
+    p_session_id        => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+The resumed agent continues its own conversation history from the previous
+turn. If it transfers, the receiving agent gets the follow-up message as its
+`prompt` parameter plus the usual `handoff_context`. When the previous final
+agent is no longer part of the mesh, the turn falls back to the initial agent.
 
 ## Result fields
 
@@ -213,11 +297,11 @@ In addition to the standard result fields (`final_message`, `execution_id`, `sta
 
 | Field                  | Description                                                    |
 | ---------------------- | -------------------------------------------------------------- |
-| `final_agent_code`     | The agent that produced the final answer                       |
-| `handoff_count`        | Number of transfers that happened                              |
-| `handoff_trail`        | Array of `{from_agent, to_agent, context}` per transfer        |
-| `conversation_history` | Array of `{agent, response}` for every hop                     |
-| `max_handoffs_reached` | `true` when the chain hit `max_handoffs`                       |
+| `final_agent_code`     | The agent that produced the final answer                              |
+| `handoff_count`        | Number of transfers in this turn                                      |
+| `handoff_trail`        | Array of `{hop, from_agent, to_agent, reason?, context}` per transfer |
+| `conversation_history` | Array of `{agent, response}` for every hop                            |
+| `max_handoffs_reached` | `true` when the chain hit `max_handoffs`                              |
 
 ## Session tracking
 
@@ -227,6 +311,8 @@ Each hop runs as a child execution under the handoff wrapper, so the full chain 
 
 - **Descriptions are routing rules**: The `description` in `handoff_agents` becomes the transfer tool's description. Write it like an instruction for when to transfer.
 - **Tell the entry agent to transfer**: Explicitly instruct the triage agent to never answer specialist questions itself. Without that, capable models tend to guess an answer instead of transferring.
+- **Tell mid-level agents to delegate down**: In hierarchies, instruct department agents to transfer technical/detail questions to their specialists ("if transfer tools are available and the problem is technical, transfer to the matching technician").
 - **Use a capable model for the entry agent**: The triage decision is a tool-calling task; smaller models transfer less reliably.
-- **Stateless per turn**: Each `execute_agent` call starts at the initial agent. For multi-turn conversations, keep using the same `p_session_id` so the message log stays in one conversation.
+- **Always provide a back-edge**: Give every specialist a `can_transfer_to` edge back to the entry agent so conversations cannot get stuck out of scope.
 - **Specialists keep their tools**: Transfer tools are merged with an agent's own tool configuration, so a specialist can look up data *and* transfer back.
+- **Loops are bounded, not detected**: Reverse edges make A→B→A ping-pong possible within a turn; `max_handoffs` caps it (the last hop must answer).

@@ -18,7 +18,8 @@ create or replace package body uc_ai_agent_exec_api as
   procedure record_transfer_request(
     p_handoff_exec_id in uc_ai_agent_executions.id%type,
     p_target_agent    in uc_ai_agents.code%type,
-    p_context         in clob
+    p_context         in clob,
+    p_reason          in varchar2 default null
   )
   as
     l_scope   uc_ai_logger.scope := gc_scope_prefix || 'record_transfer_request';
@@ -33,6 +34,9 @@ create or replace package body uc_ai_agent_exec_api as
 
     l_request.put('target_agent', p_target_agent);
     l_request.put('context', p_context);
+    if p_reason is not null then
+      l_request.put('reason', p_reason);
+    end if;
     g_transfer_requests(l_key) := l_request;
 
     uc_ai_logger.log('Transfer requested to agent ' || p_target_agent
@@ -927,7 +931,8 @@ begin
   uc_ai_agent_exec_api.record_transfer_request(
     p_handoff_exec_id => !' || p_handoff_exec_id || q'!,
     p_target_agent    => '!' || l_safe_target || q'!',
-    p_context         => l_input.get_clob('context')
+    p_context         => l_input.get_clob('context'),
+    p_reason          => l_input.get_string('reason')
   );
 
   return 'Transfer to !' || l_safe_target || q'! initiated. Briefly acknowledge the transfer and end your turn; the specialist will answer the user.';
@@ -939,6 +944,10 @@ end;!';
         "context": {
           "type": "string",
           "description": "Summary of the user''s request and all details the specialist needs to answer it"
+        },
+        "reason": {
+          "type": "string",
+          "description": "Short reason why this specialist should take over"
         }
       },
       "required": ["context"]
@@ -1138,29 +1147,80 @@ end;!';
 
 
   /*
+   * Resolves the active agent for a follow-up turn of a handoff agent: the
+   * agent that produced the final answer of the wrapper's last completed
+   * execution in the session (sticky active agent). Returns null when there
+   * is no previous completed execution or it carries no final_agent_code.
+   */
+  function resolve_active_agent(
+    p_session_id in varchar2,
+    p_agent_id   in uc_ai_agents.id%type,
+    p_exec_id    in uc_ai_agent_executions.id%type
+  ) return varchar2
+  as
+    l_scope       uc_ai_logger.scope := gc_scope_prefix || 'resolve_active_agent';
+    l_prev_output clob;
+    l_prev_result json_object_t;
+  begin
+    begin
+      select output_result
+        into l_prev_output
+        from uc_ai_agent_executions
+       where session_id = p_session_id
+         and agent_id   = p_agent_id
+         and status     = uc_ai_agents_api.c_exec_completed
+         and id        != p_exec_id
+       order by completed_at desc
+       fetch first 1 row only;
+    exception
+      when no_data_found then
+        return null;
+    end;
+
+    l_prev_result := json_object_t.parse(l_prev_output);
+    return l_prev_result.get_string('final_agent_code');
+  exception
+    when others then
+      uc_ai_logger.log_error('Error resolving active agent', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+      raise;
+  end resolve_active_agent;
+
+
+  /*
    * Executes a handoff-type agent (Swarm-style tool-based transfers).
    *
-   * The engine registers a temporary transfer_to_<agent> tool per configured
+   * The engine registers a temporary transfer_to_<agent> tool per ALLOWED
    * handoff target for the currently active agent's LLM call. When the model
    * calls one, the callback records the request (see record_transfer_request)
    * and the engine switches to the target agent, threading the original input,
    * the transfer context and the conversation trail. When no transfer is
    * requested, the agent's answer is final.
    *
+   * Allowed targets: a handoff_agents entry may carry "can_transfer_to" (array
+   * of agent codes) restricting its outgoing edges - this expresses multi-level
+   * hierarchies (triage -> product support -> product technician). Without it
+   * an agent may transfer to every other entry (full mesh).
+   *
+   * Follow-up turns (p_follow_up_message) resume with the agent that answered
+   * the previous turn (sticky active agent, see resolve_active_agent); it keeps
+   * its transfer tools so it can hand off when the topic changed.
+   *
    * The hop at max_handoffs runs WITHOUT transfer tools and must answer
    * (graceful cap, no error); the result then carries max_handoffs_reached.
    */
   function execute_handoff_agent(
-    p_agent          in uc_ai_agents%rowtype,
-    p_input_params   in json_object_t,
-    p_session_id     in varchar2,
-    p_exec_id        in uc_ai_agent_executions.id%type
+    p_agent             in uc_ai_agents%rowtype,
+    p_input_params      in json_object_t,
+    p_session_id        in varchar2,
+    p_exec_id           in uc_ai_agent_executions.id%type,
+    p_follow_up_message in clob default null
   ) return json_object_t
   as
     l_scope                uc_ai_logger.scope := gc_scope_prefix || 'execute_handoff_agent';
     l_config               json_object_t;
     l_handoff_agents       json_array_t;
     l_target               json_object_t;
+    l_target_code          varchar2(255 char);
     l_current_agent        varchar2(255 char);
     l_handoff_count        number := 0;
     l_max_handoffs         number;
@@ -1173,6 +1233,34 @@ end;!';
     l_combined_messages    json_array_t := json_array_t();
     l_tool_ids             apex_t_number;
     l_tool_tag             varchar2(255 char);
+    l_allowed              json_array_t;
+    l_first_hop            boolean := true;
+    l_is_follow_up         boolean := p_follow_up_message is not null;
+
+    type t_entry_map is table of json_object_t index by varchar2(255 char);
+    l_entries t_entry_map; -- @dblinter ignore(g-9105): handoff_agents entries keyed by agent code, not a local array
+
+    /*
+     * True when the current agent may transfer to p_code: either it has no
+     * can_transfer_to list (full mesh) or p_code is listed.
+     */
+    function is_allowed_target(
+      p_code    in varchar2,
+      p_allowed in json_array_t
+    ) return boolean
+    as
+    begin
+      if p_allowed is null then
+        return true;
+      end if;
+      <<allowed_loop>>
+      for i in 0 .. p_allowed.get_size - 1 loop
+        if p_allowed.get_string(i) = p_code then
+          return true;
+        end if;
+      end loop allowed_loop;
+      return false;
+    end is_allowed_target;
 
     /*
      * Appends one hop's messages to the combined turn log. The first hop is
@@ -1222,6 +1310,30 @@ end;!';
       l_history_mgmt := l_config.get_object('history_management');
     end if;
 
+    -- Index handoff_agents entries by code for graph lookups
+    <<entry_loop>>
+    for i in 0 .. l_handoff_agents.get_size - 1 loop
+      l_target := treat(l_handoff_agents.get(i) as json_object_t);
+      l_entries(l_target.get_string('agent_code')) := l_target;
+    end loop entry_loop;
+
+    -- Sticky active agent: a follow-up turn resumes with the agent that
+    -- answered the previous turn (falls back to the initial agent when it is
+    -- unknown or no longer part of the handoff mesh).
+    if l_is_follow_up then
+      declare
+        l_active varchar2(255 char);
+      begin
+        l_active := resolve_active_agent(p_session_id, p_agent.id, p_exec_id);
+        if l_active is not null
+          and (l_entries.exists(l_active) or l_active = l_current_agent)
+        then
+          l_current_agent := l_active;
+        end if;
+        uc_ai_logger.log('Handoff follow-up resumes with agent: ' || l_current_agent, l_scope);
+      end;
+    end if;
+
     l_current_input := p_input_params;
     if l_current_input is null then
       l_current_input := json_object_t();
@@ -1238,16 +1350,28 @@ end;!';
       l_tool_tag := lower('handoff_' || p_agent.code || '_' || p_exec_id || '_' || l_handoff_count);
 
       begin
-        -- Register transfer tools for every OTHER handoff target (full mesh
-        -- minus self). At the cap the agent runs without them and must answer.
+        -- Register transfer tools for every OTHER allowed handoff target
+        -- (the current agent's can_transfer_to edges; full mesh minus self
+        -- when absent). At the cap the agent runs without them and must
+        -- answer.
         if l_handoff_count < l_max_handoffs then
+          l_allowed := null;
+          if l_entries.exists(l_current_agent)
+            and l_entries(l_current_agent).has('can_transfer_to')
+          then
+            l_allowed := l_entries(l_current_agent).get_array('can_transfer_to');
+          end if;
+
           <<target_loop>>
           for i in 0 .. l_handoff_agents.get_size - 1 loop
             l_target := treat(l_handoff_agents.get(i) as json_object_t);
-            if l_target.get_string('agent_code') != l_current_agent then
+            l_target_code := l_target.get_string('agent_code');
+            if l_target_code != l_current_agent
+              and is_allowed_target(l_target_code, l_allowed)
+            then
               l_tool_ids.extend;
               l_tool_ids(l_tool_ids.count) := register_transfer_tool(
-                p_target_code     => l_target.get_string('agent_code'),
+                p_target_code     => l_target_code,
                 p_description     => l_target.get_string('description'),
                 p_handoff_exec_id => p_exec_id,
                 p_tool_tag        => l_tool_tag
@@ -1256,14 +1380,26 @@ end;!';
           end loop target_loop;
         end if;
 
-        -- Execute current agent (nested execution records its own tokens)
-        l_result := uc_ai_agents_api.execute_agent(
-          p_agent_code       => l_current_agent,
-          p_input_parameters => l_current_input,
-          p_session_id       => p_session_id,
-          p_parent_exec_id   => p_exec_id,
-          p_extra_tool_tag   => case when l_tool_ids.count > 0 then l_tool_tag end
-        );
+        -- Execute current agent (nested execution records its own tokens).
+        -- The first hop of a follow-up turn resumes the active agent's own
+        -- conversation via the profile follow-up path.
+        if l_first_hop and l_is_follow_up then
+          l_result := uc_ai_agents_api.execute_agent(
+            p_agent_code        => l_current_agent,
+            p_follow_up_message => p_follow_up_message,
+            p_session_id        => p_session_id,
+            p_parent_exec_id    => p_exec_id,
+            p_extra_tool_tag    => case when l_tool_ids.count > 0 then l_tool_tag end
+          );
+        else
+          l_result := uc_ai_agents_api.execute_agent(
+            p_agent_code       => l_current_agent,
+            p_input_parameters => l_current_input,
+            p_session_id       => p_session_id,
+            p_parent_exec_id   => p_exec_id,
+            p_extra_tool_tag   => case when l_tool_ids.count > 0 then l_tool_tag end
+          );
+        end if;
       exception
         when others then
           cleanup_agent_tools(l_tool_ids);
@@ -1273,7 +1409,8 @@ end;!';
 
       cleanup_agent_tools(l_tool_ids);
 
-      append_hop_messages(l_result, p_first_hop => l_handoff_count = 0);
+      append_hop_messages(l_result, p_first_hop => l_first_hop);
+      l_first_hop := false;
 
       -- Add to conversation trail
       l_conversation_history.append(json_object_t(
@@ -1298,22 +1435,32 @@ end;!';
       declare
         l_trail_entry json_object_t := json_object_t();
       begin
+        l_trail_entry.put('hop', l_handoff_count);
         l_trail_entry.put('from_agent', l_current_agent);
         l_trail_entry.put('to_agent', l_transfer.get_string('target_agent'));
+        if l_transfer.has('reason') then
+          l_trail_entry.put('reason', l_transfer.get_string('reason'));
+        end if;
         l_trail_entry.put('context', l_transfer.get_clob('context'));
         l_handoff_trail.append(l_trail_entry);
       end;
 
       -- Prepare the next hop's input: original input + transfer context +
       -- conversation trail (TOON-encoded, token-efficient). Targets opt in
-      -- via {handoff_context} / {conversation_history} template placeholders;
-      -- extra parameters without placeholders are silently ignored.
+      -- via {handoff_context} / {handoff_from} / {conversation_history}
+      -- template placeholders; extra parameters without placeholders are
+      -- silently ignored. On follow-up turns (no input params) the follow-up
+      -- message becomes the "prompt" parameter for the receiving hop.
       if p_input_params is not null then
         l_current_input := json_object_t.parse(p_input_params.to_clob);
       else
         l_current_input := json_object_t();
+        if l_is_follow_up then
+          l_current_input.put('prompt', p_follow_up_message);
+        end if;
       end if;
       l_current_input.put('handoff_context', l_transfer.get_clob('context'));
+      l_current_input.put('handoff_from', l_current_agent);
       l_current_input.put('conversation_history', uc_ai_toon.to_toon(l_conversation_history));
 
       l_current_agent := l_transfer.get_string('target_agent');

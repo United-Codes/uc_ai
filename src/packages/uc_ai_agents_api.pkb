@@ -1654,6 +1654,10 @@ create or replace package body uc_ai_agents_api as
         declare
           l_handoff_agents json_array_t := l_json.get_array('handoff_agents');
           l_target         json_object_t;
+          l_transfer_to    json_array_t;
+          l_edge           varchar2(255 char);
+          type t_code_set is table of boolean index by varchar2(255 char);
+          l_codes          t_code_set; -- @dblinter ignore(g-9105): set of entry codes for edge validation, not a local array
         begin
           if l_handoff_agents.get_size = 0 then
             l_result.is_valid := false;
@@ -1676,7 +1680,47 @@ create or replace package body uc_ai_agents_api as
               uc_ai_logger.log_error(l_result.error_reason, l_scope);
               return l_result;
             end if;
+            l_codes(l_target.get_string('agent_code')) := true;
           end loop handoff_targets;
+
+          -- can_transfer_to edges must reference other handoff_agents entries
+          <<edge_validation>>
+          for i in 0 .. l_handoff_agents.get_size - 1 loop
+            l_target := treat(l_handoff_agents.get(i) as json_object_t);
+            if l_target.has('can_transfer_to') then
+              if not l_target.get('can_transfer_to').is_array then
+                l_result.is_valid := false;
+                l_result.error_reason := 'Handoff config handoff_agents entry ' || i || ' can_transfer_to must be an array';
+                uc_ai_logger.log_error(l_result.error_reason, l_scope);
+                return l_result;
+              end if;
+              l_transfer_to := l_target.get_array('can_transfer_to');
+              if l_transfer_to.get_size = 0 then
+                l_result.is_valid := false;
+                l_result.error_reason := 'Handoff config handoff_agents entry ' || i || ' can_transfer_to must not be empty (omit it for full mesh)';
+                uc_ai_logger.log_error(l_result.error_reason, l_scope);
+                return l_result;
+              end if;
+              <<edge_loop>>
+              for j in 0 .. l_transfer_to.get_size - 1 loop
+                l_edge := l_transfer_to.get_string(j);
+                if l_edge is null or not l_codes.exists(l_edge) then
+                  l_result.is_valid := false;
+                  l_result.error_reason := 'Handoff config handoff_agents entry ' || i
+                    || ' can_transfer_to references unknown agent: ' || coalesce(l_edge, '(null)');
+                  uc_ai_logger.log_error(l_result.error_reason, l_scope);
+                  return l_result;
+                end if;
+                if l_edge = l_target.get_string('agent_code') then
+                  l_result.is_valid := false;
+                  l_result.error_reason := 'Handoff config handoff_agents entry ' || i
+                    || ' can_transfer_to must not reference itself';
+                  uc_ai_logger.log_error(l_result.error_reason, l_scope);
+                  return l_result;
+                end if;
+              end loop edge_loop;
+            end if;
+          end loop edge_validation;
         end;
         if l_json.has('max_handoffs')
           and coalesce(l_json.get_number('max_handoffs'), 0) < 1
@@ -1890,12 +1934,12 @@ create or replace package body uc_ai_agents_api as
 
     -- Validate follow_up_message usage
     if p_follow_up_message is not null then
-      if l_agent.agent_type not in (c_type_profile, c_type_orchestrator) then
+      if l_agent.agent_type not in (c_type_profile, c_type_orchestrator, c_type_handoff) then
         uc_ai_error.raise_error(
           p_error_code => uc_ai_error.c_err_invalid_config
         , p_scope      => l_scope
         , p0           => 'follow_up_message'
-        , p1           => 'can only be used with profile or orchestrator agents, not ' || l_agent.agent_type
+        , p1           => 'can only be used with profile, orchestrator or handoff agents, not ' || l_agent.agent_type
         );
       end if;
 
@@ -1963,7 +2007,7 @@ create or replace package body uc_ai_agents_api as
           l_result := uc_ai_agent_exec_api.execute_orchestrator_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message, p_files);
 
         when c_type_handoff then
-          l_result := uc_ai_agent_exec_api.execute_handoff_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
+          l_result := uc_ai_agent_exec_api.execute_handoff_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message);
 
         when c_type_conversation then
           l_result := uc_ai_agent_exec_api.execute_conversation_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);

@@ -5,10 +5,14 @@ create or replace package body test_uc_ai_agent_handoff as
 
   gc_handoff_code  constant varchar2(50 char) := 'TEST_HANDOFF';
   gc_capped_code   constant varchar2(50 char) := 'TEST_HANDOFF_CAPPED';
+  gc_ml_code       constant varchar2(50 char) := 'TEST_HANDOFF_ML';
   gc_triage_code   constant varchar2(50 char) := 'TEST_HANDOFF_TRIAGE';
   gc_product_code  constant varchar2(50 char) := 'TEST_HANDOFF_PRODUCT';
   gc_shipping_code constant varchar2(50 char) := 'TEST_HANDOFF_SHIPPING';
   gc_customer_code constant varchar2(50 char) := 'TEST_HANDOFF_CUSTOMER';
+  gc_tech_a_code   constant varchar2(50 char) := 'TEST_HANDOFF_TECH_A';
+  gc_tech_b_code   constant varchar2(50 char) := 'TEST_HANDOFF_TECH_B';
+  gc_returns_code  constant varchar2(50 char) := 'TEST_HANDOFF_RETURNS';
 
   /*
    * Handoff config: full mesh minus self. Triage is listed as a target too so
@@ -31,6 +35,40 @@ create or replace package body test_uc_ai_agent_handoff as
       "max_handoffs": ' || p_max_handoffs || '
     }';
   end handoff_config;
+
+  /*
+   * Multi-level handoff config (can_transfer_to graph) modeling:
+   *   triage -> {product, shipping, customer}
+   *   product -> {tech A, tech B, triage}
+   *   shipping -> {returns, triage}
+   *   tech A / tech B / returns -> {triage}
+   * Triage never sees the level-3 specialists.
+   */
+  function ml_handoff_config return clob
+  as
+  begin
+    return '{
+      "pattern_type": "handoff",
+      "initial_agent_code": "' || gc_triage_code || '",
+      "handoff_agents": [
+        {"agent_code": "' || gc_triage_code || '", "description": "Triage and general support - transfer back for questions outside your specialty",
+         "can_transfer_to": ["' || gc_product_code || '", "' || gc_shipping_code || '", "' || gc_customer_code || '"]},
+        {"agent_code": "' || gc_product_code || '", "description": "Product support: specs, prices, availability and technical problems with products",
+         "can_transfer_to": ["' || gc_tech_a_code || '", "' || gc_tech_b_code || '", "' || gc_triage_code || '"]},
+        {"agent_code": "' || gc_shipping_code || '", "description": "Shipping and returns: options, costs, delivery times, return policy",
+         "can_transfer_to": ["' || gc_returns_code || '", "' || gc_triage_code || '"]},
+        {"agent_code": "' || gc_customer_code || '", "description": "Customer accounts: membership, orders, order status",
+         "can_transfer_to": ["' || gc_triage_code || '"]},
+        {"agent_code": "' || gc_tech_a_code || '", "description": "Technician for technical problems with the Aurora Desk Lamp",
+         "can_transfer_to": ["' || gc_triage_code || '"]},
+        {"agent_code": "' || gc_tech_b_code || '", "description": "Technician for technical problems with the GLX-7000 Headset",
+         "can_transfer_to": ["' || gc_triage_code || '"]},
+        {"agent_code": "' || gc_returns_code || '", "description": "Return policy: return window, return fees, refunds",
+         "can_transfer_to": ["' || gc_triage_code || '"]}
+      ],
+      "max_handoffs": 5
+    }';
+  end ml_handoff_config;
 
   procedure setup
   as
@@ -78,12 +116,46 @@ create or replace package body test_uc_ai_agent_handoff as
       p_status              => uc_ai_agents_api.c_status_active
     );
 
-    -- The handoff agent (single point of entry)
+    -- Level-3 specialists for multi-level routing
+    l_id := uc_ai_agents_api.create_agent(
+      p_code                => gc_tech_a_code,
+      p_description         => 'Aurora Desk Lamp technician',
+      p_agent_type          => uc_ai_agents_api.c_type_profile,
+      p_prompt_profile_code => 'TEST_AGENT_CS_TECH_A',
+      p_status              => uc_ai_agents_api.c_status_active
+    );
+
+    l_id := uc_ai_agents_api.create_agent(
+      p_code                => gc_tech_b_code,
+      p_description         => 'GLX-7000 Headset technician',
+      p_agent_type          => uc_ai_agents_api.c_type_profile,
+      p_prompt_profile_code => 'TEST_AGENT_CS_TECH_B',
+      p_status              => uc_ai_agents_api.c_status_active
+    );
+
+    l_id := uc_ai_agents_api.create_agent(
+      p_code                => gc_returns_code,
+      p_description         => 'Return policy specialist',
+      p_agent_type          => uc_ai_agents_api.c_type_profile,
+      p_prompt_profile_code => 'TEST_AGENT_CS_RETURNS',
+      p_status              => uc_ai_agents_api.c_status_active
+    );
+
+    -- The handoff agent (single point of entry, flat mesh)
     l_id := uc_ai_agents_api.create_agent(
       p_code                 => gc_handoff_code,
       p_description          => 'Customer support handoff agent',
       p_agent_type           => uc_ai_agents_api.c_type_handoff,
       p_orchestration_config => handoff_config(p_max_handoffs => 3),
+      p_status               => uc_ai_agents_api.c_status_active
+    );
+
+    -- The multi-level handoff agent (can_transfer_to graph)
+    l_id := uc_ai_agents_api.create_agent(
+      p_code                 => gc_ml_code,
+      p_description          => 'Customer support handoff agent with two-level specialist tree',
+      p_agent_type           => uc_ai_agents_api.c_type_handoff,
+      p_orchestration_config => ml_handoff_config,
       p_status               => uc_ai_agents_api.c_status_active
     );
 
@@ -313,6 +385,203 @@ create or replace package body test_uc_ai_agent_handoff as
     ut.expect(l_result.get_boolean('max_handoffs_reached')).to_be_true();
     ut.expect(l_result.get_clob('final_message'), 'Specialist still answered').to_be_like('%2.5%');
   end max_handoffs_guard;
+
+  procedure multi_level_tech_question
+  as
+    l_session_id varchar2(100 char);
+    l_result     json_object_t;
+    l_final_msg  clob;
+    l_trail      json_array_t;
+    l_entry      json_object_t;
+    l_count      number;
+  begin
+    l_session_id := uc_ai_agents_api.generate_session_id;
+    l_result := uc_ai_agents_api.execute_agent(
+      p_agent_code       => gc_ml_code,
+      p_input_parameters => json_object_t('{"prompt": "My Aurora Desk Lamp will not turn on anymore. How do I reset it?"}'),
+      p_session_id       => l_session_id
+    );
+
+    uc_ai_test_agent_utils.validate_agent_result(l_result, 'Multi-level tech question');
+    ut.expect(l_result.get_string('status')).to_equal(uc_ai_agents_api.c_exec_completed);
+
+    l_final_msg := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Multi-level tech result: ' || l_final_msg);
+
+    -- Only the Aurora technician knows the reset procedure
+    ut.expect(l_final_msg, 'Answer should contain the technician-only fact').to_be_like('%5 seconds%');
+    ut.expect(l_result.get_number('handoff_count'), 'Two handoffs (triage -> product -> tech A)').to_equal(2);
+    ut.expect(l_result.get_string('final_agent_code')).to_equal(gc_tech_a_code);
+
+    -- The trail proves the request went THROUGH the mid-level (graph scoping:
+    -- triage cannot see the technicians directly)
+    l_trail := l_result.get_array('handoff_trail');
+    ut.expect(l_trail.get_size, 'Trail has two hops').to_equal(2);
+
+    l_entry := treat(l_trail.get(0) as json_object_t);
+    ut.expect(l_entry.get_string('from_agent'), 'Hop 1 from').to_equal(gc_triage_code);
+    ut.expect(l_entry.get_string('to_agent'), 'Hop 1 to').to_equal(gc_product_code);
+
+    l_entry := treat(l_trail.get(1) as json_object_t);
+    ut.expect(l_entry.get_string('from_agent'), 'Hop 2 from').to_equal(gc_product_code);
+    ut.expect(l_entry.get_string('to_agent'), 'Hop 2 to').to_equal(gc_tech_a_code);
+
+    -- Both transfer tool calls are persisted in the message log
+    select count(*)
+      into l_count
+      from uc_ai_agent_messages
+     where session_id = l_session_id
+       and role = 'tool_call'
+       and tool_name like 'transfer_to_%';
+    ut.expect(l_count, 'Two transfer tool calls in message log').to_equal(2);
+  end multi_level_tech_question;
+
+  procedure multi_level_returns_question
+  as
+    l_session_id varchar2(100 char);
+    l_result     json_object_t;
+    l_final_msg  clob;
+    l_trail      json_array_t;
+    l_entry      json_object_t;
+  begin
+    l_session_id := uc_ai_agents_api.generate_session_id;
+    l_result := uc_ai_agents_api.execute_agent(
+      p_agent_code       => gc_ml_code,
+      p_input_parameters => json_object_t('{"prompt": "How many days do I have to return an item and is there a return fee?"}'),
+      p_session_id       => l_session_id
+    );
+
+    uc_ai_test_agent_utils.validate_agent_result(l_result, 'Multi-level returns question');
+    ut.expect(l_result.get_string('status')).to_equal(uc_ai_agents_api.c_exec_completed);
+
+    l_final_msg := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Multi-level returns result: ' || l_final_msg);
+
+    -- Only the return policy specialist knows the 30-day window
+    ut.expect(l_final_msg, 'Answer should contain the return window').to_be_like('%30%');
+    ut.expect(l_result.get_number('handoff_count'), 'Two handoffs (triage -> shipping -> returns)').to_equal(2);
+    ut.expect(l_result.get_string('final_agent_code')).to_equal(gc_returns_code);
+
+    l_trail := l_result.get_array('handoff_trail');
+    ut.expect(l_trail.get_size, 'Trail has two hops').to_equal(2);
+    l_entry := treat(l_trail.get(1) as json_object_t);
+    ut.expect(l_entry.get_string('from_agent'), 'Hop 2 from').to_equal(gc_shipping_code);
+    ut.expect(l_entry.get_string('to_agent'), 'Hop 2 to').to_equal(gc_returns_code);
+  end multi_level_returns_question;
+
+  procedure mid_level_answers_itself
+  as
+    l_session_id varchar2(100 char);
+    l_result     json_object_t;
+    l_final_msg  clob;
+  begin
+    l_session_id := uc_ai_agents_api.generate_session_id;
+    l_result := uc_ai_agents_api.execute_agent(
+      p_agent_code       => gc_ml_code,
+      p_input_parameters => json_object_t('{"prompt": "How much does the GLX-7000 Headset cost?"}'),
+      p_session_id       => l_session_id
+    );
+
+    uc_ai_test_agent_utils.validate_agent_result(l_result, 'Mid-level answers itself');
+    ut.expect(l_result.get_string('status')).to_equal(uc_ai_agents_api.c_exec_completed);
+
+    l_final_msg := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Mid-level answer result: ' || l_final_msg);
+
+    -- A spec question is answered by product support (catalog tool) without
+    -- descending to a technician
+    ut.expect(l_final_msg, 'Answer should contain the catalog price').to_be_like('%129%');
+    ut.expect(l_result.get_number('handoff_count'), 'Only one handoff (triage -> product)').to_equal(1);
+    ut.expect(l_result.get_string('final_agent_code')).to_equal(gc_product_code);
+  end mid_level_answers_itself;
+
+  procedure sticky_follow_up_same_agent
+  as
+    l_session_id varchar2(100 char);
+    l_result     json_object_t;
+    l_final_msg  clob;
+    l_turn_count number;
+    l_count      number;
+  begin
+    l_session_id := uc_ai_agents_api.generate_session_id;
+
+    -- Turn 1: shipping question ends at the shipping specialist
+    l_result := uc_ai_agents_api.execute_agent(
+      p_agent_code       => gc_ml_code,
+      p_input_parameters => json_object_t('{"prompt": "How much does standard shipping cost?"}'),
+      p_session_id       => l_session_id
+    );
+    uc_ai_test_agent_utils.validate_agent_result(l_result, 'Sticky same agent turn 1');
+    ut.expect(l_result.get_string('final_agent_code'), 'Turn 1 ends at shipping').to_equal(gc_shipping_code);
+
+    -- Turn 2: follow-up resumes with the shipping specialist (sticky), which
+    -- answers itself - no re-routing through triage
+    l_result := uc_ai_agents_api.execute_agent(
+      p_agent_code        => gc_ml_code,
+      p_follow_up_message => 'And how much is the express option?',
+      p_session_id        => l_session_id
+    );
+
+    uc_ai_test_agent_utils.validate_agent_result(l_result, 'Sticky same agent turn 2');
+    ut.expect(l_result.get_string('status')).to_equal(uc_ai_agents_api.c_exec_completed);
+
+    l_final_msg := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Sticky follow-up result: ' || l_final_msg);
+
+    ut.expect(l_final_msg, 'Answer should contain the express price').to_be_like('%19.99%');
+    ut.expect(l_result.get_string('final_agent_code'), 'Still the shipping specialist').to_equal(gc_shipping_code);
+    ut.expect(l_result.get_number('handoff_count'), 'No handoff needed').to_equal(0);
+
+    -- Session header reflects two turns
+    select turn_count
+      into l_turn_count
+      from uc_ai_agent_sessions
+     where session_id = l_session_id;
+    ut.expect(l_turn_count, 'Two conversation turns').to_equal(2);
+
+    select count(*)
+      into l_count
+      from uc_ai_agent_executions
+     where session_id = l_session_id
+       and turn_index = 2;
+    ut.expect(l_count, 'Second top-level turn recorded').to_equal(1);
+  end sticky_follow_up_same_agent;
+
+  procedure sticky_follow_up_with_transfer
+  as
+    l_session_id varchar2(100 char);
+    l_result     json_object_t;
+    l_final_msg  clob;
+  begin
+    l_session_id := uc_ai_agents_api.generate_session_id;
+
+    -- Turn 1: shipping question ends at the shipping specialist
+    l_result := uc_ai_agents_api.execute_agent(
+      p_agent_code       => gc_ml_code,
+      p_input_parameters => json_object_t('{"prompt": "How long does standard shipping take?"}'),
+      p_session_id       => l_session_id
+    );
+    uc_ai_test_agent_utils.validate_agent_result(l_result, 'Sticky transfer turn 1');
+    ut.expect(l_result.get_string('final_agent_code'), 'Turn 1 ends at shipping').to_equal(gc_shipping_code);
+
+    -- Turn 2: topic changes to returns - the resumed shipping specialist must
+    -- transfer down to the return policy specialist
+    l_result := uc_ai_agents_api.execute_agent(
+      p_agent_code        => gc_ml_code,
+      p_follow_up_message => 'One more thing: how many days do I have to return an item?',
+      p_session_id        => l_session_id
+    );
+
+    uc_ai_test_agent_utils.validate_agent_result(l_result, 'Sticky transfer turn 2');
+    ut.expect(l_result.get_string('status')).to_equal(uc_ai_agents_api.c_exec_completed);
+
+    l_final_msg := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Sticky transfer result: ' || l_final_msg);
+
+    ut.expect(l_final_msg, 'Answer should contain the return window').to_be_like('%30%');
+    ut.expect(l_result.get_string('final_agent_code'), 'Return specialist took over').to_equal(gc_returns_code);
+    ut.expect(l_result.get_number('handoff_count'), 'One handoff in the follow-up turn').to_equal(1);
+  end sticky_follow_up_with_transfer;
 
 end test_uc_ai_agent_handoff;
 /

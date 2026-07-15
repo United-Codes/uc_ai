@@ -419,7 +419,8 @@ as
    * @param p_agent_code        Code of the agent to execute
    * @param p_agent_version     Version number (null = latest active)
    * @param p_input_parameters  JSON input parameters
-   * @param p_follow_up_message Follow-up message to continue an existing conversation (profile/orchestrator agents only)
+   * @param p_follow_up_message Follow-up message to continue an existing conversation (profile/orchestrator/handoff
+   *                            agents; handoff agents resume with the agent that answered the previous turn)
    * @param p_session_id        Optional session ID for grouping executions (required when using p_follow_up_message)
    * @param p_parent_exec_id    Optional parent execution ID for nested calls
    * @param p_response_schema   Optional JSON schema for response validation (profile agents only)
@@ -448,7 +449,8 @@ as
    *
    * @param p_agent_id          ID of the agent to execute
    * @param p_input_parameters  JSON input parameters
-   * @param p_follow_up_message Follow-up message to continue an existing conversation (profile/orchestrator agents only)
+   * @param p_follow_up_message Follow-up message to continue an existing conversation (profile/orchestrator/handoff
+   *                            agents; handoff agents resume with the agent that answered the previous turn)
    * @param p_session_id        Optional session ID for grouping executions (required when using p_follow_up_message)
    * @param p_parent_exec_id    Optional parent execution ID for nested calls
    * @param p_response_schema   Optional JSON schema for response validation (profile agents only)

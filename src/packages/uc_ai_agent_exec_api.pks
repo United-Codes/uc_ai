@@ -134,17 +134,21 @@ as
   /*
    * Executes a handoff-type agent
    *
-   * @param p_agent        Agent rowtype record
-   * @param p_input_params Input parameters for handoff chain
-   * @param p_session_id   Session ID for grouping executions
-   * @param p_exec_id      Execution ID for tracking
+   * @param p_agent             Agent rowtype record
+   * @param p_input_params      Input parameters for handoff chain
+   * @param p_session_id        Session ID for grouping executions
+   * @param p_exec_id           Execution ID for tracking
+   * @param p_follow_up_message Optional follow-up message: resumes the session
+   *                            with the agent that answered the previous turn
+   *                            (sticky active agent)
    * @return JSON result from handoff chain
    */
   function execute_handoff_agent(
-    p_agent          in uc_ai_agents%rowtype,
-    p_input_params   in json_object_t,
-    p_session_id     in varchar2,
-    p_exec_id        in uc_ai_agent_executions.id%type
+    p_agent             in uc_ai_agents%rowtype,
+    p_input_params      in json_object_t,
+    p_session_id        in varchar2,
+    p_exec_id           in uc_ai_agent_executions.id%type,
+    p_follow_up_message in clob default null
   ) return json_object_t;
 
 
@@ -201,11 +205,13 @@ as
    * @param p_handoff_exec_id Execution ID of the handoff wrapper
    * @param p_target_agent    Code of the agent to transfer to
    * @param p_context         Context summary the target agent receives
+   * @param p_reason          Optional short reason for the transfer
    */
   procedure record_transfer_request(
     p_handoff_exec_id in uc_ai_agent_executions.id%type,
     p_target_agent    in uc_ai_agents.code%type,
-    p_context         in clob
+    p_context         in clob,
+    p_reason          in varchar2 default null
   );
 
   /*

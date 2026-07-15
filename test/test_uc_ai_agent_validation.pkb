@@ -340,6 +340,74 @@ create or replace package body test_uc_ai_agent_validation as
   end orch_handoff_valid;
 
 
+  procedure orch_handoff_bad_edge
+  as
+    l_result uc_ai_agents_api.t_validation_result;
+  begin
+    l_result := uc_ai_agents_api.validate_orchestration_config(
+      '{"pattern_type":"handoff","initial_agent_code":"A","handoff_agents":['
+        || '{"agent_code":"A","can_transfer_to":["B","GHOST"]},'
+        || '{"agent_code":"B"}]}'
+    );
+
+    ut.expect(l_result.is_valid).to_be_false();
+    ut.expect(l_result.error_reason).to_equal(
+      'Handoff config handoff_agents entry 0 can_transfer_to references unknown agent: GHOST'
+    );
+  end orch_handoff_bad_edge;
+
+
+  procedure orch_handoff_self_edge
+  as
+    l_result uc_ai_agents_api.t_validation_result;
+  begin
+    l_result := uc_ai_agents_api.validate_orchestration_config(
+      '{"pattern_type":"handoff","initial_agent_code":"A","handoff_agents":['
+        || '{"agent_code":"A","can_transfer_to":["A"]},'
+        || '{"agent_code":"B"}]}'
+    );
+
+    ut.expect(l_result.is_valid).to_be_false();
+    ut.expect(l_result.error_reason).to_equal(
+      'Handoff config handoff_agents entry 0 can_transfer_to must not reference itself'
+    );
+  end orch_handoff_self_edge;
+
+
+  procedure orch_handoff_empty_edges
+  as
+    l_result uc_ai_agents_api.t_validation_result;
+  begin
+    l_result := uc_ai_agents_api.validate_orchestration_config(
+      '{"pattern_type":"handoff","initial_agent_code":"A","handoff_agents":['
+        || '{"agent_code":"A","can_transfer_to":[]},'
+        || '{"agent_code":"B"}]}'
+    );
+
+    ut.expect(l_result.is_valid).to_be_false();
+    ut.expect(l_result.error_reason).to_equal(
+      'Handoff config handoff_agents entry 0 can_transfer_to must not be empty (omit it for full mesh)'
+    );
+  end orch_handoff_empty_edges;
+
+
+  procedure orch_handoff_graph_valid
+  as
+    l_result uc_ai_agents_api.t_validation_result;
+  begin
+    l_result := uc_ai_agents_api.validate_orchestration_config(
+      '{"pattern_type":"handoff","initial_agent_code":"TRIAGE","handoff_agents":['
+        || '{"agent_code":"TRIAGE","description":"triage","can_transfer_to":["PRODUCT"]},'
+        || '{"agent_code":"PRODUCT","description":"product support","can_transfer_to":["TECH_A","TRIAGE"]},'
+        || '{"agent_code":"TECH_A","description":"technician","can_transfer_to":["TRIAGE"]}'
+        || '],"max_handoffs":5}'
+    );
+
+    ut.expect(l_result.is_valid).to_be_true();
+    ut.expect(l_result.error_reason).to_be_null();
+  end orch_handoff_graph_valid;
+
+
   procedure create_handoff_bad_target
   as
     l_id number;

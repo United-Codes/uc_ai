@@ -170,12 +170,70 @@ Only greetings and smalltalk you answer yourself, briefly and politely.',
     l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
       p_code                   => 'TEST_AGENT_CS_PRODUCT',
       p_description            => 'Product details specialist for handoff testing',
-      p_system_prompt_template => 'You are the product specialist of an online shop. Use the product details tool to look up product facts and answer the customer''s question concisely with the exact numbers from the catalog.',
+      p_system_prompt_template => 'You are the product specialist of an online shop. Use the product details tool to look up product facts and answer the customer''s question concisely with the exact numbers from the catalog.
+If transfer tools are available and the customer has a technical problem or how-to question about a specific product, you MUST transfer to the matching product technician instead of answering yourself. Transfer at most once - never transfer back to triage for product-related questions.',
       p_user_prompt_template   => 'Customer question: {prompt}
 Triage notes: {handoff_context}',
       p_provider               => gc_main_provider,
       p_model                  => gc_better_model,
       p_model_config_json      => '{"g_enable_tools": true, "g_tool_tags": ["' || gc_product_tool_tag || '"], "g_max_tool_calls": 3}',
+      p_status                 => 'active'
+    );
+
+    -- Product technicians (multi-level handoff targets): each knows one fact
+    -- no other agent knows, so tests can prove the routing path
+    delete from uc_ai_prompt_profiles
+     where code = 'TEST_AGENT_CS_TECH_A';
+
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code                   => 'TEST_AGENT_CS_TECH_A',
+      p_description            => 'Aurora Desk Lamp technician for handoff testing',
+      p_system_prompt_template => 'You are the technician for the Aurora Desk Lamp. Technical knowledge:
+- Reset: hold the power button for 5 seconds until the light blinks twice
+- Flickering: firmly reseat the shade connector
+Questions about Aurora Desk Lamp technical issues are YOURS: answer them directly and concisely based only on this knowledge - never transfer them.
+Only use a transfer tool if the question is clearly not about the Aurora Desk Lamp.',
+      p_user_prompt_template   => 'Customer question: {prompt}
+Handoff notes: {handoff_context}',
+      p_provider               => gc_main_provider,
+      p_model                  => gc_main_model,
+      p_status                 => 'active'
+    );
+
+    delete from uc_ai_prompt_profiles
+     where code = 'TEST_AGENT_CS_TECH_B';
+
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code                   => 'TEST_AGENT_CS_TECH_B',
+      p_description            => 'GLX-7000 Headset technician for handoff testing',
+      p_system_prompt_template => 'You are the technician for the GLX-7000 Headset. Technical knowledge:
+- Pairing problems: double-tap the left earcup to enter pairing mode
+- Audio dropouts: update to firmware 4.2 via the companion app
+Questions about GLX-7000 technical issues are YOURS: answer them directly and concisely based only on this knowledge - never transfer them.
+Only use a transfer tool if the question is clearly not about the GLX-7000 Headset.',
+      p_user_prompt_template   => 'Customer question: {prompt}
+Handoff notes: {handoff_context}',
+      p_provider               => gc_main_provider,
+      p_model                  => gc_main_model,
+      p_status                 => 'active'
+    );
+
+    -- Return policy specialist (below the shipping specialist)
+    delete from uc_ai_prompt_profiles
+     where code = 'TEST_AGENT_CS_RETURNS';
+
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code                   => 'TEST_AGENT_CS_RETURNS',
+      p_description            => 'Return policy specialist for handoff testing',
+      p_system_prompt_template => 'You are the return policy specialist of an online shop. Policy:
+- Returns accepted within a 30-day window after delivery
+- Return label fee: $2.50 (waived for premium members)
+Questions about returns and refunds are YOURS: answer them directly and concisely with the exact numbers from this policy - never transfer them.
+Only use a transfer tool if the question is clearly not about returns.',
+      p_user_prompt_template   => 'Customer question: {prompt}
+Handoff notes: {handoff_context}',
+      p_provider               => gc_main_provider,
+      p_model                  => gc_main_model,
       p_status                 => 'active'
     );
 
@@ -191,7 +249,8 @@ Triage notes: {handoff_context}',
 - Express shipping: 1 business day, $19.99
 - Orders over $100 get free standard shipping
 - We ship to the US and the EU only
-Answer the customer''s question concisely with the exact numbers from these rules.',
+Answer the customer''s question concisely with the exact numbers from these rules.
+If transfer tools are available and the question is about returns, refunds, or the return policy, you MUST transfer to the return policy specialist instead of answering yourself.',
       p_user_prompt_template   => 'Customer question: {prompt}
 Triage notes: {handoff_context}',
       p_provider               => gc_main_provider,
