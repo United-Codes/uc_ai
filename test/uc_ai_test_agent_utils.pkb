@@ -885,11 +885,12 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
   end validate_execution_context;
 
   procedure validate_session_persistence(
-    p_session_id       in varchar2,
-    p_root_agent_code  in varchar2,
-    p_final_agent_code in varchar2,
-    p_expected_turns   in number,
-    p_test_name        in varchar2
+    p_session_id         in varchar2,
+    p_root_agent_code    in varchar2,
+    p_final_agent_code   in varchar2,
+    p_expected_turns     in number,
+    p_test_name          in varchar2,
+    p_min_assistant_rows in number default 1
   )
   as
     l_root_agent_id  uc_ai_agents.id%type;
@@ -1093,7 +1094,37 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
     select count(*) into l_count
       from uc_ai_agent_messages
      where session_id = p_session_id and role = 'assistant';
-    ut.expect(l_count, p_test_name || ': at least one assistant message').to_be_greater_than(0);
+    ut.expect(l_count, p_test_name || ': assistant messages recorded').to_be_greater_or_equal(p_min_assistant_rows);
+
+    -- Attribution: agent-produced rows (assistant/tool_call/tool_result/
+    -- reasoning) always name a producing agent; caller input (user/system)
+    -- never does.
+    select count(*) into l_count
+      from uc_ai_agent_messages
+     where session_id = p_session_id
+       and role in ('assistant', 'tool_call', 'tool_result', 'reasoning')
+       and agent_code is null;
+    ut.expect(l_count, p_test_name || ': agent-produced messages carry an agent_code').to_equal(0);
+
+    select count(*) into l_count
+      from uc_ai_agent_messages
+     where session_id = p_session_id
+       and role in ('user', 'system')
+       and agent_code is not null;
+    ut.expect(l_count, p_test_name || ': caller input messages have no agent_code').to_equal(0);
+
+    -- Every attributed agent_code belongs to an agent that ran in this session.
+    select count(*) into l_count
+      from uc_ai_agent_messages m
+     where m.session_id = p_session_id
+       and m.agent_code is not null
+       and not exists (
+             select 1
+               from uc_ai_agent_executions e
+               join uc_ai_agents a on a.id = e.agent_id
+              where e.session_id = p_session_id
+                and a.code = m.agent_code);
+    ut.expect(l_count, p_test_name || ': every agent_code matches an execution agent in the session').to_equal(0);
 
     -- tool_call rows are well formed: a tool name is always recorded.
     select count(*) into l_count

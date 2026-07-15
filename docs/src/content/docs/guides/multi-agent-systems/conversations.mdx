@@ -317,6 +317,27 @@ END;
 
 ---
 
+## Message log at a glance
+
+A conversation turn is persisted to [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) as a **full transcript**: the opening input as a `user` row, then one `assistant` row per participant turn, each attributed to the agent that produced it via `agent_code`. In AI-driven mode the moderator's closing summary is the final row. There are no tool rows — a conversation is discussion, not tool use.
+
+```sql
+SELECT seq, role, agent_code, SUBSTR(content, 1, 60) AS content
+  FROM uc_ai_agent_messages
+ WHERE session_id = :session_id
+ ORDER BY seq;
+```
+
+| seq | role        | agent_code           | content                                          |
+| --- | ----------- | -------------------- | ------------------------------------------------ |
+| 1   | `user`      | *(null)*             | `{"prompt":"Plan a birthday party for a 12 ...` |
+| 2   | `assistant` | `brainstormer_agent` | `Idea 1: Pirate Football Treasure Hunt - ...`   |
+| 3   | `assistant` | `critic_agent`       | `Critique: the treasure hunt is risky because...` |
+| 4   | `assistant` | `synthesizer_agent`  | `Combined Plan: 1. Pirate Football Scavenger...` |
+| 5   | `assistant` | `moderator_agent`    | `Final Party Plan: ...` *(AI-driven summary)*    |
+
+This makes the whole debate queryable — filter by `agent_code` to isolate one participant's contributions, or read in `seq` order to replay the discussion.
+
 ## Config reference
 
 | Field                             | Type   | Description                                                |

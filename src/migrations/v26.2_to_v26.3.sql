@@ -165,6 +165,7 @@ create table uc_ai_agent_messages (
   seq                    number not null,
   role                   varchar2(50 char) not null,
   content                clob,
+  agent_code             varchar2(255 char),
   tool_name              varchar2(255 char),
   tool_input             clob,
   tool_output            clob,
@@ -186,6 +187,7 @@ create index uc_ai_agent_msg_session_idx on uc_ai_agent_messages(session_id, seq
 create index uc_ai_agent_msg_exec_idx on uc_ai_agent_messages(execution_id);
 
 comment on table uc_ai_agent_messages is 'Normalized, untrimmed per-message conversation log (one row per content item)';
+comment on column uc_ai_agent_messages.agent_code is 'Agent that produced this message (sub-agent for wrapper turns; the turn''s own agent otherwise); null for caller user/system input';
 
 
 create or replace trigger uc_ai_agent_sessions_biu

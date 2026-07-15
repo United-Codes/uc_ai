@@ -431,6 +431,14 @@ A string value that resolves a path from the workflow state:
 | `{$.steps.<output_key>}`         | Full output of a previous step                   |
 | `{$.steps.<output_key>.<field>}` | Specific field from a step's structured output   |
 
+## Message log at a glance
+
+A workflow is a deterministic pipeline rather than a conversation, so the [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript holds a **single `assistant` row** with the final step's output, attributed to the workflow agent via `agent_code`. The per-step detail lives in `uc_ai_agent_executions` instead — each step runs as a child execution under the workflow wrapper, so query that table (by `parent_execution_id`) when you need to inspect intermediate steps.
+
+| seq | role        | agent_code       | content                        |
+| --- | ----------- | ---------------- | ------------------------------ |
+| 1   | `assistant` | `haiku_workflow` | `An improved haiku: ...`       |
+
 ## Monitoring running workflows
 
 Workflows checkpoint their state to `uc_ai_agent_executions.current_state` after every completed step (conversation and handoff agents checkpoint after every turn/handoff). Checkpoints are committed in autonomous transactions, so you can watch a long-running workflow from another session:

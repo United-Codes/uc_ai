@@ -142,6 +142,19 @@ Each row also captures the caller's environment (`created_by`, database user, AP
 
 This is especially useful when profile agents are composed into larger patterns. A workflow with three profile agent steps produces three execution rows under the same session, so you can see exactly which step took the most tokens or failed.
 
+### Message log at a glance
+
+A profile agent calls the model directly, so its turn produces the most granular [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript: the `user` prompt, any `reasoning` / `tool_call` / `tool_result` rows, and the `assistant` answer. Every agent-produced row is attributed to the profile agent via `agent_code`.
+
+| seq | role          | agent_code        | tool_name          | content                      |
+| --- | ------------- | ----------------- | ------------------ | ---------------------------- |
+| 1   | `user`        | *(null)*          |                    | `What's the weather in NYC?` |
+| 2   | `tool_call`   | `weather_agent`   | `get_weather`      |                              |
+| 3   | `tool_result` | `weather_agent`   | `get_weather`      | `{"tempC":18,"sky":"clear"}` |
+| 4   | `assistant`   | `weather_agent`   |                    | `It's 18 C and clear in NYC.` |
+
+On a follow-up turn only that turn's new messages are appended, continuing the session's `seq` — earlier turns keep the rows they were written with.
+
 ## Profile agents as building blocks
 
 Profile agents become powerful when composed into other patterns. Every [workflow step](/products/uc-ai/docs/guides/multi-agent-systems/workflows/), [orchestrator delegate](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/), and [conversation participant](/products/uc-ai/docs/guides/multi-agent-systems/conversations/) is ultimately a profile agent.

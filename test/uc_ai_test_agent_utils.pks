@@ -46,15 +46,18 @@ create or replace package uc_ai_test_agent_utils as
   -- all three telemetry tables (executions + session header + message log).
   -- Only checks deterministic, LLM-independent invariants so it is safe to call
   -- from integration tests that make real model calls.
-  --   p_root_agent_code  code of the agent that opened the session (wrapper)
-  --   p_final_agent_code code of the agent expected to have answered
-  --   p_expected_turns   number of top-level turns (conversation rounds)
+  --   p_root_agent_code    code of the agent that opened the session (wrapper)
+  --   p_final_agent_code   code of the agent expected to have answered
+  --   p_expected_turns     number of top-level turns (conversation rounds)
+  --   p_min_assistant_rows minimum assistant rows expected in the message log
+  --                        (>1 for multi-participant patterns like conversation)
   procedure validate_session_persistence(
-    p_session_id       in varchar2,
-    p_root_agent_code  in varchar2,
-    p_final_agent_code in varchar2,
-    p_expected_turns   in number,
-    p_test_name        in varchar2
+    p_session_id         in varchar2,
+    p_root_agent_code    in varchar2,
+    p_final_agent_code   in varchar2,
+    p_expected_turns     in number,
+    p_test_name          in varchar2,
+    p_min_assistant_rows in number default 1
   );
 
 end uc_ai_test_agent_utils;

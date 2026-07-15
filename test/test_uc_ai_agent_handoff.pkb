@@ -261,6 +261,16 @@ create or replace package body test_uc_ai_agent_handoff as
        and tool_name = 'TEST_PRODUCT_TOOL';
     ut.expect(l_count, 'Product lookup tool call persisted in message log').to_be_greater_than(0);
 
+    -- Attribution: the specialist's hop (its answer + its tool activity) is
+    -- attributed to the product agent via agent_code, not the wrapper.
+    select count(*)
+      into l_count
+      from uc_ai_agent_messages
+     where session_id = l_session_id
+       and role = 'assistant'
+       and agent_code = gc_product_code;
+    ut.expect(l_count, 'Specialist hop attributed to the product agent').to_be_greater_than(0);
+
     -- The product child execution is a distinct row that recorded its own LLM
     -- spend (proving it, not the wrapper, made the model call that used the
     -- catalog tool). NB: tool_calls_count / iteration_count are intentionally

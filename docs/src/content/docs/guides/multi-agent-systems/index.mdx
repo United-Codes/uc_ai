@@ -332,6 +332,57 @@ END;
 /
 ```
 
+### Conversation message log
+
+While `uc_ai_agent_executions` tracks *who ran*, the `uc_ai_agent_messages`
+table is the **normalized transcript of what was said** — one row per message
+content item, ordered by `seq` within the session. It is the table you query to
+reconstruct a chat, build an audit trail, or render a conversation UI.
+
+It is written **per turn as the delta of new messages**, so history-window
+trimming (which only governs what is sent to the model) never erodes the
+persisted record. Only the **top-level turn** persists its messages; nested
+sub-agent runs (workflow steps, orchestrator delegates, handoff hops,
+conversation participants) are captured through their parent turn's result.
+
+| Column                                            | Content                                                                                                      |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `seq`                                             | Ordering within the session (running `max(seq)+1`); globally contiguous across turns                         |
+| `role`                                            | `user`, `assistant`, `tool_call`, `tool_result`, `reasoning`, or `system`                                    |
+| `agent_code`                                      | The agent that **produced** this message (see below); `null` for the caller's `user`/`system` input          |
+| `content`                                         | Message text (for `text`/`reasoning`, and for plain-string messages)                                         |
+| `tool_name`, `tool_input`, `tool_output`, `tool_status` | Populated for `tool_call` / `tool_result` rows                                                          |
+
+**Attribution (`agent_code`).** For multi-agent patterns the whole turn is
+persisted against the top-level wrapper's `execution_id`, so `agent_code` is how
+you tell *which* agent produced a given row:
+
+- **Wrapper patterns** (conversation, handoff): each row names the sub-agent
+  that produced it — the participant that spoke, or the specialist that answered
+  the hop.
+- **Direct patterns** (profile, orchestrator, workflow): rows name the turn's
+  own agent.
+- **Caller input** (`user` / `system`) is never attributed — `agent_code` is
+  `null`.
+
+```sql
+SELECT seq,
+       role,
+       agent_code,
+       tool_name,
+       SUBSTR(content, 1, 80) AS content
+  FROM uc_ai_agent_messages
+ WHERE session_id = :session_id
+ ORDER BY seq;
+```
+
+<Aside type="note" title="Granularity differs per pattern">
+How much detail a turn records depends on the pattern — a granular
+`user → tool_call → tool_result → assistant` trace, a multi-speaker transcript,
+or a single summary row. Each pattern page has a **"Message log at a glance"**
+section showing exactly what it produces.
+</Aside>
+
 ## Best practices
 
 - **Start simple**: Begin with a profile agent, then compose into workflows or conversations as the task grows

@@ -1269,15 +1269,30 @@ end;!';
      * exactly one user message - the original one - so persist_turn_messages
      * (which persists from the LAST user message onward) records the whole
      * chain including the transfer tool calls.
+     *
+     * Each appended message is stamped with the hop's agent code so the
+     * message log attributes it to the specialist that produced it (the
+     * transfer tool_call names the target; agentCode names the producer).
+     * persist_turn_messages nulls attribution for user/system rows regardless.
      */
     procedure append_hop_messages(
       p_hop_result in json_object_t,
-      p_first_hop  in boolean
+      p_first_hop  in boolean,
+      p_agent_code in varchar2
     )
     as
       l_messages  json_array_t;
       l_msg       json_object_t;
       l_seen_user boolean := false;
+
+      procedure append_stamped(p_element in json_element_t)
+      as
+        l_m json_object_t;
+      begin
+        l_m := treat(p_element as json_object_t);
+        l_m.put('agentCode', p_agent_code);
+        l_combined_messages.append(l_m);
+      end append_stamped;
     begin
       if not p_hop_result.has('messages') then
         return;
@@ -1287,9 +1302,9 @@ end;!';
       <<hop_messages>>
       for i in 0 .. l_messages.get_size - 1 loop
         if p_first_hop then
-          l_combined_messages.append(l_messages.get(i));
+          append_stamped(l_messages.get(i));
         elsif l_seen_user then
-          l_combined_messages.append(l_messages.get(i));
+          append_stamped(l_messages.get(i));
         else
           l_msg := treat(l_messages.get(i) as json_object_t);
           if l_msg.has('role') and l_msg.get_string('role') = 'user' then
@@ -1409,7 +1424,7 @@ end;!';
 
       cleanup_agent_tools(l_tool_ids);
 
-      append_hop_messages(l_result, p_first_hop => l_first_hop);
+      append_hop_messages(l_result, p_first_hop => l_first_hop, p_agent_code => l_current_agent);
       l_first_hop := false;
 
       -- Add to conversation trail
@@ -1538,6 +1553,55 @@ end;!';
     l_agent           uc_ai_agents%rowtype;
     l_participant_info clob;
 
+    /*
+     * Turns the internal conversation log (each entry: agent, role, message,
+     * turn) into a standard messages array so persist_turn_messages records
+     * the full debate instead of collapsing it to one summary row. The opening
+     * 'system' entry (the caller's input) becomes a 'user' message with no
+     * producing agent; every participant turn becomes an 'assistant' message
+     * stamped with its 'agentCode' for attribution.
+     */
+    function conversation_to_messages(
+      p_conversation in json_array_t
+    ) return json_array_t
+    as
+      l_messages json_array_t := json_array_t();
+      l_entry    json_object_t;
+      l_msg_val  json_element_t;
+      l_out      json_object_t;
+      l_agent_cd varchar2(255 char);
+      l_content  clob;
+    begin
+      <<conv_entries>>
+      for i in 0 .. p_conversation.get_size - 1 loop
+        l_entry := treat(p_conversation.get(i) as json_object_t);
+        l_agent_cd := l_entry.get_string('agent');
+
+        -- Message payload may be a scalar (participant text) or the input
+        -- object (opening 'system' entry); serialize objects losslessly.
+        l_msg_val := l_entry.get('message');
+        if l_msg_val is not null and l_msg_val.is_string then
+          l_content := l_entry.get_clob('message');
+        elsif l_msg_val is not null then
+          l_content := l_msg_val.to_clob;
+        else
+          l_content := null;
+        end if;
+
+        l_out := json_object_t();
+        if l_agent_cd = 'system' then
+          l_out.put('role', 'user');
+        else
+          l_out.put('role', 'assistant');
+          l_out.put('agentCode', l_agent_cd);
+        end if;
+        l_out.put('content', l_content);
+        l_messages.append(l_out);
+      end loop conv_entries;
+
+      return l_messages;
+    end conversation_to_messages;
+
   begin
     uc_ai_logger.log('Executing conversation agent: ' || p_agent.code, l_scope);
     
@@ -1644,7 +1708,10 @@ end;!';
         l_return.put('turns', l_turn_count);
         l_return.put('completed', true);
         l_return.put('final_message', l_result.get_string('final_message'));
-        
+        -- Full transcript for the message log; the terminal participant turn is
+        -- already the final_message, so no extra summary row is appended.
+        l_return.put('messages', conversation_to_messages(l_conversation));
+
       when c_conversation_ai_driven then
         -- AI-driven (moderator) conversation
         l_moderator := l_config.get_object('moderator_agent');
@@ -1802,6 +1869,20 @@ end;!';
         l_return.put('turns', l_turn_count);
         l_return.put('completed', true);
         l_return.put('final_message', l_mod_result.get_string('final_message'));
+
+        -- Full transcript for the message log: the debate plus the moderator's
+        -- closing summary (produced after the loop, so not in l_conversation),
+        -- attributed to the moderator agent.
+        declare
+          l_msgs    json_array_t := conversation_to_messages(l_conversation);
+          l_summary json_object_t := json_object_t();
+        begin
+          l_summary.put('role', 'assistant');
+          l_summary.put('agentCode', l_moderator_code);
+          l_summary.put('content', l_mod_result.get_string('final_message'));
+          l_msgs.append(l_summary);
+          l_return.put('messages', l_msgs);
+        end;
       else
         uc_ai_error.raise_error(
           p_error_code => uc_ai_error.c_err_unknown_conv_mode

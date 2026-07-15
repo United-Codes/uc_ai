@@ -307,6 +307,17 @@ In addition to the standard result fields (`final_message`, `execution_id`, `sta
 
 Each hop runs as a child execution under the handoff wrapper, so the full chain is visible in `uc_ai_agent_executions` (via `parent_execution_id`) and the transfer tool calls appear in the `uc_ai_agent_messages` log (`role = 'tool_call'`, `tool_name` like `transfer_to_%`). Token usage is recorded on the hop executions and rolled up on the session header - the wrapper itself reports zero own tokens.
 
+### Message log at a glance
+
+The [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript records the whole chain — the user question, each transfer tool call, and the specialist's answer. The `transfer_to_*` `tool_name` names the transfer *target*; `agent_code` names the *producer* of each row, so you can see which specialist actually spoke.
+
+| seq | role          | agent_code             | tool_name                     | content                          |
+| --- | ------------- | ---------------------- | ----------------------------- | -------------------------------- |
+| 1   | `user`        | *(null)*               |                               | `Where is my order #12345?`      |
+| 2   | `tool_call`   | `triage_agent`         | `transfer_to_shipping_agent`  |                                  |
+| 3   | `tool_result` | `triage_agent`         | `transfer_to_shipping_agent`  | `Transferred to shipping_agent`  |
+| 4   | `assistant`   | `shipping_agent`       |                               | `Your order shipped yesterday...` |
+
 ## Tips
 
 - **Descriptions are routing rules**: The `description` in `handoff_agents` becomes the transfer tool's description. Write it like an instruction for when to transfer.

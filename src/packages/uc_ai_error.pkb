@@ -65,7 +65,12 @@ create or replace package body uc_ai_error as
   is
     l_msg varchar2(2048 char);
   begin
-    l_msg := apex_string.format(
+    -- apex_string.format's p_max_length truncates individual substitution
+    -- values, but the assembled message (template + separators) can still
+    -- exceed it by a few characters. Hard-cap with substr so the assignment
+    -- into l_msg cannot overflow the buffer (ORA-06502) — otherwise a long
+    -- provider error body building this message masks the real HTTP failure.
+    l_msg := substr(apex_string.format(
       p_message    => coalesce(p_message, get_default_message(p_error_code))
     , p0           => p0
     , p1           => p1
@@ -78,7 +83,7 @@ create or replace package body uc_ai_error as
     , p8           => p8
     , p9           => p9
     , p_max_length => 2048
-    );
+    ), 1, 2048);
 
     if p_log then
       uc_ai_logger.log_error(

@@ -370,6 +370,12 @@ create table uc_ai_agent_messages (
   role                   varchar2(50 char) not null,
   content                clob,
 
+  -- Agent that produced this message: the sub-agent for wrapper turns
+  -- (conversation participant, handoff specialist), the turn's own agent
+  -- otherwise. Null for the caller's user/system input. No FK - kept as a
+  -- plain string (like tool_name) so history survives agent deletion.
+  agent_code             varchar2(255 char),
+
   tool_name              varchar2(255 char),
   tool_input             clob,
   tool_output            clob,
@@ -396,3 +402,4 @@ create index uc_ai_agent_msg_exec_idx on uc_ai_agent_messages(execution_id);
 
 comment on table uc_ai_agent_messages is 'Normalized, untrimmed per-message conversation log (one row per content item)';
 comment on column uc_ai_agent_messages.seq is 'Ordering within the session; assigned as running max(seq)+1 per persisted message';
+comment on column uc_ai_agent_messages.agent_code is 'Agent that produced this message (sub-agent for wrapper turns; the turn''s own agent otherwise); null for caller user/system input';

@@ -633,10 +633,16 @@ create or replace package body uc_ai_agents_api as
     l_type         varchar2(50 char);
     l_start_idx    pls_integer := 0;
     l_seq          number;
+    l_msg_agent    uc_ai_agents.code%type;
+    -- Attribution fallback: the executing turn's own agent. Wrapper patterns
+    -- (conversation, handoff) override this per message via an 'agentCode'
+    -- field so each row attributes to the sub-agent that produced it.
+    l_exec_agent   uc_ai_agents.code%type;
 
     procedure ins(
       p_role        in varchar2,
       p_content     in clob     default null,
+      p_agent_code  in varchar2 default null,
       p_tool_name   in varchar2 default null,
       p_tool_input  in clob     default null,
       p_tool_output in clob     default null,
@@ -646,10 +652,10 @@ create or replace package body uc_ai_agents_api as
     begin
       l_seq := l_seq + 1;
       insert into uc_ai_agent_messages (
-        session_id, execution_id, seq, role, content,
+        session_id, execution_id, seq, role, content, agent_code,
         tool_name, tool_input, tool_output, tool_status
       ) values (
-        p_session_id, p_exec_id, l_seq, p_role, p_content,
+        p_session_id, p_exec_id, l_seq, p_role, p_content, p_agent_code,
         p_tool_name, p_tool_input, p_tool_output, p_tool_status
       );
     end ins;
@@ -664,11 +670,25 @@ create or replace package body uc_ai_agents_api as
       from uc_ai_agent_messages
      where session_id = p_session_id;
 
+    -- Attribution fallback for messages that carry no explicit 'agentCode'
+    -- (direct patterns: profile/orchestrator run under their own agent).
+    begin
+      select a.code
+        into l_exec_agent
+        from uc_ai_agent_executions e
+        join uc_ai_agents a on a.id = e.agent_id
+       where e.id = p_exec_id;
+    exception
+      when no_data_found then
+        l_exec_agent := null;
+    end;
+
     -- No structured message array (e.g. some workflow agents): store the
     -- final_message as a single assistant row so the turn is not lost.
     if not p_result.has('messages') then
       if p_result.has('final_message') then
-        ins(p_role => 'assistant', p_content => p_result.get_clob('final_message'));
+        ins(p_role => 'assistant', p_content => p_result.get_clob('final_message'),
+            p_agent_code => l_exec_agent);
         commit;
       end if;
       return;
@@ -694,11 +714,21 @@ create or replace package body uc_ai_agents_api as
         continue;
       end if;
 
+      -- Attribution: caller input (user/system) has no producing agent; every
+      -- other role attributes to the message's own 'agentCode' when a wrapper
+      -- stamped one, else the executing turn's agent.
+      if l_role in ('user', 'system') then
+        l_msg_agent := null;
+      else
+        l_msg_agent := coalesce(l_msg.get_string('agentCode'), l_exec_agent);
+      end if;
+
       l_content := l_msg.get('content');
 
       -- Content may be a plain string or an array of typed content items.
       if not l_content.is_array then
-        ins(p_role => l_role, p_content => l_msg.get_clob('content'));
+        ins(p_role => l_role, p_content => l_msg.get_clob('content'),
+            p_agent_code => l_msg_agent);
         continue;
       end if;
 
@@ -710,18 +740,22 @@ create or replace package body uc_ai_agents_api as
 
         case l_type
           when 'text' then
-            ins(p_role => l_role, p_content => l_item.get_clob('text'));
+            ins(p_role => l_role, p_content => l_item.get_clob('text'),
+                p_agent_code => l_msg_agent);
           when 'reasoning' then
-            ins(p_role => 'reasoning', p_content => l_item.get_clob('text'));
+            ins(p_role => 'reasoning', p_content => l_item.get_clob('text'),
+                p_agent_code => l_msg_agent);
           when 'tool_call' then
             ins(
               p_role       => 'tool_call',
+              p_agent_code => l_msg_agent,
               p_tool_name  => l_item.get_string('toolName'),
               p_tool_input => l_item.get_clob('args')
             );
           when 'tool_result' then
             ins(
               p_role        => 'tool_result',
+              p_agent_code  => l_msg_agent,
               p_tool_name   => l_item.get_string('toolName'),
               p_tool_output => l_item.get_clob('result'),
               p_tool_status => 'success'

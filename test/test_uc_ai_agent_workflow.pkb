@@ -25,7 +25,8 @@ create or replace package body test_uc_ai_agent_workflow as
    *   - session token totals equal the SUM of every execution's own tokens
    * The wrapper result carries only a final_message (no structured messages
    * array), so the message log holds the final step's output as an assistant
-   * row - or nothing at all when every step was skipped.
+   * row - attributed (via agent_code) to the workflow agent - or nothing at
+   * all when every step was skipped.
    *   p_expect_children  false for the all-steps-skipped case (no child runs,
    *                      no LLM spend, empty message log)
    */
@@ -53,6 +54,7 @@ create or replace package body test_uc_ai_agent_workflow as
     l_exec_out      number;
     l_msg_rows      number;
     l_hdr_msg       number;
+    l_bad_attr      number;
     l_min_seq       number;
     l_max_seq       number;
     l_uniq_seq      number;
@@ -133,6 +135,19 @@ create or replace package body test_uc_ai_agent_workflow as
       ut.expect(l_uniq_seq, p_test_name || ': seq values are unique').to_equal(l_msg_rows);
       ut.expect(l_min_seq, p_test_name || ': seq starts at 1').to_equal(1);
       ut.expect(l_max_seq, p_test_name || ': seq ends at message count').to_equal(l_msg_rows);
+
+      -- The persisted assistant row is attributed to a session agent.
+      select count(*) into l_bad_attr
+        from uc_ai_agent_messages m
+       where m.session_id = p_session_id
+         and (m.agent_code is null
+              or not exists (
+                    select 1
+                      from uc_ai_agent_executions e
+                      join uc_ai_agents a on a.id = e.agent_id
+                     where e.session_id = p_session_id
+                       and a.code = m.agent_code));
+      ut.expect(l_bad_attr, p_test_name || ': workflow message attributed to a session agent').to_equal(0);
     else
       -- Every step was skipped: no child runs, no LLM spend, empty message log.
       ut.expect(l_child_count, p_test_name || ': no step ran, so no child executions').to_equal(0);

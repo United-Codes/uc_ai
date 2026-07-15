@@ -16,8 +16,9 @@ create or replace package body test_uc_ai_agent_conversation as
    *   - the wrapper itself spends no tokens (no direct generate_text call)
    *   - participants run as nested children, sharing the session, no turn_index
    *   - the session token totals equal the SUM of every execution's own tokens
-   * The wrapper result carries only a final_message (no structured messages
-   * array), so the message log holds the final summary as an assistant row.
+   * The wrapper now emits a full transcript, so the message log holds the
+   * opening input as a 'user' row (no agent_code) plus one 'assistant' row per
+   * participant turn, each attributed to its producing agent via agent_code.
    */
   procedure validate_conversation_telemetry(
     p_session_id in varchar2,
@@ -43,6 +44,10 @@ create or replace package body test_uc_ai_agent_conversation as
     l_msg_rows      number;
     l_hdr_msg       number;
     l_assistant     number;
+    l_user_rows     number;
+    l_tool_rows     number;
+    l_bad_attr      number;
+    l_unmatched     number;
     l_min_seq       number;
     l_max_seq       number;
     l_uniq_seq      number;
@@ -115,19 +120,47 @@ create or replace package body test_uc_ai_agent_conversation as
     ut.expect(l_sess_in, p_test_name || ': conversation spent input tokens').to_be_greater_than(0);
 
     -- Message log: header count matches actual rows, seq is contiguous, and the
-    -- final summary is persisted as an assistant row.
-    select count(*), count(case when role = 'assistant' then 1 end),
+    -- full debate is recorded - the opening input as a 'user' row plus one
+    -- 'assistant' row per participant turn (never collapsed to a single row).
+    select count(*),
+           count(case when role = 'assistant' then 1 end),
+           count(case when role = 'user' then 1 end),
+           count(case when role in ('tool_call', 'tool_result') then 1 end),
            min(seq), max(seq), count(distinct seq)
-      into l_msg_rows, l_assistant, l_min_seq, l_max_seq, l_uniq_seq
+      into l_msg_rows, l_assistant, l_user_rows, l_tool_rows,
+           l_min_seq, l_max_seq, l_uniq_seq
       from uc_ai_agent_messages where session_id = p_session_id;
     select message_count into l_hdr_msg
       from uc_ai_agent_sessions where session_id = p_session_id;
     ut.expect(l_hdr_msg, p_test_name || ': header message_count matches persisted rows').to_equal(l_msg_rows);
-    ut.expect(l_msg_rows, p_test_name || ': conversation persisted messages').to_be_greater_than(0);
-    ut.expect(l_assistant, p_test_name || ': final conversation message persisted as assistant row').to_be_greater_than(0);
+    ut.expect(l_user_rows, p_test_name || ': opening input persisted as a user row').to_be_greater_than(0);
+    ut.expect(l_assistant, p_test_name || ': each participant turn persisted as an assistant row').to_be_greater_than(0);
+    ut.expect(l_msg_rows, p_test_name || ': transcript is not collapsed to one row').to_be_greater_than(1);
+    -- Conversation is discussion, not tool use: no tool rows expected.
+    ut.expect(l_tool_rows, p_test_name || ': no tool rows in a conversation transcript').to_equal(0);
     ut.expect(l_uniq_seq, p_test_name || ': seq values are unique').to_equal(l_msg_rows);
     ut.expect(l_min_seq, p_test_name || ': seq starts at 1').to_equal(1);
     ut.expect(l_max_seq, p_test_name || ': seq ends at message count').to_equal(l_msg_rows);
+
+    -- Attribution: assistant rows name their producing agent; the user row does
+    -- not; and every agent_code belongs to an agent that ran in the session.
+    select count(case when role = 'assistant' and agent_code is null then 1 end)
+         + count(case when role = 'user' and agent_code is not null then 1 end)
+      into l_bad_attr
+      from uc_ai_agent_messages where session_id = p_session_id;
+    ut.expect(l_bad_attr, p_test_name || ': assistant rows attributed, user row not').to_equal(0);
+
+    select count(*) into l_unmatched
+      from uc_ai_agent_messages m
+     where m.session_id = p_session_id
+       and m.agent_code is not null
+       and not exists (
+             select 1
+               from uc_ai_agent_executions e
+               join uc_ai_agents a on a.id = e.agent_id
+              where e.session_id = p_session_id
+                and a.code = m.agent_code);
+    ut.expect(l_unmatched, p_test_name || ': every agent_code matches an execution agent in the session').to_equal(0);
   end validate_conversation_telemetry;
 
   procedure setup

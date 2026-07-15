@@ -278,6 +278,26 @@ END;
 
 On each follow-up call, the delegate agents are re-registered as temporary tools so the orchestrator can continue delegating work. The full conversation history — including previous tool calls and their results — is sent to the LLM.
 
+## Message log at a glance
+
+The orchestrator makes the model calls itself and reaches its delegates through **tool calls**, so the [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript records each delegate as a `tool_call` / `tool_result` pair (`tool_name` = the delegate agent) around the orchestrator's own reasoning and final synthesis. Because this is a direct pattern, every agent-produced row is attributed to the orchestrator via `agent_code`; the delegate identity lives on the tool rows' `tool_name`.
+
+```sql
+SELECT seq, role, agent_code, tool_name, SUBSTR(content, 1, 50) AS content
+  FROM uc_ai_agent_messages
+ WHERE session_id = :session_id
+ ORDER BY seq;
+```
+
+| seq | role          | agent_code            | tool_name              | content                        |
+| --- | ------------- | --------------------- | ---------------------- | ------------------------------ |
+| 1   | `user`        | *(null)*              |                        | `Plan my NYC -> SF trip ...`   |
+| 2   | `tool_call`   | `travel_orchestrator` | `calendar_agent`       |                                |
+| 3   | `tool_result` | `travel_orchestrator` | `calendar_agent`       | `Board meeting ends 11:00 AM...` |
+| 4   | `tool_call`   | `travel_orchestrator` | `flight_booking_agent` |                                |
+| 5   | `tool_result` | `travel_orchestrator` | `flight_booking_agent` | `Direct flights: UA 514 ...`   |
+| 6   | `assistant`   | `travel_orchestrator` |                        | `Recommended plan: depart ...` |
+
 ## Tips
 
 - **Give the orchestrator a plan**: In the orchestrator's system prompt, describe the strategy for using delegates. For example: "First check calendar constraints, then search flights, then hotels."
