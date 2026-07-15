@@ -48,5 +48,17 @@ create or replace package test_uc_ai_hook as
   --%test(before_tool_call is optional: a hook without it is skipped, not errored)
   procedure tool_hook_optional_when_absent;
 
+  --%test(augment_system_prompt fires and can modify the rendered prompt)
+  procedure prompt_hook_appends;
+
+  --%test(augment_system_prompt can set a prompt where the profile had none)
+  procedure prompt_hook_on_null_prompt;
+
+  --%test(an error raised by augment_system_prompt is swallowed and leaves the prompt unchanged)
+  procedure prompt_hook_error_swallowed;
+
+  --%test(augment_system_prompt is optional: a hook without it is skipped, not errored)
+  procedure prompt_hook_optional_when_absent;
+
 end test_uc_ai_hook;
 /

@@ -21,9 +21,13 @@ create or replace package body test_uc_ai_hook_stub as
     g_last_tool_code   := null;
     g_last_tool_agent  := null;
     g_last_tool_user   := null;
+    g_prompt_count     := 0;
+    g_last_prompt_in   := null;
     g_before_raise     := false;
     g_after_raise      := false;
     g_tool_raise       := false;
+    g_prompt_raise     := false;
+    g_prompt_append    := null;
   end reset;
 
 
@@ -88,6 +92,26 @@ create or replace package body test_uc_ai_hook_stub as
       raise_application_error(c_tool_veto_code, 'stub tool veto');
     end if;
   end before_tool_call;
+
+
+  procedure augment_system_prompt(
+    pio_system_prompt in out nocopy clob
+  )
+  as
+  begin
+    g_prompt_count   := nvl(g_prompt_count, 0) + 1;
+    g_last_prompt_in := pio_system_prompt;
+
+    if g_prompt_append is not null then
+      pio_system_prompt := pio_system_prompt || g_prompt_append;
+    end if;
+
+    -- raise AFTER mutating so the suite can assert the caller's prompt is
+    -- protected against half-applied changes from a failing hook
+    if g_prompt_raise then
+      raise_application_error(c_prompt_fail_code, 'stub prompt failure');
+    end if;
+  end augment_system_prompt;
 
 end test_uc_ai_hook_stub;
 /

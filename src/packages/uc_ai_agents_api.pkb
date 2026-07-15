@@ -46,10 +46,12 @@ create or replace package body uc_ai_agents_api as
   g_hook_override   varchar2(128 char);          -- explicit override (null = use convention)
   g_hook_pkg        varchar2(128 char);           -- resolved package name (null = no hook)
   g_hook_resolved   boolean := false;             -- whether convention resolution has run this session
-  -- before_tool_call is optional; cache whether the resolved hook implements it
-  -- so we never execute-immediate a missing procedure (which would break every
-  -- tool call for a hook that only implements before/after_execution).
+  -- before_tool_call / augment_system_prompt are optional; cache whether the
+  -- resolved hook implements them so we never execute-immediate a missing
+  -- procedure (which would break every dispatch for a hook that only
+  -- implements before/after_execution).
   g_hook_tool_cb          pls_integer;            -- 1 = has before_tool_call, 0 = not, null = unknown
+  g_hook_prompt_cb        pls_integer;            -- 1 = has augment_system_prompt, 0 = not, null = unknown
 
 
   -- ============================================================================
@@ -85,6 +87,40 @@ create or replace package body uc_ai_agents_api as
 
     return g_hook_pkg;
   end resolve_hook_pkg;
+
+
+  /*
+   * Probes whether the resolved hook package implements an optional procedure
+   * (e.g. BEFORE_TOOL_CALL, AUGMENT_SYSTEM_PROMPT). Splits a schema-qualified
+   * override (SCHEMA.PKG) so the lookup finds cross-schema hooks. Callers cache
+   * the result per session.
+   */
+  function hook_implements(
+    p_pkg       in varchar2,
+    p_procedure in varchar2
+  ) return pls_integer
+  as
+    l_owner varchar2(128 char);
+    l_name  varchar2(128 char);
+    l_cnt   pls_integer;
+  begin
+    if instr(p_pkg, '.') > 0 then
+      l_owner := upper(substr(p_pkg, 1, instr(p_pkg, '.') - 1));
+      l_name  := upper(substr(p_pkg, instr(p_pkg, '.') + 1));
+    else
+      l_owner := sys_context('userenv', 'current_schema');
+      l_name  := upper(p_pkg);
+    end if;
+
+    select count(*)
+      into l_cnt
+      from all_procedures
+     where owner          = l_owner
+       and object_name    = l_name
+       and procedure_name = p_procedure;
+
+    return l_cnt;
+  end hook_implements;
 
 
   /*
@@ -160,9 +196,10 @@ create or replace package body uc_ai_agents_api as
       g_hook_override := sys.dbms_assert.qualified_sql_name(p_package_name);
     end if;
     -- force convention re-resolution on next dispatch
-    g_hook_resolved := false;
-    g_hook_pkg      := null;
-    g_hook_tool_cb  := null;
+    g_hook_resolved  := false;
+    g_hook_pkg       := null;
+    g_hook_tool_cb   := null;
+    g_hook_prompt_cb := null;
   end set_execution_hook;
 
 
@@ -183,31 +220,15 @@ create or replace package body uc_ai_agents_api as
   as
     l_pkg   varchar2(128 char);
     l_stmt  varchar2(500 char);
-    l_owner varchar2(128 char);
-    l_name  varchar2(128 char);
   begin
     l_pkg := resolve_hook_pkg();
     if l_pkg is null then
       return;
     end if;
 
-    -- Probe once whether the resolved hook implements before_tool_call. Split a
-    -- schema-qualified override (SCHEMA.PKG) so the lookup finds cross-schema hooks.
+    -- Probe once whether the resolved hook implements before_tool_call
     if g_hook_tool_cb is null then
-      if instr(l_pkg, '.') > 0 then
-        l_owner := upper(substr(l_pkg, 1, instr(l_pkg, '.') - 1));
-        l_name  := upper(substr(l_pkg, instr(l_pkg, '.') + 1));
-      else
-        l_owner := sys_context('userenv', 'current_schema');
-        l_name  := upper(l_pkg);
-      end if;
-
-      select count(*)
-        into g_hook_tool_cb
-        from all_procedures
-       where owner          = l_owner
-         and object_name    = l_name
-         and procedure_name = 'BEFORE_TOOL_CALL';
+      g_hook_tool_cb := hook_implements(l_pkg, 'BEFORE_TOOL_CALL');
     end if;
 
     if g_hook_tool_cb = 0 then
@@ -218,6 +239,52 @@ create or replace package body uc_ai_agents_api as
     execute immediate l_stmt
       using in p_agent_id, in p_agent_code, in p_tool_code, in p_created_by, in p_session_id, in p_apex_app_id;
   end fire_before_tool_hook;
+
+
+  /*
+   * Fires the optional system-prompt augmentation hook. See the spec. Dispatch
+   * is BEST-EFFORT: any hook error is logged and swallowed and the prompt is
+   * left unchanged — a broken prompt augmenter must never fail a run. The
+   * augment_system_prompt procedure is optional; its presence on the resolved
+   * hook package is probed once and cached (like before_tool_call).
+   */
+  procedure fire_augment_prompt_hook(
+    pio_system_prompt in out nocopy clob
+  )
+  as
+    l_scope  uc_ai_logger.scope := gc_scope_prefix || 'fire_augment_prompt_hook';
+    l_pkg    varchar2(128 char);
+    l_stmt   varchar2(500 char);
+    l_prompt clob;
+  begin
+    l_pkg := resolve_hook_pkg();
+    if l_pkg is null then
+      return;
+    end if;
+
+    -- Probe once whether the resolved hook implements augment_system_prompt
+    if g_hook_prompt_cb is null then
+      g_hook_prompt_cb := hook_implements(l_pkg, 'AUGMENT_SYSTEM_PROMPT');
+    end if;
+
+    if g_hook_prompt_cb = 0 then
+      return;
+    end if;
+
+    -- work on a copy so a hook raising mid-mutation cannot leave the caller's
+    -- prompt half-modified
+    l_prompt := pio_system_prompt;
+    l_stmt := 'begin ' || l_pkg || '.augment_system_prompt(:1); end;';
+    execute immediate l_stmt using in out l_prompt;
+    pio_system_prompt := l_prompt;
+  exception
+    when others then
+      uc_ai_logger.log_error(
+        p_text  => 'augment_system_prompt hook failed - prompt left unchanged'
+      , p_scope => l_scope
+      , p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+      );
+  end fire_augment_prompt_hook;
 
   /*
    * Extracts all agent_code references from a JSON object recursively

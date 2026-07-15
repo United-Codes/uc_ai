@@ -1,0 +1,103 @@
+---
+title: Agent Memory
+description: Give agents persistent memory across conversations — a virtual filesystem of files in Oracle tables, exposed through one provider-independent memory tool.
+sidebar:
+  order: 78
+---
+
+import { Aside, Steps } from "@astrojs/starlight/components";
+
+**Agent memory lets an agent store and retrieve knowledge across conversations.** The agent gets a private virtual filesystem rooted at `/memories` — backed by CLOBs in Oracle tables — and a `memory` tool to `view`, `create`, `str_replace`, `insert`, `delete`, and `rename` files in it. What the agent learns in one session (user preferences, decisions, task progress) is there in the next one.
+
+The tool implements the [Anthropic memory tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool) contract — the command set Claude models are specifically trained on — but ships as a regular UC AI function tool, so it works with **every provider** (OpenAI, Google, OCI, Ollama, …).
+
+<Aside type="note" title="Pro add-on">
+Agent memory is part of the paid UC AI Pro layer. See [about guardrails](/products/uc-ai/docs/guides/guardrails/) for how the Pro layer installs and plugs into core.
+</Aside>
+
+## Quickstart
+
+```sql
+begin
+  uc_ai_memory.enable_for_agent('SUPPORT_AGENT');
+end;
+/
+```
+
+That single call:
+
+<Steps>
+
+1. Creates the agent's row in `uc_ai_memory_config` (scope, size caps).
+
+2. Adds the `memory` tool tag and `g_enable_tools` to the agent's prompt profile `model_config_json`, so the tool reaches the model.
+
+3. From the next fresh session on, the **MEMORY PROTOCOL** block ("always view `/memories` first, record progress as you go, assume interruption") is appended to the agent's system prompt automatically through the [`augment_system_prompt` hook](/products/uc-ai/docs/guides/execution-hooks/#augment_system_prompt-optional).
+
+</Steps>
+
+The agent now checks its memory at the start of a conversation and records what it learns. Files are plain text; directories exist implicitly through paths (like object-store keys).
+
+## Scopes: which agents share which memory
+
+Every memory file lives in a **store** (one store = one virtual filesystem). Which store an agent resolves to is configurable per agent:
+
+| Scope     | One store per…            | Use for                                                    |
+| --------- | ------------------------- | ---------------------------------------------------------- |
+| `agent`   | agent code *(default)*    | knowledge-accumulating agents; all users share the memory  |
+| `user`    | agent + user (created_by) | end-user-facing agents — no information crosses users      |
+| `session` | conversation session      | scratch memory that should not outlive the conversation    |
+| `shared`  | explicitly named store    | several agents collaborating on one knowledge base         |
+| `global`  | whole installation        | one common memory for everything                           |
+
+```sql
+-- per-user memory
+uc_ai_memory.enable_for_agent('SUPPORT_AGENT', p_scope => 'user');
+
+-- two agents sharing one named store
+uc_ai_memory.enable_for_agent('RESEARCH_AGENT', p_scope => 'shared', p_store_code => 'TEAM_KB');
+uc_ai_memory.enable_for_agent('WRITER_AGENT',   p_scope => 'shared', p_store_code => 'TEAM_KB');
+```
+
+Stores are auto-provisioned on first use; resolution happens at tool-call time from the execution context, so the same tool row serves every agent and user with their own filesystem.
+
+## Size caps and housekeeping
+
+`uc_ai_memory_config` caps what an agent can pile up — `max_file_chars` (default 100,000), `max_files` (default 1,000), and an optional `max_store_chars`. When a write would exceed a cap the model receives an instructive error and is nudged to consolidate or delete stale files.
+
+For time-based cleanup, run periodically (e.g. from a scheduler job):
+
+```sql
+begin
+  uc_ai_memory.expire_files(p_days => 180);  -- drop files untouched for 180 days
+  commit;
+end;
+/
+```
+
+Inspect what is stored through the `uc_ai_v_memory_files` view, or manage files directly with `uc_ai_memory.list_files` / `get_file` / `put_file` / `delete_file` / `clear_store_files` (e.g. to seed an agent's memory with reference notes).
+
+## Using memory outside agents
+
+The tool also works with plain `generate_text` calls. Point the session at a named store first:
+
+```sql
+begin
+  uc_ai_memory.set_store('MY_NOTES');     -- session-level store override
+  uc_ai.g_enable_tools := true;
+  uc_ai.g_tool_tags    := apex_t_varchar2('memory');
+  -- ... uc_ai.generate_text(...) — the model can now use the memory tool
+  uc_ai_memory.clear_store;
+end;
+/
+```
+
+Because standalone calls bypass the prompt hook, add the protocol to your system prompt yourself — `uc_ai_memory.get_memory_protocol` returns the recommended block.
+
+## Behavior notes
+
+- **Errors are messages, not exceptions.** Per the Anthropic contract the tool returns instructive strings ("The path … does not exist…") that the model reacts to; a memory problem never aborts a run.
+- **Path safety.** All paths must stay under `/memories`; traversal attempts (`..`, backslashes, URL-encoded variants) are rejected.
+- **Transactions.** Memory writes join the caller's transaction — if a run's work is rolled back, the memory it wrote rolls back with it, keeping memory consistent with the conversation history.
+- **Enabling mid-conversation.** The protocol is injected when a conversation's first turn renders the system prompt. Enabling memory for an agent takes full effect on the next *new* session; ongoing sessions keep their original system prompt (the tool itself works immediately).
+- **Concurrency.** Parallel runs writing the same file serialize on row locks; the last committed write wins.

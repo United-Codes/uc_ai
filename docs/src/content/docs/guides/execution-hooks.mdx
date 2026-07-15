@@ -60,6 +60,14 @@ create or replace package my_ai_hook as
     p_apex_app_id in number      -- APEX application id (null outside APEX)
   );
 
+  -- OPTIONAL. Called after a prompt profile's system prompt has been rendered
+  -- (placeholders substituted), before the model call. Append to or rewrite
+  -- the prompt to inject standing instructions. Best-effort: errors are
+  -- logged and swallowed and the prompt is used unchanged.
+  procedure augment_system_prompt(
+    pio_system_prompt in out nocopy clob  -- rendered system prompt (may be null)
+  );
+
 end my_ai_hook;
 /
 ```
@@ -75,6 +83,12 @@ Runs once the top-level execution has finished, on both the success and failure 
 ### `before_tool_call` (optional)
 
 Runs **before every individual tool call** inside a `generate_text` tool-calling loop, giving you a mid-run enforcement point that `before_execution` (which only fires once, at the start) cannot. Raising here vetoes the tool call and stops the run immediately — use it for per-tool-call rate limits or to block specific tools dynamically. It fires for agent runs and for standalone `generate_text` calls alike; the agent context fields are null in the standalone case, and `p_created_by` falls back to the database session user. The procedure is **optional**: UC AI probes once (cached per session) whether your hook package declares it, so hooks that only implement `before_execution`/`after_execution` are unaffected.
+
+### `augment_system_prompt` (optional)
+
+Runs after `uc_ai_prompt_profiles_api.execute_profile` has rendered a profile's system prompt (placeholders substituted), right before the model call. The hook receives the prompt as an `in out` CLOB and may append to it, rewrite it, or set one where the profile had none — use it to inject standing instructions such as compliance notes or the memory protocol of the Pro [agent-memory feature](/products/uc-ai/docs/guides/agent-memory/). Read `uc_ai.get_exec_context` inside the hook to know which agent is running (fields are null outside an agent run).
+
+It covers agent **first turns** (profile, orchestrator, and workflow-nested agents all go through `execute_profile`); follow-up turns of a conversation reuse the persisted system message from history, so an augmentation made on the first turn travels with the session. Standalone `generate_text` calls with a raw `p_system_prompt` are **not** augmented. Unlike the veto hooks, dispatch is **best-effort**: if the hook raises, the error is logged, its changes are discarded, and the run continues with the unmodified prompt — this hook can never fail a run. Like `before_tool_call`, it is probed once per session and fully optional.
 
 ## Registering a hook
 

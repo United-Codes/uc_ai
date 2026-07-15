@@ -961,7 +961,12 @@ create or replace package body uc_ai_prompt_profiles_api as
     -- Replace placeholders in templates
     l_system_prompt := replace_placeholders(l_profile.system_prompt_template, p_parameters);
     l_user_prompt := replace_placeholders(l_profile.user_prompt_template, p_parameters);
-    
+
+    -- Optional execution-hook augmentation of the rendered system prompt
+    -- (e.g. an extension injecting standing instructions). Best-effort no-op
+    -- when no hook is installed or it does not implement augment_system_prompt.
+    uc_ai_agents_api.fire_augment_prompt_hook(l_system_prompt);
+
     -- Determine final provider and model (overrides take precedence)
     l_provider := coalesce(p_provider_override, l_profile.provider);
     l_model := coalesce(p_model_override, l_profile.model);

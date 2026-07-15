@@ -374,6 +374,23 @@ as
    *   -- generate_text and stops the run. Fires for agent runs and standalone
    *   -- generate_text tool calls alike (context fields null in the latter).
    *
+   *   procedure augment_system_prompt(
+   *     pio_system_prompt in out nocopy clob  -- rendered profile system prompt (may be null)
+   *   );
+   *   -- Called after a prompt profile's system prompt template has been
+   *   -- rendered (placeholders substituted), before the model call. May append
+   *   -- to or rewrite the prompt (e.g. inject standing instructions); it may
+   *   -- also set a prompt where the profile had none. Fires for every
+   *   -- uc_ai_prompt_profiles_api.execute_profile call, which covers agent
+   *   -- first turns (profile/orchestrator/workflow-nested agents); follow-up
+   *   -- turns reuse the persisted system message from the conversation
+   *   -- history, so an augmentation made on the first turn travels with the
+   *   -- session. Standalone generate_text calls with a raw p_system_prompt are
+   *   -- NOT augmented. Read uc_ai.get_exec_context inside the hook to know
+   *   -- which agent is running (fields null outside an agent run). Dispatch is
+   *   -- best-effort: errors are logged and swallowed and the prompt is used
+   *   -- unchanged — this hook cannot veto a run.
+   *
    * Resolution: if no override is set, the hook is auto-resolved by convention
    * to a VALID package named UC_AI_HOOK in the current schema (so simply
    * installing an extension that provides UC_AI_HOOK activates it, with no
@@ -406,6 +423,21 @@ as
   , p_created_by  in varchar2 default null
   , p_session_id  in varchar2 default null
   , p_apex_app_id in number   default null
+  );
+
+  /*
+   * Fires the optional system-prompt augmentation hook (augment_system_prompt)
+   * on the resolved hook package, if that package implements it. Called by
+   * uc_ai_prompt_profiles_api.execute_profile after the profile's system
+   * prompt template has been rendered. Best-effort by design: hook errors are
+   * logged and swallowed and the prompt is left unchanged, so a broken
+   * augmenter can never fail a run. No-ops when no hook is resolved or the
+   * hook package does not implement augment_system_prompt.
+   *
+   * @param pio_system_prompt  the rendered system prompt; the hook may modify it
+   */
+  procedure fire_augment_prompt_hook(
+    pio_system_prompt in out nocopy clob
   );
 
 

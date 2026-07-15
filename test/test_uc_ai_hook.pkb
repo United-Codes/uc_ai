@@ -284,5 +284,70 @@ create or replace package body test_uc_ai_hook as
     ut.expect(test_uc_ai_hook_stub.g_tool_count).to_equal(0);
   end tool_hook_optional_when_absent;
 
+
+  procedure prompt_hook_appends
+  as
+    l_prompt clob := 'You are a helpful assistant.';
+  begin
+    test_uc_ai_hook_stub.g_prompt_append := ' MEMORY PROTOCOL BLOCK';
+    uc_ai_agents_api.set_execution_hook(gc_stub_pkg);
+
+    uc_ai_agents_api.fire_augment_prompt_hook(l_prompt);
+
+    ut.expect(test_uc_ai_hook_stub.g_prompt_count).to_equal(1);
+    -- the stub received the original prompt and its change was applied
+    ut.expect(dbms_lob.substr(test_uc_ai_hook_stub.g_last_prompt_in, 4000, 1))
+      .to_equal('You are a helpful assistant.');
+    ut.expect(dbms_lob.substr(l_prompt, 4000, 1))
+      .to_equal('You are a helpful assistant. MEMORY PROTOCOL BLOCK');
+  end prompt_hook_appends;
+
+
+  procedure prompt_hook_on_null_prompt
+  as
+    l_prompt clob;
+  begin
+    test_uc_ai_hook_stub.g_prompt_append := 'INJECTED PROMPT';
+    uc_ai_agents_api.set_execution_hook(gc_stub_pkg);
+
+    uc_ai_agents_api.fire_augment_prompt_hook(l_prompt);
+
+    ut.expect(test_uc_ai_hook_stub.g_prompt_count).to_equal(1);
+    ut.expect(dbms_lob.substr(l_prompt, 4000, 1)).to_equal('INJECTED PROMPT');
+  end prompt_hook_on_null_prompt;
+
+
+  procedure prompt_hook_error_swallowed
+  as
+    l_prompt clob := 'ORIGINAL PROMPT';
+  begin
+    -- the stub mutates the prompt and THEN raises; the dispatcher must swallow
+    -- the error and leave the caller's prompt untouched
+    test_uc_ai_hook_stub.g_prompt_append := ' HALF-APPLIED CHANGE';
+    test_uc_ai_hook_stub.g_prompt_raise  := true;
+    uc_ai_agents_api.set_execution_hook(gc_stub_pkg);
+
+    uc_ai_agents_api.fire_augment_prompt_hook(l_prompt);
+
+    ut.expect(test_uc_ai_hook_stub.g_prompt_count).to_equal(1);
+    ut.expect(dbms_lob.substr(l_prompt, 4000, 1)).to_equal('ORIGINAL PROMPT');
+  end prompt_hook_error_swallowed;
+
+
+  procedure prompt_hook_optional_when_absent
+  as
+    l_prompt clob := 'ORIGINAL PROMPT';
+  begin
+    -- Point the hook at a valid package that does NOT implement
+    -- augment_system_prompt. The existence probe must skip it silently.
+    uc_ai_agents_api.set_execution_hook('UC_AI');
+    test_uc_ai_hook_stub.g_prompt_append := 'WOULD APPEND';  -- IF the stub were called
+
+    uc_ai_agents_api.fire_augment_prompt_hook(l_prompt);
+
+    ut.expect(test_uc_ai_hook_stub.g_prompt_count).to_equal(0);
+    ut.expect(dbms_lob.substr(l_prompt, 4000, 1)).to_equal('ORIGINAL PROMPT');
+  end prompt_hook_optional_when_absent;
+
 end test_uc_ai_hook;
 /

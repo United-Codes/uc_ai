@@ -14,6 +14,7 @@ create or replace package test_uc_ai_hook_stub as
   c_before_veto_code constant pls_integer := -20099;
   c_after_fail_code   constant pls_integer := -20098;
   c_tool_veto_code    constant pls_integer := -20097;
+  c_prompt_fail_code  constant pls_integer := -20096;
 
   -- recorded call state
   g_before_count      pls_integer;
@@ -38,10 +39,16 @@ create or replace package test_uc_ai_hook_stub as
   g_last_tool_agent   varchar2(255 char);
   g_last_tool_user    varchar2(255 char);
 
+  -- last augment_system_prompt args
+  g_prompt_count      pls_integer;
+  g_last_prompt_in    clob;                       -- prompt as received by the stub
+
   -- behaviour switches
   g_before_raise      boolean;
   g_after_raise       boolean;
   g_tool_raise        boolean;
+  g_prompt_raise      boolean;                    -- raise AFTER mutating (tests copy protection)
+  g_prompt_append     varchar2(4000 char);        -- appended to the prompt when set
 
   -- Reset all recorded state and behaviour switches
   procedure reset;
@@ -69,6 +76,10 @@ create or replace package test_uc_ai_hook_stub as
     p_created_by  in varchar2,
     p_session_id  in varchar2,
     p_apex_app_id in number
+  );
+
+  procedure augment_system_prompt(
+    pio_system_prompt in out nocopy clob
   );
 
 end test_uc_ai_hook_stub;
