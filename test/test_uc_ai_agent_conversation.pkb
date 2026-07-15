@@ -7,6 +7,129 @@ create or replace package body test_uc_ai_agent_conversation as
   gc_agent_a_code      constant varchar2(50 char) := 'TEST_CONV_A';
   gc_agent_b_code      constant varchar2(50 char) := 'TEST_CONV_B';
 
+  /*
+   * Deterministic telemetry checks for a finished conversation run. A
+   * conversation agent is a wrapper that delegates every LLM call to its
+   * participant/moderator sub-agents (all run with parent_execution_id set to
+   * the wrapper), so:
+   *   - exactly one session header + one top-level turn (the wrapper)
+   *   - the wrapper itself spends no tokens (no direct generate_text call)
+   *   - participants run as nested children, sharing the session, no turn_index
+   *   - the session token totals equal the SUM of every execution's own tokens
+   * The wrapper result carries only a final_message (no structured messages
+   * array), so the message log holds the final summary as an assistant row.
+   */
+  procedure validate_conversation_telemetry(
+    p_session_id in varchar2,
+    p_test_name  in varchar2
+  )
+  as
+    l_count         number;
+    l_turn_count    number;
+    l_status_hdr    varchar2(50 char);
+    l_top_index     number;
+    l_top_status    varchar2(50 char);
+    l_top_output    clob;
+    l_wrapper_in    number;
+    l_wrapper_out   number;
+    l_child_count   number;
+    l_bad_child_idx number;
+    l_bad_child_sid number;
+    l_child_in      number;
+    l_sess_in       number;
+    l_sess_out      number;
+    l_exec_in       number;
+    l_exec_out      number;
+    l_msg_rows      number;
+    l_hdr_msg       number;
+    l_assistant     number;
+    l_min_seq       number;
+    l_max_seq       number;
+    l_uniq_seq      number;
+  begin
+    -- One session header, completed, exactly one conversation turn.
+    select count(*) into l_count
+      from uc_ai_agent_sessions where session_id = p_session_id;
+    ut.expect(l_count, p_test_name || ': one session header').to_equal(1);
+
+    select turn_count, status into l_turn_count, l_status_hdr
+      from uc_ai_agent_sessions where session_id = p_session_id;
+    ut.expect(l_turn_count, p_test_name || ': single conversation turn').to_equal(1);
+    ut.expect(l_status_hdr, p_test_name || ': session completed').to_equal(uc_ai_agents_api.c_exec_completed);
+
+    -- Top-level wrapper: turn 1, completed, stored an output_result, and made
+    -- no LLM calls of its own (all spend lives on the children).
+    select turn_index, status, output_result, total_input_tokens, total_output_tokens
+      into l_top_index, l_top_status, l_top_output, l_wrapper_in, l_wrapper_out
+      from uc_ai_agent_executions
+     where session_id = p_session_id and parent_execution_id is null;
+    ut.expect(l_top_index, p_test_name || ': wrapper is turn 1').to_equal(1);
+    ut.expect(l_top_status, p_test_name || ': wrapper completed').to_equal(uc_ai_agents_api.c_exec_completed);
+    ut.expect(l_top_output is not null, p_test_name || ': wrapper stored an output_result').to_be_true();
+    ut.expect(l_wrapper_in, p_test_name || ': wrapper spent no input tokens itself').to_equal(0);
+    ut.expect(l_wrapper_out, p_test_name || ': wrapper spent no output tokens itself').to_equal(0);
+
+    -- Participant/moderator sub-agents: nested children, same session, no
+    -- turn_index, and they actually consumed tokens.
+    select count(*),
+           count(case when turn_index is not null then 1 end),
+           count(case when session_id <> p_session_id then 1 end),
+           nvl(sum(total_input_tokens), 0)
+      into l_child_count, l_bad_child_idx, l_bad_child_sid, l_child_in
+      from uc_ai_agent_executions
+     where parent_execution_id is not null and session_id = p_session_id;
+    ut.expect(l_child_count, p_test_name || ': conversation spawned participant sub-agents').to_be_greater_than(0);
+    ut.expect(l_bad_child_idx, p_test_name || ': nested executions carry no turn_index').to_equal(0);
+    ut.expect(l_bad_child_sid, p_test_name || ': nested executions share the session_id').to_equal(0);
+    ut.expect(l_child_in, p_test_name || ': participants recorded their own input tokens').to_be_greater_than(0);
+
+    -- Every child's parent is the top-level wrapper of this session.
+    select count(*) into l_count
+      from uc_ai_agent_executions c
+     where c.session_id = p_session_id
+       and c.parent_execution_id is not null
+       and not exists (
+             select 1 from uc_ai_agent_executions p
+              where p.id = c.parent_execution_id
+                and p.session_id = c.session_id
+                and p.parent_execution_id is null);
+    ut.expect(l_count, p_test_name || ': every child points at the top-level wrapper').to_equal(0);
+
+    -- Every execution finished cleanly with consistent timestamps.
+    select count(*) into l_count
+      from uc_ai_agent_executions
+     where session_id = p_session_id
+       and (status <> uc_ai_agents_api.c_exec_completed or completed_at is null
+            or started_at is null or completed_at < started_at);
+    ut.expect(l_count, p_test_name || ': all executions completed with valid timestamps').to_equal(0);
+
+    -- Session token totals reconcile with the SUM over executions (no double
+    -- count: each row holds only the tokens of its own LLM calls).
+    select total_input_tokens, total_output_tokens into l_sess_in, l_sess_out
+      from uc_ai_agent_sessions where session_id = p_session_id;
+    select nvl(sum(total_input_tokens), 0), nvl(sum(total_output_tokens), 0)
+      into l_exec_in, l_exec_out
+      from uc_ai_agent_executions where session_id = p_session_id;
+    ut.expect(l_sess_in, p_test_name || ': session input = SUM of execution own tokens').to_equal(l_exec_in);
+    ut.expect(l_sess_out, p_test_name || ': session output = SUM of execution own tokens').to_equal(l_exec_out);
+    ut.expect(l_sess_in, p_test_name || ': conversation spent input tokens').to_be_greater_than(0);
+
+    -- Message log: header count matches actual rows, seq is contiguous, and the
+    -- final summary is persisted as an assistant row.
+    select count(*), count(case when role = 'assistant' then 1 end),
+           min(seq), max(seq), count(distinct seq)
+      into l_msg_rows, l_assistant, l_min_seq, l_max_seq, l_uniq_seq
+      from uc_ai_agent_messages where session_id = p_session_id;
+    select message_count into l_hdr_msg
+      from uc_ai_agent_sessions where session_id = p_session_id;
+    ut.expect(l_hdr_msg, p_test_name || ': header message_count matches persisted rows').to_equal(l_msg_rows);
+    ut.expect(l_msg_rows, p_test_name || ': conversation persisted messages').to_be_greater_than(0);
+    ut.expect(l_assistant, p_test_name || ': final conversation message persisted as assistant row').to_be_greater_than(0);
+    ut.expect(l_uniq_seq, p_test_name || ': seq values are unique').to_equal(l_msg_rows);
+    ut.expect(l_min_seq, p_test_name || ': seq starts at 1').to_equal(1);
+    ut.expect(l_max_seq, p_test_name || ': seq ends at message count').to_equal(l_msg_rows);
+  end validate_conversation_telemetry;
+
   procedure setup
   as
     l_id number;
@@ -173,6 +296,8 @@ create or replace package body test_uc_ai_agent_conversation as
     l_final_msg := l_result.get_clob('final_message');
     sys.dbms_output.put_line('Conversation result: ' || l_final_msg);
     ut.expect(l_final_msg, 'Final message should not be null').to_be_not_null();
+
+    validate_conversation_telemetry(l_session_id, 'Round robin conversation');
   end execute_round_robin_conversation;
 
   procedure execute_ai_driven_conversation
@@ -239,13 +364,14 @@ create or replace package body test_uc_ai_agent_conversation as
     l_final_msg := l_result.get_clob('final_message');
     sys.dbms_output.put_line('AI driven conversation result: ' || l_final_msg);
 
-    -- Verify limited executions
+    -- The moderator + the agents it picks each run as their own execution
+    -- (wrapper + moderator turns + at least one participant).
     select count(*) into l_exec_count
       from uc_ai_agent_executions
      where session_id = l_session_id;
-    
-    -- Should be just 2 (conversation wrapper + one agent)
-    ut.expect(l_exec_count, 'Limited turns should limit executions').to_be_greater_than(3);
+    ut.expect(l_exec_count, 'Moderator-driven run spawns several executions').to_be_greater_than(3);
+
+    validate_conversation_telemetry(l_session_id, 'AI driven conversation');
   end execute_ai_driven_conversation;
 
 end test_uc_ai_agent_conversation;

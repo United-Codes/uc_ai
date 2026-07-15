@@ -884,5 +884,233 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
     ).to_equal(1);
   end validate_execution_context;
 
+  procedure validate_session_persistence(
+    p_session_id       in varchar2,
+    p_root_agent_code  in varchar2,
+    p_final_agent_code in varchar2,
+    p_expected_turns   in number,
+    p_test_name        in varchar2
+  )
+  as
+    l_root_agent_id  uc_ai_agents.id%type;
+    l_final_agent_id uc_ai_agents.id%type;
+    l_count          number;
+
+    -- session header
+    l_root_id        number;
+    l_status         varchar2(50 char);
+    l_turn_count     number;
+    l_message_count  number;
+    l_sess_in        number;
+    l_sess_out       number;
+    l_started        timestamp;
+    l_last_activity  timestamp;
+
+    -- reconciliation
+    l_exec_sum_in    number;
+    l_exec_sum_out   number;
+    l_msg_rows       number;
+
+    -- numeric scratch (min/max/distinct probes)
+    l_min            number;
+    l_max            number;
+  begin
+    select id into l_root_agent_id
+      from uc_ai_agents
+     where code = p_root_agent_code and status = 'active'
+     fetch first 1 row only;
+
+    select id into l_final_agent_id
+      from uc_ai_agents
+     where code = p_final_agent_code and status = 'active'
+     fetch first 1 row only;
+
+    -- ---------------------------------------------------------------- SESSION
+    -- Exactly one session header row for the conversation.
+    select count(*) into l_count
+      from uc_ai_agent_sessions
+     where session_id = p_session_id;
+    ut.expect(l_count, p_test_name || ': one session header row').to_equal(1);
+
+    select root_agent_id, status, turn_count, message_count,
+           total_input_tokens, total_output_tokens, started_at, last_activity_at
+      into l_root_id, l_status, l_turn_count, l_message_count,
+           l_sess_in, l_sess_out, l_started, l_last_activity
+      from uc_ai_agent_sessions
+     where session_id = p_session_id;
+
+    ut.expect(l_root_id, p_test_name || ': session root_agent_id is the entry agent').to_equal(l_root_agent_id);
+    ut.expect(l_status, p_test_name || ': session status completed').to_equal(uc_ai_agents_api.c_exec_completed);
+    ut.expect(l_turn_count, p_test_name || ': session turn_count').to_equal(p_expected_turns);
+    ut.expect(l_started is not null, p_test_name || ': session started_at set').to_be_true();
+    ut.expect(l_last_activity is not null, p_test_name || ': session last_activity_at set').to_be_true();
+    ut.expect(l_last_activity >= l_started, p_test_name || ': last_activity_at >= started_at').to_be_true();
+
+    -- ------------------------------------------------------------- EXECUTIONS
+    -- One top-level execution per turn; each finished cleanly.
+    select count(*) into l_count
+      from uc_ai_agent_executions
+     where session_id = p_session_id
+       and parent_execution_id is null;
+    ut.expect(l_count, p_test_name || ': one top-level execution per turn').to_equal(p_expected_turns);
+
+    -- Top-level executions all carry a turn_index, matching the session count.
+    select count(*) into l_count
+      from uc_ai_agent_executions
+     where session_id = p_session_id
+       and parent_execution_id is null
+       and turn_index is not null;
+    ut.expect(l_count, p_test_name || ': every top-level execution has a turn_index').to_equal(p_expected_turns);
+
+    -- turn_index numbering is contiguous 1..N with no gaps or duplicates.
+    select count(distinct turn_index), min(turn_index), max(turn_index)
+      into l_count, l_min, l_max
+      from uc_ai_agent_executions
+     where session_id = p_session_id
+       and turn_index is not null;
+    ut.expect(l_count, p_test_name || ': distinct turn_index count').to_equal(p_expected_turns);
+    ut.expect(l_min, p_test_name || ': turn_index starts at 1').to_equal(1);
+    ut.expect(l_max, p_test_name || ': turn_index ends at N').to_equal(p_expected_turns);
+
+    select count(*) into l_count
+      from uc_ai_agent_executions
+     where session_id = p_session_id
+       and turn_index is not null
+       and turn_index not between 1 and p_expected_turns;
+    ut.expect(l_count, p_test_name || ': turn_index values within 1..N').to_equal(0);
+
+    -- Nested child executions never carry a turn_index (spec invariant).
+    select count(*) into l_count
+      from uc_ai_agent_executions
+     where session_id = p_session_id
+       and parent_execution_id is not null
+       and turn_index is not null;
+    ut.expect(l_count, p_test_name || ': child executions leave turn_index null').to_equal(0);
+
+    -- Every execution in the session finished as completed with a timestamp.
+    select count(*) into l_count
+      from uc_ai_agent_executions
+     where session_id = p_session_id
+       and (status != uc_ai_agents_api.c_exec_completed or completed_at is null
+            or started_at is null or completed_at < started_at);
+    ut.expect(l_count, p_test_name || ': all executions completed with valid timestamps').to_equal(0);
+
+    -- Every top-level execution stored its output_result JSON.
+    select count(*) into l_count
+      from uc_ai_agent_executions
+     where session_id = p_session_id
+       and parent_execution_id is null
+       and output_result is null;
+    ut.expect(l_count, p_test_name || ': every turn stored an output_result').to_equal(0);
+
+    -- Every child's parent is a top-level execution of the SAME session.
+    select count(*) into l_count
+      from uc_ai_agent_executions c
+     where c.session_id = p_session_id
+       and c.parent_execution_id is not null
+       and not exists (
+             select 1 from uc_ai_agent_executions p
+              where p.id = c.parent_execution_id
+                and p.session_id = c.session_id
+                and p.parent_execution_id is null);
+    ut.expect(l_count, p_test_name || ': every child points at a top-level parent in the session').to_equal(0);
+
+    -- The handoff wrapper delegates all LLM work: its own token totals stay 0.
+    select count(*) into l_count
+      from uc_ai_agent_executions
+     where session_id = p_session_id
+       and parent_execution_id is null
+       and (total_input_tokens != 0 or total_output_tokens != 0);
+    ut.expect(l_count, p_test_name || ': wrapper executions spent no tokens themselves').to_equal(0);
+
+    -- The agent that answered actually ran as a (child) execution.
+    select count(*) into l_count
+      from uc_ai_agent_executions
+     where session_id = p_session_id
+       and agent_id = l_final_agent_id
+       and parent_execution_id is not null;
+    ut.expect(l_count, p_test_name || ': the final agent ran as a child execution').to_be_greater_than(0);
+
+    -- Session token totals reconcile with the SUM over executions, and the
+    -- children actually consumed tokens.
+    select nvl(sum(total_input_tokens), 0), nvl(sum(total_output_tokens), 0)
+      into l_exec_sum_in, l_exec_sum_out
+      from uc_ai_agent_executions
+     where session_id = p_session_id;
+    ut.expect(l_sess_in, p_test_name || ': session input tokens = sum over executions').to_equal(l_exec_sum_in);
+    ut.expect(l_sess_out, p_test_name || ': session output tokens = sum over executions').to_equal(l_exec_sum_out);
+    ut.expect(l_sess_in, p_test_name || ': children spent input tokens').to_be_greater_than(0);
+    ut.expect(l_sess_out, p_test_name || ': children spent output tokens').to_be_greater_than(0);
+
+    -- ---------------------------------------------------------------- MESSAGES
+    -- Header message_count matches the actual number of persisted rows.
+    select count(*) into l_msg_rows
+      from uc_ai_agent_messages
+     where session_id = p_session_id;
+    ut.expect(l_message_count, p_test_name || ': session message_count = actual message rows').to_equal(l_msg_rows);
+    ut.expect(l_msg_rows, p_test_name || ': conversation produced messages').to_be_greater_than(0);
+
+    -- Every message links to a top-level execution of this session (messages are
+    -- persisted per turn against the wrapper execution).
+    select count(*) into l_count
+      from uc_ai_agent_messages m
+     where m.session_id = p_session_id
+       and not exists (
+             select 1 from uc_ai_agent_executions e
+              where e.id = m.execution_id
+                and e.session_id = p_session_id
+                and e.parent_execution_id is null);
+    ut.expect(l_count, p_test_name || ': every message links to a top-level execution of the session').to_equal(0);
+
+    -- One distinct wrapper execution owns the messages of each turn.
+    select count(distinct execution_id) into l_count
+      from uc_ai_agent_messages
+     where session_id = p_session_id;
+    ut.expect(l_count, p_test_name || ': messages spread across one execution per turn').to_equal(p_expected_turns);
+
+    -- seq is globally contiguous 1..N within the session (no gaps/duplicates).
+    select count(distinct seq), min(seq), max(seq)
+      into l_count, l_min, l_max
+      from uc_ai_agent_messages
+     where session_id = p_session_id;
+    ut.expect(l_count, p_test_name || ': seq values are unique').to_equal(l_msg_rows);
+    ut.expect(l_min, p_test_name || ': seq starts at 1').to_equal(1);
+    ut.expect(l_max, p_test_name || ': seq ends at message count').to_equal(l_msg_rows);
+
+    -- Every message has a creation timestamp.
+    select count(*) into l_count
+      from uc_ai_agent_messages
+     where session_id = p_session_id
+       and created_at is null;
+    ut.expect(l_count, p_test_name || ': every message has created_at').to_equal(0);
+
+    -- The turn's user prompt and an assistant answer are both recorded.
+    select count(*) into l_count
+      from uc_ai_agent_messages
+     where session_id = p_session_id and role = 'user';
+    ut.expect(l_count, p_test_name || ': at least one user message').to_be_greater_than(0);
+
+    select count(*) into l_count
+      from uc_ai_agent_messages
+     where session_id = p_session_id and role = 'assistant';
+    ut.expect(l_count, p_test_name || ': at least one assistant message').to_be_greater_than(0);
+
+    -- tool_call rows are well formed: a tool name is always recorded.
+    select count(*) into l_count
+      from uc_ai_agent_messages
+     where session_id = p_session_id
+       and role = 'tool_call'
+       and tool_name is null;
+    ut.expect(l_count, p_test_name || ': tool_call rows record a tool_name').to_equal(0);
+
+    -- tool_result rows carry a name and the hard-coded success status.
+    select count(*) into l_count
+      from uc_ai_agent_messages
+     where session_id = p_session_id
+       and role = 'tool_result'
+       and (tool_name is null or tool_status != 'success');
+    ut.expect(l_count, p_test_name || ': tool_result rows record name and success status').to_equal(0);
+  end validate_session_persistence;
+
 end uc_ai_test_agent_utils;
 /

@@ -260,6 +260,41 @@ create or replace package body test_uc_ai_agent_handoff as
        and role = 'tool_call'
        and tool_name = 'TEST_PRODUCT_TOOL';
     ut.expect(l_count, 'Product lookup tool call persisted in message log').to_be_greater_than(0);
+
+    -- The product child execution is a distinct row that recorded its own LLM
+    -- spend (proving it, not the wrapper, made the model call that used the
+    -- catalog tool). NB: tool_calls_count / iteration_count are intentionally
+    -- NOT asserted here - the completion path never populates those columns
+    -- (they stay 0 for every execution), so token spend is the reliable signal.
+    declare
+      l_prod_agent_id number;
+      l_child_in      number;
+      l_child_out     number;
+    begin
+      select id into l_prod_agent_id
+        from uc_ai_agents where code = gc_product_code and status = 'active'
+       fetch first 1 row only;
+
+      select total_input_tokens, total_output_tokens
+        into l_child_in, l_child_out
+        from uc_ai_agent_executions
+       where session_id = l_session_id
+         and agent_id = l_prod_agent_id
+         and parent_execution_id is not null
+       fetch first 1 row only;
+
+      ut.expect(l_child_in, 'Product child recorded input tokens').to_be_greater_than(0);
+      ut.expect(l_child_out, 'Product child recorded output tokens').to_be_greater_than(0);
+    end;
+
+    -- Full cross-table persistence invariants (executions + session + messages)
+    uc_ai_test_agent_utils.validate_session_persistence(
+      p_session_id       => l_session_id,
+      p_root_agent_code  => gc_handoff_code,
+      p_final_agent_code => gc_product_code,
+      p_expected_turns   => 1,
+      p_test_name        => 'Route product question'
+    );
   end route_product_question;
 
   procedure route_shipping_question
@@ -285,6 +320,14 @@ create or replace package body test_uc_ai_agent_handoff as
     ut.expect(l_final_msg, 'Answer should contain the express price').to_be_like('%19.99%');
     ut.expect(l_result.get_number('handoff_count'), 'Exactly one handoff').to_equal(1);
     ut.expect(l_result.get_string('final_agent_code')).to_equal(gc_shipping_code);
+
+    uc_ai_test_agent_utils.validate_session_persistence(
+      p_session_id       => l_session_id,
+      p_root_agent_code  => gc_handoff_code,
+      p_final_agent_code => gc_shipping_code,
+      p_expected_turns   => 1,
+      p_test_name        => 'Route shipping question'
+    );
   end route_shipping_question;
 
   procedure route_customer_question
@@ -310,6 +353,14 @@ create or replace package body test_uc_ai_agent_handoff as
     ut.expect(l_final_msg, 'Answer should contain the membership year').to_be_like('%2021%');
     ut.expect(l_result.get_number('handoff_count'), 'Exactly one handoff').to_equal(1);
     ut.expect(l_result.get_string('final_agent_code')).to_equal(gc_customer_code);
+
+    uc_ai_test_agent_utils.validate_session_persistence(
+      p_session_id       => l_session_id,
+      p_root_agent_code  => gc_handoff_code,
+      p_final_agent_code => gc_customer_code,
+      p_expected_turns   => 1,
+      p_test_name        => 'Route customer question'
+    );
   end route_customer_question;
 
   procedure direct_answer_no_handoff
@@ -349,6 +400,15 @@ create or replace package body test_uc_ai_agent_handoff as
        and role = 'tool_call'
        and tool_name like 'transfer_to_%';
     ut.expect(l_count, 'No transfer tool calls in message log').to_equal(0);
+
+    -- Triage answered directly: it is the (only) child execution.
+    uc_ai_test_agent_utils.validate_session_persistence(
+      p_session_id       => l_session_id,
+      p_root_agent_code  => gc_handoff_code,
+      p_final_agent_code => gc_triage_code,
+      p_expected_turns   => 1,
+      p_test_name        => 'Direct answer'
+    );
   end direct_answer_no_handoff;
 
   procedure max_handoffs_guard
@@ -384,6 +444,16 @@ create or replace package body test_uc_ai_agent_handoff as
     ut.expect(l_result.get_number('handoff_count'), 'Chain stopped at the cap').to_equal(1);
     ut.expect(l_result.get_boolean('max_handoffs_reached')).to_be_true();
     ut.expect(l_result.get_clob('final_message'), 'Specialist still answered').to_be_like('%2.5%');
+
+    -- Even a capped chain persists a clean hierarchy: capped wrapper as root,
+    -- product specialist as the answering child.
+    uc_ai_test_agent_utils.validate_session_persistence(
+      p_session_id       => l_session_id,
+      p_root_agent_code  => gc_capped_code,
+      p_final_agent_code => gc_product_code,
+      p_expected_turns   => 1,
+      p_test_name        => 'Max handoffs guard'
+    );
   end max_handoffs_guard;
 
   procedure multi_level_tech_question
@@ -434,6 +504,23 @@ create or replace package body test_uc_ai_agent_handoff as
        and role = 'tool_call'
        and tool_name like 'transfer_to_%';
     ut.expect(l_count, 'Two transfer tool calls in message log').to_equal(2);
+
+    -- Two-level routing must still persist as one flat session: three child
+    -- executions (triage, product, tech A) under a single wrapper turn.
+    select count(*)
+      into l_count
+      from uc_ai_agent_executions
+     where session_id = l_session_id
+       and parent_execution_id is not null;
+    ut.expect(l_count, 'Three child executions across the two hops').to_equal(3);
+
+    uc_ai_test_agent_utils.validate_session_persistence(
+      p_session_id       => l_session_id,
+      p_root_agent_code  => gc_ml_code,
+      p_final_agent_code => gc_tech_a_code,
+      p_expected_turns   => 1,
+      p_test_name        => 'Multi-level tech question'
+    );
   end multi_level_tech_question;
 
   procedure multi_level_returns_question
@@ -467,6 +554,14 @@ create or replace package body test_uc_ai_agent_handoff as
     l_entry := treat(l_trail.get(1) as json_object_t);
     ut.expect(l_entry.get_string('from_agent'), 'Hop 2 from').to_equal(gc_shipping_code);
     ut.expect(l_entry.get_string('to_agent'), 'Hop 2 to').to_equal(gc_returns_code);
+
+    uc_ai_test_agent_utils.validate_session_persistence(
+      p_session_id       => l_session_id,
+      p_root_agent_code  => gc_ml_code,
+      p_final_agent_code => gc_returns_code,
+      p_expected_turns   => 1,
+      p_test_name        => 'Multi-level returns question'
+    );
   end multi_level_returns_question;
 
   procedure mid_level_answers_itself
@@ -493,6 +588,14 @@ create or replace package body test_uc_ai_agent_handoff as
     ut.expect(l_final_msg, 'Answer should contain the catalog price').to_be_like('%129%');
     ut.expect(l_result.get_number('handoff_count'), 'Only one handoff (triage -> product)').to_equal(1);
     ut.expect(l_result.get_string('final_agent_code')).to_equal(gc_product_code);
+
+    uc_ai_test_agent_utils.validate_session_persistence(
+      p_session_id       => l_session_id,
+      p_root_agent_code  => gc_ml_code,
+      p_final_agent_code => gc_product_code,
+      p_expected_turns   => 1,
+      p_test_name        => 'Mid-level answers itself'
+    );
   end mid_level_answers_itself;
 
   procedure sticky_follow_up_same_agent
@@ -545,6 +648,16 @@ create or replace package body test_uc_ai_agent_handoff as
      where session_id = l_session_id
        and turn_index = 2;
     ut.expect(l_count, 'Second top-level turn recorded').to_equal(1);
+
+    -- Two turns persisted as two wrapper executions in one session, each with
+    -- its own message delta; shipping answered both.
+    uc_ai_test_agent_utils.validate_session_persistence(
+      p_session_id       => l_session_id,
+      p_root_agent_code  => gc_ml_code,
+      p_final_agent_code => gc_shipping_code,
+      p_expected_turns   => 2,
+      p_test_name        => 'Sticky same agent'
+    );
   end sticky_follow_up_same_agent;
 
   procedure sticky_follow_up_with_transfer
@@ -581,6 +694,16 @@ create or replace package body test_uc_ai_agent_handoff as
     ut.expect(l_final_msg, 'Answer should contain the return window').to_be_like('%30%');
     ut.expect(l_result.get_string('final_agent_code'), 'Return specialist took over').to_equal(gc_returns_code);
     ut.expect(l_result.get_number('handoff_count'), 'One handoff in the follow-up turn').to_equal(1);
+
+    -- Follow-up turn that transferred onward still reconciles: two wrapper
+    -- turns, the return specialist ran as a child, message log spans both turns.
+    uc_ai_test_agent_utils.validate_session_persistence(
+      p_session_id       => l_session_id,
+      p_root_agent_code  => gc_ml_code,
+      p_final_agent_code => gc_returns_code,
+      p_expected_turns   => 2,
+      p_test_name        => 'Sticky transfer'
+    );
   end sticky_follow_up_with_transfer;
 
 end test_uc_ai_agent_handoff;

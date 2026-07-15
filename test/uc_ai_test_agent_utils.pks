@@ -42,5 +42,20 @@ create or replace package uc_ai_test_agent_utils as
     p_test_name  in varchar2
   );
 
+  -- Deep-validates that a finished conversation was persisted correctly across
+  -- all three telemetry tables (executions + session header + message log).
+  -- Only checks deterministic, LLM-independent invariants so it is safe to call
+  -- from integration tests that make real model calls.
+  --   p_root_agent_code  code of the agent that opened the session (wrapper)
+  --   p_final_agent_code code of the agent expected to have answered
+  --   p_expected_turns   number of top-level turns (conversation rounds)
+  procedure validate_session_persistence(
+    p_session_id       in varchar2,
+    p_root_agent_code  in varchar2,
+    p_final_agent_code in varchar2,
+    p_expected_turns   in number,
+    p_test_name        in varchar2
+  );
+
 end uc_ai_test_agent_utils;
 /
