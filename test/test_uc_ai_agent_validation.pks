@@ -63,6 +63,25 @@ create or replace package test_uc_ai_agent_validation as
   --%test(Handoff config without initial_agent_code is invalid)
   procedure orch_handoff_missing_initial;
 
+  --%test(Handoff config without handoff_agents is invalid)
+  procedure orch_handoff_missing_agents;
+
+  --%test(Handoff config with empty handoff_agents is invalid)
+  procedure orch_handoff_empty_agents;
+
+  --%test(Handoff config target without agent_code is invalid)
+  procedure orch_handoff_target_no_code;
+
+  --%test(Handoff config with max_handoffs below 1 is invalid)
+  procedure orch_handoff_bad_max;
+
+  --%test(Valid handoff config passes)
+  procedure orch_handoff_valid;
+
+  --%test(create_agent rejects handoff targets that are not active profile agents)
+  --%throws(-20503)
+  procedure create_handoff_bad_target;
+
   --%test(Conversation config without mode or participants is invalid)
   procedure orch_conversation_missing_fields;
 

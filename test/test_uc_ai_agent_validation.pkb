@@ -267,6 +267,95 @@ create or replace package body test_uc_ai_agent_validation as
   end orch_handoff_missing_initial;
 
 
+  procedure orch_handoff_missing_agents
+  as
+    l_result uc_ai_agents_api.t_validation_result;
+  begin
+    l_result := uc_ai_agents_api.validate_orchestration_config(
+      '{"pattern_type":"handoff","initial_agent_code":"A"}'
+    );
+
+    ut.expect(l_result.is_valid).to_be_false();
+    ut.expect(l_result.error_reason).to_equal(
+      'Handoff config missing required field: handoff_agents (array)'
+    );
+  end orch_handoff_missing_agents;
+
+
+  procedure orch_handoff_empty_agents
+  as
+    l_result uc_ai_agents_api.t_validation_result;
+  begin
+    l_result := uc_ai_agents_api.validate_orchestration_config(
+      '{"pattern_type":"handoff","initial_agent_code":"A","handoff_agents":[]}'
+    );
+
+    ut.expect(l_result.is_valid).to_be_false();
+    ut.expect(l_result.error_reason).to_equal(
+      'Handoff config handoff_agents must not be empty'
+    );
+  end orch_handoff_empty_agents;
+
+
+  procedure orch_handoff_target_no_code
+  as
+    l_result uc_ai_agents_api.t_validation_result;
+  begin
+    l_result := uc_ai_agents_api.validate_orchestration_config(
+      '{"pattern_type":"handoff","initial_agent_code":"A","handoff_agents":[{"description":"no code"}]}'
+    );
+
+    ut.expect(l_result.is_valid).to_be_false();
+    ut.expect(l_result.error_reason).to_equal(
+      'Handoff config handoff_agents entry 0 missing required field: agent_code'
+    );
+  end orch_handoff_target_no_code;
+
+
+  procedure orch_handoff_bad_max
+  as
+    l_result uc_ai_agents_api.t_validation_result;
+  begin
+    l_result := uc_ai_agents_api.validate_orchestration_config(
+      '{"pattern_type":"handoff","initial_agent_code":"A","handoff_agents":[{"agent_code":"B"}],"max_handoffs":0}'
+    );
+
+    ut.expect(l_result.is_valid).to_be_false();
+    ut.expect(l_result.error_reason).to_equal(
+      'Handoff config max_handoffs must be a number >= 1'
+    );
+  end orch_handoff_bad_max;
+
+
+  procedure orch_handoff_valid
+  as
+    l_result uc_ai_agents_api.t_validation_result;
+  begin
+    l_result := uc_ai_agents_api.validate_orchestration_config(
+      '{"pattern_type":"handoff","initial_agent_code":"A","handoff_agents":[{"agent_code":"B","description":"specialist"}],"max_handoffs":3}'
+    );
+
+    ut.expect(l_result.is_valid).to_be_true();
+    ut.expect(l_result.error_reason).to_be_null();
+  end orch_handoff_valid;
+
+
+  procedure create_handoff_bad_target
+  as
+    l_id number;
+  begin
+    -- Targets do not exist as active profile agents -> c_err_invalid_config
+    l_id := uc_ai_agents_api.create_agent(
+      p_code                 => 'TEST_VAL_HANDOFF_BAD',
+      p_description          => 'Handoff agent with invalid targets',
+      p_agent_type           => uc_ai_agents_api.c_type_handoff,
+      p_orchestration_config => '{"pattern_type":"handoff","initial_agent_code":"TEST_VAL_NO_SUCH_AGENT",'
+        || '"handoff_agents":[{"agent_code":"TEST_VAL_NO_SUCH_AGENT_2","description":"missing"}]}',
+      p_status               => uc_ai_agents_api.c_status_active
+    );
+  end create_handoff_bad_target;
+
+
   procedure orch_conversation_missing_fields
   as
     l_result uc_ai_agents_api.t_validation_result;

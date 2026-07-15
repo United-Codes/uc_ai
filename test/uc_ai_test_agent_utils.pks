@@ -8,6 +8,11 @@ create or replace package uc_ai_test_agent_utils as
 
   procedure create_profiles;
 
+  -- Creates the customer-support profiles for handoff tests: a triage agent
+  -- plus product (with get_product_details tool), shipping, and customer
+  -- details specialists.
+  procedure create_support_profiles;
+
   -- Cleans up all test data
   procedure cleanup_test_data;
 

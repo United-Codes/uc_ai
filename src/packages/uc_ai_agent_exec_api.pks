@@ -77,6 +77,8 @@ as
    * @param p_follow_up_message Optional follow-up message for conversation continuation
    * @param p_session_id        Session ID (required for conversation continuation)
    * @param p_files             Optional files (documents/images) to attach to the user message
+   * @param p_extra_tool_tag    Optional engine-supplied tool tag merged into the profile's
+   *                            own model config (used by handoff agents to expose transfer tools)
    * @return JSON result from prompt profile execution
    */
   function execute_profile_agent(
@@ -86,7 +88,8 @@ as
     p_response_schema   in json_object_t default null,
     p_follow_up_message in clob default null,
     p_session_id        in varchar2 default null,
-    p_files             in uc_ai_message_api.t_files default null
+    p_files             in uc_ai_message_api.t_files default null,
+    p_extra_tool_tag    in varchar2 default null
   ) return json_object_t;
 
 
@@ -180,6 +183,50 @@ as
     p_tool_tag         in varchar2,
     p_session_id       in varchar2
   ) return uc_ai_tools.id%type;
+
+
+  -- ============================================================================
+  -- Transfer Requests (for Handoff pattern)
+  -- ============================================================================
+  -- Handoff agents expose dynamically registered transfer_to_<agent> tools to
+  -- the currently active agent. The tool callback records the requested
+  -- transfer here (keyed by the handoff wrapper's execution id so concurrent /
+  -- nested handoff runs cannot cross-contaminate); after the agent's turn
+  -- returns, execute_handoff_agent pops the request and switches agents.
+
+  /*
+   * Records a transfer request from a transfer_to_<agent> tool callback.
+   * If a request already exists for the execution, the last one wins.
+   *
+   * @param p_handoff_exec_id Execution ID of the handoff wrapper
+   * @param p_target_agent    Code of the agent to transfer to
+   * @param p_context         Context summary the target agent receives
+   */
+  procedure record_transfer_request(
+    p_handoff_exec_id in uc_ai_agent_executions.id%type,
+    p_target_agent    in uc_ai_agents.code%type,
+    p_context         in clob
+  );
+
+  /*
+   * Returns the pending transfer request for a handoff execution and clears
+   * the slot. Returns null if no transfer was requested.
+   *
+   * @param p_handoff_exec_id Execution ID of the handoff wrapper
+   * @return JSON object {target_agent, context} or null
+   */
+  function pop_transfer_request(
+    p_handoff_exec_id in uc_ai_agent_executions.id%type
+  ) return json_object_t;
+
+  /*
+   * Clears any pending transfer request for a handoff execution.
+   *
+   * @param p_handoff_exec_id Execution ID of the handoff wrapper
+   */
+  procedure clear_transfer_request(
+    p_handoff_exec_id in uc_ai_agent_executions.id%type
+  );
 
 
   procedure create_apex_session_if_needed;

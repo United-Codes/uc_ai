@@ -20,6 +20,9 @@ create or replace package body uc_ai_test_agent_utils as
   gc_calc_tool_code constant varchar2(50 char) := 'TEST_CALC_TOOL';
   gc_calc_tool_tag  constant varchar2(50 char) := 'test_calculator';
 
+  gc_product_tool_code constant varchar2(50 char) := 'TEST_PRODUCT_TOOL';
+  gc_product_tool_tag  constant varchar2(50 char) := 'test_product_details';
+
   procedure create_math_profile
   as
     l_id      number;
@@ -89,6 +92,131 @@ create or replace package body uc_ai_test_agent_utils as
       p_status                 => 'active'
     );
   end create_math_profile;
+
+  procedure create_support_profiles
+  as
+    l_id      number;
+    l_tool_id number;
+    l_schema  json_object_t;
+  begin
+    -- Product lookup function: canned catalog data for handoff tests
+    execute immediate q'!
+      create or replace function test_get_product_details(
+        p_arguments in json_object_t
+      ) return clob
+      as
+        l_product varchar2(4000 char);
+      begin
+        l_product := upper(p_arguments.get_string('product_name'));
+
+        if l_product is null then
+          return 'Error: no product_name provided.';
+        end if;
+
+        if instr(l_product, 'AURORA') > 0 or instr(l_product, 'LAMP') > 0 then
+          return 'Aurora Desk Lamp: weight 2.5 kg, made of recycled aluminum, price $49, in stock.';
+        elsif instr(l_product, 'GLX') > 0 or instr(l_product, 'HEADSET') > 0 then
+          return 'GLX-7000 Headset: battery life 88 hours, Bluetooth 5.3, price $129, in stock.';
+        elsif instr(l_product, 'TRAILMAX') > 0 or instr(l_product, 'BOOT') > 0 then
+          return 'TrailMax Hiking Boots: sizes 36-47, waterproof, price $159, ships in 2 weeks.';
+        else
+          return 'No product found matching "' || p_arguments.get_string('product_name')
+            || '". Available products: Aurora Desk Lamp, GLX-7000 Headset, TrailMax Hiking Boots.';
+        end if;
+      end test_get_product_details;
+    !';
+
+    l_schema := json_object_t('{
+      "type": "object",
+      "properties": {
+        "product_name": {
+          "type": "string",
+          "description": "Name (or part of the name) of the product to look up"
+        }
+      },
+      "required": ["product_name"]
+    }');
+
+    l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+      p_tool_code     => gc_product_tool_code,
+      p_description   => 'Looks up product details (specs, price, availability) in the shop catalog. Always use this tool for product facts.',
+      p_function_call => 'return test_get_product_details(json_object_t(:arguments));',
+      p_json_schema   => l_schema,
+      p_tags          => apex_t_varchar2(gc_product_tool_tag)
+    );
+
+    -- Triage: single point of entry, routes via transfer tools (registered
+    -- dynamically by the handoff engine - not part of this profile's config)
+    delete from uc_ai_prompt_profiles
+     where code = 'TEST_AGENT_CS_TRIAGE';
+
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code                   => 'TEST_AGENT_CS_TRIAGE',
+      p_description            => 'Online shop triage agent for handoff testing',
+      p_system_prompt_template => 'You are the triage agent of an online shop''s customer support.
+You can transfer the conversation to specialist agents using the available transfer tools.
+For any question about products, shipping, or customer accounts/orders you MUST transfer to the matching specialist - never answer such questions yourself, you have no reliable data.
+Only greetings and smalltalk you answer yourself, briefly and politely.',
+      p_user_prompt_template   => '{prompt}',
+      p_provider               => gc_main_provider,
+      p_model                  => gc_better_model,
+      p_status                 => 'active'
+    );
+
+    -- Product details specialist: has its own catalog lookup tool
+    delete from uc_ai_prompt_profiles
+     where code = 'TEST_AGENT_CS_PRODUCT';
+
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code                   => 'TEST_AGENT_CS_PRODUCT',
+      p_description            => 'Product details specialist for handoff testing',
+      p_system_prompt_template => 'You are the product specialist of an online shop. Use the product details tool to look up product facts and answer the customer''s question concisely with the exact numbers from the catalog.',
+      p_user_prompt_template   => 'Customer question: {prompt}
+Triage notes: {handoff_context}',
+      p_provider               => gc_main_provider,
+      p_model                  => gc_better_model,
+      p_model_config_json      => '{"g_enable_tools": true, "g_tool_tags": ["' || gc_product_tool_tag || '"], "g_max_tool_calls": 3}',
+      p_status                 => 'active'
+    );
+
+    -- Shipping specialist: rules baked into the system prompt
+    delete from uc_ai_prompt_profiles
+     where code = 'TEST_AGENT_CS_SHIPPING';
+
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code                   => 'TEST_AGENT_CS_SHIPPING',
+      p_description            => 'Shipping specialist for handoff testing',
+      p_system_prompt_template => 'You are the shipping specialist of an online shop. Shipping rules:
+- Standard shipping: 4 business days, $4.99
+- Express shipping: 1 business day, $19.99
+- Orders over $100 get free standard shipping
+- We ship to the US and the EU only
+Answer the customer''s question concisely with the exact numbers from these rules.',
+      p_user_prompt_template   => 'Customer question: {prompt}
+Triage notes: {handoff_context}',
+      p_provider               => gc_main_provider,
+      p_model                  => gc_main_model,
+      p_status                 => 'active'
+    );
+
+    -- Customer details specialist: fake records baked into the system prompt
+    delete from uc_ai_prompt_profiles
+     where code = 'TEST_AGENT_CS_CUSTOMER';
+
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code                   => 'TEST_AGENT_CS_CUSTOMER',
+      p_description            => 'Customer details specialist for handoff testing',
+      p_system_prompt_template => 'You are the customer account specialist of an online shop. Customer records:
+- Customer 1001: Alice Smith, premium member since 2021, open orders: 5001 (GLX-7000 Headset, shipped), 5002 (Aurora Desk Lamp, processing)
+- Customer 1002: Bob Jones, standard member since 2023, no open orders
+Answer the customer''s question concisely based only on these records.',
+      p_user_prompt_template   => 'Customer question: {prompt}
+Triage notes: {handoff_context}',
+      p_provider               => gc_main_provider,
+      p_model                  => gc_main_model,
+      p_status                 => 'active'
+    );
+  end create_support_profiles;
 
   procedure create_profiles
   as
@@ -586,9 +714,19 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
     -- Delete test calculator tool
     delete from uc_ai_tools where code = gc_calc_tool_code;
 
+    -- Delete test product tool
+    delete from uc_ai_tools where code = gc_product_tool_code;
+
     -- Drop test calculator function
     begin
       execute immediate 'drop function test_demo_calculate';
+    exception
+      when others then null;
+    end;
+
+    -- Drop test product lookup function
+    begin
+      execute immediate 'drop function test_get_product_details';
     exception
       when others then null;
     end;

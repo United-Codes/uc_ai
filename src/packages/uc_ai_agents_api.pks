@@ -425,6 +425,8 @@ as
    * @param p_response_schema   Optional JSON schema for response validation (profile agents only)
    * @param p_files             Optional files (documents/images) to attach to the user message
    *                            (profile/orchestrator agents only). Build with uc_ai_message_api.t_files.
+   * @param p_extra_tool_tag    Engine-internal: extra tool tag merged into the profile's model
+   *                            config (profile agents only; used for handoff transfer tools)
    *
    * @return                    JSON result object
    */
@@ -436,7 +438,8 @@ as
     p_session_id        in varchar2 default null,
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
     p_response_schema   in json_object_t default null,
-    p_files             in uc_ai_message_api.t_files default null
+    p_files             in uc_ai_message_api.t_files default null,
+    p_extra_tool_tag    in varchar2 default null
   ) return json_object_t;
 
 
@@ -451,6 +454,8 @@ as
    * @param p_response_schema   Optional JSON schema for response validation (profile agents only)
    * @param p_files             Optional files (documents/images) to attach to the user message
    *                            (profile/orchestrator agents only). Build with uc_ai_message_api.t_files.
+   * @param p_extra_tool_tag    Engine-internal: extra tool tag merged into the profile's model
+   *                            config (profile agents only; used for handoff transfer tools)
    *
    * @return                    JSON result object
    */
@@ -461,7 +466,8 @@ as
     p_session_id        in varchar2 default null,
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
     p_response_schema   in json_object_t default null,
-    p_files             in uc_ai_message_api.t_files default null
+    p_files             in uc_ai_message_api.t_files default null,
+    p_extra_tool_tag    in varchar2 default null
   ) return json_object_t;
 
 

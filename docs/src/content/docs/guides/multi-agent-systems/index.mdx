@@ -30,6 +30,11 @@ Instead of writing one monolithic prompt, you break the problem into smaller ste
     href="/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/"
   />
   <LinkCard
+    title="Handoff"
+    description="Agents transfer control of the conversation to the right specialist"
+    href="/products/uc-ai/docs/guides/multi-agent-systems/handoff/"
+  />
+  <LinkCard
     title="Conversations"
     description="Multiple agents collaborate in round-robin or AI-moderated dialogue"
     href="/products/uc-ai/docs/guides/multi-agent-systems/conversations/"
@@ -44,6 +49,7 @@ Instead of writing one monolithic prompt, you break the problem into smaller ste
 | **Sequential workflow**      | Steps must run in a fixed order, each building on the previous    | Classify text, then summarize based on category                     |
 | **Loop workflow**            | You need iterative refinement until a quality threshold is met    | Generate a haiku, rate it, improve it, repeat                       |
 | **Orchestrator**             | A central AI should decide which agents to call and in what order | Travel planner delegating to calendar, flight, and hotel agents     |
+| **Handoff**                  | One specialist should take over and answer the user directly      | Support triage routing to product, shipping, or account specialists |
 | **Round-robin conversation** | Multiple perspectives should take turns in a fixed order          | Brainstormer, critic, and synthesizer collaborate on a plan         |
 | **AI-driven conversation**   | A moderator should dynamically decide who speaks next             | Panel discussion where the moderator picks the most relevant expert |
 
@@ -77,6 +83,7 @@ Profile agents execute the referenced prompt profile when called. You can then c
 | Profile      | `c_type_profile`      | Wraps a prompt profile                     |
 | Workflow     | `c_type_workflow`     | Sequential or loop execution of steps      |
 | Orchestrator | `c_type_orchestrator` | AI-driven delegation to specialized agents |
+| Handoff      | `c_type_handoff`      | Agents transfer control to each other      |
 | Conversation | `c_type_conversation` | Multiple agents collaborate in dialogue    |
 
 ### Executing agents

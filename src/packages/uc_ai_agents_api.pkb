@@ -877,7 +877,59 @@ create or replace package body uc_ai_agents_api as
           , p1           => 'orchestration_config'
           );
         end if;
-        
+        declare
+          l_validation t_validation_result;
+        begin
+          -- Only wired in for the handoff type: the validator's conversation
+          -- branch expects participant_agents while the engine reads agents.
+          l_validation := validate_orchestration_config(p_orchestration_config);
+          if not l_validation.is_valid then
+            uc_ai_error.raise_error(
+              p_error_code => uc_ai_error.c_err_invalid_config
+            , p_scope      => l_scope
+            , p0           => 'orchestration config'
+            , p1           => l_validation.error_reason
+            );
+          end if;
+        end;
+        -- v1: transfer tools are injected via the profile execution path, so the
+        -- initial agent and every handoff target must be an ACTIVE profile agent
+        declare
+          l_config  json_object_t := json_object_t.parse(p_orchestration_config);
+          l_targets json_array_t;
+          l_codes   apex_t_varchar2 := apex_t_varchar2();
+          l_bad     varchar2(4000 char);
+        begin
+          l_targets := l_config.get_array('handoff_agents');
+          l_codes.extend;
+          l_codes(l_codes.count) := l_config.get_string('initial_agent_code');
+          <<collect_targets>>
+          for i in 0 .. l_targets.get_size - 1 loop
+            l_codes.extend;
+            l_codes(l_codes.count) := treat(l_targets.get(i) as json_object_t).get_string('agent_code');
+          end loop collect_targets;
+
+          select listagg(t.column_value, ', ')
+            into l_bad
+            from table(l_codes) t
+           where not exists (
+                   select 1
+                     from uc_ai_agents a
+                    where a.code = t.column_value
+                      and a.status = c_status_active
+                      and a.agent_type = c_type_profile
+                 );
+
+          if l_bad is not null then
+            uc_ai_error.raise_error(
+              p_error_code => uc_ai_error.c_err_invalid_config
+            , p_scope      => l_scope
+            , p0           => 'handoff agents'
+            , p1           => 'initial agent and handoff targets must be existing active profile agents; invalid: ' || l_bad
+            );
+          end if;
+        end;
+
       when c_type_conversation then
         if p_orchestration_config is null then
           uc_ai_error.raise_error(
@@ -1593,7 +1645,48 @@ create or replace package body uc_ai_agents_api as
           uc_ai_logger.log_error(l_result.error_reason, l_scope);
           return l_result;
         end if;
-        
+        if not (l_json.has('handoff_agents') and l_json.get('handoff_agents').is_array) then
+          l_result.is_valid := false;
+          l_result.error_reason := 'Handoff config missing required field: handoff_agents (array)';
+          uc_ai_logger.log_error(l_result.error_reason, l_scope);
+          return l_result;
+        end if;
+        declare
+          l_handoff_agents json_array_t := l_json.get_array('handoff_agents');
+          l_target         json_object_t;
+        begin
+          if l_handoff_agents.get_size = 0 then
+            l_result.is_valid := false;
+            l_result.error_reason := 'Handoff config handoff_agents must not be empty';
+            uc_ai_logger.log_error(l_result.error_reason, l_scope);
+            return l_result;
+          end if;
+          <<handoff_targets>>
+          for i in 0 .. l_handoff_agents.get_size - 1 loop
+            if not l_handoff_agents.get(i).is_object then
+              l_result.is_valid := false;
+              l_result.error_reason := 'Handoff config handoff_agents entry ' || i || ' must be an object';
+              uc_ai_logger.log_error(l_result.error_reason, l_scope);
+              return l_result;
+            end if;
+            l_target := treat(l_handoff_agents.get(i) as json_object_t);
+            if l_target.get_string('agent_code') is null then
+              l_result.is_valid := false;
+              l_result.error_reason := 'Handoff config handoff_agents entry ' || i || ' missing required field: agent_code';
+              uc_ai_logger.log_error(l_result.error_reason, l_scope);
+              return l_result;
+            end if;
+          end loop handoff_targets;
+        end;
+        if l_json.has('max_handoffs')
+          and coalesce(l_json.get_number('max_handoffs'), 0) < 1
+        then
+          l_result.is_valid := false;
+          l_result.error_reason := 'Handoff config max_handoffs must be a number >= 1';
+          uc_ai_logger.log_error(l_result.error_reason, l_scope);
+          return l_result;
+        end if;
+
       when 'conversation' then
         if not l_json.has('conversation_mode') then
           l_result.is_valid := false;
@@ -1734,7 +1827,8 @@ create or replace package body uc_ai_agents_api as
     p_session_id        in varchar2 default null,
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
     p_response_schema   in json_object_t default null,
-    p_files             in uc_ai_message_api.t_files default null
+    p_files             in uc_ai_message_api.t_files default null,
+    p_extra_tool_tag    in varchar2 default null
   ) return json_object_t
   as
     l_scope         uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -1780,6 +1874,16 @@ create or replace package body uc_ai_agents_api as
         p_error_code => uc_ai_error.c_err_invalid_config
       , p_scope      => l_scope
       , p0           => 'response_schema'
+      , p1           => 'can only be used with profile agents, not ' || l_agent.agent_type
+      );
+    end if;
+
+    -- Validate extra_tool_tag usage (engine-internal, handoff transfer tools)
+    if p_extra_tool_tag is not null and l_agent.agent_type != c_type_profile then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'extra_tool_tag'
       , p1           => 'can only be used with profile agents, not ' || l_agent.agent_type
       );
     end if;
@@ -1850,7 +1954,7 @@ create or replace package body uc_ai_agents_api as
       -- Execute based on agent type (delegating to sub-package)
       case l_agent.agent_type
         when c_type_profile then
-          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema, p_follow_up_message, l_session_id, p_files);
+          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema, p_follow_up_message, l_session_id, p_files, p_extra_tool_tag);
 
         when c_type_workflow then
           l_result := uc_ai_agent_exec_api.execute_workflow_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
@@ -1963,7 +2067,8 @@ create or replace package body uc_ai_agents_api as
     p_session_id        in varchar2 default null,
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
     p_response_schema   in json_object_t default null,
-    p_files             in uc_ai_message_api.t_files default null
+    p_files             in uc_ai_message_api.t_files default null,
+    p_extra_tool_tag    in varchar2 default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -1979,7 +2084,8 @@ create or replace package body uc_ai_agents_api as
       p_session_id        => p_session_id,
       p_parent_exec_id    => p_parent_exec_id,
       p_response_schema   => p_response_schema,
-      p_files             => p_files
+      p_files             => p_files,
+      p_extra_tool_tag    => p_extra_tool_tag
     );
   exception
     when others then
