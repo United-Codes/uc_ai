@@ -13,8 +13,11 @@
 declare -a API_PACKAGES=(
     "uc_ai_settings"
     "uc_ai_tools_api"
-    "uc_ai_prompt_profiles_api"
+    # message_api must precede prompt_profiles_api: the prompt_profiles_api spec
+    # references uc_ai_message_api.t_files, so its spec fails to compile (PLS-00302)
+    # if message_api's spec is not created first.
     "uc_ai_message_api"
+    "uc_ai_prompt_profiles_api"
     "uc_ai_structured_output"
     "uc_ai_logger"
     "uc_ai_error"

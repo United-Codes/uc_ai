@@ -26,8 +26,8 @@ PROMPT - Installing utility functions...
 PROMPT - Installing API package specifications...
 @@src/packages/uc_ai_settings.pks
 @@src/packages/uc_ai_tools_api.pks
-@@src/packages/uc_ai_prompt_profiles_api.pks
 @@src/packages/uc_ai_message_api.pks
+@@src/packages/uc_ai_prompt_profiles_api.pks
 @@src/packages/uc_ai_structured_output.pks
 @@src/packages/uc_ai_logger.pks
 @@src/packages/uc_ai_error.pks
@@ -52,8 +52,8 @@ PROMPT Installing package bodies (implementations)...
 PROMPT - Installing API package bodies...
 @@src/packages/uc_ai_settings.pkb
 @@src/packages/uc_ai_tools_api.pkb
-@@src/packages/uc_ai_prompt_profiles_api.pkb
 @@src/packages/uc_ai_message_api.pkb
+@@src/packages/uc_ai_prompt_profiles_api.pkb
 @@src/packages/uc_ai_structured_output.pkb
 @@src/packages/uc_ai_logger.pkb
 @@src/packages/uc_ai_error.pkb
