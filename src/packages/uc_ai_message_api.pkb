@@ -84,7 +84,13 @@ create or replace package body uc_ai_message_api as
   begin
     l_content := json_object_t();
     l_content.put('type', 'reasoning');
-    l_content.put('text', p_text);
+    -- Only add 'text' when we actually have content. A NULL CLOB passed to
+    -- json_object_t.put writes a JSON null node ({"text":null}), and reading
+    -- that back with get_clob later returns the literal 4-char string 'null'
+    -- (not SQL NULL). Omitting the key keeps get_clob returning a real NULL.
+    if p_text is not null then
+      l_content.put('text', p_text);
+    end if;
 
     if p_provider_options is not null then
       l_content.put('providerOptions', p_provider_options);

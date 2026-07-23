@@ -120,6 +120,25 @@ create or replace package body test_uc_ai_message_api as
   end reasoning_content_shape;
 
 
+  procedure reasoning_content_null_text
+  as
+    l_content   json_object_t;
+    l_null_text clob;
+  begin
+    -- Regression: a NULL CLOB must not be stored as a JSON null node.
+    -- json_object_t.put('text', <null>) writes {"text":null}, and reading it
+    -- back with get_clob returns the literal 4-char string 'null' (not SQL
+    -- NULL). create_reasoning_content must omit the key instead.
+    l_content := uc_ai_message_api.create_reasoning_content(l_null_text);
+
+    ut.expect(l_content.get_string('type')).to_equal('reasoning');
+    -- key must be absent, so get_clob yields a real NULL...
+    ut.expect(l_content.has('text')).to_be_false();
+    -- ...never the literal 'null' string that was the reported bug
+    ut.expect(l_content.get_clob('text')).to_be_null();
+  end reasoning_content_null_text;
+
+
   procedure tool_call_content_shape
   as
     l_content json_object_t;

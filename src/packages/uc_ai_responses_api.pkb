@@ -420,14 +420,18 @@ create or replace package body uc_ai_responses_api as
               l_provider_options.put('id', l_output_item.get_string('id'));
             end if;
 
+            -- Reasoning output items carry their text in summary[].text, which
+            -- we assembled into l_summary_text above. The item has no top-level
+            -- 'text' field, so get_clob('text') would be NULL and store as a
+            -- literal 'null' string.
             l_reasoning_content := uc_ai_message_api.create_reasoning_content(
-              p_text => l_output_item.get_clob('text'),
+              p_text => l_summary_text,
               p_provider_options => l_provider_options
             );
 
             l_assistant_content.append(l_reasoning_content);
           end;
-          
+
         else
           uc_ai_logger.log_warn('Unknown output item type: ' || l_item_type, l_scope);
       end case;
@@ -859,8 +863,11 @@ create or replace package body uc_ai_responses_api as
                       l_provider_options.put('id', l_output_item.get_string('id'));
                     end if;
 
+                    -- summary[].text (assembled into l_summary_text) is the
+                    -- reasoning text; the item has no top-level 'text' field,
+                    -- so get_clob('text') would store a literal 'null' string.
                     l_reasoning_content := uc_ai_message_api.create_reasoning_content(
-                      p_text => l_output_item.get_clob('text'),
+                      p_text => l_summary_text,
                       p_provider_options => l_provider_options
                     );
 

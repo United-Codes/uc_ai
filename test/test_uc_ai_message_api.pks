@@ -27,6 +27,9 @@ create or replace package test_uc_ai_message_api as
   --%test(create_reasoning_content builds a reasoning content object)
   procedure reasoning_content_shape;
 
+  --%test(create_reasoning_content omits text key when text is null (no literal "null" string))
+  procedure reasoning_content_null_text;
+
   --%test(create_tool_call_content builds a tool call content object)
   procedure tool_call_content_shape;
 
