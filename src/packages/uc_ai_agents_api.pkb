@@ -2432,8 +2432,6 @@ create or replace package body uc_ai_agents_api as
              m.tool_input,
              m.tool_output,
              m.tool_status,
-             m.input_tokens,
-             m.output_tokens,
              m.created_at
       from uc_ai_agent_messages m
       where m.session_id = p_session_id

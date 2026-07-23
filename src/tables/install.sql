@@ -381,11 +381,6 @@ create table uc_ai_agent_messages (
   tool_output            clob,
   tool_status            varchar2(50 char),
 
-  -- Reserved for future per-message attribution; aggregates live on the
-  -- execution/session rows for now.
-  input_tokens           number,
-  output_tokens          number,
-
   created_at             timestamp not null,
 
   constraint uc_ai_agent_messages_pk primary key (id),

@@ -170,8 +170,6 @@ create table uc_ai_agent_messages (
   tool_input             clob,
   tool_output            clob,
   tool_status            varchar2(50 char),
-  input_tokens           number,
-  output_tokens          number,
   created_at             timestamp not null,
 
   constraint uc_ai_agent_messages_pk primary key (id),
