@@ -1072,6 +1072,47 @@ create or replace package body uc_ai_tools_api as
   end create_parameters_recursive;
 
   /*
+   * Inserts tags for a tool.
+   *
+   * Tag names are lowercased to satisfy the uc_ai_tool_tags_tag_lower_ck check
+   * constraint and de-duplicated (case-insensitively) before insert. Without the
+   * de-duplication a p_tags array containing repeated or case-variant values
+   * (e.g. 'Foo' and 'foo') would violate the uc_ai_tool_tags_uk unique key
+   * (tool_id, tag_name) and raise ORA-00001, aborting the enclosing tool merge.
+   */
+  procedure insert_tool_tags(
+    p_tool_id    in uc_ai_tools.id%type
+  , p_tags       in apex_t_varchar2
+  , p_created_by in uc_ai_tool_tags.created_by%type
+  )
+  as
+  begin
+    if p_tags is null or p_tags.count = 0 then
+      return;
+    end if;
+
+    insert into uc_ai_tool_tags (
+      tool_id,
+      tag_name,
+      created_by,
+      created_at,
+      updated_by,
+      updated_at
+    )
+    select p_tool_id,
+           tag_name,
+           p_created_by,
+           systimestamp,
+           p_created_by,
+           systimestamp
+      from (
+        select distinct lower(column_value) as tag_name
+          from table(p_tags)
+         where column_value is not null
+      );
+  end insert_tool_tags;
+
+  /*
    * Creates a new tool definition from a JSON schema
    */
   function create_tool_from_schema(
@@ -1154,24 +1195,11 @@ create or replace package body uc_ai_tools_api as
     );
 
     -- Create tags if provided
-    if p_tags is not null and p_tags.count > 0 then
-      forall i in 1 .. p_tags.count
-        insert into uc_ai_tool_tags (
-          tool_id,
-          tag_name,
-          created_by,
-          created_at,
-          updated_by,
-          updated_at
-        ) values (
-          l_tool_id,
-          lower(p_tags(i)),
-          p_created_by,
-          systimestamp,
-          p_created_by,
-          systimestamp
-        );
-    end if;
+    insert_tool_tags(
+      p_tool_id    => l_tool_id
+    , p_tags       => p_tags
+    , p_created_by => p_created_by
+    );
 
     uc_ai_logger.log('Successfully created tool with schema', l_scope, 'Tool ID: ' || l_tool_id);
 
@@ -1307,24 +1335,11 @@ create or replace package body uc_ai_tools_api as
     );
 
     -- Create tags if provided
-    if p_tags is not null and p_tags.count > 0 then
-      forall i in 1 .. p_tags.count
-        insert into uc_ai_tool_tags (
-          tool_id,
-          tag_name,
-          created_by,
-          created_at,
-          updated_by,
-          updated_at
-        ) values (
-          l_tool_id,
-          lower(p_tags(i)),
-          p_created_by,
-          systimestamp,
-          p_created_by,
-          systimestamp
-        );
-    end if;
+    insert_tool_tags(
+      p_tool_id    => l_tool_id
+    , p_tags       => p_tags
+    , p_created_by => p_created_by
+    );
 
     uc_ai_logger.log('Successfully merged tool with schema', l_scope, 'Tool ID: ' || l_tool_id);
 
