@@ -65,6 +65,7 @@ export default defineConfig({
 						"guides/use-cases",
 						"guides/providers",
 						"guides/tools",
+						"guides/programmatic-tool-calling",
 						"guides/file_analysis",
 						"guides/reasoning",
 						"guides/structured_output",

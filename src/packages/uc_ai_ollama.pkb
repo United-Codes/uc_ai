@@ -437,10 +437,11 @@ create or replace package body uc_ai_ollama as
           -- Fire the per-tool-call hook (may veto by raising, stopping the run)
           uc_ai_tools_api.before_tool_call(p_tool_code => l_tool_name, p_settings => p_settings);
 
-          -- Execute the tool and get result
-          l_tool_result := uc_ai_tools_api.execute_tool(
+          -- Execute the tool (or run the code-mode program in the sandbox)
+          l_tool_result := uc_ai_tools_api.execute_agent_tool(
             p_tool_code          => l_tool_name
           , p_arguments          => l_tool_input
+          , p_settings           => p_settings
           );
 
           -- Create tool result message for Ollama format
@@ -643,7 +644,7 @@ create or replace package body uc_ai_ollama as
     -- enabled OR when provider (server-side) tools were supplied.
     if l_settings.enable_tools
        or (l_settings.provider_tools is not null and l_settings.provider_tools.get_size > 0) then
-      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_ollama, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools, p_provider_tools => l_settings.provider_tools);
+      l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_ollama, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools, p_provider_tools => l_settings.provider_tools, p_programmatic_tools => l_settings.enable_programmatic_tools);
 
       if l_tools.get_size > 0 then
         l_input_obj.put('tools', l_tools);

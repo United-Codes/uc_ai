@@ -1,6 +1,37 @@
-create or replace package body uc_ai_tools_api as 
+create or replace package body uc_ai_tools_api as
 
   gc_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
+
+  -- Programmatic tool-calling (code mode) run context. Set by execute_agent_tool
+  -- around a sandboxed run and read by the uc_ai_ptc_api gateway (same session,
+  -- same package instantiation) to enforce the allow-list + inner-call budget.
+  gc_ptc_max_inner_calls constant pls_integer := 100;
+  g_ptc_active     boolean := false;
+  g_ptc_enable     boolean := false;
+  g_ptc_tag_filter number(1) := 0;  -- @dblinter ignore(G-2410): used in a SQL predicate (member-of filter), so kept numeric like l_enable_tool_filter
+  g_ptc_tags       apex_t_varchar2 := apex_t_varchar2();
+  g_ptc_calls      pls_integer := 0;
+  g_ptc_max_calls  pls_integer := gc_ptc_max_inner_calls;
+  -- settings of the active run, so inner callTool()s can fire the per-tool-call hook
+  g_ptc_settings   uc_ai_settings.t_settings;
+  -- message of a hook veto raised for an inner call; re-raised after the run so a
+  -- veto aborts the whole request instead of being swallowed into an error result
+  g_ptc_veto_msg   varchar2(4000 char);
+  g_ptc_runner_ok  pls_integer;  -- null = not yet checked, 1 = present, 0 = absent
+
+  -- Snapshot of the run context, so a nested code-mode run (e.g. a program that
+  -- calls an agent-as-tool whose agent itself uses code mode) restores the outer
+  -- run instead of deactivating it.
+  type t_ptc_ctx is record (
+    active     boolean
+  , enable     boolean
+  , tag_filter number(1)
+  , tags       apex_t_varchar2
+  , calls      pls_integer
+  , max_calls  pls_integer
+  , settings   uc_ai_settings.t_settings
+  , veto_msg   varchar2(4000 char)
+  );
 
 
   /*
@@ -326,8 +357,34 @@ create or replace package body uc_ai_tools_api as
 
 
   /*
+   * Name of the key a provider expects the tool's JSON schema under.
+   *
+   * Google/Ollama (and the OpenAI-compatible xAI/OpenRouter/Mistral endpoints) call
+   * it "parameters", the rest "input_schema". Single source of truth: every builder
+   * (get_tool_schema, build_code_mode_tool) and every reader (format_tool_for_provider,
+   * tool_param_names) must derive the key from here, otherwise a tool definition is
+   * silently emitted under a key the provider ignores.
+   */
+  function input_schema_key (
+    p_provider        in uc_ai.provider_type
+  , p_additional_info in varchar2 default null
+  ) return varchar2
+  as
+  begin
+    if    p_provider in (uc_ai.c_provider_google, uc_ai.c_provider_ollama)
+       -- xAI uses "parameters" as input schema name
+       or (p_provider = uc_ai.c_provider_openai and p_additional_info in (uc_ai.c_provider_xai, uc_ai.c_provider_openrouter, uc_ai.c_provider_mistral))
+    then
+      return 'parameters';
+    else
+      return 'input_schema';
+    end if;
+  end input_schema_key;
+
+
+  /*
    * Main function to build complete JSON schema for a tool
-   * 
+   *
    * Workflow:
    * 1. Gets tool info (code, description) from uc_ai_tools
    * 2. Processes all top-level parameters (parent_param_id IS NULL)
@@ -427,15 +484,8 @@ create or replace package body uc_ai_tools_api as
       end if;
     end if;
 
-    if    p_provider in (uc_ai.c_provider_google, uc_ai.c_provider_ollama) 
-       -- xAI uses "parameters" as input schema name
-       or (p_provider = uc_ai.c_provider_openai and p_additional_info in (uc_ai.c_provider_xai, uc_ai.c_provider_openrouter, uc_ai.c_provider_mistral))
-    then
-      l_input_schema_name := 'parameters';
-    else
-      l_input_schema_name := 'input_schema';
-    end if;
-    
+    l_input_schema_name := input_schema_key(p_provider, p_additional_info);
+
     l_function.put(l_input_schema_name, l_input_schema);
     l_function.put('name', l_tool_code);
     l_function.put('description', l_tool_description);
@@ -448,19 +498,158 @@ create or replace package body uc_ai_tools_api as
   END get_tool_schema;
 
 
+  -- Wrap a base tool definition ({name, description, <schema key>}) into the
+  -- shape a given provider expects. Anthropic/google/xai/openrouter/mistral use
+  -- the base form directly; openai/ollama/responses/oci need their own envelope.
+  function format_tool_for_provider (
+    p_tool_base       in json_object_t
+  , p_provider        in uc_ai.provider_type
+  , p_additional_info in varchar2 default null
+  ) return json_object_t
+  as
+    l_base       json_object_t := p_tool_base;
+    l_out        json_object_t;
+    l_schema_key varchar2(30 char);
+  begin
+    l_schema_key := input_schema_key(p_provider, p_additional_info);
+
+    if p_provider in (uc_ai.c_provider_openai, uc_ai.c_provider_ollama) then
+      l_out := json_object_t();
+      l_out.put('type', 'function');
+      l_out.put('function', l_base.clone());
+    elsif p_provider = uc_ai.c_provider_responses_api then
+      l_out := json_object_t();
+      l_out.put('type', 'function');
+      l_out.put('name', l_base.get_string('name'));
+      l_out.put('description', l_base.get_string('description'));
+      l_out.put('parameters', l_base.get_object(l_schema_key));
+    elsif p_provider = uc_ai.c_provider_oci then
+      l_out := json_object_t();
+      if p_additional_info != gc_cohere then
+        l_out.put('type', 'FUNCTION');
+      end if;
+      l_out.put('description', l_base.get_string('description'));
+      l_out.put('name', l_base.get_string('name'));
+      if p_additional_info != gc_cohere then
+        l_out.put('parameters', l_base.get_object(l_schema_key));
+      else
+        l_out.put('parameterDefinitions', convert_input_schema_to_cohere(l_base.get_object(l_schema_key)));
+      end if;
+    else
+      l_out := l_base;
+    end if;
+
+    return l_out;
+  end format_tool_for_provider;
+
+
+  -- Build the base definition of the code-mode meta-tool. The tool takes a single
+  -- `code` string; the model authors JavaScript that calls the other tools via
+  -- callTool(name, args) and returns only its final `result`.
+  -- The schema goes under the same key the provider's regular tools use, so the
+  -- `code` parameter is actually declared for every provider.
+  function build_code_mode_tool(
+    p_catalog         in varchar2
+  , p_provider        in uc_ai.provider_type
+  , p_additional_info in varchar2 default null
+  ) return json_object_t
+  as
+    l_tool         json_object_t := json_object_t();
+    l_input_schema json_object_t := json_object_t();
+    l_props        json_object_t := json_object_t();
+    l_code_prop    json_object_t := json_object_t();
+    l_required     json_array_t  := json_array_t();
+    l_code_desc    varchar2(32767 char);
+  begin
+    l_code_desc :=
+      'JavaScript source executed in the database. Your code runs as the body of an '
+      || 'async function, so you can use await at the top level. Call the tools listed '
+      || 'below with `await callTool("TOOL_CODE", { ...args })` - ALWAYS await it - which '
+      || 'returns the tool''s parsed JSON result (an object or array). ONLY the exact tool '
+      || 'codes listed here are callable - there is no discovery/list function, so never '
+      || 'invent tool names. Loop, filter and aggregate locally, then assign your final '
+      || 'answer to a top-level variable named `result` (an object or a string). Only '
+      || '`result` is returned to you - intermediate tool outputs stay in the sandbox. '
+      || 'Use plain JavaScript only: there is no SQL, network, file or module access, '
+      || 'and callTool is the only way to reach data. You may use console.log() while '
+      || 'developing: its output is returned to you if the program fails or sets no '
+      || '`result`.' || chr(10) || chr(10)
+      || 'Callable tools (await callTool code -> arguments):' || chr(10)
+      || p_catalog;
+
+    l_code_prop.put('type', 'string');
+    l_code_prop.put('description', l_code_desc);
+    l_props.put('code', l_code_prop);
+    l_required.append('code');
+
+    l_input_schema.put('type', 'object');
+    l_input_schema.put('properties', l_props);
+    l_input_schema.put('required', l_required);
+    -- Google rejects the request outright for unknown schema keys, so the meta-tool
+    -- follows the same rule as get_tool_schema and omits them there.
+    if p_provider != uc_ai.c_provider_google then
+      l_input_schema.put('additionalProperties', false);
+    end if;
+
+    l_tool.put('name', c_code_mode_tool_code);
+    l_tool.put('description',
+      'Programmatically orchestrate the other available tools by writing a short '
+      || 'JavaScript program that calls them and returns only the final result. Prefer '
+      || 'this when a task needs many tool calls or would pull large intermediate data '
+      || 'into the conversation. The exact callable tool codes are documented in the '
+      || '`code` parameter description.');
+    l_tool.put(input_schema_key(p_provider, p_additional_info), l_input_schema);
+
+    return l_tool;
+  end build_code_mode_tool;
+
+
+  -- Comma-separated parameter names of a base tool definition, for the code-mode
+  -- catalog line (e.g. "employee_id, quarter"). Empty string for a no-arg tool.
+  -- p_schema_key is the provider's schema key (input_schema_key), because the base
+  -- definition already carries the provider-specific name.
+  function tool_param_names(
+    p_tool_base  in json_object_t
+  , p_schema_key in varchar2
+  ) return varchar2
+  as
+    l_props json_object_t;
+    l_keys  json_key_list;
+    l_out   varchar2(4000 char);
+  begin
+    if not p_tool_base.has(p_schema_key) then
+      return null;
+    end if;
+    l_props := p_tool_base.get_object(p_schema_key);
+    if l_props is null or not l_props.has('properties') then
+      return null;
+    end if;
+    l_keys := l_props.get_object('properties').get_keys();
+    <<param_names_loop>>
+    for i in 1 .. l_keys.count loop
+      l_out := l_out || case when i > 1 then ', ' end || l_keys(i);
+    end loop param_names_loop;
+    return l_out;
+  end tool_param_names;
+
+
   function get_tools_array (
     p_provider        in uc_ai.provider_type
   , p_additional_info in varchar2 default null
   , p_tool_tags       in apex_t_varchar2 default null
   , p_enable_tools    in boolean default null
   , p_provider_tools  in json_array_t default null
+  , p_programmatic_tools       in boolean default false
   ) return json_array_t
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'get_tools_array';
 
     l_tools_array  json_array_t := json_array_t();
     l_tool_obj     json_object_t;
-    l_tool_cpy_obj json_object_t;
+    l_tool_base    json_object_t;
+    l_catalog      varchar2(32767 char);
+    l_schema_key   varchar2(30 char);
+    l_skipped_cat  pls_integer := 0;
     l_enable_tool_filter number(1) := 0; -- @dbLinter ignore(G-2410) used in SQL
     l_found_tools number := 0;
     -- Prefer explicitly threaded values (from the per-call settings record); fall
@@ -469,6 +658,8 @@ create or replace package body uc_ai_tools_api as
     l_tool_tags    apex_t_varchar2; -- @dbLinter ignore(G-2410) used in SQL
     l_enable_tools boolean;
   begin
+    l_schema_key := input_schema_key(p_provider, p_additional_info);
+
     if p_tool_tags is not null then
       l_tool_tags := p_tool_tags;
     else
@@ -493,7 +684,7 @@ create or replace package body uc_ai_tools_api as
 
     <<fetch_tools>>
     for rec in (
-      select id
+      select id, code_mode_access
         from uc_ai_tools
        where (
               l_enable_tool_filter = 0
@@ -508,48 +699,58 @@ create or replace package body uc_ai_tools_api as
     )
     loop
       l_found_tools := l_found_tools + 1;
-      l_tool_obj := get_tool_schema(rec.id, p_provider, p_additional_info);
+      l_tool_base := get_tool_schema(rec.id, p_provider, p_additional_info);
 
-      -- openai has an additional object wrapper for function calls
-      -- {type: "function", function: {...}}
-      -- where others like anthropic/claude use the function object directly
-      if p_provider in (uc_ai.c_provider_openai, uc_ai.c_provider_ollama) then
-        l_tool_cpy_obj := l_tool_obj.clone();
+      -- In code mode, a tool's code_mode_access decides where it shows up:
+      --   'direct' -> normal tool only, 'code' -> catalog only, 'both' -> both.
+      -- (When code mode is off, code_mode_access is ignored and every tool is a
+      -- normal tool, exactly as before.)
 
-        l_tool_obj := json_object_t();
-        l_tool_obj.put('type', 'function');
-        l_tool_obj.put('function', l_tool_cpy_obj);
-      elsif p_provider = uc_ai.c_provider_responses_api then
-        l_tool_cpy_obj := l_tool_obj.clone();
-
-        l_tool_obj := json_object_t();
-        l_tool_obj.put('type', 'function');
-        l_tool_obj.put('name', l_tool_cpy_obj.get_string('name'));
-        l_tool_obj.put('description', l_tool_cpy_obj.get_string('description'));
-        l_tool_obj.put('parameters', l_tool_cpy_obj.get_object('input_schema'));
-      elsif p_provider = uc_ai.c_provider_oci then
-        l_tool_cpy_obj := l_tool_obj.clone();
-        uc_ai_logger.log('Creating tool schema for OCI provider (' || p_additional_info || ')', l_scope, l_tool_cpy_obj.to_clob());
-
-        l_tool_obj := json_object_t();
-        if p_additional_info != gc_cohere then
-          l_tool_obj.put('type', 'FUNCTION');
-        end if;
-
-        l_tool_obj.put('description', l_tool_cpy_obj.get_string('description'));
-        l_tool_obj.put('name', l_tool_cpy_obj.get_string('name'));
-
-        if p_additional_info != gc_cohere then
-          l_tool_obj.put('parameters', l_tool_cpy_obj.get_object('input_schema'));
+      -- Catalog entry (callable via callTool) for code/both tools. One line per
+      -- tool, so newlines in a description are folded to keep the line intact.
+      if p_programmatic_tools and rec.code_mode_access in ('code', 'both') then
+        if nvl(length(l_catalog), 0) < 30000 then
+          l_catalog := l_catalog
+            || '  await callTool("' || l_tool_base.get_string('name') || '", { '
+            || tool_param_names(l_tool_base, l_schema_key) || ' })  // '
+            || substr(translate(l_tool_base.get_string('description'), chr(10) || chr(13) || chr(9), '   '), 1, 200) || chr(10);
         else
-          l_tool_obj.put('parameterDefinitions',  convert_input_schema_to_cohere(l_tool_cpy_obj.get_object('input_schema')));
+          l_skipped_cat := l_skipped_cat + 1;
         end if;
       end if;
 
-      l_tools_array.append(l_tool_obj);
+      -- Direct (normal) tool for direct/both tools - and always when code mode is off.
+      if not p_programmatic_tools or rec.code_mode_access in ('direct', 'both') then
+        -- Providers expect different envelopes (openai/ollama/responses/oci);
+        -- anthropic/google/xai/openrouter/mistral use the base form directly.
+        l_tool_obj := format_tool_for_provider(l_tool_base, p_provider, p_additional_info);
+        l_tools_array.append(l_tool_obj);
+      end if;
     end loop fetch_tools;
 
     uc_ai_logger.log('Total tools found: ' || l_found_tools, l_scope);
+
+    -- Programmatic tool calling: append the code-mode meta-tool, but only if at
+    -- least one tool is actually code-callable (otherwise there is nothing to run).
+    if p_programmatic_tools and l_catalog is not null then
+      l_tools_array.append(
+        format_tool_for_provider(
+          build_code_mode_tool(l_catalog, p_provider, p_additional_info)
+        , p_provider
+        , p_additional_info
+        )
+      );
+      uc_ai_logger.log('Appended code-mode meta-tool ' || c_code_mode_tool_code, l_scope);
+
+      -- never drop tools from the catalog silently
+      if l_skipped_cat > 0 then
+        uc_ai_logger.log_warning(
+          'Code-mode catalog size limit reached: ' || l_skipped_cat
+          || ' tool(s) left out and NOT callable from a program'
+        , l_scope
+        );
+      end if;
+    end if;
 
     end if; -- l_enable_tools
 
@@ -637,6 +838,269 @@ create or replace package body uc_ai_tools_api as
       uc_ai_logger.log_error('Error in execute_tool: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end execute_tool;
+
+
+  -- ---- Code mode (programmatic tool calling) --------------------------------
+
+  -- Save the current run context so a nested run can restore it (a program may
+  -- call an agent-as-tool whose agent itself runs in code mode).
+  function save_ptc_ctx return t_ptc_ctx
+  as
+    l_ctx t_ptc_ctx;
+  begin
+    l_ctx.active     := g_ptc_active;
+    l_ctx.enable     := g_ptc_enable;
+    l_ctx.tag_filter := g_ptc_tag_filter;
+    l_ctx.tags       := g_ptc_tags;
+    l_ctx.calls      := g_ptc_calls;
+    l_ctx.max_calls  := g_ptc_max_calls;
+    l_ctx.settings   := g_ptc_settings;
+    l_ctx.veto_msg   := g_ptc_veto_msg;
+    return l_ctx;
+  end save_ptc_ctx;
+
+  procedure restore_ptc_ctx(p_ctx in t_ptc_ctx)
+  as
+  begin
+    g_ptc_active     := p_ctx.active;
+    g_ptc_enable     := p_ctx.enable;
+    g_ptc_tag_filter := p_ctx.tag_filter;
+    g_ptc_tags       := p_ctx.tags;
+    g_ptc_calls      := p_ctx.calls;
+    g_ptc_max_calls  := p_ctx.max_calls;
+    g_ptc_settings   := p_ctx.settings;
+    g_ptc_veto_msg   := p_ctx.veto_msg;
+  end restore_ptc_ctx;
+
+  procedure begin_ptc_run(
+    p_settings  in uc_ai_settings.t_settings
+  , p_max_calls in pls_integer
+  )
+  as
+    l_tool_tags apex_t_varchar2;
+  begin
+    -- Prefer the explicitly threaded per-call settings; fall back to the globals
+    -- for direct callers that still rely on them (same rule as get_tools_array).
+    if nvl(p_settings.initialized, false) then
+      g_ptc_settings := p_settings;
+      g_ptc_enable   := nvl(p_settings.enable_tools, false);
+      l_tool_tags    := p_settings.tool_tags;
+    else
+      g_ptc_settings := uc_ai_settings.build_from_globals;
+      g_ptc_enable   := nvl(uc_ai.g_enable_tools, false);
+      l_tool_tags    := uc_ai.g_tool_tags;
+    end if;
+
+    if l_tool_tags is not null and l_tool_tags.count > 0 then
+      g_ptc_tags       := l_tool_tags;
+      g_ptc_tag_filter := 1;
+    else
+      g_ptc_tags       := apex_t_varchar2();
+      g_ptc_tag_filter := 0;
+    end if;
+    g_ptc_calls     := 0;
+    g_ptc_max_calls := nvl(p_max_calls, gc_ptc_max_inner_calls);
+    g_ptc_veto_msg  := null;
+    g_ptc_active    := true;
+  end begin_ptc_run;
+
+  procedure check_ptc_tool_allowed(
+    p_tool_code in uc_ai_tools.code%type
+  )
+  as
+    l_scope uc_ai_logger.scope := gc_scope_prefix || 'check_ptc_tool_allowed';
+    l_cnt   pls_integer;
+  begin
+    if not g_ptc_active then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'code mode'
+      , p1           => 'callTool used outside an active code-mode run'
+      );
+    end if;
+
+    g_ptc_calls := g_ptc_calls + 1;
+    if g_ptc_calls > g_ptc_max_calls then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'code mode call budget'
+      , p1           => 'Exceeded the maximum of ' || g_ptc_max_calls || ' tool calls in one program'
+      );
+    end if;
+
+    -- The tool must belong to THIS run's exposed set: active, and matching the
+    -- run's tag filter (same predicate get_tools_array uses). This stops a
+    -- program from reaching tools that were never offered for the run.
+    if not g_ptc_enable then
+      l_cnt := 0;
+    else
+      select count(*)
+        into l_cnt
+        from uc_ai_tools t
+       where t.code = p_tool_code
+         and t.active = 1
+         and t.code_mode_access in ('code', 'both')
+         and (
+              g_ptc_tag_filter = 0
+               or t.id in (
+                 select tt.tool_id
+                   from uc_ai_tool_tags tt
+                  where tt.tag_name member of g_ptc_tags
+               )
+             );
+    end if;
+
+    if l_cnt = 0 then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_tool_not_found
+      , p_scope      => l_scope
+      , p0           => p_tool_code
+      );
+    end if;
+
+    -- Inner calls go through the same per-tool-call hook as direct calls, so
+    -- hook-based authorization and auditing cover tools called from a program too.
+    -- A veto (the hook raising) blocks this call and is remembered: execute_agent_tool
+    -- re-raises it after the run, so a veto still aborts the request rather than
+    -- being swallowed into an error result the model may retry.
+    begin
+      before_tool_call(p_tool_code => p_tool_code, p_settings => g_ptc_settings);
+    exception
+      -- @dblinter ignore(G-5040): the veto is re-raised immediately; it is only recorded on the way out
+      -- @dblinter ignore(G-5080): the hook's own error is re-raised unchanged; adding a backtrace here would hide the veto message the caller asserts on
+      when others then
+        g_ptc_veto_msg := substr(sqlerrm, 1, 4000);
+        raise;
+    end;
+  end check_ptc_tool_allowed;
+
+  /*
+   * Is the code-mode sandbox installed for THIS schema?
+   *
+   * The sandbox installer creates a private synonym (c_ptc_runner_synonym) here that
+   * points at the runner in the sandbox schema it created, so both schema names stay
+   * the DBA's choice and two UC AI installs never share a sandbox. Resolving the
+   * synonym also tells us the sandbox schema for log and error messages.
+   */
+  function ptc_runner_available return boolean
+  as
+    l_cnt pls_integer;
+  begin
+    -- Only a positive result is cached: sessions are long-lived in ORDS/APEX pools,
+    -- so caching "absent" would keep code mode disabled in pooled sessions that
+    -- existed before the sandbox was installed.
+    if g_ptc_runner_ok = 1 then
+      return true;
+    end if;
+
+    -- @dblinter ignore(G-8110): presence check for the sandbox runner; a scalar count is the clearest form here
+    select count(*)
+      into l_cnt
+      from all_synonyms syn
+      join all_objects obj
+        on obj.owner = syn.table_owner
+       and obj.object_name = syn.table_name
+     where syn.owner = $$plsql_unit_owner
+       and syn.synonym_name = c_ptc_runner_synonym
+       and obj.object_type = 'PACKAGE BODY'
+       and obj.status = 'VALID';
+
+    if l_cnt > 0 then
+      g_ptc_runner_ok := 1;
+    end if;
+
+    return l_cnt > 0;
+  end ptc_runner_available;
+
+  /*
+   * Hands the model-authored program to the sandbox runner.
+   *
+   * Called dynamically only to avoid a compile-time dependency on the optional
+   * sandbox package. The runner evaluates the program in a PURE MLE context, which
+   * has no SQL access at all, so the generated JavaScript cannot commit or roll
+   * back the caller's transaction; the tools it calls run in the caller's
+   * transaction exactly like a direct tool call.
+   */
+  function run_in_sandbox(p_code in clob) return clob
+  as
+    l_result clob;
+    -- @dblinter ignore(G-6010): statement built from a compile-time constant (no user input) with both binds bound
+    l_stmt   varchar2(200 char) := 'begin :r := ' || c_ptc_runner_synonym || '.run_code(:c); end;';
+  begin
+    execute immediate l_stmt using out l_result, in p_code;
+    return l_result;
+  end run_in_sandbox;
+
+  function execute_agent_tool(
+    p_tool_code in uc_ai_tools.code%type
+  , p_arguments in json_object_t
+  , p_settings  in uc_ai_settings.t_settings default null
+  ) return clob
+  as
+    l_scope  uc_ai_logger.scope := gc_scope_prefix || 'execute_agent_tool';
+    l_result clob;
+    l_code   clob;
+    l_outer  t_ptc_ctx;
+    l_veto   varchar2(4000 char);
+  begin
+    -- Normal tool: unchanged behaviour.
+    if p_tool_code <> c_code_mode_tool_code then
+      return execute_tool(p_tool_code => p_tool_code, p_arguments => p_arguments);
+    end if;
+
+    -- Code mode is mandatory-sandboxed: run the model-authored program in the
+    -- dedicated low-privilege schema, or fail clearly. There is no in-schema path.
+    if not ptc_runner_available then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_missing_config
+      , p_scope      => l_scope
+      , p0           => c_ptc_runner_synonym
+      , p_message    => 'Code mode requires the MLE sandbox, which is not installed for this schema (no valid %0 synonym). Run scripts/install_ptc_sandbox.sql as a DBA to enable code mode.'
+      );
+    end if;
+
+    -- get_clob, not get_string: generated programs can exceed the 32 KB varchar2 limit
+    l_code := p_arguments.get_clob('code');
+
+    -- Publish this run's allow-list + budget for the gateway, invoke the sandbox,
+    -- and always restore the previous context afterwards (a nested code-mode run
+    -- must not deactivate the outer one).
+    l_outer := save_ptc_ctx;
+    begin_ptc_run(
+      p_settings  => p_settings
+    , p_max_calls => gc_ptc_max_inner_calls
+    );
+
+    begin
+      l_result := run_in_sandbox(l_code);
+      l_veto   := g_ptc_veto_msg;
+      restore_ptc_ctx(l_outer);
+    exception
+      when others then
+        restore_ptc_ctx(l_outer);
+        raise;
+    end;
+
+    -- A per-tool-call hook veto for an inner call must abort the request, not come
+    -- back as an error result the model can retry (the runner turns every failure
+    -- inside the program into data, which would otherwise swallow the veto).
+    if l_veto is not null then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'code mode tool call'
+      , p1           => 'vetoed by the before_tool_call hook: ' || l_veto
+      );
+    end if;
+
+    return l_result;
+  exception
+    when others then
+      uc_ai_logger.log_error('Error in execute_agent_tool: %s', l_scope, sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      raise;
+  end execute_agent_tool;
 
 
   function exec_function_call(
@@ -1124,7 +1588,8 @@ create or replace package body uc_ai_tools_api as
     p_version               in uc_ai_tools.version%type default '1.0',
     p_authorization_schema  in uc_ai_tools.authorization_schema%type default null,
     p_created_by            in uc_ai_tools.created_by%type default coalesce(sys_context('APEX$SESSION','app_user'), sys_context('userenv', 'session_user')),
-    p_tags                  in apex_t_varchar2 default apex_t_varchar2()
+    p_tags                  in apex_t_varchar2 default apex_t_varchar2(),
+    p_code_mode_access      in uc_ai_tools.code_mode_access%type default 'both'
   ) return uc_ai_tools.id%type
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'create_tool_from_schema';
@@ -1148,6 +1613,7 @@ create or replace package body uc_ai_tools_api as
       version,
       function_call,
       authorization_schema,
+      code_mode_access,
       created_by,
       created_at,
       updated_by,
@@ -1160,6 +1626,7 @@ create or replace package body uc_ai_tools_api as
       p_version,
       p_function_call,
       p_authorization_schema,
+      p_code_mode_access,
       p_created_by,
       systimestamp,
       p_created_by,
@@ -1226,7 +1693,8 @@ create or replace package body uc_ai_tools_api as
     p_version               in uc_ai_tools.version%type default '1.0',
     p_authorization_schema  in uc_ai_tools.authorization_schema%type default null,
     p_created_by            in uc_ai_tools.created_by%type default coalesce(sys_context('APEX$SESSION','app_user'), sys_context('userenv', 'session_user')),
-    p_tags                  in apex_t_varchar2 default apex_t_varchar2()
+    p_tags                  in apex_t_varchar2 default apex_t_varchar2(),
+    p_code_mode_access      in uc_ai_tools.code_mode_access%type default null
   ) return uc_ai_tools.id%type
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'merge_tool_from_schema';
@@ -1262,6 +1730,9 @@ create or replace package body uc_ai_tools_api as
              version              = p_version,
              function_call        = p_function_call,
              authorization_schema = p_authorization_schema,
+             -- null keeps the stored value: re-running a merge script must not
+             -- silently widen a tool that was narrowed to 'direct' or 'code'
+             code_mode_access     = nvl(p_code_mode_access, code_mode_access),
              updated_by           = p_created_by,
              updated_at           = systimestamp
        where id = l_existing_tool_id;
@@ -1287,6 +1758,7 @@ create or replace package body uc_ai_tools_api as
         version,
         function_call,
         authorization_schema,
+        code_mode_access,
         created_by,
         created_at,
         updated_by,
@@ -1299,6 +1771,7 @@ create or replace package body uc_ai_tools_api as
         p_version,
         p_function_call,
         p_authorization_schema,
+        nvl(p_code_mode_access, 'both'),
         p_created_by,
         systimestamp,
         p_created_by,

@@ -404,3 +404,18 @@ begin
   commit;
 end;
 /
+
+
+-- ============================================================================
+-- TOOLS: programmatic tool calling ("code mode") per-tool availability
+-- ============================================================================
+-- Controls whether a tool is offered as a normal (direct) tool, only inside a
+-- code-mode program (callTool), or both. Existing tools default to 'both' so
+-- behaviour is unchanged.
+
+alter table uc_ai_tools add (
+  code_mode_access varchar2(10 char) default on null 'both' not null
+);
+
+alter table uc_ai_tools add constraint uc_ai_tools_cma_ck
+  check (code_mode_access in ('direct','code','both'));

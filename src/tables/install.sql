@@ -9,14 +9,18 @@ create table uc_ai_tools(
   version              varchar2(50 char) default on null '1.0' not null,
   function_call        clob not null,
   authorization_schema varchar2(255 char),
+  code_mode_access     varchar2(10 char) default on null 'both' not null,
   created_by           varchar2(255 char) not null,
   created_at           timestamp not null,
   updated_by           varchar2(255 char) not null,
   updated_at           timestamp not null,
   constraint uc_ai_tools_pk primary key (id),
   constraint uc_ai_tools_uk unique (code),
-  constraint uc_ai_tools_active_ck check (active in (0,1))
-);  
+  constraint uc_ai_tools_active_ck check (active in (0,1)),
+  -- Programmatic tool calling ("code mode") availability:
+  --   direct = normal tool only, code = only via callTool() in a program, both = either
+  constraint uc_ai_tools_cma_ck check (code_mode_access in ('direct','code','both'))
+);
 
 create sequence uc_ai_tool_parameters_seq;
 

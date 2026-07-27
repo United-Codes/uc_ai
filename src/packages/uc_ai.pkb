@@ -340,6 +340,7 @@ create or replace package body uc_ai as
     g_enable_reasoning := false;
     g_reasoning_level := null;
     g_enable_tools := false;
+    g_enable_programmatic_tools := false;
     g_tool_tags := apex_t_varchar2();
     g_apex_web_credential := null;
     g_provider_override := null;

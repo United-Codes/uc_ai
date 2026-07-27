@@ -723,11 +723,12 @@ create or replace package body uc_ai_oci as
                       -- swallows tool errors) so a hook veto propagates and stops the run.
                       uc_ai_tools_api.before_tool_call(p_tool_code => l_tool_name, p_settings => p_settings);
 
-                      -- Execute the tool and get result
+                      -- Execute the tool (or run the code-mode program in the sandbox)
                       begin
-                        l_tool_result := uc_ai_tools_api.execute_tool(
+                        l_tool_result := uc_ai_tools_api.execute_agent_tool(
                           p_tool_code          => l_tool_name
                         , p_arguments          => l_tool_args
+                        , p_settings           => p_settings
                         );
                       exception
                         when others then
@@ -854,11 +855,12 @@ create or replace package body uc_ai_oci as
               -- swallows tool errors) so a hook veto propagates and stops the run.
               uc_ai_tools_api.before_tool_call(p_tool_code => l_tool_name, p_settings => p_settings);
 
-              -- Execute the tool and get result
+              -- Execute the tool (or run the code-mode program in the sandbox)
               begin
-                l_tool_result := uc_ai_tools_api.execute_tool(
+                l_tool_result := uc_ai_tools_api.execute_agent_tool(
                   p_tool_code          => l_tool_name
                 , p_arguments          => l_tool_args
+                , p_settings           => p_settings
                 );
               exception
                 when others then
@@ -1114,6 +1116,7 @@ create or replace package body uc_ai_oci as
     , p_tool_tags => l_settings.tool_tags
     , p_enable_tools => l_settings.enable_tools
     , p_provider_tools => l_settings.provider_tools
+    , p_programmatic_tools => l_settings.enable_programmatic_tools
     );
 
     if l_tools.get_size > 0 then

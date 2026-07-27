@@ -49,6 +49,7 @@ as
   , provider_override              varchar2(4000 char)
   , apex_web_credential            varchar2(255 char)
   , enable_tools                   boolean
+  , enable_programmatic_tools               boolean
   , enable_reasoning               boolean
   , reasoning_level                varchar2(10 char)
   , tool_tags                      apex_t_varchar2

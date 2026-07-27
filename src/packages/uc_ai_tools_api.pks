@@ -14,6 +14,19 @@ as
 
   gc_cohere constant varchar2(255 char) := 'cohere';
 
+  -- Reserved tool code for the programmatic tool-calling ("code mode") meta-tool.
+  -- Not a row in uc_ai_tools; get_tools_array synthesizes it when p_programmatic_tools is
+  -- true, and execute_agent_tool routes it to the sandboxed MLE runner instead of
+  -- execute_tool.
+  c_code_mode_tool_code constant varchar2(30 char) := 'uc_ai__run_code';
+
+  -- Local synonym pointing at the MLE runner in the dedicated low-privilege sandbox
+  -- schema (code mode runs there, never in the install schema). Both schema names are
+  -- chosen by the DBA running scripts/install_ptc_sandbox.sql, which creates this
+  -- synonym in THIS schema - so the runner is located at runtime and every UC AI
+  -- install in the database gets its own sandbox.
+  c_ptc_runner_synonym constant varchar2(30 char) := 'UC_AI_PTC_RUNNER';
+
 
   /*
    * Returns array of all active tools formatted for specific AI provider
@@ -32,6 +45,7 @@ as
   , p_tool_tags       in apex_t_varchar2 default null
   , p_enable_tools    in boolean default null
   , p_provider_tools  in json_array_t default null
+  , p_programmatic_tools       in boolean default false
   ) return json_array_t;
 
   /*
@@ -44,6 +58,56 @@ as
     p_tool_code in uc_ai_tools.code%type
   , p_arguments in json_object_t
   ) return clob;
+
+
+  /*
+   * Provider-facing tool executor that is aware of code mode.
+   *
+   * For a normal tool this is just execute_tool. For the code-mode meta-tool
+   * (c_code_mode_tool_code) it runs the model-authored JavaScript in the
+   * dedicated low-privilege sandbox schema (via the c_ptc_runner_synonym synonym),
+   * having first published this run's allow-list + inner-call budget (derived from
+   * p_settings) so the gateway can enforce them. Raises a clear error if code mode
+   * is requested but the sandbox is not installed.
+   *
+   * Tools called by the program run in the CALLER's transaction, exactly like a
+   * direct tool call, so tools stay in charge of their own transaction handling.
+   * The generated JavaScript itself cannot commit or roll back anything: the runner
+   * evaluates it in a PURE MLE context, which has no SQL access at all, and services
+   * every callTool() from PL/SQL.
+   *
+   * A nested code-mode run (a program calling an agent-as-tool whose agent uses
+   * code mode) saves and restores the outer run's context.
+   *
+   * Providers call this in place of execute_tool; they keep their own
+   * before_tool_call invocation and error handling unchanged. The hook is fired
+   * again per inner callTool() (see check_ptc_tool_allowed).
+   *
+   * @param p_tool_code  tool code (or c_code_mode_tool_code)
+   * @param p_arguments  the tool arguments (for code mode: { "code": "<js>" })
+   * @param p_settings   per-call settings (supplies tool_tags / enable_tools)
+   * @return the tool's (or the program's) CLOB result
+   */
+  function execute_agent_tool(
+    p_tool_code in uc_ai_tools.code%type
+  , p_arguments in json_object_t
+  , p_settings  in uc_ai_settings.t_settings default null
+  ) return clob;
+
+  /*
+   * Guard called by the uc_ai_ptc_api gateway for every callTool() from inside a
+   * code-mode program. Raises c_err_invalid_config if the requested tool is not
+   * part of the current run's exposed (enabled + tag-filtered) set, or if the
+   * inner-call budget for this run is exceeded. Only meaningful inside a run
+   * bracketed by execute_agent_tool (raises otherwise).
+   *
+   * It also fires the per-tool-call hook (before_tool_call) for the inner call, so
+   * hook-based authorization and auditing cover tools called from a program. A veto
+   * blocks the call and makes execute_agent_tool abort the request after the run.
+   */
+  procedure check_ptc_tool_allowed(
+    p_tool_code in uc_ai_tools.code%type
+  );
 
 
   /*
@@ -106,6 +170,9 @@ as
    * @param p_authorization_schema Authorization schema if needed
    * @param p_created_by         User creating the tool
    * @param p_tags               Array of tags to associate with the tool
+   * @param p_code_mode_access   Code-mode availability: 'direct' (normal tool only),
+   *                             'code' (only callable via callTool in a program), or
+   *                             'both' (default)
    *
    * @return tool_id             The ID of the created tool
    */
@@ -118,7 +185,8 @@ as
     p_version               in uc_ai_tools.version%type default '1.0',
     p_authorization_schema  in uc_ai_tools.authorization_schema%type default null,
     p_created_by            in uc_ai_tools.created_by%type default coalesce(sys_context('APEX$SESSION','app_user'), sys_context('userenv', 'session_user')),
-    p_tags                  in apex_t_varchar2 default apex_t_varchar2()
+    p_tags                  in apex_t_varchar2 default apex_t_varchar2(),
+    p_code_mode_access      in uc_ai_tools.code_mode_access%type default 'both'
   ) return uc_ai_tools.id%type;
 
   /*
@@ -138,6 +206,12 @@ as
    * @param p_authorization_schema Authorization schema if needed
    * @param p_created_by         User creating the tool
    * @param p_tags               Array of tags to associate with the tool
+   * @param p_code_mode_access   Code-mode availability: 'direct' (normal tool only),
+   *                             'code' (only callable via callTool in a program), or
+   *                             'both'. Null (the default) keeps the value already
+   *                             stored for an existing tool and uses 'both' for a
+   *                             new one, so re-running a merge script never widens
+   *                             a tool that was deliberately narrowed.
    *
    * @return tool_id             The ID of the created or updated tool
    */
@@ -150,7 +224,8 @@ as
     p_version               in uc_ai_tools.version%type default '1.0',
     p_authorization_schema  in uc_ai_tools.authorization_schema%type default null,
     p_created_by            in uc_ai_tools.created_by%type default coalesce(sys_context('APEX$SESSION','app_user'), sys_context('userenv', 'session_user')),
-    p_tags                  in apex_t_varchar2 default apex_t_varchar2()
+    p_tags                  in apex_t_varchar2 default apex_t_varchar2(),
+    p_code_mode_access      in uc_ai_tools.code_mode_access%type default null
   ) return uc_ai_tools.id%type;
 
 end uc_ai_tools_api;

@@ -463,10 +463,12 @@ create or replace package body uc_ai_anthropic as
               -- Fire the per-tool-call hook (may veto by raising, stopping the run)
               uc_ai_tools_api.before_tool_call(p_tool_code => l_tool_name, p_settings => p_settings);
 
-              -- Execute the tool and get result
-              l_tool_result := uc_ai_tools_api.execute_tool(
+              -- Execute the tool (or, for the code-mode meta-tool, run the
+              -- model-authored program in the sandbox) and get the result.
+              l_tool_result := uc_ai_tools_api.execute_agent_tool(
                 p_tool_code          => l_tool_name
               , p_arguments          => l_tool_input
+              , p_settings           => p_settings
               );
    
               -- Create tool result object for the content array
@@ -649,7 +651,7 @@ create or replace package body uc_ai_anthropic as
     l_input_obj.put('model', p_model);
 
     -- Get all available tools formatted for Anthropic
-    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_anthropic, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools, p_provider_tools => l_settings.provider_tools);
+    l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_anthropic, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools, p_provider_tools => l_settings.provider_tools, p_programmatic_tools => l_settings.enable_programmatic_tools);
 
     if l_tools.get_size > 0 then
       l_input_obj.put('tools', l_tools);

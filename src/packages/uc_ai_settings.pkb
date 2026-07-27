@@ -24,6 +24,7 @@ as
     l_s.provider_override              := null;
     l_s.apex_web_credential            := null;
     l_s.enable_tools                   := false;
+    l_s.enable_programmatic_tools               := false;
     l_s.enable_reasoning               := false;
     l_s.reasoning_level                := null;
     l_s.tool_tags                      := apex_t_varchar2();
@@ -103,6 +104,7 @@ as
     l_s.provider_override              := uc_ai.g_provider_override;
     l_s.apex_web_credential            := uc_ai.g_apex_web_credential;
     l_s.enable_tools                   := uc_ai.g_enable_tools;
+    l_s.enable_programmatic_tools               := uc_ai.g_enable_programmatic_tools;
     l_s.enable_reasoning               := uc_ai.g_enable_reasoning;
     l_s.reasoning_level                := uc_ai.g_reasoning_level;
     l_s.tool_tags                      := uc_ai.g_tool_tags;
@@ -204,6 +206,10 @@ as
         when 'g_enable_tools' then
           if l_value.is_boolean then
             l_s.enable_tools := p_config.get_boolean(l_key);
+          end if;
+        when 'g_enable_programmatic_tools' then
+          if l_value.is_boolean then
+            l_s.enable_programmatic_tools := p_config.get_boolean(l_key);
           end if;
         when 'g_max_tool_calls' then
           if l_value.is_number then

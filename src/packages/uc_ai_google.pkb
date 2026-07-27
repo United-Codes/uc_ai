@@ -479,9 +479,10 @@ create or replace package body uc_ai_google as
 
             -- Execute the tool and get result
             begin
-              l_tool_result := uc_ai_tools_api.execute_tool(
+              l_tool_result := uc_ai_tools_api.execute_agent_tool(
                 p_tool_code          => l_tool_name
               , p_arguments          => l_tool_args
+              , p_settings           => p_settings
               );
             exception
               when others then
@@ -671,7 +672,7 @@ create or replace package body uc_ai_google as
         l_tools_wrapper json_object_t;
       begin
         if l_settings.enable_tools then
-          l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_google, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools);
+          l_tools := uc_ai_tools_api.get_tools_array(uc_ai.c_provider_google, p_tool_tags => l_settings.tool_tags, p_enable_tools => l_settings.enable_tools, p_programmatic_tools => l_settings.enable_programmatic_tools);
           if l_tools.get_size > 0 then
             l_tools_wrapper := json_object_t();
             l_tools_wrapper.put('functionDeclarations', l_tools);

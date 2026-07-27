@@ -77,6 +77,13 @@ as
   g_enable_tools boolean := false;
   g_tool_tags apex_t_varchar2;
   g_max_tool_calls pls_integer;
+  -- Programmatic tool calling ("code mode"): when true (and tools are enabled),
+  -- generate_text also offers the uc_ai__run_code meta-tool, letting the model
+  -- author a JS program that orchestrates the other tools in-database via Oracle
+  -- MLE, returning only its final result. Opt-in per call and requires the MLE
+  -- sandbox from scripts/install_ptc_sandbox.sql (23ai+): when the model calls the
+  -- meta-tool without it, the run fails with a clear "sandbox not installed" error.
+  g_enable_programmatic_tools boolean := false;
 
   -- global settings for APEX Web Credentials
   g_apex_web_credential varchar2(255 char);

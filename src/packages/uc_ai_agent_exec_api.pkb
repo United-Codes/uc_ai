@@ -888,7 +888,11 @@ end;!';
       p_json_schema  => json_object_t(l_agent.input_schema),
       p_active       => 1,
       p_tags         => apex_t_varchar2(p_tool_tag),
-      p_created_by   => 'UC_AI_AGENT_EXEC_API'
+      p_created_by   => 'UC_AI_AGENT_EXEC_API',
+      -- direct only: delegating to a sub-agent costs LLM calls, so it stays a
+      -- deliberate decision of the calling model instead of something a code-mode
+      -- program can loop over unsupervised
+      p_code_mode_access => 'direct'
     );
 
     return l_tool_id;
@@ -961,7 +965,9 @@ end;!';
       p_json_schema   => l_schema,
       p_active        => 1,
       p_tags          => apex_t_varchar2(p_tool_tag),
-      p_created_by    => 'UC_AI_AGENT_EXEC_API'
+      p_created_by    => 'UC_AI_AGENT_EXEC_API',
+      -- handing the conversation to another agent is never a code-mode operation
+      p_code_mode_access => 'direct'
     );
 
     return l_tool_id;
