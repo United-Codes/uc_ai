@@ -608,6 +608,10 @@ create or replace package body uc_ai_prompt_profiles_api as
           if l_value.is_boolean then
             uc_ai.g_enable_tools := p_config.get_boolean(l_key);
           end if;
+        when 'g_enable_programmatic_tools' then
+          if l_value.is_boolean then
+            uc_ai.g_enable_programmatic_tools := p_config.get_boolean(l_key);
+          end if;
         when 'g_max_tool_calls' then
           if l_value.is_number then
             uc_ai.g_max_tool_calls := p_config.get_number(l_key);

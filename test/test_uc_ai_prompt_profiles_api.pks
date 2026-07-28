@@ -56,6 +56,9 @@ create or replace package test_uc_ai_prompt_profiles_api as
   --%test(Execute profile - tool usage)
   procedure execute_profile_with_tools;
 
+  --%test(Prepare context - g_enable_programmatic_tools enables code mode)
+  procedure config_enables_code_mode;
+
   --%test(Execute profile - unknown root config key raises invalid_config)
   procedure execute_profile_bad_root_key;
 

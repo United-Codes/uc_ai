@@ -211,6 +211,7 @@ Configuration options map to UC AI global variables:
 - `g_enable_reasoning`: Enable reasoning mode (boolean)
 - `g_reasoning_level`: Reasoning level - 'low', 'medium', or 'high' (string)
 - `g_enable_tools`: Enable [tools/functions](/products/uc-ai/docs/guides/tools) (boolean)
+- `g_enable_programmatic_tools`: Also offer [code mode](/products/uc-ai/docs/guides/programmatic-tool-calling) — the `uc_ai__run_code` meta-tool — alongside the normal tools (boolean; requires `g_enable_tools` and the MLE sandbox)
 - `g_max_tool_calls`: Maximum number of tool calls allowed (number)
 - `g_tool_tags`: Tool tags to filter available tools (array of strings or single string)
 - `g_apex_web_credential`: APEX web credential static ID (string)

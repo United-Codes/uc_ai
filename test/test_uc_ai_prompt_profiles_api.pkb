@@ -699,6 +699,39 @@ create or replace package body test_uc_ai_prompt_profiles_api as
   end execute_profile_with_tools;
 
 
+  procedure config_enables_code_mode
+  as
+    l_id              number;
+    l_provider        uc_ai_prompt_profiles.provider%type;
+    l_model           uc_ai_prompt_profiles.model%type;
+    l_response_schema json_object_t;
+  begin
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code => gc_test_code || '_CODE_MODE',
+      p_description => 'Profile enabling programmatic tool calling',
+      p_system_prompt_template => 'You are a helpful assistant.',
+      p_user_prompt_template => 'Hello',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_4o_mini,
+      p_status => 'active',
+      p_model_config_json => '{"g_enable_tools": true, "g_enable_programmatic_tools": true}'
+    );
+
+    -- applies the profile's model_config to the uc_ai globals (no LLM call)
+    uc_ai_prompt_profiles_api.prepare_profile_context(
+      p_code             => gc_test_code || '_CODE_MODE',
+      po_provider        => l_provider,
+      po_model           => l_model,
+      po_response_schema => l_response_schema
+    );
+
+    ut.expect(uc_ai.g_enable_tools, 'g_enable_tools applied').to_be_true();
+    ut.expect(uc_ai.g_enable_programmatic_tools, 'g_enable_programmatic_tools applied').to_be_true();
+
+    uc_ai.reset_globals;
+  end config_enables_code_mode;
+
+
   procedure execute_profile_bad_root_key
   as
     l_id     number;
