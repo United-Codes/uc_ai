@@ -891,6 +891,8 @@ create or replace package body uc_ai_prompt_profiles_api as
                 uc_ai_oci.g_region := l_provider_obj.get_string(l_key);
               when 'g_use_responses_api' then
                 uc_ai_oci.g_use_responses_api := l_provider_obj.get_boolean(l_key);
+              when 'g_max_tokens' then
+                uc_ai_oci.g_max_tokens := l_provider_obj.get_number(l_key);
               else
                 uc_ai_error.raise_error(
                   p_error_code => uc_ai_error.c_err_invalid_config
