@@ -995,6 +995,13 @@ create or replace package body uc_ai_tools_api as
       return true;
     end if;
 
+    -- Checks the package SPEC, not the body: ALL_OBJECTS is privilege-filtered, and
+    -- an EXECUTE grant only ever exposes the spec to the grantee. A least-privilege
+    -- UC AI schema therefore never sees the sandbox's PACKAGE BODY row, so matching
+    -- on it would report "not installed" on every correct installation. (Dev schemas
+    -- with DB_DEVELOPER_ROLE do see the body, which masks the difference.) A valid
+    -- spec plus the private synonym is exactly what makes the runner callable; if the
+    -- body were missing or invalid, the dynamic call raises a clear ORA-04063 anyway.
     -- @dblinter ignore(G-8110): presence check for the sandbox runner; a scalar count is the clearest form here
     select count(*)
       into l_cnt
@@ -1004,7 +1011,7 @@ create or replace package body uc_ai_tools_api as
        and obj.object_name = syn.table_name
      where syn.owner = $$plsql_unit_owner
        and syn.synonym_name = c_ptc_runner_synonym
-       and obj.object_type = 'PACKAGE BODY'
+       and obj.object_type = 'PACKAGE'
        and obj.status = 'VALID';
 
     if l_cnt > 0 then
