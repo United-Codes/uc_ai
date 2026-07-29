@@ -31,6 +31,9 @@ create or replace package test_uc_ai_ptc as
   --%test(the code catalog lists parameter names for every provider)
   procedure test_catalog_param_names;
 
+  --%test(the code catalog carries a tool description in full, folded onto one line)
+  procedure test_catalog_keeps_full_description;
+
   --%test(a program larger than 32 KB is passed through uncut)
   procedure test_large_program;
 

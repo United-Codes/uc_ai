@@ -99,6 +99,12 @@ uc_ai_tools_api.merge_tool_from_schema(
 
 This is enforced, not advisory: the allow-list rejects a `callTool` to a `direct`-only tool even if the model guesses its code. It only applies when code mode is on — with code mode off, every tool is a normal tool regardless of this setting.
 
+### Descriptions in the tool catalog
+
+Each code-callable tool gets one line in the catalog inside the `uc_ai__run_code` description — the `callTool` signature plus its **full** tool description. Write those descriptions with that in mind: for a `code`-only tool the description is the only documentation the model receives, because the catalog lists parameter *names*, not the JSON schema. State what each parameter expects (`employee_id` — numeric id from `GET_EMPLOYEES`) rather than relying on the name alone.
+
+Newlines and tabs in a description are folded to spaces so each entry stays on one line. The catalog as a whole has to fit in roughly 31 KB; if your descriptions exceed that, the tools that no longer fit are left out of the catalog entirely — they become uncallable from a program — and UC AI writes a warning to the log. Shorten descriptions or move bulk tools to `direct` if you hit it.
+
 <Aside type="note">
 Code mode works with every provider that supports tool calling. In practice the more capable models write more reliable JavaScript — see the model-quality notes in the [Tools guide](/products/uc-ai/docs/guides/tools/#best-practices).
 </Aside>

@@ -19,6 +19,33 @@ create or replace package body uc_ai_tools_api as
   g_ptc_veto_msg   varchar2(4000 char);
   g_ptc_runner_ok  pls_integer;  -- null = not yet checked, 1 = present, 0 = absent
 
+  -- Fixed part of the code-mode meta-tool's `code` parameter description (see
+  -- build_code_mode_tool). Held in a constant so get_tools_array can derive exactly
+  -- how many bytes are left for the tool catalog that gets appended to it.
+  gc_code_mode_preamble constant varchar2(4000 char) :=
+    'JavaScript source executed in the database. Your code runs as the body of an '
+    || 'async function, so you can use await at the top level. Call the tools listed '
+    || 'below with `await callTool("TOOL_CODE", { ...args })` - ALWAYS await it - which '
+    || 'returns the tool''s parsed JSON result (an object or array). ONLY the exact tool '
+    || 'codes listed here are callable - there is no discovery/list function, so never '
+    || 'invent tool names. Loop, filter and aggregate locally, then assign your final '
+    || 'answer to a top-level variable named `result` (an object or a string). Only '
+    || '`result` is returned to you - intermediate tool outputs stay in the sandbox. '
+    || 'Use plain JavaScript only: there is no SQL, network, file or module access, '
+    || 'and callTool is the only way to reach data. You may use console.log() while '
+    || 'developing: its output is returned to you if the program fails or sets no '
+    || '`result`.' || chr(10) || chr(10)
+    || 'Callable tools (await callTool code -> arguments):' || chr(10);
+
+  -- Byte budget for the catalog: preamble + catalog share one PL/SQL varchar2, whose
+  -- hard limit is 32767 bytes no matter how the variable is declared. Byte-based (not
+  -- char-based) because a varchar2(4000 char) description can be up to 16000 bytes.
+  gc_catalog_max_bytes constant pls_integer := 32767 - lengthb(gc_code_mode_preamble);
+
+  -- Fixed characters a catalog line adds around name/params/description, i.e.
+  -- '  await callTool("' || '", { ' || ' })  // ' || chr(10)
+  gc_catalog_line_overhead constant pls_integer := 32;
+
   -- Snapshot of the run context, so a nested code-mode run (e.g. a program that
   -- calls an agent-as-tool whose agent itself uses code mode) restores the outer
   -- run instead of deactivating it.
@@ -561,21 +588,7 @@ create or replace package body uc_ai_tools_api as
     l_required     json_array_t  := json_array_t();
     l_code_desc    varchar2(32767 char);
   begin
-    l_code_desc :=
-      'JavaScript source executed in the database. Your code runs as the body of an '
-      || 'async function, so you can use await at the top level. Call the tools listed '
-      || 'below with `await callTool("TOOL_CODE", { ...args })` - ALWAYS await it - which '
-      || 'returns the tool''s parsed JSON result (an object or array). ONLY the exact tool '
-      || 'codes listed here are callable - there is no discovery/list function, so never '
-      || 'invent tool names. Loop, filter and aggregate locally, then assign your final '
-      || 'answer to a top-level variable named `result` (an object or a string). Only '
-      || '`result` is returned to you - intermediate tool outputs stay in the sandbox. '
-      || 'Use plain JavaScript only: there is no SQL, network, file or module access, '
-      || 'and callTool is the only way to reach data. You may use console.log() while '
-      || 'developing: its output is returned to you if the program fails or sets no '
-      || '`result`.' || chr(10) || chr(10)
-      || 'Callable tools (await callTool code -> arguments):' || chr(10)
-      || p_catalog;
+    l_code_desc := gc_code_mode_preamble || p_catalog;
 
     l_code_prop.put('type', 'string');
     l_code_prop.put('description', l_code_desc);
@@ -650,6 +663,13 @@ create or replace package body uc_ai_tools_api as
     l_catalog      varchar2(32767 char);
     l_schema_key   varchar2(30 char);
     l_skipped_cat  pls_integer := 0;
+    -- pieces of one catalog line, sized separately so the line length can be checked
+    -- against the remaining budget *before* concatenating (a concatenation over 32767
+    -- bytes raises ORA-06502, so it must never be built speculatively)
+    l_cat_name     varchar2(32767 char);
+    l_cat_params   varchar2(32767 char);
+    l_cat_desc     varchar2(32767 char);
+    l_cat_bytes    pls_integer;
     l_enable_tool_filter number(1) := 0; -- @dbLinter ignore(G-2410) used in SQL
     l_found_tools number := 0;
     -- Prefer explicitly threaded values (from the per-call settings record); fall
@@ -708,12 +728,25 @@ create or replace package body uc_ai_tools_api as
 
       -- Catalog entry (callable via callTool) for code/both tools. One line per
       -- tool, so newlines in a description are folded to keep the line intact.
+      -- The description is carried in full: it is the only documentation a code-only
+      -- tool gets (the catalog lists parameter names, not the JSON schema), so it is
+      -- never shortened. A tool is left out entirely - and logged - if it no longer
+      -- fits, which is visible, unlike a silently cut description.
       if p_programmatic_tools and rec.code_mode_access in ('code', 'both') then
-        if nvl(length(l_catalog), 0) < 30000 then
+        l_cat_name   := l_tool_base.get_string('name');
+        l_cat_params := tool_param_names(l_tool_base, l_schema_key);
+        l_cat_desc   := translate(l_tool_base.get_string('description'), chr(10) || chr(13) || chr(9), '   ');
+
+        l_cat_bytes := gc_catalog_line_overhead
+                       + lengthb(l_cat_name)
+                       + nvl(lengthb(l_cat_params), 0)
+                       + nvl(lengthb(l_cat_desc), 0);
+
+        if nvl(lengthb(l_catalog), 0) + l_cat_bytes <= gc_catalog_max_bytes then
           l_catalog := l_catalog
-            || '  await callTool("' || l_tool_base.get_string('name') || '", { '
-            || tool_param_names(l_tool_base, l_schema_key) || ' })  // '
-            || substr(translate(l_tool_base.get_string('description'), chr(10) || chr(13) || chr(9), '   '), 1, 200) || chr(10);
+            || '  await callTool("' || l_cat_name || '", { '
+            || l_cat_params || ' })  // '
+            || l_cat_desc || chr(10);
         else
           l_skipped_cat := l_skipped_cat + 1;
         end if;
@@ -745,8 +778,9 @@ create or replace package body uc_ai_tools_api as
       -- never drop tools from the catalog silently
       if l_skipped_cat > 0 then
         uc_ai_logger.log_warning(
-          'Code-mode catalog size limit reached: ' || l_skipped_cat
-          || ' tool(s) left out and NOT callable from a program'
+          'Code-mode catalog size limit (' || gc_catalog_max_bytes || ' bytes) reached: '
+          || l_skipped_cat || ' tool(s) left out and NOT callable from a program.'
+          || ' Shorten the descriptions of code-mode tools to fit more of them in.'
         , l_scope
         );
       end if;

@@ -139,6 +139,19 @@ create or replace package body test_uc_ai_ptc as
     , p_code_mode_access => 'direct'
     );
 
+    -- long, multi-line description: the catalog must carry it in full, on one line
+    l_id := uc_ai_tools_api.merge_tool_from_schema(
+      p_tool_code        => gc_prefix || 'LONG_DESC'
+    , p_description      => 'First sentence of a deliberately long description.' || chr(10)
+                            || rpad('more detail ', 1000, 'more detail ') || chr(9)
+                            || 'END_OF_LONG_DESC'
+    , p_function_call    => 'return test_uc_ai_ptc.f_get_employees(:parameters);'
+    , p_json_schema      => json_object_t('{"type":"object","properties":{},"required":[]}')
+    , p_created_by       => gc_user
+    , p_tags             => apex_t_varchar2(gc_tag)
+    , p_code_mode_access => 'code'
+    );
+
     -- code-only: must NOT appear as a normal tool, but IS callable from a program
     l_id := uc_ai_tools_api.merge_tool_from_schema(
       p_tool_code        => gc_prefix || 'CODE_ONLY'
@@ -302,6 +315,26 @@ create or replace package body test_uc_ai_ptc as
     ut.expect(meta_catalog(uc_ai.c_provider_ollama)).to_be_like('%GET_EXPENSES", { employee_id }%');
     ut.expect(meta_catalog(uc_ai.c_provider_openai, uc_ai.c_provider_xai)).to_be_like('%GET_EXPENSES", { employee_id }%');
   end test_catalog_param_names;
+
+  -- Regression: the catalog cut every description at 200 chars. For a code-only tool
+  -- that description is the only documentation the model gets (the catalog lists
+  -- parameter names, not the JSON schema), so it was silently losing semantics.
+  procedure test_catalog_keeps_full_description as
+    l_catalog varchar2(32767 char);
+    l_line    varchar2(32767 char);
+  begin
+    l_catalog := meta_catalog(uc_ai.c_provider_anthropic);
+
+    -- the tail sits ~1000 chars past the old cut, so it only shows up if nothing was cut
+    ut.expect(instr(l_catalog, 'END_OF_LONG_DESC')).to_be_greater_than(0);
+
+    -- ... and the whole entry must still be ONE line: newlines and tabs inside a
+    -- description are folded to spaces, otherwise the '//' comment would break and
+    -- swallow the following catalog entries as code.
+    l_line := regexp_substr(l_catalog, '^  await callTool\("' || gc_prefix || 'LONG_DESC".*$', 1, 1, 'm');
+    ut.expect(instr(l_line, 'END_OF_LONG_DESC')).to_be_greater_than(0);
+    ut.expect(length(l_line)).to_be_greater_than(1000);
+  end test_catalog_keeps_full_description;
 
   -- Regression: the code argument was read with get_string, which raises above 32 KB.
   procedure test_large_program as
