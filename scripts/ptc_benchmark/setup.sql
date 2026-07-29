@@ -287,14 +287,17 @@ create or replace package body uc_ai_ptc_bench as
   , p_provider in uc_ai.provider_type default null
   )
   as
+    -- p_filter, not p_provider: an inner parameter of the same name would shadow
+    -- run_all's, which silently made the unfiltered case match nothing
     procedure maybe(
       p_label    in varchar2
     , p_provider in uc_ai.provider_type
     , p_model    in uc_ai.model_type
     )
     as
+      l_filter uc_ai.provider_type := run_all.p_provider;
     begin
-      if p_provider is null or run_all.p_provider = maybe.p_provider then
+      if l_filter is null or l_filter = maybe.p_provider then
         run_case(p_label, maybe.p_provider, p_model, false);
         run_case(p_label, maybe.p_provider, p_model, true);
       end if;
