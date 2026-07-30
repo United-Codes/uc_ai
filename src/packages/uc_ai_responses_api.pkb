@@ -36,9 +36,10 @@ create or replace package body uc_ai_responses_api as
    * Returns items array compatible with the Responses API input parameter
    */
   procedure convert_lm_messages_to_items(
-    p_lm_messages in json_array_t
-  , po_items out nocopy json_array_t
+    p_lm_messages   in json_array_t
+  , po_items        out nocopy json_array_t
   , po_instructions out nocopy varchar2
+  , p_settings      in uc_ai_settings.t_settings default null
   )
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_lm_messages_to_items';
@@ -52,8 +53,7 @@ create or replace package body uc_ai_responses_api as
     l_content_type varchar2(255 char);
     l_system_instructions varchar2(32767 char);
     l_media_type varchar2(4000 char);
-    l_has_reasoning_content boolean := false;
-    l_reasoning_text clob;
+    l_store_responses boolean := nvl(p_settings.ra_store_responses, false);
   begin
     uc_ai_logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to Responses API items', l_scope);
 
@@ -170,35 +170,71 @@ create or replace package body uc_ai_responses_api as
                 l_items.append(l_item);
                 
               when 'reasoning' then
-                l_has_reasoning_content := false;
+                -- Reasoning item, replayed on follow-up turns so the model keeps
+                -- its chain of thought across calls.
+                --
+                -- The item shape is NOT the normalized one: the reasoning text
+                -- lives in summary[].text (there is no top-level 'text' field on
+                -- a Responses API reasoning item), and 'summary' is REQUIRED even
+                -- when empty - omitting it fails with
+                --   Missing required parameter: 'input[N].summary'.
+                declare
+                  l_reasoning_text clob := l_content_item.get_clob('text');
+                  l_reasoning_id varchar2(4000 char);
+                  l_encrypted_content clob;
+                  l_summary json_array_t := json_array_t();
+                  l_summary_item json_object_t;
+                begin
+                  if l_content_item.has('providerOptions') and not l_content_item.get('providerOptions').is_null then
+                    declare
+                      l_provider_options json_object_t := l_content_item.get_object('providerOptions');
+                    begin
+                      if l_provider_options.has('id') and not l_provider_options.get('id').is_null then
+                        l_reasoning_id := l_provider_options.get_string('id');
+                      end if;
 
-                -- Reasoning item (for multi-turn conversations with reasoning)
-                l_item := json_object_t();
-                l_item.put('type', 'reasoning');
-                l_reasoning_text := l_content_item.get_clob('text');
-                l_item.put('text', l_reasoning_text);
+                      if l_provider_options.has('encrypted_content') and not l_provider_options.get('encrypted_content').is_null then
+                        l_encrypted_content := l_provider_options.get_clob('encrypted_content');
+                      end if;
+                    end;
+                  end if;
 
-                if l_reasoning_text is not null then
-                  l_has_reasoning_content := true;
-                end if;
-                
-                -- Extract providerOptions if present
-                if l_content_item.has('providerOptions') and not l_content_item.get('providerOptions').is_null then
-                  declare
-                    l_provider_options json_object_t := l_content_item.get_object('providerOptions');
-                  begin
-                    -- Add encrypted_content if present
-                    if l_provider_options.has('encrypted_content') and not l_provider_options.get('encrypted_content').is_null then
-                      l_item.put('encrypted_content', l_provider_options.get_clob('encrypted_content'));
-                      l_has_reasoning_content := true;
+                  -- Only replay what the provider can actually reconstitute:
+                  -- encrypted_content carries the reasoning itself, while a bare
+                  -- rs_... id resolves server-side only when store=true. Sending
+                  -- an unresolvable id fails with "Item with id 'rs_...' not
+                  -- found. Items are not persisted when `store` is set to false."
+                  -- Mirrors the raw-item filter in generate_text (add_output_items).
+                  if l_encrypted_content is null and (l_reasoning_id is null or not l_store_responses) then
+                    uc_ai_logger.log('Skipping unreplayable reasoning item (no encrypted_content, store=false)', l_scope);
+                  else
+                    l_item := json_object_t();
+                    l_item.put('type', 'reasoning');
+
+                    if l_reasoning_id is not null then
+                      l_item.put('id', l_reasoning_id);
                     end if;
-                  end;
-                end if;
-                
-                if l_has_reasoning_content then
-                  l_items.append(l_item);
-                end if;
-                
+
+                    if l_reasoning_text is not null then
+                      l_summary_item := json_object_t();
+                      l_summary_item.put('type', 'summary_text');
+                      l_summary_item.put('text', l_reasoning_text);
+                      l_summary.append(l_summary_item);
+                    end if;
+
+                    -- Required key: an empty array when there is no summary text
+                    -- (reasoning summaries are off, or only the encrypted blob
+                    -- carries the reasoning).
+                    l_item.put('summary', l_summary);
+
+                    if l_encrypted_content is not null then
+                      l_item.put('encrypted_content', l_encrypted_content);
+                    end if;
+
+                    l_items.append(l_item);
+                  end if;
+                end;
+
               else
                 uc_ai_logger.log_warn('Unknown assistant content type: ' || l_content_type, l_scope);
             end case;
@@ -252,8 +288,66 @@ create or replace package body uc_ai_responses_api as
 
 
   /*
+   * Normalizes a Responses API 'reasoning' output item.
+   *
+   * Shared by both parse paths - the final response (convert_output_to_lm_messages)
+   * and the intermediate tool-calling turns inside generate_text - so they cannot
+   * drift apart.
+   *
+   * The reasoning text lives in summary[].text (there is no top-level 'text'
+   * field); the parts are joined with newlines. 'id' and 'encrypted_content' are
+   * kept in providerOptions because both are needed to replay the item on a
+   * follow-up turn (see convert_lm_messages_to_items).
+   */
+  function build_reasoning_content(
+    p_output_item in json_object_t
+  ) return json_object_t
+  as
+    l_encrypted_content clob;
+    l_summary_arr json_array_t;
+    l_summary_text clob;
+    l_provider_options json_object_t := json_object_t();
+  begin
+    if p_output_item.has('encrypted_content') and not p_output_item.get('encrypted_content').is_null then
+      l_encrypted_content := p_output_item.get_clob('encrypted_content');
+    end if;
+
+    if p_output_item.has('summary') and not p_output_item.get('summary').is_null then
+      l_summary_arr := p_output_item.get_array('summary');
+    end if;
+
+    if l_summary_arr is not null and l_summary_arr.get_size > 0 then
+      <<summary_loop>>
+      for i in 0 .. l_summary_arr.get_size - 1
+      loop
+        declare
+          l_summary_item json_object_t := treat(l_summary_arr.get(i) as json_object_t);
+        begin
+          if l_summary_text is not null then
+            l_summary_text := l_summary_text || chr(10);
+          end if;
+
+          l_summary_text := l_summary_text || l_summary_item.get_clob('text');
+        end;
+      end loop summary_loop;
+    end if;
+
+    l_provider_options.put('encrypted_content', l_encrypted_content);
+
+    if p_output_item.has('id') and not p_output_item.get('id').is_null then
+      l_provider_options.put('id', p_output_item.get_string('id'));
+    end if;
+
+    return uc_ai_message_api.create_reasoning_content(
+      p_text             => l_summary_text
+    , p_provider_options => l_provider_options
+    );
+  end build_reasoning_content;
+
+
+  /*
    * Convert Responses API output items to standardized Language Model format
-   * 
+   *
    * Responses API returns an "output" array containing various item types:
    * - message items (with role and content)
    * - function_call items (tool calls initiated by model)
@@ -382,55 +476,7 @@ create or replace package body uc_ai_responses_api as
           end;
           
         when 'reasoning' then
-          declare
-            l_encrypted_content clob;
-            l_summary_arr json_array_t;
-            l_summary_text clob;
-
-            l_provider_options json_object_t := json_object_t();
-            l_reasoning_content json_object_t;
-          begin
-            if l_output_item.has('encrypted_content') and not l_output_item.get('encrypted_content').is_null then
-              l_encrypted_content := l_output_item.get_clob('encrypted_content');
-            end if;
-
-            if l_output_item.has('summary') and not l_output_item.get('summary').is_null then
-              l_summary_arr := l_output_item.get_array('summary');
-            end if;
-
-            if l_summary_arr is not null and l_summary_arr.get_size > 0 then
-              <<summary_loop>>
-              for i in 0 .. l_summary_arr.get_size - 1 loop
-                declare
-                  l_summary_item json_object_t;
-                begin
-                  l_summary_item := treat(l_summary_arr.get(i) as json_object_t);
-                  if l_summary_text is not null then
-                    l_summary_text := l_summary_text || chr(10);
-                  end if;
-
-                  l_summary_text := l_summary_text || l_summary_item.get_clob('text');
-                end;
-              end loop summary_loop;
-            end if;
-
-            l_provider_options.put('encrypted_content', l_encrypted_content);
-            l_provider_options.put('text', l_summary_text);
-            if l_output_item.has('id') and not l_output_item.get('id').is_null then
-              l_provider_options.put('id', l_output_item.get_string('id'));
-            end if;
-
-            -- Reasoning output items carry their text in summary[].text, which
-            -- we assembled into l_summary_text above. The item has no top-level
-            -- 'text' field, so get_clob('text') would be NULL and store as a
-            -- literal 'null' string.
-            l_reasoning_content := uc_ai_message_api.create_reasoning_content(
-              p_text => l_summary_text,
-              p_provider_options => l_provider_options
-            );
-
-            l_assistant_content.append(l_reasoning_content);
-          end;
+          l_assistant_content.append(build_reasoning_content(l_output_item));
 
         else
           uc_ai_logger.log_warn('Unknown output item type: ' || l_item_type, l_scope);
@@ -681,7 +727,7 @@ create or replace package body uc_ai_responses_api as
     end loop extract_provider_options_loop;
 
     -- Convert LM messages to Responses items (extracts system messages as instructions)
-    convert_lm_messages_to_items(p_messages.clone, l_items, l_instructions);
+    convert_lm_messages_to_items(p_messages.clone, l_items, l_instructions, l_settings);
     l_input_obj.put('input', l_items);
 
     -- Add instructions (extracted from system messages)
@@ -826,53 +872,7 @@ create or replace package body uc_ai_responses_api as
                   l_assistant_content.append(l_tool_use_content);
 
                 when 'reasoning' then
-                  declare
-                    l_encrypted_content clob;
-                    l_summary_arr json_array_t;
-                    l_summary_text clob;
-                    l_provider_options json_object_t := json_object_t();
-                    l_reasoning_content json_object_t;
-                  begin
-                    if l_output_item.has('encrypted_content') and not l_output_item.get('encrypted_content').is_null then
-                      l_encrypted_content := l_output_item.get_clob('encrypted_content');
-                    end if;
-
-                    if l_output_item.has('summary') and not l_output_item.get('summary').is_null then
-                      l_summary_arr := l_output_item.get_array('summary');
-                    end if;
-
-                    if l_summary_arr is not null and l_summary_arr.get_size > 0 then
-                      <<reasoning_summary_loop>>
-                      for j in 0 .. l_summary_arr.get_size - 1 loop
-                        declare
-                          l_summary_item json_object_t;
-                        begin
-                          l_summary_item := treat(l_summary_arr.get(j) as json_object_t);
-                          if l_summary_text is not null then
-                            l_summary_text := l_summary_text || chr(10);
-                          end if;
-
-                          l_summary_text := l_summary_text || l_summary_item.get_clob('text');
-                        end;
-                      end loop reasoning_summary_loop;
-                    end if;
-
-                    l_provider_options.put('encrypted_content', l_encrypted_content);
-                    l_provider_options.put('text', l_summary_text);
-                    if l_output_item.has('id') and not l_output_item.get('id').is_null then
-                      l_provider_options.put('id', l_output_item.get_string('id'));
-                    end if;
-
-                    -- summary[].text (assembled into l_summary_text) is the
-                    -- reasoning text; the item has no top-level 'text' field,
-                    -- so get_clob('text') would store a literal 'null' string.
-                    l_reasoning_content := uc_ai_message_api.create_reasoning_content(
-                      p_text => l_summary_text,
-                      p_provider_options => l_provider_options
-                    );
-
-                    l_assistant_content.append(l_reasoning_content);
-                  end;
+                  l_assistant_content.append(build_reasoning_content(l_output_item));
 
                 else
                   null;

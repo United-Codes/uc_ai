@@ -50,7 +50,10 @@ create or replace package body uc_ai_openai as
     l_arr json_array_t;
   begin
     l_content := p_message.get_clob('content');
-    l_provider_options := p_message;
+    -- Must clone: the message object is already referenced by the raw conversation
+    -- history sent to the provider, so stripping keys from it in place would
+    -- mutate what gets sent on the next turn.
+    l_provider_options := p_message.clone();
     l_provider_options.remove('role');
     l_provider_options.remove('content');
 

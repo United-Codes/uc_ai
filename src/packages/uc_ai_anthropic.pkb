@@ -49,6 +49,17 @@ create or replace package body uc_ai_anthropic as
   end get_text_content;
 
 
+  /*
+   * Normalizes an Anthropic 'thinking' or 'redacted_thinking' content block.
+   *
+   * Every key of the block except the reasoning text itself is kept in
+   * providerOptions, because Anthropic's contract is that the block goes back
+   * unmodified when the assistant turn is replayed: 'signature' is the token that
+   * vouches for a thinking block, and 'data' is the opaque payload of a redacted
+   * one. 'type' is kept too so the replay path can tell the two apart (a redacted
+   * block has no readable text at all).
+   * See convert_lm_messages_to_anthropic.
+   */
   function get_reasoning_content(
     p_message in json_object_t
   ) return json_object_t
@@ -59,7 +70,6 @@ create or replace package body uc_ai_anthropic as
   begin
     l_reasoning_content := p_message.get_clob('thinking');
     l_provider_options := p_message.clone();
-    l_provider_options.remove('type');
     l_provider_options.remove('thinking');
 
     l_lm_reasoning_content := uc_ai_message_api.create_reasoning_content(
@@ -89,6 +99,7 @@ create or replace package body uc_ai_anthropic as
     l_content_item json_object_t;
     l_content_type varchar2(255 char);
     l_anthropic_content json_array_t;
+    l_thinking_blocks json_array_t;
     l_tool_use json_object_t;
     l_tool_result json_object_t;
   begin
@@ -182,7 +193,8 @@ create or replace package body uc_ai_anthropic as
           -- Assistant message: can have text content and/or tool calls
           l_content := l_lm_message.get_array('content');
           l_anthropic_content := json_array_t();
-          
+          l_thinking_blocks := json_array_t();
+
           <<assistant_content_loop>>
           for j in 0 .. l_content.get_size - 1
           loop
@@ -220,11 +232,86 @@ create or replace package body uc_ai_anthropic as
                 end;
                 
                 l_anthropic_content.append(l_tool_use);
+
+              when 'reasoning' then
+                -- Anthropic's contract is that a thinking block is handed back
+                -- unmodified, with its signature, so the model can continue the
+                -- chain of thought it already paid for. (Measured against
+                -- claude-haiku-4-5: the API currently TOLERATES a replayed turn
+                -- whose thinking was stripped, and does not reject a bad
+                -- signature - so this is about reasoning continuity and honouring
+                -- the documented contract, not about avoiding an HTTP error.)
+                --
+                -- A block with no signature has no provenance we could vouch for,
+                -- so it is dropped rather than invented - stricter modes such as
+                -- interleaved thinking do validate what they are given.
+                declare
+                  l_provider_options json_object_t;
+                  l_thinking_block json_object_t;
+                  l_block_type varchar2(255 char);
+                  l_signature clob;
+                  l_redacted_data clob;
+                begin
+                  if l_content_item.has('providerOptions') and not l_content_item.get('providerOptions').is_null then
+                    l_provider_options := l_content_item.get_object('providerOptions');
+
+                    if l_provider_options.has('type') and not l_provider_options.get('type').is_null then
+                      l_block_type := l_provider_options.get_string('type');
+                    end if;
+
+                    if l_provider_options.has('signature') and not l_provider_options.get('signature').is_null then
+                      l_signature := l_provider_options.get_clob('signature');
+                    end if;
+
+                    if l_provider_options.has('data') and not l_provider_options.get('data').is_null then
+                      l_redacted_data := l_provider_options.get_clob('data');
+                    end if;
+                  end if;
+
+                  if l_block_type = 'redacted_thinking' and l_redacted_data is not null then
+                    l_thinking_block := json_object_t();
+                    l_thinking_block.put('type', 'redacted_thinking');
+                    l_thinking_block.put('data', l_redacted_data);
+                    l_thinking_blocks.append(l_thinking_block);
+                  elsif l_signature is not null then
+                    l_thinking_block := json_object_t();
+                    l_thinking_block.put('type', 'thinking');
+                    l_thinking_block.put('thinking', l_content_item.get_clob('text'));
+                    l_thinking_block.put('signature', l_signature);
+                    l_thinking_blocks.append(l_thinking_block);
+                  else
+                    uc_ai_logger.log('Skipping unsigned thinking block (cannot be verified by Anthropic)', l_scope);
+                  end if;
+                end;
+
               else
                 null; -- Skip unknown content types
             end case;
           end loop assistant_content_loop;
-          
+
+          -- Anthropic requires thinking blocks to come FIRST in the content array,
+          -- so they are collected separately above and prepended here instead of
+          -- relying on the order they happen to have in the normalized message.
+          if l_thinking_blocks.get_size > 0 then
+            declare
+              l_ordered_content json_array_t := json_array_t();
+            begin
+              <<thinking_first_loop>>
+              for k in 0 .. l_thinking_blocks.get_size - 1
+              loop
+                l_ordered_content.append(treat(l_thinking_blocks.get(k) as json_object_t));
+              end loop thinking_first_loop;
+
+              <<remaining_content_loop>>
+              for k in 0 .. l_anthropic_content.get_size - 1
+              loop
+                l_ordered_content.append(treat(l_anthropic_content.get(k) as json_object_t));
+              end loop remaining_content_loop;
+
+              l_anthropic_content := l_ordered_content;
+            end;
+          end if;
+
           if l_anthropic_content.get_size > 0 then
             l_anthropic_message := json_object_t();
             l_anthropic_message.put('role', 'assistant');
@@ -494,6 +581,14 @@ create or replace package body uc_ai_anthropic as
 
               l_new_msg := get_reasoning_content(l_content_prompt);
               l_normalized_messages.append(l_new_msg);
+            when 'redacted_thinking' then
+              -- Encrypted reasoning we cannot read, but which must still be
+              -- replayed verbatim on the next turn - normalize it so it survives
+              -- a cross-call history round trip.
+              uc_ai_logger.log('Redacted thinking content block found', l_scope);
+
+              l_new_msg := get_reasoning_content(l_content_prompt);
+              l_normalized_messages.append(l_new_msg);
             else
               -- Server-side tool blocks (server_tool_use, web_search_tool_result,
               -- code_execution_tool_result, ...) are produced and consumed by the
@@ -535,13 +630,23 @@ create or replace package body uc_ai_anthropic as
         l_content_msg       json_object_t;
         l_content_array     json_array_t := json_array_t();
         l_assistant_message json_object_t;
+        l_resp_message      json_object_t := json_object_t();
       begin
+        -- Add the AI's message to the raw conversation history as ONE assistant
+        -- message carrying the whole content array, exactly like the tool_use
+        -- path above. (This used to append each content block individually - and
+        -- the last one a second time - which left bare content blocks sitting in
+        -- what is meant to be a messages array.)
+        l_resp_message.put('role', 'assistant');
+        l_resp_message.put('content', l_content);
+        pio_messages.append(l_resp_message);
+
         <<content_loop>>
         for i in 0 .. l_content.get_size - 1
         loop
           l_content_prompt := treat(l_content.get(i) as json_object_t);
           l_content_type := l_content_prompt.get_string('type');
-      
+
           case l_content_type
             when 'text' then
               l_content_msg := get_text_content(l_content_prompt, pio_state);
@@ -549,15 +654,16 @@ create or replace package body uc_ai_anthropic as
             when 'thinking' then
               l_content_msg := get_reasoning_content(l_content_prompt);
               l_content_array.append(l_content_msg);
+            when 'redacted_thinking' then
+              l_content_msg := get_reasoning_content(l_content_prompt);
+              l_content_array.append(l_content_msg);
             else
               -- Server-side tool blocks (server_tool_use, web_search_tool_result,
               -- code_execution_tool_result, ...) from g_provider_tools are executed
-              -- by the provider. Preserve them in the raw conversation (appended
-              -- below) but skip normalization instead of erroring.
+              -- by the provider. Preserved in the raw conversation appended above,
+              -- but skip normalization instead of erroring.
               uc_ai_logger.log('Passing through server-side content block: ' || l_content_type, l_scope, l_content_prompt.to_clob);
           end case;
-
-          pio_messages.append(l_content_prompt);
         end loop content_loop;
 
         l_assistant_message := uc_ai_message_api.create_assistant_message(
@@ -565,8 +671,6 @@ create or replace package body uc_ai_anthropic as
         );
         pio_norm_messages.append(l_assistant_message);
       end;
-
-      pio_messages.append(l_content_prompt);
     end if;
 
     uc_ai_logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);

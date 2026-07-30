@@ -78,5 +78,20 @@ as
   , p_settings in uc_ai_settings.t_settings default null
   ) return json_array_t;
 
+
+  /*
+   * Converts standardized LM messages into Google's contents array, lifting the
+   * system prompt out into its own field.
+   *
+   * Exposed so the request payload can be asserted without an HTTP call (see
+   * test_uc_ai_reasoning_replay). Not part of the stable public API - the part
+   * shape follows whatever the provider requires and may change.
+   */
+  procedure convert_lm_messages_to_google(
+    p_lm_messages in json_array_t,
+    po_system_prompt out nocopy clob,
+    po_google_messages out nocopy json_array_t
+  );
+
 end uc_ai_google;
 /

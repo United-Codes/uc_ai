@@ -73,5 +73,24 @@ as
   , p_settings       in uc_ai_settings.t_settings default null
   ) return json_object_t;
 
+
+  /*
+   * Converts standardized LM messages into the Responses API "input" items array.
+   *
+   * Exposed so the request payload can be asserted without an HTTP call (see
+   * test_uc_ai_reasoning_replay). Not part of the stable public API - the item
+   * shape follows whatever the provider requires and may change.
+   *
+   * p_settings is needed for reasoning replay: a reasoning item identified only
+   * by its rs_... id can be reconstituted by the provider when store=true, but
+   * not when store=false, so such items are skipped in that case.
+   */
+  procedure convert_lm_messages_to_items(
+    p_lm_messages   in json_array_t
+  , po_items        out nocopy json_array_t
+  , po_instructions out nocopy varchar2
+  , p_settings      in uc_ai_settings.t_settings default null
+  );
+
 end uc_ai_responses_api;
 /

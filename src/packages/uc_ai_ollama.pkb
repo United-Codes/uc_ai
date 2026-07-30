@@ -143,6 +143,7 @@ create or replace package body uc_ai_ollama as
     l_content_item json_object_t;
     l_content_type varchar2(255 char);
     l_ollama_content clob;
+    l_ollama_thinking clob;
     l_images json_array_t;
     l_tool_calls json_array_t;
     l_tool_call json_object_t;
@@ -202,17 +203,22 @@ create or replace package body uc_ai_ollama as
           -- Assistant message: can have text content and/or tool calls
           l_content := l_lm_message.get_array('content');
           l_ollama_content := null;
+          l_ollama_thinking := null;
           l_tool_calls := json_array_t();
-          
+
           <<assistant_content_loop>>
           for j in 0 .. l_content.get_size - 1
           loop
             l_content_item := treat(l_content.get(j) as json_object_t);
             l_content_type := l_content_item.get_string('type');
-            
+
             case l_content_type
               when 'text' then
                 l_ollama_content := l_ollama_content || l_content_item.get_clob('text');
+              when 'reasoning' then
+                -- /api/chat accepts 'thinking' on assistant messages, so replay it
+                -- instead of dropping the model's chain of thought.
+                l_ollama_thinking := l_ollama_thinking || l_content_item.get_clob('text');
               when 'tool_call' then
                 -- Convert to OpenAI-style tool call format that Ollama expects
                 l_tool_call := json_object_t();
@@ -233,12 +239,16 @@ create or replace package body uc_ai_ollama as
           l_ollama_message := json_object_t();
           l_ollama_message.put('role', 'assistant');
           l_ollama_message.put('content', l_ollama_content);
-          
+
+          if l_ollama_thinking is not null then
+            l_ollama_message.put('thinking', l_ollama_thinking);
+          end if;
+
           -- Add tool calls if any
           if l_tool_calls.get_size > 0 then
             l_ollama_message.put('tool_calls', l_tool_calls);
           end if;
-          
+
           po_ollama_messages.append(l_ollama_message);
 
         when 'tool' then

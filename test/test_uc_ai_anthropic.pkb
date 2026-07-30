@@ -288,7 +288,7 @@ create or replace package body test_uc_ai_anthropic as
       p_user_prompt => 'What is the email address of Jim?',
       p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.',
       p_provider => uc_ai.c_provider_anthropic,
-      p_model => uc_ai_anthropic.c_model_claude_4_sonnet
+      p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
@@ -351,7 +351,7 @@ create or replace package body test_uc_ai_anthropic as
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
       p_provider => uc_ai.c_provider_anthropic,
-      p_model => uc_ai_anthropic.c_model_claude_4_sonnet
+      p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);
@@ -415,7 +415,7 @@ create or replace package body test_uc_ai_anthropic as
     l_result := uc_ai.GENERATE_TEXT(
       p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
       p_provider => uc_ai.c_provider_anthropic,
-      p_model => uc_ai_anthropic.c_model_claude_4_sonnet
+      p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
     );
 
     sys.dbms_output.put_line('Result: ' || l_result.to_string);

@@ -218,6 +218,8 @@ create or replace package body uc_ai_oci as
                 l_oci_content_item.put('text', 'Tool call: ' || l_content_item.get_string('toolName'));
                 l_oci_content.append(l_oci_content_item);
               else
+                -- Includes 'reasoning': OCI has no reasoning channel, so a history
+                -- carrying reasoning from another provider is replayed without it.
                 null; -- Skip unknown content types
             end case;
           end loop assistant_content_loop;
@@ -360,11 +362,22 @@ create or replace package body uc_ai_oci as
             l_content_item := treat(l_content.get(j) as json_object_t);
             l_content_type := l_content_item.get_string('type');
 
+            -- Cohere has no reasoning channel, so reasoning items are dropped here.
+            -- They used to be re-sent as a CHATBOT turn whose body was the raw
+            -- reasoning text (no type check below), or to raise outright on the
+            -- tool-call path - both wrong for a history that was produced by a
+            -- reasoning-capable provider and is now being continued against OCI.
+            continue when l_content_type = 'reasoning';
+
             if not l_has_tool_call then
-              l_oci_message := json_object_t();
-              l_oci_message.put('role', 'CHATBOT');
-              l_oci_message.put('message', l_content_item.get_clob('text'));
-              po_oci_messages.append(l_oci_message);
+              -- Only text carries a Cohere message body; anything else would put a
+              -- null (or the wrong field's) content into the transcript.
+              if l_content_type = 'text' then
+                l_oci_message := json_object_t();
+                l_oci_message.put('role', 'CHATBOT');
+                l_oci_message.put('message', l_content_item.get_clob('text'));
+                po_oci_messages.append(l_oci_message);
+              end if;
             else
               l_tool_calls := json_array_t();
 

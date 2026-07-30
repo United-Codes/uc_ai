@@ -42,6 +42,7 @@ create or replace package body uc_ai_google as
     p_message in json_object_t
   -- @dblinter ignore(g-7170): in out kept for a uniform signature across the get_*_content accumulator family
   -- @dblinter ignore(g-7440): pio_state is a run-state accumulator threaded through the call, so in out is intentional
+  -- @dblinter ignore(g-7330): intentionally reads but never writes pio_state - a thought summary must NOT become final_message (see below)
   , pio_state in out nocopy uc_ai_settings.t_run_state
   ) return json_object_t
   as
@@ -50,7 +51,10 @@ create or replace package body uc_ai_google as
     l_lm_text_content  json_object_t;
   begin
     l_content := p_message.get_clob('text');
-    l_provider_options := p_message;
+    -- Must clone: the part object is already referenced by the raw conversation
+    -- history handed to the provider, so stripping 'text' from it in place would
+    -- silently blank the text out of the request sent on the next turn.
+    l_provider_options := p_message.clone();
     l_provider_options.remove('text');
 
     l_lm_text_content := uc_ai_message_api.create_reasoning_content(
@@ -58,7 +62,9 @@ create or replace package body uc_ai_google as
     , p_provider_options => l_provider_options
     );
 
-    pio_state.final_message := l_content;
+    -- Deliberately NOT setting pio_state.final_message: a thought summary is
+    -- reasoning, not the user-visible answer, and it would otherwise overwrite
+    -- the real final message when it is the last text-bearing part.
 
     return l_lm_text_content;
   end get_thought_content;
@@ -85,7 +91,8 @@ create or replace package body uc_ai_google as
     end if;
 
     l_content := p_message.get_clob('text');
-    l_provider_options := p_message;
+    -- Must clone - see get_thought_content above.
+    l_provider_options := p_message.clone();
     l_provider_options.remove('text');
 
     l_lm_text_content := uc_ai_message_api.create_text_content(
@@ -218,7 +225,59 @@ create or replace package body uc_ai_google as
                 
                 l_part := json_object_t();
                 l_part.put('functionCall', l_function_call);
+
+                -- Gemini 2.5+ signs the parts it produced and requires the
+                -- signature back on the same part in later turns; a function-call
+                -- part replayed without it breaks multi-turn function calling.
+                if l_content_item.has('providerOptions') and not l_content_item.get('providerOptions').is_null then
+                  declare
+                    l_provider_options json_object_t := l_content_item.get_object('providerOptions');
+                  begin
+                    if l_provider_options.has('thoughtSignature')
+                       and not l_provider_options.get('thoughtSignature').is_null then
+                      l_part.put('thoughtSignature', l_provider_options.get_clob('thoughtSignature'));
+                    end if;
+                  end;
+                end if;
+
                 l_parts.append(l_part);
+
+              when 'reasoning' then
+                -- Thought summaries themselves need not be sent back, but a signed
+                -- thought part must be replayed with its signature intact. Without
+                -- a signature there is nothing Gemini needs, so skip the part.
+                declare
+                  l_signature clob;
+                begin
+                  if l_content_item.has('providerOptions') and not l_content_item.get('providerOptions').is_null then
+                    declare
+                      l_provider_options json_object_t := l_content_item.get_object('providerOptions');
+                    begin
+                      if l_provider_options.has('thoughtSignature')
+                         and not l_provider_options.get('thoughtSignature').is_null then
+                        l_signature := l_provider_options.get_clob('thoughtSignature');
+                      end if;
+                    end;
+                  end if;
+
+                  if l_signature is not null then
+                    l_part := json_object_t();
+
+                    -- Gemini also emits signature-only parts (no thought text at
+                    -- all). Keep those as a bare signed part rather than sending a
+                    -- part with a null text field.
+                    if l_content_item.get_clob('text') is not null then
+                      l_part.put('text', l_content_item.get_clob('text'));
+                      l_part.put('thought', true);
+                    end if;
+
+                    l_part.put('thoughtSignature', l_signature);
+                    l_parts.append(l_part);
+                  else
+                    uc_ai_logger.log('Skipping unsigned thought part (nothing to replay)', l_scope);
+                  end if;
+                end;
+
               else
                 null; -- Skip unknown content types
             end case;
@@ -466,11 +525,25 @@ create or replace package body uc_ai_google as
               l_tool_args := json_object_t();
             end if;
 
-            l_new_msg := uc_ai_message_api.create_tool_call_content(
-              p_tool_call_id => l_tool_call_id
-            , p_tool_name    => l_tool_name
-            , p_args         => l_tool_args.to_clob
-            );
+            -- Gemini 2.5+ attaches thoughtSignature to the functionCall PART (not
+            -- to a thought part), and requires it back on that part in later turns.
+            -- Carry it through the normalized tool call so a cross-call replay can
+            -- restore it (see convert_lm_messages_to_google).
+            declare
+              l_tool_provider_options json_object_t;
+            begin
+              if l_part.has('thoughtSignature') and not l_part.get('thoughtSignature').is_null then
+                l_tool_provider_options := json_object_t();
+                l_tool_provider_options.put('thoughtSignature', l_part.get_clob('thoughtSignature'));
+              end if;
+
+              l_new_msg := uc_ai_message_api.create_tool_call_content(
+                p_tool_call_id     => l_tool_call_id
+              , p_tool_name        => l_tool_name
+              , p_args             => l_tool_args.to_clob
+              , p_provider_options => l_tool_provider_options
+              );
+            end;
             l_normalized_messages.append(l_new_msg);
 
             -- Fire the per-tool-call hook OUTSIDE the handler below (which swallows
@@ -515,6 +588,14 @@ create or replace package body uc_ai_google as
           elsif l_part.has('text') then
             uc_ai_logger.log('Text received', l_scope, l_part.to_clob);
             l_new_msg := get_text_content(l_part, pio_state);
+            l_normalized_messages.append(l_new_msg);
+
+          -- Signature-only part: no text and no functionCall, just the signed
+          -- token Gemini wants back on the next turn. Normalize it as a text-less
+          -- reasoning item so it survives a cross-call history round trip.
+          elsif l_part.has('thoughtSignature') and not l_part.get('thoughtSignature').is_null then
+            uc_ai_logger.log('Signature-only thought part received', l_scope);
+            l_new_msg := get_thought_content(l_part, pio_state);
             l_normalized_messages.append(l_new_msg);
           end if;
         end loop parts_loop;

@@ -34,5 +34,18 @@ as
   , p_settings in uc_ai_settings.t_settings default null
   ) return json_array_t;
 
+
+  /*
+   * Converts standardized LM messages into Ollama's /api/chat messages array.
+   *
+   * Exposed so the request payload can be asserted without an HTTP call (see
+   * test_uc_ai_reasoning_replay). Not part of the stable public API - the message
+   * shape follows whatever the provider requires and may change.
+   */
+  procedure convert_lm_messages_to_ollama(
+    p_lm_messages in json_array_t,
+    po_ollama_messages out nocopy json_array_t
+  );
+
 end uc_ai_ollama;
 /
