@@ -14,6 +14,7 @@ create or replace package body uc_ai_agents_api as
     created_by        uc_ai_agent_executions.created_by%type,
     db_user           uc_ai_agent_executions.db_user%type,
     apex_user         uc_ai_agent_executions.apex_user%type,
+    audience          uc_ai_agent_executions.audience%type,
     apex_session_id   uc_ai_agent_executions.apex_session_id%type,
     apex_app_id       uc_ai_agent_executions.apex_app_id%type,
     apex_page_id      uc_ai_agent_executions.apex_page_id%type,
@@ -417,6 +418,10 @@ create or replace package body uc_ai_agents_api as
     l_env.sid               := to_number(sys_context('userenv', 'sid'));
 
     l_env.apex_user := sys_context('APEX$SESSION', 'APP_USER');
+    -- Default caller class: a database session (job, trigger, SQL client) has no
+    -- browser identity at all, and neither does uc_ai's own synthetic session.
+    l_env.audience := c_audience_db;
+
     if l_env.apex_user = uc_ai_agent_exec_api.c_synthetic_apex_user then
       -- uc_ai's own synthetic session — not real caller context
       l_env.apex_user := null;
@@ -424,6 +429,25 @@ create or replace package body uc_ai_agents_api as
       l_env.apex_session_id := to_number(sys_context('APEX$SESSION', 'APP_SESSION'));
       l_env.apex_app_id     := apex_application.g_flow_id;
       l_env.apex_page_id    := apex_application.g_flow_step_id;
+
+      -- A real APEX session exists; let APEX itself say whether it is
+      -- authenticated. is_authenticated is the POSITIVE test on purpose: it is
+      -- false both outside a session and for an anonymous one, so anything we
+      -- cannot prove authenticated is recorded as public. Asking APEX also keeps
+      -- this correct for an app whose public user was renamed away from the
+      -- default 'nobody', which a username comparison could not do.
+      begin
+        l_env.audience := case
+                            when apex_authentication.is_authenticated then c_audience_auth
+                            else c_audience_public
+                          end;
+      exception
+        -- @dblinter ignore(g-5040): any APEX failure here must be swallowed; a run must never fail over caller classification
+        when others then
+          -- A real session was proven to exist, so record the more restrictive
+          -- class rather than guessing.
+          l_env.audience := c_audience_public;
+      end;
     end if;
 
     l_env.created_by := coalesce(l_env.apex_user, l_env.db_user);
@@ -440,6 +464,7 @@ create or replace package body uc_ai_agents_api as
     put_if_set('action', l_env.action);
     put_if_set('sid', l_env.sid);
     put_if_set('apex_user', l_env.apex_user);
+    put_if_set('audience', l_env.audience);
     put_if_set('apex_session_id', l_env.apex_session_id);
     put_if_set('apex_app_id', l_env.apex_app_id);
     put_if_set('apex_page_id', l_env.apex_page_id);
@@ -491,11 +516,11 @@ create or replace package body uc_ai_agents_api as
       on (s.session_id = src.session_id)
       when not matched then insert (
         session_id, root_agent_id, status, started_at, last_activity_at,
-        created_by, db_user, apex_user, apex_session_id, apex_app_id, apex_page_id,
+        created_by, db_user, apex_user, audience, apex_session_id, apex_app_id, apex_page_id,
         os_user, host, ip_address, module, action, client_identifier, sid, env_context
       ) values (
         p_session_id, p_agent_id, c_exec_running, systimestamp, systimestamp,
-        g_exec_env.created_by, g_exec_env.db_user, g_exec_env.apex_user,
+        g_exec_env.created_by, g_exec_env.db_user, g_exec_env.apex_user, g_exec_env.audience,
         g_exec_env.apex_session_id, g_exec_env.apex_app_id, g_exec_env.apex_page_id,
         g_exec_env.os_user, g_exec_env.host, g_exec_env.ip_address,
         g_exec_env.module, g_exec_env.action, g_exec_env.client_identifier,
@@ -518,6 +543,7 @@ create or replace package body uc_ai_agents_api as
       created_by,
       db_user,
       apex_user,
+      audience,
       apex_session_id,
       apex_app_id,
       apex_page_id,
@@ -539,6 +565,7 @@ create or replace package body uc_ai_agents_api as
       g_exec_env.created_by,
       g_exec_env.db_user,
       g_exec_env.apex_user,
+      g_exec_env.audience,
       g_exec_env.apex_session_id,
       g_exec_env.apex_app_id,
       g_exec_env.apex_page_id,

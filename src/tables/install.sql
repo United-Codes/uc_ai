@@ -259,6 +259,7 @@ create table uc_ai_agent_executions (
   created_by             varchar2(255 char),
   db_user                varchar2(255 char),
   apex_user              varchar2(255 char),
+  audience               varchar2(20 char),
   apex_session_id        number,
   apex_app_id            number,
   apex_page_id           number,
@@ -287,10 +288,14 @@ create index uc_ai_agent_exec_session_idx on uc_ai_agent_executions(session_id);
 create index uc_ai_agent_exec_status_idx on uc_ai_agent_executions(status, started_at);
 create index uc_ai_agent_exec_agent_idx on uc_ai_agent_executions(agent_id);
 create index uc_ai_agent_exec_parent_idx on uc_ai_agent_executions(parent_execution_id);
+-- Per-APEX-session usage lookups (an extension governing anonymous traffic pairs
+-- the session equality with a started_at window, so keep them in one index).
+create index uc_ai_agent_exec_apex_sess_idx on uc_ai_agent_executions(apex_session_id, started_at);
 
 comment on column uc_ai_agent_executions.created_by is 'coalesce(real APEX user, DB user) at top-level execution start';
 comment on column uc_ai_agent_executions.db_user is 'SYS_CONTEXT USERENV SESSION_USER';
 comment on column uc_ai_agent_executions.apex_user is 'APEX APP_USER (null for uc_ai''s own synthetic session)';
+comment on column uc_ai_agent_executions.audience is 'Caller class at execution start: public (anonymous APEX visitor) | authenticated (logged-in APEX user) | db (database/job session, or uc_ai''s own synthetic session)';
 comment on column uc_ai_agent_executions.apex_session_id is 'APEX APP_SESSION';
 comment on column uc_ai_agent_executions.apex_app_id is 'APEX application ID';
 comment on column uc_ai_agent_executions.apex_page_id is 'APEX page ID';
@@ -325,6 +330,7 @@ create table uc_ai_agent_sessions (
   created_by             varchar2(255 char),
   db_user                varchar2(255 char),
   apex_user              varchar2(255 char),
+  audience               varchar2(20 char),
   apex_session_id        number,
   apex_app_id            number,
   apex_page_id           number,
@@ -348,6 +354,7 @@ create index uc_ai_agent_sess_activity_idx on uc_ai_agent_sessions(last_activity
 create index uc_ai_agent_sess_agent_idx on uc_ai_agent_sessions(root_agent_id);
 
 comment on table uc_ai_agent_sessions is 'Conversation header: one row per session_id grouping all executions (turns + nested sub-agent runs)';
+comment on column uc_ai_agent_sessions.audience is 'Caller class of the opening turn: public | authenticated | db';
 comment on column uc_ai_agent_sessions.root_agent_id is 'Agent that opened the session (first top-level turn)';
 comment on column uc_ai_agent_sessions.status is 'Status of the most recent top-level turn';
 comment on column uc_ai_agent_sessions.total_input_tokens is 'SUM of own input tokens across all executions in the session';

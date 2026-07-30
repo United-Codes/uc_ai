@@ -45,6 +45,20 @@ as
   c_exec_failed    constant varchar2(50 char) := 'failed';
   c_exec_timeout   constant varchar2(50 char) := 'timeout';
 
+  -- Caller-class ("audience") constants, recorded on every execution row and on
+  -- the session header. Classified once per top-level run, before uc_ai's own
+  -- synthetic APEX session can mask the real caller.
+  --   public        - an APEX session that is not authenticated (anonymous visitor)
+  --   authenticated - a logged-in APEX user
+  --   db            - no APEX session, or uc_ai's synthetic one: a database
+  --                   session, scheduler job or trigger
+  -- Consumers (e.g. usage-governance extensions) use these to tell anonymous
+  -- traffic apart from signed-in traffic, which a username cannot do: every
+  -- anonymous visitor of an app shares one APEX public user name.
+  c_audience_public constant varchar2(20 char) := 'public';
+  c_audience_auth   constant varchar2(20 char) := 'authenticated';
+  c_audience_db     constant varchar2(20 char) := 'db';
+
   -- ============================================================================
   -- Types
   -- ============================================================================

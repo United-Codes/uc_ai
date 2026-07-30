@@ -35,6 +35,10 @@ Guardrails ship in the commercial UC AI Pro layer, available to support-pack cus
 | **Budget** | Monetary **cost** (priced from token usage) | "This app may spend at most \$100 this month" |
 | **Rate limiting** | **Counts** — runs, tool calls, concurrency | "This user may start at most 100 runs per hour" |
 
+Both features share the same scope and **audience** vocabulary, so either can
+express "anonymous visitors get a little, logged-in users get more" — see
+[the recipe](#recipe-public-visitors-a-little-logged-in-users-more).
+
 Use them together: budgets stop runaway *cost*, rate limits stop runaway *frequency* (abuse, retry storms, infinite tool loops).
 
 ## How it plugs into core
@@ -55,7 +59,7 @@ uc_ai_tools_api  (inside the tool-calling loop)
    UC_AI_HOOK ──► subscribers flagged tool_hook = 'Y'  (rate limiting)
 ```
 
-Each feature reads token counts, identity, and timestamps straight from the public `uc_ai_agent_executions` table — the Pro layer adds no columns to core and keeps only its own configuration and (for budgets) a cost ledger.
+Each feature reads token counts, identity, and timestamps straight from the public `uc_ai_agent_executions` table — the Pro layer keeps only its own configuration and (for budgets) a cost ledger. Core records the caller's class in `uc_ai_agent_executions.audience` (`public` / `authenticated` / `db`) when a run starts, which is what lets the guardrails tell anonymous traffic apart from signed-in traffic.
 
 - **`before_execution`** runs *before* a run starts. A guardrail raises here to **veto** the run (a hard cap) — no tokens are spent.
 - **`before_tool_call`** runs *before each tool call*. Rate limiting raises here to stop a run **mid-flight** the moment a tool-call cap is hit.
@@ -67,16 +71,52 @@ Both features share the same governance vocabulary.
 
 ### Scope
 
-Every limit targets a **scope** — who or what it applies to:
+Every limit targets a **scope** — what it counts, and in which bucket:
 
-| `scope_type` | `scope_value` | Applies to |
-| ------------ | ------------- | ---------- |
+| `scope_type` | `scope_value` | Counts |
+| ------------ | ------------- | ------ |
 | `global` | *(null)* | Every execution in the schema |
-| `user` | the `created_by` value | Runs by one user (APEX user, else DB user) |
+| `user` | the `created_by` value | Runs by one named user (APEX user, else DB user) |
 | `agent` | an agent `code` | Runs of one agent |
 | `app` | an APEX application id | Runs from one APEX app |
+| `apex_session` | *(must be null)* | Runs in **the calling visitor's own APEX session** — one bucket per browser session |
+| `each_user` | *(must be null)* | Runs by **the calling user** — one row gives every user their own bucket |
+
+The first four are **static**: you name the bucket in `scope_value`. The last two
+are **per-caller**: one configuration row creates a separate bucket for every
+visitor or user, so `scope_value` must be left null (the database rejects it
+otherwise).
 
 All limits that match a given run are evaluated; the strictest outcome wins.
+
+### Audience
+
+Every limit also targets an **audience** — which *callers* it governs:
+
+| `audience` | Governs |
+| ---------- | ------- |
+| `any` *(default)* | Every caller |
+| `public` | An anonymous APEX visitor (a session that is not authenticated) |
+| `authenticated` | A logged-in APEX user |
+| `db` | A database session — SQL client, scheduler job, trigger — or uc_ai's own internal session |
+
+**`audience` selects which callers a limit governs, and — for anything other than
+`any` — also restricts what it counts to that same class of caller.** So a
+`public` limit counts only anonymous usage: signed-in traffic can never consume
+an anonymous allowance, and vice versa.
+
+The caller's class is determined per run from the live APEX session, asking APEX
+itself whether the session is authenticated. That matters because a username
+cannot answer this question: **every anonymous visitor of an application shares
+one APEX public user name** (`nobody` by default), so `scope_type = 'user'` would
+pool them all into a single bucket.
+
+<Aside type="caution" title="Leave an `any` backstop in place">
+A caller with no APEX session resolves to `db`, so limits scoped to `public` or
+`authenticated` never apply to a scheduler job or backend code. If *every* limit
+you write targets `public` and `authenticated`, your batch jobs are ungoverned.
+Keep at least one `audience = 'any'` limit as a whole-system ceiling.
+</Aside>
 
 ### Enforcement mode
 
@@ -91,6 +131,77 @@ All limits that match a given run are evaluated; the strictest outcome wins.
 <Aside type="tip">
 Roll out a new limit as `advisory` first to watch real usage in the status views, promote it to `soft` to start warning, and only then flip it to `hard` once you are confident about the thresholds.
 </Aside>
+
+## Recipe: public visitors a little, logged-in users more
+
+This is the canonical setup for an AI feature on a page anonymous visitors can
+reach. It takes three rows, and **all three matter**:
+
+```sql
+-- 1. Each anonymous visitor: 3 runs per browser session per day
+insert into uc_ai_rate_limits (
+  code, description, audience, scope_type,
+  limit_type, limit_count, window_kind, period, enforcement_mode
+) values (
+  'PUBLIC_SESSION_DAY', 'Anonymous: 3 runs/session/day', 'public', 'apex_session',
+  'AGENT_EXEC', 3, 'calendar', 'day', 'hard'
+);
+
+-- 2. Backstop, NOT optional: a visitor can clear cookies for a fresh session and
+--    a fresh quota, so also cap anonymous traffic in aggregate.
+insert into uc_ai_rate_limits (
+  code, description, audience, scope_type, scope_value,
+  limit_type, limit_count, window_kind, period, enforcement_mode
+) values (
+  'PUBLIC_APP_DAY', 'Anonymous: 500 runs/day across the app', 'public', 'app', '512',
+  'AGENT_EXEC', 500, 'calendar', 'day', 'hard'
+);
+
+-- 3. Logged-in users: 100 runs EACH per day — one row covers everybody
+insert into uc_ai_rate_limits (
+  code, description, audience, scope_type,
+  limit_type, limit_count, window_kind, period, enforcement_mode
+) values (
+  'AUTH_USER_DAY', 'Logged in: 100 runs/user/day', 'authenticated', 'each_user',
+  'AGENT_EXEC', 100, 'calendar', 'day', 'hard'
+);
+commit;
+```
+
+Row 2 is what makes this a real control rather than a courtesy. Because it is
+`audience = 'public'`, its 500 counts **only anonymous runs** — your employees
+using the same app cannot exhaust the visitors' allowance, and visitors cannot
+exhaust the company's.
+
+The same three shapes work for [budgets](/products/uc-ai/docs/guides/guardrails/budget/)
+with `limit_amount` instead of `limit_count` — e.g. \$0.10 per anonymous session
+per day, \$5 per logged-in user per day.
+
+### What to watch out for
+
+<Aside type="caution" title="An APEX session is not an identity">
+A visitor who clears cookies gets a new APEX session and therefore a new
+`apex_session` bucket. Per-session limits shape behaviour and stop accidental
+hammering; they are **not** a security boundary on their own. Always pair them
+with the aggregate `public` cap above.
+</Aside>
+
+- **Do not use `each_user` for anonymous traffic.** All anonymous visitors share
+  one `created_by`, so a per-user bucket would become a shared cap and the first
+  visitor of the day would lock out everyone else. The database rejects
+  `each_user` combined with `audience = 'public'` outright; use `apex_session`.
+- **`apex_session` cannot use `period = 'total'`.** APEX session ids are recycled,
+  so an all-time bucket would eventually hand a new visitor an already-exhausted
+  quota with no diagnosable cause. Also rejected by the database.
+- **Database and job callers resolve to `db`.** They are governed by
+  `audience = 'any'` limits, and by `each_user` (bucketed on their database
+  username); `apex_session` limits never apply to them.
+- **The audience is re-evaluated before every tool call.** A tool that opens its
+  own APEX session can therefore change the tier mid-run.
+- **The check-then-act race still applies.** Two runs starting at the same instant
+  can both pass before either row exists, so a hard cap of *N* may briefly allow
+  *N+1*. With small per-visitor caps this is more visible than it was for
+  coarse limits; pair a `CONCURRENCY` limit if simultaneous requests matter.
 
 ## Install
 

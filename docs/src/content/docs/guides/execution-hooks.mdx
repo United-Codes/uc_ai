@@ -76,6 +76,10 @@ end my_ai_hook;
 
 Runs after the agent is resolved but **before** the execution row is created and before any provider call. Raising here vetoes the run — the exception is what the caller of `execute_agent` receives, and no tokens are spent. This is the enforcement point for hard limits.
 
+Note what the contract deliberately does *not* pass: whether the caller is an anonymous APEX visitor, a logged-in user, or a database session. The contract stays small and stable, and a hook that needs the distinction reads it from the live session itself — `sys_context('APEX$SESSION', 'APP_USER')` plus `apex_authentication.is_authenticated`, guarding against `uc_ai_agent_exec_api.c_synthetic_apex_user` (uc_ai's own internal session, which is created before this hook fires). Core also records its own classification on every run in `uc_ai_agent_executions.audience` (`public` / `authenticated` / `db`), which is the right source for counting *past* runs. Beware that `apex_authentication.is_public_user` returns TRUE outside any APEX session, so it must never be called before confirming a real session exists.
+
+`uc_ai.get_exec_context` is **not** yet populated at this point — it is published after the execution row is created. Use the procedure's own parameters here, and `get_exec_context` from `before_tool_call` / `augment_system_prompt`.
+
 ### `after_execution`
 
 Runs once the top-level execution has finished, on both the success and failure paths. It is **best-effort**: if it raises, UC AI logs the error and continues, so bookkeeping (cost recording, audit writes) can never convert a finished run into a failure. Because it fires at the top level, `p_exec_id` is the root execution — walk `uc_ai_agent_executions` by `parent_execution_id` if you need the whole tree.

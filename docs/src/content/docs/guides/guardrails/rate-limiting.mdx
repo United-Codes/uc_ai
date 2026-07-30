@@ -1,6 +1,6 @@
 ---
 title: Rate limiting
-description: Cap how often AI runs happen — agent runs, tool calls, and concurrent runs per user, agent, or app — with rolling or calendar windows, enforced mid-run.
+description: Cap how often AI runs happen — agent runs, tool calls, and concurrent runs per user, agent, app, or anonymous visitor — with rolling or calendar windows, enforced mid-run.
 sidebar:
   order: 20
 ---
@@ -15,7 +15,7 @@ Rate limiting is part of the paid UC AI Pro layer. See [about guardrails](/produ
 
 ## Limit types
 
-A limit caps one of three counts, over a [scope](/products/uc-ai/docs/guides/guardrails/#scope) and window:
+A limit caps one of three counts, over a [scope](/products/uc-ai/docs/guides/guardrails/#scope), an [audience](/products/uc-ai/docs/guides/guardrails/#audience) and a window:
 
 | `limit_type` | Counts | Enforced |
 | ------------ | ------ | -------- |
@@ -42,11 +42,11 @@ Limits are rows in `uc_ai_rate_limits`. Example — at most 100 runs per user pe
 
 ```sql
 insert into uc_ai_rate_limits (
-  code, description, scope_type, scope_value,
+  code, description, scope_type, scope_value, audience,
   limit_type, limit_count, window_kind, window_seconds, enforcement_mode
 ) values (
   'USER_RUNS_HOUR', 'Max 100 runs/user/hour',
-  'user', 'ANNA',
+  'user', 'ANNA', 'any',
   'AGENT_EXEC', 100, 'rolling', 3600, 'hard'
 );
 commit;
@@ -56,18 +56,43 @@ More shapes:
 
 ```sql
 -- Max 500 tool calls per app per hour (enforced mid-run, hard)
-insert into uc_ai_rate_limits (code, scope_type, scope_value, limit_type, limit_count, window_kind, window_seconds, enforcement_mode)
-values ('APP_TOOLS_HOUR', 'app', '512', 'TOOL_CALL', 500, 'rolling', 3600, 'hard');
+insert into uc_ai_rate_limits (code, scope_type, scope_value, audience, limit_type, limit_count, window_kind, window_seconds, enforcement_mode)
+values ('APP_TOOLS_HOUR', 'app', '512', 'any', 'TOOL_CALL', 500, 'rolling', 3600, 'hard');
 
 -- Max 5 concurrent runs per user
-insert into uc_ai_rate_limits (code, scope_type, scope_value, limit_type, limit_count, enforcement_mode)
-values ('USER_CONCURRENCY', 'user', 'ANNA', 'CONCURRENCY', 5, 'hard');
+insert into uc_ai_rate_limits (code, scope_type, scope_value, audience, limit_type, limit_count, enforcement_mode)
+values ('USER_CONCURRENCY', 'user', 'ANNA', 'any', 'CONCURRENCY', 5, 'hard');
 
 -- Org-wide daily run cap, warn only
-insert into uc_ai_rate_limits (code, scope_type, scope_value, limit_type, limit_count, window_kind, period, enforcement_mode)
-values ('ORG_RUNS_DAY', 'global', null, 'AGENT_EXEC', 10000, 'calendar', 'day', 'soft');
+insert into uc_ai_rate_limits (code, scope_type, scope_value, audience, limit_type, limit_count, window_kind, period, enforcement_mode)
+values ('ORG_RUNS_DAY', 'global', null, 'any', 'AGENT_EXEC', 10000, 'calendar', 'day', 'soft');
+
+-- Each logged-in user gets 200 runs/day — one row, a bucket per user
+insert into uc_ai_rate_limits (code, scope_type, audience, limit_type, limit_count, window_kind, period, enforcement_mode)
+values ('AUTH_EACH_DAY', 'each_user', 'authenticated', 'AGENT_EXEC', 200, 'calendar', 'day', 'hard');
+
+-- Each anonymous visitor gets 3 runs/day — one row, a bucket per browser session
+insert into uc_ai_rate_limits (code, scope_type, audience, limit_type, limit_count, window_kind, period, enforcement_mode)
+values ('PUB_SESSION_DAY', 'apex_session', 'public', 'AGENT_EXEC', 3, 'calendar', 'day', 'hard');
 commit;
 ```
+
+`audience` defaults to `any`, so it can be omitted — but spelling it out keeps the
+intent of a limit obvious to whoever reads the table next.
+
+## Public vs logged-in quotas
+
+`audience` and the two per-caller scopes (`apex_session`, `each_user`) are what
+let one small set of rows give anonymous visitors a modest allowance and
+logged-in users a generous one. The full setup, the reasoning, and the pitfalls
+are in [the shared recipe](/products/uc-ai/docs/guides/guardrails/#recipe-public-visitors-a-little-logged-in-users-more).
+
+The short version:
+
+- `apex_session` is the right bucket for anonymous traffic — one per browser session.
+- `each_user` is the right bucket for signed-in traffic — one per username.
+- A `public` limit counts only anonymous runs, so the two groups can never consume each other's allowance.
+- Always add an aggregate `audience = 'public'` cap as a backstop, because a visitor can clear cookies for a fresh session.
 
 When a hard limit is hit, the caller receives one of these, depending on the type:
 
@@ -79,6 +104,13 @@ When a hard limit is hit, the caller receives one of these, depending on the typ
 
 ```text
 ORA-20411: Rate limit "USER_RUNS_HOUR" (AGENT_EXEC) exceeded: 100 of 100 allowed
+```
+
+A per-caller limit also names the bucket it denied, since "3 of 3" would otherwise
+not say whose:
+
+```text
+ORA-20411: Rate limit "PUB_SESSION_DAY" (AGENT_EXEC) exceeded: 3 of 3 allowed (apex_session 40218...)
 ```
 
 ## Mid-run tool-call enforcement
@@ -106,9 +138,14 @@ Inspect live limit usage with the status view or the API:
 
 ```sql
 -- Which limits are close to their cap?
-select code, scope_type, scope_value, limit_type,
-       used, limit_count, pct, remaining, state   -- state: ok | warn | over
+select code, audience, scope_type, scope_value, is_dynamic, limit_type,
+       used, limit_count, pct, remaining, state   -- state: ok | warn | over | per_caller
   from uc_ai_v_rate_limit_status
+ order by pct desc nulls last;
+
+-- Which individual visitors / users are at their cap?
+select code, scope_type, bucket_value, used, limit_count, pct, state
+  from uc_ai_v_rate_limit_buckets
  order by pct desc nulls last;
 
 -- Ad-hoc: how many runs has a user started in the last hour?
@@ -120,7 +157,31 @@ select uc_ai_ratelimit_api.current_count(
          p_window_seconds => 3600
        ) as runs_last_hour
   from dual;
+
+-- Ad-hoc: how many runs have anonymous visitors started today, in total?
+select uc_ai_ratelimit_api.current_count(
+         p_scope_type     => 'global',
+         p_scope_value    => null,
+         p_limit_type     => 'AGENT_EXEC',
+         p_window_kind    => 'calendar',
+         p_period         => 'day',
+         p_count_audience => 'public'
+       ) as anonymous_runs_today
+  from dual;
 ```
+
+<Aside type="note" title="Per-caller limits in the status view">
+A `apex_session` or `each_user` limit has one bucket per caller, so there is no
+single "used" for it. `uc_ai_v_rate_limit_status` reports `used`, `pct` and
+`remaining` as `NULL` with `state = 'per_caller'` for those rows (reporting `0`
+would read as "nothing used" for a limit that may be actively denying visitors),
+and flags them with `is_dynamic = 'Y'`. Use `uc_ai_v_rate_limit_buckets` to see
+them expanded one row per bucket.
+</Aside>
+
+Direct API callers can pass the caller class explicitly:
+`check_limits(p_created_by, p_agent_code, p_apex_app_id, p_audience, p_apex_session_id)`.
+Omit the last two and the caller is classified from the live APEX session.
 
 <Aside type="tip">
 The same race window as budgets applies: two runs starting at the same instant can both pass a count check before either row exists, so a hard cap of N may briefly allow N+1. Rate limits are a guardrail against abuse and runaway loops, not a hard transactional quota.

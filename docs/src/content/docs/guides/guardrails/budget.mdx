@@ -66,16 +66,28 @@ A few more shapes:
 
 ```sql
 -- Per-user daily soft cap (warns, never blocks)
-insert into uc_ai_budgets (code, scope_type, scope_value, period, limit_amount, enforcement_mode)
-values ('USER_DAY_SOFT', 'user', 'ANNA', 'day', 5, 'soft');
+insert into uc_ai_budgets (code, scope_type, scope_value, audience, period, limit_amount, enforcement_mode)
+values ('USER_DAY_SOFT', 'user', 'ANNA', 'any', 'day', 5, 'soft');
 
 -- Track total spend for one agent, no enforcement
-insert into uc_ai_budgets (code, scope_type, scope_value, period, limit_amount, enforcement_mode)
-values ('TRANSLATOR_TOTAL', 'agent', 'translator', 'total', 999999, 'advisory');
+insert into uc_ai_budgets (code, scope_type, scope_value, audience, period, limit_amount, enforcement_mode)
+values ('TRANSLATOR_TOTAL', 'agent', 'translator', 'any', 'total', 999999, 'advisory');
 
 -- Organisation-wide hard monthly cap
-insert into uc_ai_budgets (code, scope_type, scope_value, period, limit_amount, enforcement_mode)
-values ('ORG_MONTH', 'global', null, 'month', 2000, 'hard');
+insert into uc_ai_budgets (code, scope_type, scope_value, audience, period, limit_amount, enforcement_mode)
+values ('ORG_MONTH', 'global', null, 'any', 'month', 2000, 'hard');
+
+-- Each anonymous visitor may spend $0.10 a day (one bucket per browser session)
+insert into uc_ai_budgets (code, scope_type, audience, period, limit_amount, enforcement_mode)
+values ('PUB_SESSION_DAY', 'apex_session', 'public', 'day', 0.10, 'hard');
+
+-- ...and anonymous traffic together may spend $20 a day across the app
+insert into uc_ai_budgets (code, scope_type, scope_value, audience, period, limit_amount, enforcement_mode)
+values ('PUB_APP_DAY', 'app', '512', 'public', 'day', 20, 'hard');
+
+-- Each logged-in user may spend $5 a day (one row covers everybody)
+insert into uc_ai_budgets (code, scope_type, audience, period, limit_amount, enforcement_mode)
+values ('AUTH_USER_DAY', 'each_user', 'authenticated', 'day', 5, 'hard');
 commit;
 ```
 
@@ -94,6 +106,32 @@ When a hard budget is exceeded, the caller of `execute_agent` receives:
 ORA-20401: Budget "APP100_MONTH" exceeded: spent 100.4213 of 100
 ```
 
+A per-caller budget also names the bucket it denied:
+
+```text
+ORA-20401: Budget "PUB_SESSION_DAY" exceeded: spent .1042 of .1 (apex_session 40218...)
+```
+
+## Public vs logged-in allowances
+
+`uc_ai_budgets` carries the same `audience` column and the same per-caller scopes
+(`apex_session`, `each_user`) as rate limits, so the money side of "anonymous
+visitors get a little, logged-in users get more" is configured exactly the same
+way. The reasoning and the pitfalls are in
+[the shared recipe](/products/uc-ai/docs/guides/guardrails/#recipe-public-visitors-a-little-logged-in-users-more).
+
+Because a `public` budget prices **only** anonymous runs, the `PUB_APP_DAY` row
+above is a true \$20/day ceiling on anonymous spend — employees using the same
+app cannot eat into it, and visitors cannot eat into the company's.
+
+<Aside type="caution" title="A per-session budget lags by one run">
+Cost is priced in `after_execution`, once a run has finished. So a per-visitor
+budget always reflects that visitor's *completed* runs: their current run is not
+yet counted, and simultaneous runs all see the same pre-run figure. Pair a
+per-session `CONCURRENCY` [rate limit](/products/uc-ai/docs/guides/guardrails/rate-limiting/)
+if you need to stop a visitor launching several expensive runs at once.
+</Aside>
+
 ## Reporting and planning
 
 The budget API answers spend and forecast questions without running an agent.
@@ -102,6 +140,14 @@ The budget API answers spend and forecast questions without running an agent.
 -- Current spend and projected period-end spend for a scope
 select uc_ai_budget_api.spend('user', 'ANNA', 'month')    as spent_so_far,
        uc_ai_budget_api.forecast('user', 'ANNA', 'month') as projected_month_end
+  from dual;
+
+-- How much have anonymous visitors cost this month, in total?
+select uc_ai_budget_api.spend('app', '512', 'month', systimestamp, 'public') as anonymous_spend
+  from dual;
+
+-- ...and one specific visitor?
+select uc_ai_budget_api.spend('apex_session', '40218...', 'day') as this_visitor_today
   from dual;
 
 -- Estimate a rollout before you build it:
@@ -114,19 +160,32 @@ Ready-made views drive dashboards and chargeback reports:
 
 | View | Shows |
 | ---- | ----- |
-| `uc_ai_v_budget_status` | Every active budget: spend, forecast, % of limit, remaining, and `ok`/`warn`/`over` state |
-| `uc_ai_v_execution_costs` | Per-execution cost detail joined to the run rows |
+| `uc_ai_v_budget_status` | Every active budget: spend, forecast, % of limit, remaining, and `ok`/`warn`/`over`/`per_caller` state |
+| `uc_ai_v_budget_buckets` | Per-caller budgets expanded one row per visitor / user |
+| `uc_ai_v_execution_costs` | Per-execution cost detail joined to the run rows (incl. `audience`, `apex_session_id`) |
 | `uc_ai_v_usage_by_user` | Daily token + cost rollup per user |
 | `uc_ai_v_usage_by_agent` | Daily token + cost rollup per agent |
 | `uc_ai_v_usage_by_app` | Daily token + cost rollup per APEX app |
 
 ```sql
 -- The "plan ahead" screen: which budgets are close to their limit?
-select code, scope_type, scope_value, period,
+select code, audience, scope_type, scope_value, is_dynamic, period,
        spend, limit_amount, pct, forecast_period_end, state
   from uc_ai_v_budget_status
  order by pct desc nulls last;
+
+-- Which individual visitors / users have spent their allowance?
+select code, scope_type, bucket_value, spend, limit_amount, pct, state
+  from uc_ai_v_budget_buckets
+ order by pct desc nulls last;
 ```
+
+<Aside type="note" title="Per-caller budgets in the status view">
+An `apex_session` or `each_user` budget has one bucket per caller, so there is no
+single spend for it. `uc_ai_v_budget_status` reports `spend`, `forecast_period_end`,
+`pct` and `remaining` as `NULL` with `state = 'per_caller'` for those rows, and
+flags them with `is_dynamic = 'Y'`. Use `uc_ai_v_budget_buckets` for the expansion.
+</Aside>
 
 <Aside type="tip">
 Pair budgets with [rate limiting](/products/uc-ai/docs/guides/guardrails/rate-limiting/): a budget stops runaway **cost**, while a rate limit stops runaway **frequency** (retry storms, tool loops) before it even shows up on the bill.

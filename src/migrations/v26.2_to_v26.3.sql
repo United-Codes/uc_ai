@@ -10,6 +10,7 @@ alter table uc_ai_agent_executions add (
   created_by             varchar2(255 char),
   db_user                varchar2(255 char),
   apex_user              varchar2(255 char),
+  audience               varchar2(20 char),
   apex_session_id        number,
   apex_app_id            number,
   apex_page_id           number,
@@ -27,6 +28,7 @@ alter table uc_ai_agent_executions add (
 comment on column uc_ai_agent_executions.created_by is 'coalesce(real APEX user, DB user) at top-level execution start';
 comment on column uc_ai_agent_executions.db_user is 'SYS_CONTEXT USERENV SESSION_USER';
 comment on column uc_ai_agent_executions.apex_user is 'APEX APP_USER (null for uc_ai''s own synthetic session)';
+comment on column uc_ai_agent_executions.audience is 'Caller class at execution start: public (anonymous APEX visitor) | authenticated (logged-in APEX user) | db (database/job session, or uc_ai''s own synthetic session)';
 comment on column uc_ai_agent_executions.apex_session_id is 'APEX APP_SESSION';
 comment on column uc_ai_agent_executions.apex_app_id is 'APEX application ID';
 comment on column uc_ai_agent_executions.apex_page_id is 'APEX page ID';
@@ -65,6 +67,13 @@ alter table uc_ai_agent_executions add constraint uc_ai_agent_exec_done_ck check
   enable novalidate;
 
 create index uc_ai_agent_exec_parent_idx on uc_ai_agent_executions(parent_execution_id);
+
+-- Per-APEX-session usage lookups pair an apex_session_id equality with a
+-- started_at range, so both columns belong in one index. Without it, a governance
+-- extension capping anonymous usage per browser session would full-scan this
+-- table on every run — the worst place for it, since anonymous traffic is exactly
+-- what is unbounded.
+create index uc_ai_agent_exec_apex_sess_idx on uc_ai_agent_executions(apex_session_id, started_at);
 
 
 -- ============================================================================
@@ -131,6 +140,7 @@ create table uc_ai_agent_sessions (
   created_by             varchar2(255 char),
   db_user                varchar2(255 char),
   apex_user              varchar2(255 char),
+  audience               varchar2(20 char),
   apex_session_id        number,
   apex_app_id            number,
   apex_page_id           number,
@@ -154,6 +164,7 @@ create index uc_ai_agent_sess_activity_idx on uc_ai_agent_sessions(last_activity
 create index uc_ai_agent_sess_agent_idx on uc_ai_agent_sessions(root_agent_id);
 
 comment on table uc_ai_agent_sessions is 'Conversation header: one row per session_id grouping all executions (turns + nested sub-agent runs)';
+comment on column uc_ai_agent_sessions.audience is 'Caller class of the opening turn: public | authenticated | db';
 
 
 create sequence uc_ai_agent_messages_seq;
