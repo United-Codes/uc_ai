@@ -79,6 +79,71 @@ as
    */
   function generate_session_id return varchar2;
 
+  /*
+   * Sets the human-readable title of a conversation on its session header.
+   *
+   * Front ends name conversations however they like (an LLM summary of the first
+   * exchange, the user typing one in); the engine never sets this itself. The
+   * title is overwritten if one already exists, so this doubles as "rename" —
+   * a write-once policy, if wanted, belongs in the caller.
+   *
+   * Silently does nothing (logged as a warning) when the session header does not
+   * exist yet (a session only gets a header once its first top-level execution
+   * starts) or when p_created_by does not match the opening user.
+   *
+   * Commits in an autonomous transaction, so the caller's transaction must not
+   * hold an uncommitted change to the session header — the write cannot wait for
+   * a lock held by its own caller and raises instead.
+   *
+   * @param p_session_id  The session to name
+   * @param p_title       The title; trimmed to 200 characters. Null or blank
+   *                      clears the title (back to unnamed)
+   * @param p_created_by  Optional guard: only update when the session was opened
+   *                      by this user. Beware that a session opened from a
+   *                      background job (no APEX session) records the DB user
+   *                      here, not the end user — passing APP_USER against such
+   *                      a session matches nothing and the write is lost. Pass
+   *                      null when you have authorized the user yourself.
+   */
+  procedure set_session_title(
+    p_session_id in varchar2,
+    p_title      in varchar2,
+    p_created_by in varchar2 default null
+  );
+
+  /*
+   * Records the end user's verdict on a conversation on its session header.
+   *
+   * Front ends decide how (and whether) to ask; the engine never sets this
+   * itself. An existing rating is overwritten, so this doubles as "change my
+   * mind" — a write-once policy, if wanted, belongs in the caller.
+   *
+   * A null p_rating withdraws the feedback: rating, comment and timestamp are
+   * cleared together, so "not rated" never decays into "rated, comment lost".
+   * A rating the engine does not recognize is treated as null rather than
+   * raising — the check constraint must never be what a front end hits.
+   *
+   * Silently does nothing (logged as a warning) when the session header does not
+   * exist yet (a session only gets a header once its first top-level execution
+   * starts) or when p_created_by does not match the opening user.
+   *
+   * Commits in an autonomous transaction, with the same caller-lock caveat as
+   * set_session_title's.
+   *
+   * @param p_session_id  The session to rate
+   * @param p_rating      'up' | 'down', or null to withdraw the feedback
+   * @param p_comment     Optional free text; trimmed to 2000 characters, and
+   *                      cleared along with a null rating
+   * @param p_created_by  Optional guard, with the same background-job caveat as
+   *                      set_session_title's
+   */
+  procedure set_session_feedback(
+    p_session_id in varchar2,
+    p_rating     in varchar2,
+    p_comment    in varchar2 default null,
+    p_created_by in varchar2 default null
+  );
+
   -- ============================================================================
   -- Agent Management
   -- ============================================================================
@@ -579,6 +644,11 @@ as
    * Lists conversation sessions (one row per session_id) with maintained
    * aggregates (turn/message counts, summed token usage, last status/activity).
    * The conversation-level counterpart to get_execution_history.
+   *
+   * Includes the conversation title when one has been set (see set_session_title),
+   * so the result is directly usable as a conversation list, and the end user's
+   * feedback when any was given (see set_session_feedback), so quality can be
+   * reported on alongside cost.
    *
    * @param p_agent_code  Filter by the session's root agent code
    * @param p_status      Filter by the session's latest status

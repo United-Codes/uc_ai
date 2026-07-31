@@ -929,6 +929,150 @@ create or replace package body uc_ai_agents_api as
 
 
   /*
+   * Sets the conversation title on a session header
+   */
+  procedure set_session_title(
+    p_session_id in varchar2,
+    p_title      in varchar2,
+    p_created_by in varchar2 default null
+  )
+  as
+    -- @dblinter ignore(g-3330): intentional autonomous transaction; the title is session telemetry like create_execution/maintain_session and must survive a rollback of the calling transaction
+    pragma autonomous_transaction;
+    l_scope uc_ai_logger.scope := gc_scope_prefix || 'set_session_title';
+    -- Self-deadlock: the caller holds an uncommitted lock on the header row and
+    -- is suspended waiting for this autonomous transaction, which now waits for
+    -- that lock. Same trap as create_execution's, so give the same answer.
+    e_deadlock exception;
+    pragma exception_init(e_deadlock, -60);
+  begin
+    if p_session_id is null then
+      return;
+    end if;
+
+    update uc_ai_agent_sessions s
+       set s.title = trim(substr(p_title, 1, 200))
+     where s.session_id = p_session_id
+       and (p_created_by is null or s.created_by = p_created_by);
+
+    -- No row is a normal outcome, not an error: a session only gets a header
+    -- once its first top-level execution starts, and p_created_by may not match.
+    -- Logged all the same, or a front end whose write vanished has nothing to go on.
+    if sql%rowcount = 0 then
+      uc_ai_logger.log_warn(
+        p_text  => 'No session header updated for title on session ' || p_session_id
+      , p_scope => l_scope
+      , p_extra => 'Session has no header row yet, or p_created_by (' || p_created_by
+                   || ') does not match the user that opened it'
+      );
+    end if;
+
+    commit;
+  exception
+    when e_deadlock then
+      rollback;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'session title'
+      , p1           => 'the calling transaction must not hold an uncommitted change to session ' || p_session_id
+                        || ': set_session_title runs in an autonomous transaction and cannot wait for a lock '
+                        || 'held by its own caller (raised ORA-00060 self-deadlock). Commit first, then set the title'
+      );
+    when others then
+      rollback;
+      uc_ai_logger.log_error(
+        p_text  => 'Failed to set title on session ' || p_session_id
+      , p_scope => l_scope
+      , p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+      );
+      raise;
+  end set_session_title;
+
+
+  /*
+   * Records the end user's verdict on a conversation
+   */
+  procedure set_session_feedback(
+    p_session_id in varchar2,
+    p_rating     in varchar2,
+    p_comment    in varchar2 default null,
+    p_created_by in varchar2 default null
+  )
+  as
+    -- @dblinter ignore(g-3330): intentional autonomous transaction; the verdict is session telemetry like create_execution/maintain_session and must survive a rollback of the calling transaction
+    pragma autonomous_transaction;
+    l_scope  uc_ai_logger.scope := gc_scope_prefix || 'set_session_feedback';
+    l_rating uc_ai_agent_sessions.feedback_rating%type;
+    -- Self-deadlock: see set_session_title.
+    e_deadlock exception;
+    pragma exception_init(e_deadlock, -60);
+  begin
+    if p_session_id is null then
+      return;
+    end if;
+
+    -- An unrecognized rating is normalized away rather than raising: a front end
+    -- sending a value this version predates must not hit the check constraint.
+    -- substr keeps that promise for an over-long value too -- l_rating is only as
+    -- wide as the column, so assigning one raw would raise ORA-06502 instead.
+    l_rating := lower(trim(substr(p_rating, 1, 10)));
+
+    if l_rating not in ('up', 'down') then
+      l_rating := null;
+    end if;
+
+    -- No rating means the feedback is withdrawn, so the comment and timestamp go
+    -- with it — a stale comment attached to no verdict would misreport.
+    update uc_ai_agent_sessions s
+       set s.feedback_rating  = l_rating
+         , s.feedback_comment = case
+                                  when l_rating is null then null
+                                  else trim(substr(p_comment, 1, 2000))
+                                end
+         , s.feedback_at      = case
+                                  when l_rating is null then null
+                                  else systimestamp
+                                end
+     where s.session_id = p_session_id
+       and (p_created_by is null or s.created_by = p_created_by);
+
+    -- No row is a normal outcome, not an error: a session only gets a header
+    -- once its first top-level execution starts, and p_created_by may not match.
+    -- Logged all the same, or a front end whose write vanished has nothing to go on.
+    if sql%rowcount = 0 then
+      uc_ai_logger.log_warn(
+        p_text  => 'No session header updated for feedback on session ' || p_session_id
+      , p_scope => l_scope
+      , p_extra => 'Session has no header row yet, or p_created_by (' || p_created_by
+                   || ') does not match the user that opened it'
+      );
+    end if;
+
+    commit;
+  exception
+    when e_deadlock then
+      rollback;
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'session feedback'
+      , p1           => 'the calling transaction must not hold an uncommitted change to session ' || p_session_id
+                        || ': set_session_feedback runs in an autonomous transaction and cannot wait for a lock '
+                        || 'held by its own caller (raised ORA-00060 self-deadlock). Commit first, then set the feedback'
+      );
+    when others then
+      rollback;
+      uc_ai_logger.log_error(
+        p_text  => 'Failed to set feedback on session ' || p_session_id
+      , p_scope => l_scope
+      , p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+      );
+      raise;
+  end set_session_feedback;
+
+
+  /*
    * Creates a new agent
    */
   function create_agent(
@@ -2410,6 +2554,10 @@ create or replace package body uc_ai_agents_api as
     open l_cur for
       select s.session_id,
              s.root_agent_id,
+             s.title,
+             s.feedback_rating,
+             s.feedback_comment,
+             s.feedback_at,
              a.code as agent_code,
              a.version as agent_version,
              a.agent_type,

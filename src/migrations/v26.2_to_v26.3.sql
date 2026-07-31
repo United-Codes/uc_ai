@@ -125,6 +125,11 @@ comment on column uc_ai_agent_executions.turn_index is 'Sequential turn number w
 create table uc_ai_agent_sessions (
   session_id             varchar2(255 char) not null,
   root_agent_id          number,
+  title                  varchar2(200 char),
+
+  feedback_rating        varchar2(10 char),
+  feedback_comment       varchar2(2000 char),
+  feedback_at            timestamp,
 
   status                 varchar2(50 char),
   turn_count             number default on null 0 not null,
@@ -157,14 +162,20 @@ create table uc_ai_agent_sessions (
   constraint uc_ai_agent_sess_agent_fk foreign key (root_agent_id)
     references uc_ai_agents(id),
   constraint uc_ai_agent_sess_status_ck check (status in
-    ('pending', 'running', 'completed', 'failed', 'timeout'))
+    ('pending', 'running', 'completed', 'failed', 'timeout')),
+  constraint uc_ai_agent_sess_fb_ck check (feedback_rating in ('up', 'down'))
 );
 
 create index uc_ai_agent_sess_activity_idx on uc_ai_agent_sessions(last_activity_at);
 create index uc_ai_agent_sess_agent_idx on uc_ai_agent_sessions(root_agent_id);
+create index uc_ai_agent_sess_user_idx on uc_ai_agent_sessions(created_by, last_activity_at);
 
 comment on table uc_ai_agent_sessions is 'Conversation header: one row per session_id grouping all executions (turns + nested sub-agent runs)';
 comment on column uc_ai_agent_sessions.audience is 'Caller class of the opening turn: public | authenticated | db';
+comment on column uc_ai_agent_sessions.title is 'Optional human-readable conversation title, set by the front end via set_session_title';
+comment on column uc_ai_agent_sessions.feedback_rating is 'Optional end-user verdict on the conversation: up | down. Null = not rated, set by the front end via set_session_feedback';
+comment on column uc_ai_agent_sessions.feedback_comment is 'Optional free-text comment the end user left alongside feedback_rating';
+comment on column uc_ai_agent_sessions.feedback_at is 'When feedback_rating was last set; nulled together with the rating when feedback is withdrawn';
 
 
 create sequence uc_ai_agent_messages_seq;
