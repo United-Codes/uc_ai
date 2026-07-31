@@ -10,19 +10,19 @@ import { Aside } from "@astrojs/starlight/components";
 **The orchestrator pattern uses a central AI agent that autonomously decides which specialized agents to delegate to and in what order.**
 
 <Aside type="tip" title="When to use this">
-Choose the orchestrator when the right sequence of agents depends on the input and you want the AI to plan it. If the steps are always the same, a deterministic [workflow](/products/uc-ai/docs/guides/multi-agent-systems/workflows/) is simpler and cheaper.
+Choose the orchestrator when the correct order of agents depends on the input, and the AI must plan this order. If the steps are always the same, a deterministic [workflow](/products/uc-ai/docs/guides/multi-agent-systems/workflows/) is simpler and cheaper.
 </Aside>
 
-Delegate agents are exposed as [tools](/products/uc-ai/docs/guides/tools/) that the orchestrator can call. This is the most flexible pattern - the AI itself decides the execution flow based on the task.
+UC AI gives each delegate agent to the orchestrator as a [tool](/products/uc-ai/docs/guides/tools/). This is the most flexible pattern, because the AI decides the flow from the task.
 
 ## How it works
 
 1. UC AI registers each delegate agent as a temporary tool for the orchestrator
-2. The orchestrator's prompt profile provides instructions on how to coordinate the delegates
+2. The prompt profile of the orchestrator holds the instructions for the coordination of the delegates
 3. The orchestrator AI decides which agents to call, in what order, and with what parameters
-4. Each delegation executes the referenced agent and returns its result
+4. Each delegation runs the referenced agent and returns its result
 5. The orchestrator synthesizes the results into a final answer
-6. Temporary tools are cleaned up after execution
+6. UC AI deletes the temporary tools after the run
 
 ## Example: travel planner
 
@@ -32,7 +32,7 @@ This example shows an orchestrator that coordinates calendar, flight, and hotel 
 
 Each agent needs a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/) with instructions, provider, and model configuration.
 
-Note that in real life the agents would have access to some external data source or API. Here we hardcode the data in the system prompt for simplicity.
+In a real system, each agent reads an external data source or an API. This example holds the data in the system prompt, to stay simple.
 
 ```sql
 DECLARE
@@ -111,9 +111,9 @@ END;
 ```
 
 <Aside type="tip">
-  Use a more capable model for the orchestrator (here GPT-5 Mini) since it needs
-  to reason about which agents to call. Delegate agents can use cheaper models
-  since they have narrower tasks.
+  Use a more capable model for the orchestrator, here GPT-5 Mini. It must reason
+  about which agents to call. A delegate agent can use a cheaper model, because
+  its task is narrow.
 </Aside>
 
 ### Step 2: Create delegate agents
@@ -170,9 +170,9 @@ END;
 ```
 
 <Aside type="note">
-  The `p_description` of each delegate agent is what the orchestrator AI sees
-  when deciding which agent to call. Write clear, specific descriptions - they
-  directly affect delegation accuracy.
+  The orchestrator AI sees the `p_description` of each delegate agent when it
+  decides which agent to call. Write a clear and specific description. The
+  description controls how well the orchestrator delegates.
 </Aside>
 
 ### Step 3: Create the orchestrator
@@ -226,7 +226,7 @@ END;
 /
 ```
 
-The orchestrator AI will autonomously:
+The orchestrator AI then does this work itself:
 
 1. Check the calendar for scheduling constraints
 2. Search for flights that fit after the Monday meeting
@@ -244,7 +244,7 @@ The orchestrator AI will autonomously:
 
 ## Conversation continuation
 
-Like profile agents, orchestrators support follow-up messages via `p_follow_up_message`. This lets you refine or extend the orchestrator's work after seeing its initial plan:
+An orchestrator supports a follow-up message with `p_follow_up_message`, the same as a profile agent. You can therefore correct or extend the work of the orchestrator after you read its first plan:
 
 ```sql
 DECLARE
@@ -276,11 +276,11 @@ END;
 /
 ```
 
-On each follow-up call, the delegate agents are re-registered as temporary tools so the orchestrator can continue delegating work. The full conversation history — including previous tool calls and their results — is sent to the LLM.
+On each follow-up call, UC AI registers the delegate agents again as temporary tools. The orchestrator can therefore delegate more work. UC AI sends the full conversation history to the LLM, with the earlier tool calls and their results.
 
 ## Message log at a glance
 
-The orchestrator makes the model calls itself and reaches its delegates through **tool calls**, so the [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript records each delegate as a `tool_call` / `tool_result` pair (`tool_name` = the delegate agent) around the orchestrator's own reasoning and final synthesis. Because this is a direct pattern, every agent-produced row is attributed to the orchestrator via `agent_code`; the delegate identity lives on the tool rows' `tool_name`.
+The orchestrator makes the model calls itself, and it reaches each delegate through a **tool call**. The [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript therefore records each delegate as a `tool_call` and `tool_result` pair, with the delegate agent in `tool_name`. These pairs stand around the own reasoning and the final synthesis of the orchestrator. This is a direct pattern, so `agent_code` names the orchestrator on every agent row. The `tool_name` of a tool row names the delegate.
 
 ```sql
 SELECT seq, role, agent_code, tool_name, SUBSTR(content, 1, 50) AS content
@@ -300,7 +300,7 @@ SELECT seq, role, agent_code, tool_name, SUBSTR(content, 1, 50) AS content
 
 ## Tips
 
-- **Give the orchestrator a plan**: In the orchestrator's system prompt, describe the strategy for using delegates. For example: "First check calendar constraints, then search flights, then hotels."
-- **Limit delegations**: Set `max_delegations` to prevent excessive calls. The orchestrator needs enough room to call all relevant agents but shouldn't loop endlessly.
-- **Use structured output on the orchestrator**: If you need the final answer in a specific format, add a response schema to the orchestrator's prompt profile.
-- **Input schemas matter**: The `input_schema` on delegate agents defines how the orchestrator calls them. A clear schema with good `description` fields helps the AI pass the right parameters.
+- **Give the orchestrator a plan**: describe the strategy for the delegates in the system prompt of the orchestrator. An example is "First check calendar constraints, then search flights, then hotels."
+- **Limit the delegations**: set `max_delegations` to stop excessive calls. The orchestrator needs room for every relevant agent, but it must not loop forever.
+- **Use structured output on the orchestrator**: if you need the final answer in a fixed format, add a response schema to the prompt profile of the orchestrator.
+- **Input schemas matter**: the `input_schema` of a delegate agent defines how the orchestrator calls it. A clear schema with a good `description` for each field helps the AI pass the correct parameters.

@@ -7,15 +7,15 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-**Structured output is your best friend when you need consistent, parseable responses from AI models.**
+**Use structured output when you need a consistent AI answer that your code can parse.**
 
-Instead of getting free-form text, structured output guarantees that AI responses conform to a specific JSON schema. This makes it ideal for applications that need to process AI responses programmatically, extract specific data fields, or integrate AI results into databases and workflows.
+Structured output forces every AI answer into a JSON schema, in place of free text. Use it in an application that processes the AI answer in code, that reads a specific field, or that writes the AI result into a table or a workflow.
 
 ## How it works
 
-When you provide a JSON schema to UC AI, the AI model is constrained to respond only in the format you specify. The schema defines the structure, data types, required fields, and validation rules for the response.
+You give a JSON schema to UC AI, and the AI model then answers only in that format. The schema defines the structure, the data types, the required fields, and the validation rules of the answer.
 
-UC AI automatically converts your JSON schema to the format required by each AI provider. Currently the following providers are supported:
+UC AI converts your JSON schema to the format of each AI provider. These providers support structured output:
 
 - [OpenAI](/products/uc-ai/docs/providers/openai/)
 - [Anthropic Claude](/products/uc-ai/docs/providers/anthropic/)
@@ -25,15 +25,15 @@ UC AI automatically converts your JSON schema to the format required by each AI 
 
 ## JSON Schema
 
-JSON schema is a standard that defines the structure and validation rules for JSON data. It allows you to specify the expected format, data types, and required fields for API responses, making it easier to work with structured data. JSON schemas are defined in a JSON format. Read more about it on the [official page](https://json-schema.org/).
+JSON schema is a standard for the structure and the validation rules of JSON data. With it, you define the format, the data types, and the required fields of an API answer. A JSON schema is itself JSON. The [official page](https://json-schema.org/) has more information.
 
 <Aside type="tip">
-  Use [our JSON schema
-  builder](/products/uc-ai/docs/other/json-schema/#interactive-builder) to build
-  your own schemas easily.
+  [Our JSON schema
+  builder](/products/uc-ai/docs/other/json-schema/#interactive-builder) helps you
+  write your own schema.
 </Aside>
 
-This is the schema for a simple that enforces responses to contain a text response and a confidence score between 0 and 1.
+This schema forces an answer with a text and a confidence score between 0 and 1.
 
 ```json
 {
@@ -57,7 +57,7 @@ This is the schema for a simple that enforces responses to contain a text respon
 }
 ```
 
-An example response might look like this:
+An answer then looks like this:
 
 ```json
 {
@@ -66,11 +66,11 @@ An example response might look like this:
 }
 ```
 
-To create your own valid schemas use our [JSON schema builder](/products/uc-ai/docs/other/json-schema/#interactive-builder). The builder has more examples and allows to edit an existing schema interactively.
+Use our [JSON schema builder](/products/uc-ai/docs/other/json-schema/#interactive-builder) to write a valid schema. The builder has more examples, and you can edit an existing schema in it.
 
 ## Example: Simple confidence scoring
 
-This example shows how to get a response with a confidence score, useful for quality control and decision-making processes.
+This example returns an answer with a confidence score. Use such a score for quality control and for a decision.
 
 ```sql
 DECLARE
@@ -120,13 +120,13 @@ END;
 ```
 
 <Aside type="note" title="Schema validation">
-  The AI model will only return responses that exactly match your schema.
-  Invalid responses are automatically rejected and regenerated, ensuring data
-  quality.
+  The AI model returns only an answer that matches your schema exactly. It
+  rejects an invalid answer and generates a new one. The data quality therefore
+  stays high.
 </Aside>
 
 ## Schema best practices
 
-- Use clear descriptions
-- Set appropriate constraints (enums, min/max values, etc.)
-- Mark required fields
+- Write a clear description for each field
+- Set the constraints: an enum, a minimum value, and a maximum value
+- Mark every required field

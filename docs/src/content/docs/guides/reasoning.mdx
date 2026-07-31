@@ -7,13 +7,13 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-AI reasoning means an AI system can **think through problems in a step-by-step way**, analyzing information logically and reaching conclusions through deliberate thought, rather than just matching patterns. This allows AI to handle complex problems more effectively, provide better explanations for its decisions, and tackle new situations not directly seen in its training data.
+AI reasoning means that an AI system can **work through a problem step by step**. The model analyzes the information logically and reaches a conclusion by deliberate thought, and not only by a pattern match. The AI therefore solves a complex problem better, explains its decisions better, and handles a new situation that its training data does not hold.
 
-Reasoning consumes an additional amount of tokens, making it substantially more expensive than standard text generation.
+Reasoning uses extra tokens. It is therefore much more expensive than standard text generation.
 
 ## Provider Support
 
-Different providers implement reasoning in various ways. That's why UC AI provides provider specific settings to control reasoning behavior. See the provider pages for more details on how to configure reasoning for each provider:
+Each provider implements reasoning in its own way. UC AI therefore has provider-specific settings for the reasoning behavior. These provider pages describe how to configure reasoning:
 
 - [Anthropic Claude](/products/uc-ai/docs/providers/anthropic/#reasoning--extended-thinking)
 - [Google Gemini](/products/uc-ai/docs/providers/google/#reasoning--thinking)
@@ -24,9 +24,9 @@ Different providers implement reasoning in various ways. That's why UC AI provid
 
 ## Basic Usage
 
-To enable reasoning, you need to set the global flag `uc_ai.g_enable_reasoning := true;`. This allows the AI to use reasoning capabilities when generating responses.
+To enable reasoning, set the global flag `uc_ai.g_enable_reasoning := true;`. The AI can then reason during the generation of its answer.
 
-Additionally, you can configure how much reasoning the AI should do by setting provider-specific parameters. More effort will result in more detailed thought processes, but will also increase response time and token usage. This also highly depends on the task complexity and the model used.
+A provider-specific parameter controls how much the AI reasons. More effort gives a more detailed thought process, but it also increases the response time and the token usage. The complexity of the task and the model also control this effect.
 
 ### Example1: Reasoning with Google Gemini
 
@@ -81,9 +81,9 @@ END;
 
 ## Generic Reasoning Settings
 
-Instead of manually setting the provider setting UC AI also lets you simply choose between 3 levels: `low`, `medium`, `high`. In that case you don't need to supply any provider specific settings. Although we recommend for real productive systems to experiment and fine-tune reasoning settings for you chosen provider and model.
+You can also choose one of three levels: `low`, `medium`, or `high`. A provider-specific setting is then not necessary. For a production system, test and tune the reasoning settings of your provider and model.
 
-You can use these generic settings via the `g_reasoning_level` variable in the `uc_ai` package.
+The `g_reasoning_level` variable of the `uc_ai` package holds this generic level.
 
 ```sql
 DECLARE
@@ -112,7 +112,7 @@ END;
 
 ### Message Structure with Reasoning
 
-When reasoning is enabled, the assistant message will contain multiple content items:
+With reasoning enabled, the assistant message holds several content items:
 
 ```json
 {
@@ -130,11 +130,11 @@ When reasoning is enabled, the assistant message will contain multiple content i
 }
 ```
 
-OpenAI's Responses API only returns reasoning content when you opt in — see [Reasoning content, storage, and encryption](/products/uc-ai/docs/providers/openai/#reasoning-content-storage-and-encryption) for how `g_store_responses`, `g_include_encrypted_reasoning`, and `g_reasoning_summary` affect what you get back.
+The OpenAI Responses API returns the reasoning content only after you opt in. [Reasoning content, storage, and encryption](/products/uc-ai/docs/providers/openai/#reasoning-content-storage-and-encryption) describes how `g_store_responses`, `g_include_encrypted_reasoning`, and `g_reasoning_summary` control the answer.
 
 ### Extracting Reasoning Content
 
-Here is how you can extract reasoning content from the response:
+This block reads the reasoning content from the answer:
 
 ```sql
 DECLARE
@@ -183,7 +183,7 @@ END;
 
 ## Best Practices
 
-Refer to these provider-specific guides for best practices on using reasoning effectively:
+These provider guides give the best practices for reasoning:
 
 - [Anthropic Reasoning Best Practices](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#best-practices-and-considerations-for-extended-thinking)
 - [Google Reasoning Best Practices](https://ai.google.dev/gemini-api/docs/thinking#best-practices)

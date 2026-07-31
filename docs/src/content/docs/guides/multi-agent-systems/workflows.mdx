@@ -7,17 +7,17 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-**Workflows execute agents in a defined structure. The execution order is deterministic - you control exactly what happens and when.**
+**Workflows run agents in a defined structure. The order is deterministic. You control what happens, and when.**
 
 <Aside type="tip" title="When to use this">
-Choose workflows when you already know the steps and their order — a repeatable pipeline (e.g. classify → enrich → summarize). If the sequence should depend on the input, use the [orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/) instead.
+Choose a workflow when you already know the steps and their order. An example is a repeatable pipeline: classify, then enrich, then summarize. If the order must depend on the input, use the [orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/) instead.
 </Aside>
 
 Workflows reference [profile agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/) by their `agent_code` to create deterministic pipelines.
 
 ## Sequential workflow
 
-Agents run one after another. The output of each step is stored under its `output_key` and available to subsequent steps via the `{$.steps.<output_key>}` syntax.
+Agents run one after another. UC AI stores the output of each step under its `output_key`. A later step reads this output with the `{$.steps.<output_key>}` syntax.
 
 ```sql
 DECLARE
@@ -73,15 +73,15 @@ END;
 **How it works:**
 
 1. `math_agent` receives `{"question": "What is 7 + 8?"}` from the input
-2. Its output is stored under `step1_result`
-3. `summarizer_agent` receives `{"text": "<math agent's response>"}` from the previous step's output
+2. UC AI stores its output under `step1_result`
+3. `summarizer_agent` receives `{"text": "<answer of the math agent>"}` from the output of the previous step
 4. The final result is the output of the last step
 
 ## Conditional workflow
 
-Steps run in order like in a sequential workflow, but each step can have a `condition`. A step only executes when its condition evaluates to true; otherwise it is skipped.
+Steps run in order, the same as in a sequential workflow. Each step can also have a `condition`. A step runs only when its condition is true. If the condition is false, UC AI skips the step.
 
-The condition is a string containing a PL/SQL boolean expression. `{$.path}` placeholders are resolved against the workflow state first, then the expression is evaluated. As placeholders resolve to plain text, wrap them in single quotes when comparing against string values.
+The condition is a string with a PL/SQL boolean expression. UC AI first resolves each `{$.path}` placeholder against the workflow state. It then evaluates the expression. A placeholder resolves to plain text, so put single quotes around it for a comparison with a string value.
 
 ```sql
 DECLARE
@@ -133,38 +133,38 @@ END;
 
 **How it works:**
 
-1. Each step's `condition` is evaluated against the current workflow state before the step runs
-2. With `category = 'geography'`, only `geography_agent` executes; the summarizer step is skipped
+1. UC AI evaluates the `condition` of each step against the current workflow state before the step runs
+2. With `category = 'geography'`, only `geography_agent` runs. UC AI skips the summarizer step
 3. Steps without a `condition` always run
-4. The final result is the output of the last step that actually executed
+4. The final result is the output of the last step that ran
 
-Conditions can also reference the output of previous steps. A common pattern is a first (unconditional) classifier step with a [response schema](/products/uc-ai/docs/guides/structured_output/), followed by steps gated on its structured output:
+A condition can also reference the output of an earlier step. A common pattern starts with a classifier step without a condition, and a [response schema](/products/uc-ai/docs/guides/structured_output/). The later steps then use its structured output in their conditions:
 
 ```json
 "condition": "'{$.steps.classification.category}' = 'complaint'"
 ```
 
-Since the condition is a PL/SQL expression, any boolean expression works, e.g. numeric comparisons like `"{$.steps.classification.confidence} >= 0.8"` or function calls.
+The condition is a PL/SQL expression, so every boolean expression works. Examples are a numeric comparison such as `"{$.steps.classification.confidence} >= 0.8"`, and a function call.
 
-Wrap **string** references in single quotes (`'{$.steps.x}'`, as above) and leave **numeric** references unquoted (`{$.steps.x} >= 8`) — the same convention applies to `exit_condition` and to `input_mapping` entries marked `"is_plsql_expression": true`.
+Put single quotes around a **string** reference, as in `'{$.steps.x}'` above. Leave a **numeric** reference without quotes, as in `{$.steps.x} >= 8`. The same convention applies to `exit_condition`, and to an `input_mapping` entry with `"is_plsql_expression": true`.
 
 <Aside type="tip">
-  Resolved string values are automatically escaped before the expression is
-  evaluated (embedded single quotes are doubled), so untrusted content —
-  model output, tool results, user input — cannot break out of its quotes and
-  inject PL/SQL. You still author the surrounding quotes as shown; the escaping
-  only protects the substituted value.
+  UC AI escapes a resolved string value before it evaluates the expression. It
+  doubles each single quote in the value. Untrusted content therefore cannot
+  break out of its quotes and inject PL/SQL. This content includes model output,
+  tool results, and user input. Write the surrounding quotes yourself, as shown
+  above. The escaping protects only the substituted value.
 </Aside>
 
 <Aside type="caution">
-  The `condition` value must be a string. If every step's condition evaluates
-  to false, the workflow still completes successfully, but with no
-  `final_message` and `_workflow_iterations` set to `0`.
+  The `condition` value must be a string. If the condition of every step is
+  false, the workflow still completes. It then has no `final_message`, and
+  `_workflow_iterations` is `0`.
 </Aside>
 
 ## Loop workflow
 
-Agents run in a loop until an exit condition is met or the maximum number of iterations is reached. This is useful for iterative refinement where you want to keep improving output until it meets a quality bar.
+Agents run in a loop. The loop ends at an exit condition, or at the maximum number of iterations. Use a loop to refine an output until it reaches a quality level.
 
 ```sql
 DECLARE
@@ -243,20 +243,20 @@ END;
 **How it works:**
 
 1. **Pre-steps** run once before the loop: the haiku creator generates an initial haiku
-2. **Loop steps** repeat: the rater scores the haiku, then the improver refines it based on feedback
+2. **Loop steps** repeat: the rater scores the haiku, then the improver corrects it with this feedback
 3. The loop exits when `quality >= 8` or after 3 iterations
 4. **Post-steps** run once after the loop: the translator converts the final haiku to German
 5. `final_message` defines which step output becomes the overall result
 
 <Aside type="tip">
-  Use `pre_steps` to generate an initial artifact and `post_steps` for final
-  processing. The loop `steps` then focus purely on the evaluate-and-improve
+  Use `pre_steps` for the first version of the artifact, and `post_steps` for the
+  final processing. The loop `steps` then hold only the evaluate-and-improve
   cycle.
 </Aside>
 
 ### Using structured output for exit conditions
 
-Loop exit conditions typically depend on a structured value from an agent's response. The haiku rater above returns a JSON object with `quality` and `rating_feedback` fields via a [response schema](/products/uc-ai/docs/guides/structured_output/):
+A loop exit condition usually depends on a structured value in the answer of an agent. The haiku rater above uses a [response schema](/products/uc-ai/docs/guides/structured_output/). It returns a JSON object with the fields `quality` and `rating_feedback`:
 
 ```sql
 DECLARE
@@ -302,7 +302,7 @@ The workflow references the structured fields directly:
 
 ### Loop without pre/post steps
 
-For simpler loops, you can put everything in `steps` and use the `optional` flag to handle the first iteration where feedback doesn't exist yet:
+For a simpler loop, put every step in `steps`. Use the `optional` flag for the first iteration, because the feedback does not exist yet:
 
 ```json
 {
@@ -335,13 +335,13 @@ For simpler loops, you can put everything in `steps` and use the `optional` flag
 }
 ```
 
-In the first iteration, `feedback` doesn't exist yet so it is omitted. From the second iteration onwards, the rater's feedback is passed to the creator.
+In the first iteration, `feedback` does not exist, so UC AI omits it. From the second iteration, UC AI passes the feedback of the rater to the creator.
 
 ## PL/SQL steps
 
-Not every step needs an LLM. A **PL/SQL step** runs your own code in the middle of a workflow — to reshape one agent's output before the next agent sees it, look something up in a table, do arithmetic or formatting, or gate the rest of the pipeline. It costs nothing (no model call) and is fully deterministic.
+Not every step needs an LLM. A **PL/SQL step** runs your own code inside a workflow. Use it to reshape the output of one agent for the next agent, to read a value from a table, to calculate, to format, or to gate the rest of the pipeline. It makes no model call, so it costs nothing and it is deterministic.
 
-Set `"step_type": "plsql"` and provide a `plsql_function_call`: a PL/SQL function body that returns a `CLOB`, exactly like a [tool](/products/uc-ai/docs/guides/tools/). It may contain **at most one** bind variable (conventionally `:parameters`), which receives the **entire workflow state** as a JSON CLOB — `{ "input": {...}, "steps": {...} }`. There is no `input_mapping`; the snippet reads whatever it needs from the state itself.
+Set `"step_type": "plsql"` and give a `plsql_function_call`. This is a PL/SQL function body that returns a `CLOB`, the same as a [tool](/products/uc-ai/docs/guides/tools/). It can hold **at most one** bind variable, by convention `:parameters`. This variable receives the **whole workflow state** as a JSON CLOB: `{ "input": {...}, "steps": {...} }`. A PL/SQL step has no `input_mapping`. The code reads what it needs from the state.
 
 ```sql
 DECLARE
@@ -388,7 +388,7 @@ END;
 /
 ```
 
-**Return value → real JSON type.** The returned `CLOB` is parsed and stored under `output_key` as its actual type, so downstream steps can navigate it:
+**Return value → real JSON type.** UC AI parses the returned `CLOB` and stores it under `output_key` with its real type. A later step can therefore navigate it:
 
 | Snippet returns        | Stored as        | Referenced by                     |
 | ---------------------- | ---------------- | --------------------------------- |
@@ -396,11 +396,11 @@ END;
 | `return o.to_clob;` (a JSON object) | object | `{$.steps.key.field}`             |
 | `return 'done';`       | string `"done"`  | `{$.steps.key}`                   |
 
-Text that is not valid JSON is stored as a plain string.
+UC AI stores text that is not valid JSON as a plain string.
 
-**`output_key` is optional** for PL/SQL steps. Omit it for a pure side-effect step (e.g. writing to a table). The snippet must still return a non-null value.
+**`output_key` is optional** for a PL/SQL step. Omit it for a step with only a side effect, for example a write to a table. The code must still return a value that is not null.
 
-**Gating the rest of the workflow.** A PL/SQL step participates in normal `condition` gating (its own, and downstream steps can gate on its output). In addition, if it returns an object containing `"__control__": "stop"`, the workflow halts immediately — no remaining steps run:
+**Gating the rest of the workflow.** A PL/SQL step uses normal `condition` gating. It has its own condition, and a later step can gate on its output. A PL/SQL step can also return an object with `"__control__": "stop"`. The workflow then stops at once, and no later step runs:
 
 ```json
 {
@@ -411,8 +411,8 @@ Text that is not valid JSON is stored as a plain string.
 ```
 
 <Aside type="caution">
-  A `plsql_function_call` runs arbitrary PL/SQL, just like a tool or a
-  `condition`. Treat workflow definitions as trusted, authored content.
+  Accept a workflow definition only from a trusted author. A
+  `plsql_function_call` runs any PL/SQL, the same as a tool or a `condition`.
 </Aside>
 
 ## Input mapping reference
@@ -429,11 +429,11 @@ A string value that resolves a path from the workflow state:
 | -------------------------------- | ------------------------------------------------ |
 | `{$.input.*}`                    | Original input parameters passed to the workflow |
 | `{$.steps.<output_key>}`         | Full output of a previous step                   |
-| `{$.steps.<output_key>.<field>}` | Specific field from a step's structured output   |
+| `{$.steps.<output_key>.<field>}` | One field from the structured output of a step   |
 
 ## Message log at a glance
 
-A workflow is a deterministic pipeline rather than a conversation, so the [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript holds a **single `assistant` row** with the final step's output, attributed to the workflow agent via `agent_code`. The per-step detail lives in `uc_ai_agent_executions` instead — each step runs as a child execution under the workflow wrapper, so query that table (by `parent_execution_id`) when you need to inspect intermediate steps.
+A workflow is a deterministic pipeline and not a conversation. The [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript therefore holds a **single `assistant` row** with the output of the last step. Its `agent_code` names the workflow agent. The detail of each step lives in `uc_ai_agent_executions`. Each step runs as a child execution under the workflow wrapper. To see an intermediate step, query that table by `parent_execution_id`.
 
 | seq | role        | agent_code       | content                        |
 | --- | ----------- | ---------------- | ------------------------------ |
@@ -441,7 +441,7 @@ A workflow is a deterministic pipeline rather than a conversation, so the [`uc_a
 
 ## Monitoring running workflows
 
-Workflows checkpoint their state to `uc_ai_agent_executions.current_state` after every completed step (conversation and handoff agents checkpoint after every turn/handoff). Checkpoints are committed in autonomous transactions, so you can watch a long-running workflow from another session:
+A workflow writes a checkpoint of its state to `uc_ai_agent_executions.current_state` after every completed step. A conversation agent and a handoff agent write a checkpoint after every turn or handoff. UC AI commits each checkpoint in an autonomous transaction. You can therefore watch a long workflow from another session:
 
 ```sql
 SELECT status,
@@ -456,10 +456,10 @@ The checkpoint contains the full workflow state (all step outputs so far) plus t
 - `_last_completed_step` — agent code of the most recently completed step
 - `_checkpoint_at` — timestamp of the checkpoint
 
-On successful completion the checkpoint is cleared (the final state lives in `output_result`). Failed or crashed executions keep their last checkpoint, so you can inspect exactly how far a workflow got and what each step produced. `uc_ai_agents_api.get_execution_details` also returns `current_state` when present.
+After a successful run, UC AI clears the checkpoint. The final state then lives in `output_result`. A failed or crashed run keeps its last checkpoint. You can therefore see how far the workflow came, and what each step returned. `uc_ai_agents_api.get_execution_details` also returns `current_state` when a checkpoint exists.
 
 <Aside type="note">
-  Execution telemetry is written in autonomous transactions: execution rows
-  survive a rollback of your calling transaction, and an agent must be
-  committed before it can be executed within the same session transaction.
+  UC AI writes the execution telemetry in autonomous transactions. An execution
+  row therefore survives a rollback of your calling transaction. An agent must
+  also be committed before you run it in the same session transaction.
 </Aside>

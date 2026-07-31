@@ -7,26 +7,26 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-**Prompt profiles allow you to create, version, and reuse AI prompt templates across your application.**
+**With a prompt profile, you can create, version, and reuse an AI prompt template in your whole application.**
 
-Instead of hardcoding prompts throughout your codebase, prompt profiles provide a centralized way to manage prompt templates with parameter substitution, model configuration, and version control. This makes it easy to maintain consistency, update prompts without code changes, and test different versions.
+Do not write a prompt into your code. A prompt profile holds your prompt templates in one place, with parameter substitution, model configuration, and version control. The prompts then stay consistent, you can change a prompt without a code change, and you can test another version.
 
 ## Why use prompt profiles?
 
-Prompt profiles solve several common problems when working with AI:
+Prompt profiles correct several common problems in work with AI:
 
-- **Centralized Management**: Store all your prompts in the database instead of scattered throughout your code
-- **Parameter Substitution**: Use placeholders in templates that get replaced with actual values at runtime
-- **Version Control**: Create multiple versions of the same prompt and gradually roll them out
-- **Configuration Management**: Store model settings, structured output schemas, and other configuration alongside prompts
-- **Status Management**: Mark profiles as draft, active, or archived to control which versions are used
-- **Reusability**: Use the same prompt template from different parts of your application
+- **Centralized Management**: keep all prompts in the database, and not in your code
+- **Parameter Substitution**: use a placeholder in a template. UC AI replaces it with a value at run time
+- **Version Control**: create several versions of one prompt, and release them step by step
+- **Configuration Management**: keep the model settings, the structured output schemas, and the other configuration next to the prompt
+- **Status Management**: mark a profile as draft, active, or archived, to control which version runs
+- **Reusability**: use one prompt template in different parts of your application
 
 ## How it works
 
-A prompt profile consists of:
+A prompt profile holds:
 
-- **Code**: A unique identifier for the profile (e.g., `SUMMARIZE_TEXT`, `EXTRACT_DATA`)
+- **Code**: a unique identifier for the profile, for example `SUMMARIZE_TEXT` or `EXTRACT_DATA`
 - **Version**: Numeric version to support multiple iterations
 - **Status**: Draft, active, or archived
 - **Templates**: System and user prompt templates with placeholders
@@ -35,9 +35,9 @@ A prompt profile consists of:
 
 When you execute a profile, UC AI:
 
-1. Retrieves the profile by code/version or ID
-2. Validates that all placeholders have corresponding parameters
-3. Replaces placeholders with actual values
+1. Reads the profile by code and version, or by ID
+2. Validates that every placeholder has a parameter
+3. Replaces each placeholder with its value
 4. Applies model configuration settings
 5. Calls the AI with the prepared prompts
 
@@ -71,8 +71,8 @@ END;
 - `p_description`: Human-readable description
 - `p_system_prompt_template`: System prompt with placeholders (`{placeholder}`)
 - `p_user_prompt_template`: User prompt with placeholders
-- `p_provider`: AI provider (e.g., `uc_ai.c_provider_openai`)
-- `p_model`: Model identifier (e.g., `uc_ai_openai.c_model_gpt_4o_mini`)
+- `p_provider`: AI provider (for example `uc_ai.c_provider_openai`)
+- `p_model`: Model identifier (for example `uc_ai_openai.c_model_gpt_4o_mini`)
 - `p_model_config_json`: Optional JSON configuration (see [Configuration](#model-configuration))
 - `p_response_schema`: Optional JSON schema for [structured output](/products/uc-ai/docs/guides/structured_output)
 - `p_parameters_schema`: Optional JSON schema defining expected parameters
@@ -80,13 +80,13 @@ END;
 - `p_status`: Status - 'draft', 'active', or 'archived' (defaults to 'draft')
 
 <Aside type="tip">
-  Start with 'draft' status while testing, then change to 'active' when ready
-  for production use.
+  Start with the 'draft' status for your tests. Change it to 'active' when the
+  profile is ready for production.
 </Aside>
 
 ## Using placeholders
 
-Placeholders allow you to create dynamic prompts. Use `{placeholder_name}` syntax in your templates:
+With a placeholder, a prompt becomes dynamic. Use the `{placeholder_name}` syntax in your templates:
 
 ```sql
 -- Template with placeholders
@@ -94,7 +94,7 @@ p_system_prompt_template => 'You are a {role} assistant.',
 p_user_prompt_template => 'What is the capital of {country}?'
 ```
 
-When executing the profile, provide values for the placeholders:
+Give a value for each placeholder when you run the profile:
 
 ```sql
 DECLARE
@@ -115,25 +115,25 @@ END;
 ```
 
 <Aside type="note">
-  Placeholder matching is case-insensitive. Both `{Country}` and `{country}`
-  will match a parameter named 'country'.
+  A placeholder match is case-insensitive. Both `{Country}` and `{country}`
+  match a parameter with the name 'country'.
 </Aside>
 
 ### Placeholder validation
 
-UC AI validates that all placeholders in your templates have corresponding parameters. If a placeholder is missing, you'll get a clear error:
+UC AI validates that every placeholder in your templates has a parameter. For a missing parameter, UC AI raises this error:
 
 ```
 Missing parameter for placeholder: {text}
 ```
 
-Only alphanumeric characters and underscores are allowed in placeholder names: `{valid_name_123}`
+A placeholder name can hold only letters, numbers, and the underscore: `{valid_name_123}`
 
 ## Executing a profile
 
 ### Execute by code
 
-Retrieve and execute the latest active version:
+Read and run the latest active version:
 
 ```sql
 DECLARE
@@ -178,7 +178,7 @@ l_result := uc_ai_prompt_profiles_api.execute_profile(
 
 ## Model configuration
 
-Store model settings directly in the profile using `p_model_config_json`:
+The `p_model_config_json` parameter stores the model settings in the profile:
 
 ```sql
 DECLARE
@@ -203,7 +203,7 @@ END;
 
 ### Available configuration options
 
-Configuration options map to UC AI global variables:
+Each configuration option maps to a UC AI global variable:
 
 **Root-level options:**
 
@@ -211,15 +211,15 @@ Configuration options map to UC AI global variables:
 - `g_enable_reasoning`: Enable reasoning mode (boolean)
 - `g_reasoning_level`: Reasoning level - 'low', 'medium', or 'high' (string)
 - `g_enable_tools`: Enable [tools/functions](/products/uc-ai/docs/guides/tools) (boolean)
-- `g_enable_programmatic_tools`: Also offer [code mode](/products/uc-ai/docs/guides/programmatic-tool-calling) — the `uc_ai__run_code` meta-tool — alongside the normal tools (boolean; requires `g_enable_tools` and the MLE sandbox)
-- `g_max_tool_calls`: Maximum number of tool calls allowed (number)
-- `g_tool_tags`: Tool tags to filter available tools (array of strings or single string)
+- `g_enable_programmatic_tools`: Also give the `uc_ai__run_code` meta-tool of [code mode](/products/uc-ai/docs/guides/programmatic-tool-calling) next to the normal tools (boolean). It needs `g_enable_tools` and the MLE sandbox
+- `g_max_tool_calls`: Maximum number of tool calls (number)
+- `g_tool_tags`: Tool tags that filter the available tools (an array of strings, or one string)
 - `g_apex_web_credential`: APEX web credential static ID (string)
-- `g_extra_headers`: Additional HTTP request headers sent with every provider request (object of name/value pairs, e.g. `{"X-Tenant-Id": "acme"}`)
+- `g_extra_headers`: Extra HTTP request headers for every provider request (an object of name and value pairs, for example `{"X-Tenant-Id": "acme"}`)
 
 **Provider-specific options:**
 
-These are nested under a provider key (e.g., `"openai": { ... }`):
+These options sit under a provider key, for example `"openai": { ... }`:
 
 - **OpenAI** (`openai`):
   - `g_reasoning_effort`: Reasoning effort level (string)
@@ -265,11 +265,11 @@ Example with provider-specific settings:
 }
 ```
 
-The configuration is applied when the profile is executed, setting the corresponding global variables.
+UC AI applies the configuration when it runs the profile. It sets the global variable of each option.
 
 ## Structured output
 
-Define a response schema to get consistent, parseable JSON responses:
+Define a response schema for a consistent JSON answer that your code can parse:
 
 ```sql
 DECLARE
@@ -312,7 +312,7 @@ END;
 /
 ```
 
-Execute and parse the structured response:
+Run the profile and parse the structured answer:
 
 ```sql
 DECLARE
@@ -345,16 +345,16 @@ END;
 ```
 
 <Aside type="tip">
-  Use [our JSON schema
-  builder](/products/uc-ai/docs/other/json-schema/#interactive-builder) to
-  create schemas easily.
+  [Our JSON schema
+  builder](/products/uc-ai/docs/other/json-schema/#interactive-builder) helps you
+  write a schema.
 </Aside>
 
 ## Version management
 
 ### Creating a new version
 
-Create a new version based on an existing one:
+Create a new version from an existing version:
 
 ```sql
 DECLARE
@@ -372,11 +372,11 @@ END;
 /
 ```
 
-The new version is an exact copy of the source version but with 'draft' status.
+The new version is an exact copy of the source version, but its status is 'draft'.
 
 ### Changing status
 
-Control which versions are available:
+Control which version is available:
 
 ```sql
 BEGIN
@@ -401,13 +401,13 @@ END;
 
 Available status values:
 
-- `c_status_draft`: Under development, not used in production
-- `c_status_active`: Ready for production use
+- `c_status_draft`: Under development, not for production
+- `c_status_active`: Ready for production
 - `c_status_archived`: No longer in use
 
 <Aside type="note">
-  When executing by code without specifying a version, only 'active' profiles
-  are considered. The latest active version by version number is used.
+  A call by code without a version reads only an 'active' profile. UC AI uses the
+  active version with the highest version number.
 </Aside>
 
 ## Updating profiles
@@ -450,13 +450,13 @@ END;
 ```
 
 <Aside type="caution">
-  Consider creating a new version instead of updating an existing one if it's
-  actively used in production.
+  If a version runs in production, create a new version. Do not update that
+  version.
 </Aside>
 
 ## Runtime overrides
 
-Override provider, model, or configuration when executing a profile:
+You can overwrite the provider, the model, or the configuration when you run a profile:
 
 ```sql
 DECLARE
@@ -480,11 +480,11 @@ END;
 /
 ```
 
-This is useful for:
+Use an override for:
 
-- A/B testing different models
-- Adjusting parameters for specific use cases
-- Temporary provider switches
+- An A/B test of two models
+- A parameter change for one use case
+- A temporary change of the provider
 
 ## Using with tools
 
@@ -512,7 +512,7 @@ END;
 /
 ```
 
-Execute the profile:
+Run the profile:
 
 ```sql
 DECLARE
@@ -551,7 +551,7 @@ END;
 
 ### Get by code
 
-Get the latest active version:
+Read the latest active version:
 
 ```sql
 DECLARE
@@ -600,12 +600,12 @@ END;
 ```
 
 <Aside type="caution">
-  Consider archiving instead of deleting profiles to maintain a history.
+  Archive a profile instead of a delete. The history then stays available.
 </Aside>
 
 ## Complete example
 
-Here's a complete example showing the full workflow:
+This example shows the full workflow:
 
 ```sql
 DECLARE

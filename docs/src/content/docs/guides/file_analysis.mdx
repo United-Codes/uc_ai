@@ -5,21 +5,21 @@ sidebar:
   order: 40
 ---
 
-UC AI supports multimodal capabilities, allowing you to analyze various file types including PDFs, images, and other documents directly within your Oracle database. This powerful feature enables you to extract insights, answer questions, and perform analysis on file content using AI models.
+UC AI is multimodal. With it, you can analyze a PDF, an image, or another document directly in your Oracle database. An AI model then extracts information from the file, answers a question about it, or analyzes its content.
 
-The file analysis functionality works by converting files into base64-encoded content and sending them as part of your message array to AI providers. You can combine file content with text prompts to create rich, context-aware interactions.
+UC AI converts each file to base64 content, and sends it in your message array to the AI provider. You can combine the file content with a text prompt.
 
-**Supported file types include:**
+**Supported file types:**
 
-- **PDFs** - Extract text, analyze tables, answer questions about document content
-- **Images** (JPEG, PNG, WebP, etc.) - Describe images, identify objects, read text from images
-- **Other document formats** - Depending on the AI provider's capabilities
+- **PDF** - extract text, analyze a table, answer a question about the content
+- **Image** (JPEG, PNG, WebP, and more) - describe an image, identify an object, read text in an image
+- **Other document formats** - each provider supports its own set
 
-This guide demonstrates how to implement file analysis workflows using the UC AI message API, showing practical examples for both PDF and image analysis scenarios.
+This guide shows how to build file analysis with the UC AI message API. It has one example for a PDF, and one for an image.
 
 ## Example 1: Analyze a PDF file
 
-In this example we are using a simple PDF that contains a table of characters for the TV show "The Office". It contains this data:
+This example uses a PDF with a table of characters from the TV show "The Office". The table holds this data:
 
 | First Name | Last Name | Email                            |
 | ---------- | --------- | -------------------------------- |
@@ -30,7 +30,7 @@ In this example we are using a simple PDF that contains a table of characters fo
 | Dwight     | Schrute   | dwight.schrute@dundermifflin.com |
 | Kevin      | Malone    | kevin.malone@dundermifflin.com   |
 
-As we have to attach the file itself we will manually create a message array with a system message, a user message and the file content.
+The call must carry the file, so build the message array yourself. It holds a system message, a user message, and the file content.
 
 ```sql
 declare
@@ -74,7 +74,7 @@ end;
 
 ## Example 2: Analyze an image file
 
-In this example we are using a simple image that contains a picture of an apple. We will send the image to the AI service and ask it to describe the image.
+This example uses an image of an apple. The call sends the image to the AI service and asks for a description.
 
 ```sql
 declare
@@ -115,28 +115,28 @@ begin
 
 ## Provider support and limits
 
-File input works with the same message API across providers, but the accepted
-file types differ by provider (and by model). The framework rejects a file it
-cannot map to the provider's format with `ORA-20303` (unhandled format).
+Every provider uses the same message API for file input. The accepted file types
+differ by provider and by model. If the framework cannot map a file to the format
+of the provider, it rejects the file with `ORA-20303` (unhandled format).
 
 | Provider | Images | Documents | Notes |
 |----------|--------|-----------|-------|
 | Anthropic | JPEG, PNG, GIF, WebP | PDF | |
 | OpenAI | JPEG, PNG, GIF, WebP | PDF | |
 | Google | JPEG, PNG, GIF, WebP | PDF (+ more) | |
-| Ollama | model-dependent | — | files are sent as images |
-| **OCI** | **PNG, JPG only** (≤ 5 MB) | **PDF only** | GENERIC-format vision models only; **Cohere models do not accept files** |
+| Ollama | depends on the model | — | UC AI sends every file as an image |
+| **OCI** | **PNG, JPG only** (≤ 5 MB) | **PDF only** | GENERIC-format vision models only. **A Cohere model accepts no file** |
 
 ### OCI specifics
 
-OCI Generative AI only supports file input through its GENERIC chat format, so
-you must use a GENERIC-format vision model (e.g. Meta Llama vision, Google
-Gemini, xAI Grok) — **Cohere models reject file content**. Images must be **PNG
-or JPG and ≤ 5 MB**; documents must be **PDF**. WebP/GIF and other types are
-rejected with `ORA-20303`.
+OCI Generative AI supports file input only through its GENERIC chat format. Use a
+GENERIC-format vision model, for example Meta Llama vision, Google Gemini, or
+xAI Grok. A **Cohere model rejects file content**. An image must be a **PNG or a
+JPG, and not larger than 5 MB**. A document must be a **PDF**. OCI rejects WebP,
+GIF, and every other type with `ORA-20303`.
 
-Optionally pass a `detail` hint (`AUTO` (default), `HIGH`, `LOW`) via provider
-options:
+You can also pass a `detail` hint in the provider options. The values are `AUTO`
+(the default), `HIGH`, and `LOW`:
 
 ```sql
 l_content.append(uc_ai_message_api.create_file_content(

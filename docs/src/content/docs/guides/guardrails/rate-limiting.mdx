@@ -1,16 +1,16 @@
 ---
 title: Rate limiting
-description: Cap how often AI runs happen — agent runs, tool calls, and concurrent runs per user, agent, app, or anonymous visitor — with rolling or calendar windows, enforced mid-run.
+description: Cap how often AI runs happen. Agent runs, tool calls, and concurrent runs for each user, agent, app, or anonymous visitor, with rolling or calendar windows.
 sidebar:
   order: 20
 ---
 
 import { Aside, Steps } from "@astrojs/starlight/components";
 
-**Rate limiting caps the frequency of AI usage — how many runs, how many tool calls, and how many concurrent runs a user, agent, or app may have.** It stops abuse, retry storms, and runaway tool loops that a cost budget alone would only catch after the money is spent.
+**Rate limiting caps the frequency of AI usage: how many runs, how many tool calls, and how many concurrent runs a user, an agent, or an app can have.** It stops abuse, retry storms, and runaway tool loops. A cost budget alone catches these only after the money is spent.
 
 <Aside type="note" title="Pro add-on">
-Rate limiting is part of the paid UC AI Pro layer. See [about guardrails](/products/uc-ai/docs/guides/guardrails/) for how the Pro layer installs and plugs into core.
+Rate limiting is part of the paid UC AI Pro layer. [About guardrails](/products/uc-ai/docs/guides/guardrails/) describes how the Pro layer installs and connects to core.
 </Aside>
 
 ## Limit types
@@ -23,7 +23,7 @@ A limit caps one of three counts, over a [scope](/products/uc-ai/docs/guides/gua
 | `TOOL_CALL` | Tool calls made in the window | Before each tool call, **mid-run** (`before_tool_call`) |
 | `CONCURRENCY` | Runs currently `running` | Before a run starts |
 
-`AGENT_EXEC` counts *top-level* runs — a run that delegates to nested agents still counts once. `CONCURRENCY` likewise counts in-flight top-level runs.
+`AGENT_EXEC` counts *top-level* runs. A run that delegates to nested agents counts once. `CONCURRENCY` also counts in-flight top-level runs.
 
 ## Windows
 
@@ -31,14 +31,14 @@ Rate limits use one of two window kinds:
 
 | `window_kind` | Configured by | Meaning |
 | ------------- | ------------- | ------- |
-| `rolling` | `window_seconds` | The last *N* seconds up to now (e.g. `3600` = last hour) |
+| `rolling` | `window_seconds` | The last *N* seconds up to now (for example `3600` for the last hour) |
 | `calendar` | `period` | The current `day` / `week` / `month`, or `total` (all time) |
 
-Rolling windows are the natural fit for rate limiting ("100 runs per hour"); calendar windows mirror the [budget periods](/products/uc-ai/docs/guides/guardrails/budget/#periods). `CONCURRENCY` ignores the window — it is a point-in-time count.
+A rolling window fits rate limiting best, for example "100 runs per hour". A calendar window matches the [budget periods](/products/uc-ai/docs/guides/guardrails/budget/#periods). `CONCURRENCY` ignores the window, because it counts at one point in time.
 
 ## Define a limit
 
-Limits are rows in `uc_ai_rate_limits`. Example — at most 100 runs per user per rolling hour, hard:
+A limit is a row in `uc_ai_rate_limits`. This example allows at most 100 runs for each user per rolling hour, as a hard cap:
 
 ```sql
 insert into uc_ai_rate_limits (
@@ -77,24 +77,24 @@ values ('PUB_SESSION_DAY', 'apex_session', 'public', 'AGENT_EXEC', 3, 'calendar'
 commit;
 ```
 
-`audience` defaults to `any`, so it can be omitted — but spelling it out keeps the
-intent of a limit obvious to whoever reads the table next.
+`audience` defaults to `any`, so you can omit it. Write it out anyway. The next
+reader of the table then sees the intent of the limit.
 
 ## Public vs logged-in quotas
 
-`audience` and the two per-caller scopes (`apex_session`, `each_user`) are what
-let one small set of rows give anonymous visitors a modest allowance and
-logged-in users a generous one. The full setup, the reasoning, and the pitfalls
-are in [the shared recipe](/products/uc-ai/docs/guides/guardrails/#recipe-public-visitors-a-little-logged-in-users-more).
+With `audience` and the two per-caller scopes `apex_session` and `each_user`, a
+small set of rows gives anonymous visitors a small allowance and logged-in users
+a large one. [The shared recipe](/products/uc-ai/docs/guides/guardrails/#recipe-public-visitors-a-little-logged-in-users-more)
+has the full setup, the reasons, and the traps.
 
 The short version:
 
-- `apex_session` is the right bucket for anonymous traffic — one per browser session.
-- `each_user` is the right bucket for signed-in traffic — one per username.
-- A `public` limit counts only anonymous runs, so the two groups can never consume each other's allowance.
-- Always add an aggregate `audience = 'public'` cap as a backstop, because a visitor can clear cookies for a fresh session.
+- `apex_session` is the correct bucket for anonymous traffic. It gives one bucket for each browser session.
+- `each_user` is the correct bucket for signed-in traffic. It gives one bucket for each username.
+- A `public` limit counts only anonymous runs, so neither group can consume the allowance of the other.
+- Always add an aggregate `audience = 'public'` cap as a backstop. A visitor can clear the cookies and get a new session.
 
-When a hard limit is hit, the caller receives one of these, depending on the type:
+When a run reaches a hard limit, the caller gets one of these errors:
 
 | `limit_type` | Error |
 | ------------ | ----- |
@@ -106,8 +106,8 @@ When a hard limit is hit, the caller receives one of these, depending on the typ
 ORA-20411: Rate limit "USER_RUNS_HOUR" (AGENT_EXEC) exceeded: 100 of 100 allowed
 ```
 
-A per-caller limit also names the bucket it denied, since "3 of 3" would otherwise
-not say whose:
+A per-caller limit also names the bucket that it denied. Without the bucket, "3 of
+3" does not say whose quota is gone:
 
 ```text
 ORA-20411: Rate limit "PUB_SESSION_DAY" (AGENT_EXEC) exceeded: 3 of 3 allowed (apex_session 40218...)
@@ -115,15 +115,15 @@ ORA-20411: Rate limit "PUB_SESSION_DAY" (AGENT_EXEC) exceeded: 3 of 3 allowed (a
 
 ## Mid-run tool-call enforcement
 
-`TOOL_CALL` limits are checked **before every tool call**, so a run can be stopped part-way through instead of only at its boundary. This is what makes the [core `before_tool_call` hook](/products/uc-ai/docs/guides/execution-hooks/#before_tool_call-optional) worthwhile: the moment the window's tool-call count reaches the cap, the next tool call raises `ORA-20412` and the run stops.
+UC AI checks a `TOOL_CALL` limit **before every tool call**. It can therefore stop a run part-way through, and not only at the boundary of the run. This is the value of the [core `before_tool_call` hook](/products/uc-ai/docs/guides/execution-hooks/#before_tool_call-optional). When the tool-call count of the window reaches the cap, the next tool call raises `ORA-20412` and the run stops.
 
 <Aside type="caution" title="What the tool-call count includes">
-A tool call's count is written to `uc_ai_agent_executions.tool_calls_count` when its execution **completes**. So the `TOOL_CALL` window total reflects *completed* executions — an in-flight run's own calls are not yet in the total (that run is bounded separately by the core `max_tool_calls` setting). In practice this means a `TOOL_CALL` limit stops a run mid-flight once *prior* runs in the window have used up the allowance; it is a period-level cap, not a within-single-run counter.
+UC AI writes the tool-call count to `uc_ai_agent_executions.tool_calls_count` when the run **completes**. The `TOOL_CALL` window total therefore holds *completed* runs only. The calls of a run that is still in flight are not yet in this total. The core `max_tool_calls` setting bounds that run instead. A `TOOL_CALL` limit therefore stops a run in mid-flight when *earlier* runs in the window used the allowance. It is a cap for the period, and not a counter inside one run.
 </Aside>
 
 ## Concurrency and stuck runs
 
-`CONCURRENCY` counts rows still in `running` status for the scope. If a run crashes without being marked complete, its row could linger and inflate the count forever — so each limit has a `max_run_age_seconds` (default `3600`): running rows older than that are treated as stuck and excluded from the count.
+`CONCURRENCY` counts the rows of the scope that are still in `running` status. If a run crashes before UC AI marks it complete, its row stays and inflates the count. Each limit therefore has a `max_run_age_seconds` (default `3600`). UC AI treats an older running row as stuck and leaves it out of the count.
 
 ```sql
 -- Max 3 concurrent runs per user; forget "running" rows older than 30 minutes
@@ -171,22 +171,23 @@ select uc_ai_ratelimit_api.current_count(
 ```
 
 <Aside type="note" title="Per-caller limits in the status view">
-A `apex_session` or `each_user` limit has one bucket per caller, so there is no
-single "used" for it. `uc_ai_v_rate_limit_status` reports `used`, `pct` and
-`remaining` as `NULL` with `state = 'per_caller'` for those rows (reporting `0`
-would read as "nothing used" for a limit that may be actively denying visitors),
-and flags them with `is_dynamic = 'Y'`. Use `uc_ai_v_rate_limit_buckets` to see
-them expanded one row per bucket.
+An `apex_session` limit or an `each_user` limit has one bucket for each caller. It
+therefore has no single "used" value. For these rows,
+`uc_ai_v_rate_limit_status` reports `used`, `pct`, and `remaining` as `NULL`, with
+`state = 'per_caller'` and `is_dynamic = 'Y'`. A `0` reads as "nothing used", but
+the limit can deny visitors at that moment. `uc_ai_v_rate_limit_buckets` shows
+these limits with one row for each bucket.
 </Aside>
 
-Direct API callers can pass the caller class explicitly:
+A direct API caller can pass the caller class:
 `check_limits(p_created_by, p_agent_code, p_apex_app_id, p_audience, p_apex_session_id)`.
-Omit the last two and the caller is classified from the live APEX session.
+If you omit the last two parameters, UC AI classifies the caller from the live
+APEX session.
 
 <Aside type="tip">
-The same race window as budgets applies: two runs starting at the same instant can both pass a count check before either row exists, so a hard cap of N may briefly allow N+1. Rate limits are a guardrail against abuse and runaway loops, not a hard transactional quota.
+The same race window as budgets applies. Two runs that start at the same moment can both pass a count check, because neither row exists yet. A hard cap of N can therefore allow N+1 for a short time. Rate limits are a guardrail against abuse and runaway loops. They are not a hard transactional quota.
 </Aside>
 
 ## Concurrency of features
 
-Rate limiting registers ahead of [budgets](/products/uc-ai/docs/guides/guardrails/budget/) (`sort_order` 50 vs 100), so a rate-limit denial short-circuits before any cost pricing runs. Use both together for complete governance: rate limits bound *how often*, budgets bound *how much*.
+Rate limiting registers before [budgets](/products/uc-ai/docs/guides/guardrails/budget/), with `sort_order` 50 against 100. A rate-limit denial therefore stops the run before any cost pricing. Use both features together for complete governance. Rate limits bound *how often*, and budgets bound *how much*.
