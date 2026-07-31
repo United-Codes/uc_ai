@@ -7,24 +7,24 @@ sidebar:
 
 import { Steps, Aside } from "@astrojs/starlight/components";
 
-This guide takes you from a fresh install to a working AI agent in three small steps. Every example here is the **simplest possible version** — once these work, the [Tools](/products/uc-ai/docs/guides/tools/) and [Agentic AI](/products/uc-ai/docs/guides/agentic-ai/) guides show the fuller picture.
+This guide takes you from a new installation to a working AI agent in three steps. Every example is the **simplest version** of its task. The [Tools](/products/uc-ai/docs/guides/tools/) and [Agentic AI](/products/uc-ai/docs/guides/agentic-ai/) guides then show the full picture.
 
 <Aside type="note">
-New to the terms *token*, *tool*, or *structured output*? Keep the [Glossary](/products/uc-ai/docs/other/glossary/) open in another tab.
+The [Glossary](/products/uc-ai/docs/other/glossary/) explains the terms *token*, *tool*, and *structured output*.
 </Aside>
 
 ## Before you start
 
 - UC AI is [installed](/products/uc-ai/docs/guides/installation/) in your schema.
-- You have an API key for one provider set up (via the `uc_ai_get_key` function or an APEX Web Credential — see [Set up API Keys](/products/uc-ai/docs/guides/installation/#set-up-api-keys)).
+- You have an API key for one provider, in the `uc_ai_get_key` function or in an APEX Web Credential. See [Set up API Keys](/products/uc-ai/docs/guides/installation/#set-up-api-keys).
 
-The examples below use OpenAI, but any [provider](/products/uc-ai/docs/guides/providers/) works — just swap the `p_provider` and `p_model` constants.
+The examples use OpenAI, but every [provider](/products/uc-ai/docs/guides/providers/) works. To change the provider, replace the `p_provider` and `p_model` constants.
 
 <Steps>
 
 1. ### Say hello
 
-   The smallest useful call: send a prompt, get text back. Run this in your SQL client with `set serveroutput on`.
+   The smallest useful call sends a prompt and gets text back. Run this in your SQL client with `set serveroutput on`.
 
    ```sql
    set serveroutput on
@@ -42,13 +42,13 @@ The examples below use OpenAI, but any [provider](/products/uc-ai/docs/guides/pr
    /
    ```
 
-   If you see a sentence printed, your provider and key are working. 🎉
+   If the output shows a sentence, your provider and your key are correct. 🎉
 
 2. ### Give the AI a tool
 
-   On its own, the model only knows what it was trained on. A **tool** is a PL/SQL function it can call to get live information or take an action. Let's give it the simplest possible tool: one that returns the current date.
+   Alone, the model knows only its training data. A **tool** is a PL/SQL function that the model can call. The model uses a tool to get live information, or to do an action. This step creates the simplest tool: it returns the current date.
 
-   First, create the function. It must take no meaningful input and **return a `CLOB`** (the AI communicates in text):
+   First, create the function. It takes no input and **returns a `CLOB`**, because the AI communicates in text:
 
    ```sql
    create or replace function get_today
@@ -79,12 +79,12 @@ The examples below use OpenAI, but any [provider](/products/uc-ai/docs/guides/pr
    ```
 
    <Aside type="tip">
-   `p_json_schema => null` means the tool has no parameters. When a tool *does* need input, you describe it with a [JSON schema](/products/uc-ai/docs/guides/tools/#tools-call-a-plsql-function) and read the values from a `CLOB` parameter.
+   `p_json_schema => null` means that the tool has no parameters. A tool that needs input describes the input with a [JSON schema](/products/uc-ai/docs/guides/tools/#tools-call-a-plsql-function). Its function then reads the values from a `CLOB` parameter.
    </Aside>
 
 3. ### Watch the AI use it
 
-   Now ask a question the model can only answer by calling your tool. Enabling tools is a single flag:
+   Now ask a question that the model can answer only with your tool. One flag enables tools:
 
    ```sql
    set serveroutput on
@@ -106,13 +106,13 @@ The examples below use OpenAI, but any [provider](/products/uc-ai/docs/guides/pr
    /
    ```
 
-   Behind the scenes the model decided it needed the date, called `GET_TODAY`, read the result, and answered in plain language. That loop — reason, call a tool, use the result — is the core of an **agent**.
+   Internally, the model decided that it needed the date. It called `GET_TODAY`, read the result, and answered in plain language. This loop — reason, call a tool, use the result — is the core of an **agent**.
 
 </Steps>
 
 ## What just happened
 
-You built a tiny agent: the model reasoned about your question, chose a tool, and used its output to respond. Everything ran inside your database, and you controlled exactly what the AI could do.
+You built a small agent. The model reasoned about your question, chose a tool, and used the output of that tool for its answer. Everything ran in your database. You controlled what the AI can do.
 
 ## Where to go next
 

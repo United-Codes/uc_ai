@@ -15,14 +15,14 @@ Currently the framework supports the following AI providers:
 - **OCI**: Oracle Cloud Infrastructure
 - **xAI**: Grok
 - **Mistral**: Mistral Large/Medium/Small, Magistral, Codestral
-- **Ollama**: Open source models (Llama, Mistral, Qwen, etc.)
+- **Ollama**: Open source models (Llama, Mistral, Qwen, and more)
 - **OpenRouter**: Unified API for 300+ models from multiple providers
 
-The goal is to make it easy to switch between providers without changing your code. Each provider has its own package with a consistent interface for text generation and function calling.
+You can switch between providers without a change to your code. Each provider has its own package. All of these packages give the same interface for text generation and function calling.
 
 ## Selecting a Provider
 
-When using the `uc_ai.generate_text` function, you can specify the provider using the `p_provider` parameter. For example:
+The `p_provider` parameter of `uc_ai.generate_text` selects the provider. For example:
 
 ```sql
 DECLARE
@@ -61,7 +61,7 @@ END;
 
 ## Package Structure
 
-Each provider has its own package with a consistent interface. For example:
+Each provider has its own package. All of these packages have the same interface:
 
 - **OpenAI**: `uc_ai_openai`
 - **Anthropic**: `uc_ai_anthropic`
@@ -71,10 +71,10 @@ Each provider has its own package with a consistent interface. For example:
 - **Mistral**: Uses `uc_ai_openai` (OpenAI-compatible API)
 - **OpenRouter**: Uses `uc_ai_openai` (OpenAI-compatible API)
 
-That way the API differences between providers are abstracted away, allowing you to switch providers easily.
+The packages hide the API differences between the providers. You can therefore change the provider with little work.
 
 ## Contribute
 
-I plan to add more providers in the future. You are welcome to contribute new provider packages or improvements to existing ones. Just follow the same interface conventions used in the current packages.
+I plan to add more providers. You are welcome to contribute a new provider package, or an improvement to an existing one. Follow the same interface conventions as the current packages.
 
-Also see the way I build tests for the providers in the `tests` directory. Each provider has its own test suite that verifies the functionality of text generation and function calling.
+The `tests` directory shows how I build the tests for the providers. Each provider has its own test suite. The suite tests text generation and function calling.

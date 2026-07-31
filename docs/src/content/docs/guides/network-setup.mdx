@@ -7,26 +7,26 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-UC AI makes every call to an AI provider over HTTPS using `apex_web_service.make_rest_request`. Before the database is allowed to open an outbound connection, two things must be in place:
+UC AI calls every AI provider over HTTPS with `apex_web_service.make_rest_request`. The database needs two things before it can open an outbound connection:
 
-1. A **network ACL** that grants your schema permission to connect to each provider host — otherwise you get `ORA-24247: network access denied by access control list (ACL)`.
-2. A **trusted certificate** (a wallet or the database's system certificate store) so TLS validation succeeds — otherwise you get `ORA-29024: Certificate validation failure`.
+1. A **network ACL** that gives your schema permission to connect to each provider host. Without this ACL, the call fails with `ORA-24247: network access denied by access control list (ACL)`.
+2. A **trusted certificate**, in a wallet or in the system certificate store of the database. Without it, the call fails with `ORA-29024: Certificate validation failure`.
 
 ## When you need this
 
 <Aside type="tip">
-  On **Oracle Autonomous Database** and most managed cloud databases, outbound
-  ACLs and a system certificate store are already configured. You can usually
-  skip straight to the [installation
-  guide](/products/uc-ai/docs/guides/installation/) and come back only if a call
-  fails.
+  On **Oracle Autonomous Database** and most managed cloud databases, the
+  outbound ACLs and the system certificate store are already configured. This
+  page is then necessary only after a call to a provider fails. The
+  [installation guide](/products/uc-ai/docs/guides/installation/) is the next
+  step for these databases.
 </Aside>
 
-This page is mainly relevant for **on-premises / self-managed** databases (19c, 23ai). If you use a local model runner like **Ollama**, you still need an ACL for the host it runs on (for example `localhost` or an internal server name).
+This page applies to **on-premises and self-managed** databases (19c, 23ai). A local model runner such as **Ollama** also needs an ACL for its host, for example `localhost` or an internal server name.
 
 ## Network ACLs
 
-Grant your UC AI schema (the schema where UC AI is installed, i.e. your APEX parsing schema) the `connect` and `resolve` privileges for each provider host you intend to call. Run this as a privileged user (for example `SYS` or a DBA):
+The UC AI schema is the schema that holds UC AI. This is your APEX parsing schema. Grant it the `connect` and `resolve` privileges for each provider host that you call. Run this block as a privileged user, for example `SYS` or a DBA:
 
 ```sql
 BEGIN
@@ -40,7 +40,7 @@ END;
 /
 ```
 
-Repeat the block for each provider you use, changing the `host`:
+Repeat the block for each provider that you use. Change the `host` value each time:
 
 | Provider   | Host                                                  |
 | ---------- | ----------------------------------------------------- |
@@ -51,13 +51,13 @@ Repeat the block for each provider you use, changing the `host`:
 | xAI        | `api.x.ai`                                            |
 | OpenRouter | `openrouter.ai`                                       |
 | OCI        | `inference.generativeai.<region>.oci.oraclecloud.com` |
-| Ollama     | your local/remote Ollama host (e.g. `localhost`)      |
+| Ollama     | your local or remote Ollama host (for example `localhost`) |
 
 <Aside type="note">
-  For OCI, replace `<region>` with your tenancy's region identifier (for example `us-chicago-1`). See the [OCI provider guide](/products/uc-ai/docs/providers/oci/) for details.
+  For OCI, `<region>` is the region identifier of your tenancy, for example `us-chicago-1`. The [OCI provider guide](/products/uc-ai/docs/providers/oci/) has more information.
 </Aside>
 
-You can verify the ACLs that are currently granted with:
+This query shows the ACLs that the database granted:
 
 ```sql
 SELECT host, lower_port, upper_port, acl
@@ -67,22 +67,22 @@ SELECT host, lower_port, upper_port, acl
 
 ## TLS wallet / certificates
 
-Because all traffic is HTTPS, the database must trust the certificate authority (CA) that signed the provider's certificate.
+Because all traffic is HTTPS, the database must trust the certificate authority (CA) that signed the certificate of the provider.
 
 ### Option 1: System certificate store (19c+)
 
-Recent Oracle Database releases ship with a system default certificate store that already trusts the well-known public CAs used by the providers above. In many environments HTTPS calls therefore work without creating your own wallet.
+New Oracle Database releases have a system default certificate store. This store already trusts the public CAs of the providers in the table above. In many environments, HTTPS calls therefore work without your own wallet.
 
 <Aside type="tip">
-  From **Oracle Database 19c** onward, the database uses the **host operating
-  system's certificate store** by default. As long as the host's CA bundle
-  trusts the provider's certificate (which is normally the case for the public
-  providers above), you do **not** need to create a wallet at all.
+  From **Oracle Database 19c**, the database uses the **certificate store of the
+  host operating system** by default. If the CA bundle of the host trusts the
+  certificate of the provider, you need **no** wallet. The CA bundle covers the
+  public providers in the table above.
 </Aside>
 
 ### Option 2: An explicit wallet
 
-If validation still fails (typically `ORA-29024`), create a wallet and add the provider's CA certificate to it. Using Oracle's `orapki` command-line utility on the database server:
+If validation still fails with `ORA-29024`, create a wallet. Then add the CA certificate of the provider to this wallet. Use the `orapki` command-line utility of Oracle on the database server:
 
 ```bash
 # Create a wallet
@@ -92,19 +92,19 @@ orapki wallet create -wallet /path/to/wallet -auto_login -pwd <password>
 orapki wallet add -wallet /path/to/wallet -trusted_cert -cert /path/to/ca.crt -pwd <password>
 ```
 
-Then point UC AI's HTTP calls at the wallet. For APEX-based databases, set the wallet under **Manage Instance → Wallet** as above. Otherwise configure the wallet used by `apex_web_service` at the instance level. Refer to the [Oracle documentation for `orapki` and wallets](https://docs.oracle.com/en/database/oracle/oracle-database/) for the exact steps for your version.
+Then send the HTTP calls of UC AI to this wallet. On an APEX-based database, set the wallet under **Manage Instance → Wallet**. On other databases, configure the wallet of `apex_web_service` at instance level. The [Oracle documentation for `orapki` and wallets](https://docs.oracle.com/en/database/oracle/oracle-database/) gives the exact steps for your version.
 
 ## Common errors
 
 | Error                                                           | Likely cause                                              | Fix                                                                                           |
 | --------------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `ORA-24247: network access denied by access control list (ACL)` | No ACL for that host, or wrong principal/schema.          | Add the host ACL for your schema (see [Network ACLs](#network-acls)).                         |
-| `ORA-29024: Certificate validation failure`                     | The DB does not trust the provider's CA, or cert expired. | Use the system store or add the CA to a wallet (see [TLS wallet](#tls-wallet--certificates)). |
-| `ORA-29273: HTTP request failed` / `ORA-12535: TNS timeout`     | A firewall or proxy is blocking outbound traffic.         | Allow egress to the provider host/port, or configure your proxy.                              |
+| `ORA-29024: Certificate validation failure`                     | The database does not trust the CA of the provider, or the certificate expired. | Use the system store or add the CA to a wallet (see [TLS wallet](#tls-wallet--certificates)). |
+| `ORA-29273: HTTP request failed` / `ORA-12535: TNS timeout`     | A firewall or a proxy blocks the outbound traffic.        | Allow outbound traffic to the provider host and port, or configure your proxy.                 |
 
 ## Verify
 
-Once ACLs and certificates are in place, run a minimal end-to-end call. If it returns a response, your network setup is correct:
+When the ACLs and the certificates are in place, run one small call. If the call returns a response, your network configuration is correct:
 
 ```sql
 DECLARE

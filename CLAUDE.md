@@ -133,6 +133,16 @@ cd docs && bun run build                 # Production build
 
 Content lives in `docs/src/content/docs/` as MDX files. Provider setup guides are in `docs/src/content/docs/providers/`.
 
+**Writing style:** the docs follow ASD-STE100 Simplified Technical English. Invoke the
+`simple-english` skill before you write or edit any page under `docs/src/content/docs/`.
+Keep the terminology fixed: "make sure that" (never ensure / verify / confirm),
+"configuration" (never config / settings / options in prose), "call" for calling a
+procedure, "run" for one agent execution, "delete" for data (`drop` for DDL only),
+"error" for a raised exception, "failure" for an operation that did not finish. The
+landing page (`index.mdx`) and `guides/use-cases.mdx` keep their persuasive voice — fix
+only mechanics there. Never change heading text: `starlightLinksValidator` fails the
+build on anchors that other pages link to.
+
 ## Key Reference Files
 
 - Main API spec: `src/packages/uc_ai.pks` (provider constants, type definitions, `generate_text` signatures)
