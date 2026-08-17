@@ -1,7 +1,7 @@
 create or replace package body uc_ai_ollama as 
 
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
-  c_api_url constant varchar2(255 char) := 'http://localhost:1143/api';
+  c_api_url constant varchar2(255 char) := 'http://localhost:11434/api';
   c_api_generate_text_path constant varchar2(255 char) := '/chat';
   c_api_generate_embeddings_path constant varchar2(255 char) := '/embed';
 
