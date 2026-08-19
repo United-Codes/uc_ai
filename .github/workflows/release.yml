@@ -19,6 +19,8 @@ jobs:
         run: |
           chmod +x scripts/generate_install_script_complete.sh
           chmod +x scripts/generate_upgrade_script.sh
+          chmod +x scripts/generate_uninstall_script.sh
+          chmod +x scripts/generate_ptc_sandbox_script.sh
 
       - name: Generate installation scripts
         run: |
@@ -34,6 +36,11 @@ jobs:
         run: |
           cd scripts
           ./generate_uninstall_script.sh
+
+      - name: Generate code-mode sandbox installer
+        run: |
+          cd scripts
+          ./generate_ptc_sandbox_script.sh
 
       - name: Find migration file for release
         id: find_migration
@@ -64,11 +71,13 @@ jobs:
           ls -la install_uc_ai_complete_with_logger.sql
           ls -la upgrade_packages.sql
           ls -la uninstall.sql
+          ls -la install_ptc_sandbox_complete.sql
           echo "File sizes:"
           wc -l install_uc_ai_complete.sql
           wc -l install_uc_ai_complete_with_logger.sql
           wc -l upgrade_packages.sql
           wc -l uninstall.sql
+          wc -l install_ptc_sandbox_complete.sql
 
           if [ "${{ steps.find_migration.outputs.has_migration }}" = "true" ]; then
             echo "Migration file: ${{ steps.find_migration.outputs.migration_file }}"
@@ -85,5 +94,7 @@ jobs:
             upgrade_packages.sql
             ${{ steps.find_migration.outputs.has_migration == 'true' && steps.find_migration.outputs.migration_file || '' }}
             uninstall.sql
+            install_ptc_sandbox_complete.sql
+            ./scripts/uninstall_ptc_sandbox.sql
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

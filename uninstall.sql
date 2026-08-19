@@ -55,8 +55,8 @@ DROP PACKAGE uc_ai_toon;
 DROP PACKAGE uc_ai_error;
 DROP PACKAGE uc_ai_logger;
 DROP PACKAGE uc_ai_structured_output;
-DROP PACKAGE uc_ai_message_api;
 DROP PACKAGE uc_ai_prompt_profiles_api;
+DROP PACKAGE uc_ai_message_api;
 DROP PACKAGE uc_ai_tools_api;
 DROP PACKAGE uc_ai_settings;
 
@@ -90,8 +90,11 @@ BEGIN
     FOR rec IN (
         SELECT trigger_name
         FROM user_triggers
-        WHERE table_name IN ('UC_AI_TOOLS', 'UC_AI_CATEGORIES', 'UC_AI_TOOL_PARAMETERS', 'UC_AI_TOOL_CATEGORIES')
-        OR trigger_name LIKE 'UC_AI%'
+        -- All UC AI triggers are named uc_ai_*, so the name pattern finds them all.
+        -- Do not also select by table_name: that dropped user-owned triggers on
+        -- UC AI tables, and the frozen list went stale (UC_AI_TOOL_CATEGORIES was
+        -- removed in v25.5).
+        WHERE trigger_name LIKE 'UC_AI%'
     ) LOOP
         EXECUTE IMMEDIATE 'DROP TRIGGER ' || rec.trigger_name;
         sys.dbms_output.put_line('Dropped trigger: ' || rec.trigger_name);

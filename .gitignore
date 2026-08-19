@@ -1,6 +1,7 @@
 .DS_Store
 install_uc_ai_complete.sql
 install_uc_ai_complete_with_logger.sql
+install_ptc_sandbox_complete.sql
 upgrade_packages.sql
 temp
 install_uc_ai_complete_with_logger_noop.sql

@@ -37,6 +37,14 @@ sql sys/<pwd>@<pdb> as sysdba
 @scripts/install_ptc_sandbox.sql
 ```
 
+If you installed UC AI from a release download, you do not have the repository files. Download `install_ptc_sandbox_complete.sql` from the same release and run that file instead. It holds the same steps with the package sources inlined.
+
+```bash
+sql sys/<pwd>@<pdb> as sysdba
+
+@install_ptc_sandbox_complete.sql
+```
+
 The script asks for two schema names. The first is the schema that holds UC AI. The second is the new sandbox schema for it. The defaults are `UC_AI` and `UC_AI_MLE_SBX`.
 
 The script then creates four objects:
@@ -50,7 +58,7 @@ UC AI finds the sandbox through this synonym at run time. No schema name is comp
 
 Run the script **once for each UC AI installation**. Two installations must not share one sandbox, because the gateway synonym points at one UC AI schema. The script rejects a sandbox schema that already owns other objects. At the end, the script tests that the runner compiled and that the synonym points at it.
 
-To undo the installation, run `scripts/uninstall_ptc_sandbox.sql` with the same two answers. If you enable code mode without the sandbox, `generate_text` raises an error that names the script.
+To undo the installation, run `scripts/uninstall_ptc_sandbox.sql` with the same two answers. This file is also attached to each release. If you enable code mode without the sandbox, `generate_text` raises an error that names the script.
 
 ## The security model
 

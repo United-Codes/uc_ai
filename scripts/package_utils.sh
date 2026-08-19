@@ -41,6 +41,17 @@ declare -a PROVIDER_PACKAGES=(
     "uc_ai_responses_api"
 )
 
+# Sandbox packages (in dependency order).
+# These are the programmatic-tool-calling ("code mode") packages. The core
+# installer does NOT install them: they need Oracle 23ai MLE JavaScript and a
+# separate low-privilege schema, while the rest of UC AI runs on 12.2+.
+# scripts/install_ptc_sandbox.sql installs them. They are listed here so the
+# generators can classify them instead of reporting them as unknown.
+declare -a SANDBOX_PACKAGES=(
+    "uc_ai_ptc_api"
+    "uc_ai_ptc_runner"
+)
+
 # ===================================================
 # Utility Functions
 # ===================================================
@@ -87,6 +98,12 @@ get_package_description() {
             ;;
         "uc_ai_error")
             echo "Error Handling Package"
+            ;;
+        "uc_ai_ptc_api")
+            echo "Code Mode Tool Gateway Package"
+            ;;
+        "uc_ai_ptc_runner")
+            echo "Code Mode MLE JavaScript Runner Package"
             ;;
         "uc_ai_anthropic")
             echo "Anthropic AI Provider Package"
@@ -206,6 +223,22 @@ is_provider_package() {
     return 1
 }
 
+# Function to check if a package is a sandbox (code mode) package
+is_sandbox_package() {
+    local filename="$1"
+    local package_name
+
+    package_name=$(basename "$filename" .pks)
+    package_name=$(basename "$package_name" .pkb)
+
+    for sandbox_pkg in "${SANDBOX_PACKAGES[@]}"; do
+        if [[ "$package_name" == "$sandbox_pkg" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Function to check if a package is the core package
 is_core_package() {
     local filename="$1"
@@ -217,7 +250,7 @@ is_core_package() {
     [[ "$package_name" == "uc_ai" ]]
 }
 
-# Function to get package type (core, api, provider)
+# Function to get package type (core, api, provider, sandbox)
 get_package_type() {
     local filename="$1"
     
@@ -227,6 +260,8 @@ get_package_type() {
         echo "api"
     elif is_provider_package "$filename"; then
         echo "provider"
+    elif is_sandbox_package "$filename"; then
+        echo "sandbox"
     else
         echo "unknown"
     fi
@@ -361,3 +396,4 @@ validate_package_config() {
 # Export arrays for use in other scripts
 export API_PACKAGES
 export PROVIDER_PACKAGES
+export SANDBOX_PACKAGES
