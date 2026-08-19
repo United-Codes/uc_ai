@@ -29,7 +29,7 @@ as
   function evaluate_final_message(
     p_final_message in json_element_t,
     p_workflow_state in json_object_t
-  ) return varchar2;
+  ) return clob;
 
   /*
    * Evaluates a condition expression against workflow state

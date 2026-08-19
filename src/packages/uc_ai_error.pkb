@@ -23,12 +23,15 @@ create or replace package body uc_ai_error as
       when c_err_agent_retrieval        then c_msg_agent_retrieval
       when c_err_speaker_not_found      then c_msg_speaker_not_found
       when c_err_unknown_conv_mode      then c_msg_unknown_conv_mode
+      when c_err_max_exec_depth         then c_msg_max_exec_depth
       -- Workflow
       when c_err_missing_output_key     then c_msg_missing_output_key
       when c_err_condition_eval         then c_msg_condition_eval
       when c_err_input_mapping_eval     then c_msg_input_mapping_eval
       when c_err_final_message_eval     then c_msg_final_message_eval
       when c_err_apex_session           then c_msg_apex_session
+      when c_err_jsonpath_resolve       then c_msg_jsonpath_resolve
+      when c_err_plsql_step_eval        then c_msg_plsql_step_eval
       -- Validation
       when c_err_not_found              then c_msg_not_found
       when c_err_invalid_status         then c_msg_invalid_status
@@ -62,7 +65,12 @@ create or replace package body uc_ai_error as
   is
     l_msg varchar2(2048 char);
   begin
-    l_msg := apex_string.format(
+    -- apex_string.format's p_max_length truncates individual substitution
+    -- values, but the assembled message (template + separators) can still
+    -- exceed it by a few characters. Hard-cap with substr so the assignment
+    -- into l_msg cannot overflow the buffer (ORA-06502) — otherwise a long
+    -- provider error body building this message masks the real HTTP failure.
+    l_msg := substr(apex_string.format(
       p_message    => coalesce(p_message, get_default_message(p_error_code))
     , p0           => p0
     , p1           => p1
@@ -75,7 +83,7 @@ create or replace package body uc_ai_error as
     , p8           => p8
     , p9           => p9
     , p_max_length => 2048
-    );
+    ), 1, 2048);
 
     if p_log then
       uc_ai_logger.log_error(
@@ -94,15 +102,42 @@ create or replace package body uc_ai_error as
   , p_scope    in varchar2
   ) return json_object_t
   is
-    l_status_code number;
+    -- Captured before parsing; JSON parsing makes no HTTP call, so the status
+    -- code from the immediately preceding make_rest_request stays valid.
+    l_status_code number := apex_web_service.g_status_code;
     l_preview     varchar2(500 char);
+    l_json        json_object_t;
   begin
-    return json_object_t.parse(p_response);
+    l_json := json_object_t.parse(p_response);
+
+    -- Guard on the HTTP status regardless of the error-body shape. Providers
+    -- disagree on how they report errors: OpenAI/Anthropic use {"error":{...}},
+    -- while OCI can return a valid-JSON {"code":"404","message":"..."} body with
+    -- no "error" key. Without this check such error responses parse cleanly and
+    -- slip past the per-provider has('error') checks, producing a silent empty
+    -- result (e.g. OCI Responses API 404 "Entity with key ... not found").
+    if nvl(l_status_code, 0) >= 400 then
+      l_preview := substr(p_response, 1, 500);
+      raise_error(
+        p_error_code => c_err_provider_response
+      , p_scope      => p_scope
+      , p0           => p_provider
+      , p1           => 'HTTP ' || l_status_code || ' from provider, response: ' || l_preview
+      , p_extra      => p_response
+      );
+    end if;
+
+    return l_json;
   exception
     when others then -- @dblinter ignore(g-5040): error is handled in raise_error
-      l_status_code := apex_web_service.g_status_code;
-      l_preview := substr(p_response, 1, 500);
+      -- Re-raise anything already raised by raise_error (custom -203xx codes)
+      -- unchanged; only wrap genuine JSON parse failures below.
+      -- @dblinter ignore(g-5020): must match the whole -20000..-20999 application-error range, no named exception applies
+      if sqlcode <= -20000 and sqlcode >= -20999 then
+        raise;
+      end if;
 
+      l_preview := substr(p_response, 1, 500);
       raise_error(
         p_error_code => c_err_provider_response
       , p_scope      => p_scope

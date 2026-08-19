@@ -62,10 +62,15 @@ create or replace package body uc_ai_test_message_utils as
     l_has_encrypted_content boolean := false;
     l_has_id boolean := false;
   begin
-    -- Reasoning content should have 'text' field
-    ut.expect(p_content_item.has('text'),
-             p_test_name || ': Reasoning content ' || p_content_index || ' in message ' || p_message_index || ' should have text field').to_be_true();
-
+    -- The 'text' key is only present when there is actual reasoning text.
+    -- A null CLOB must never be stored as a JSON null node: reading such a
+    -- node back with get_clob yields the literal 4-char string 'null'. When
+    -- text exists it must be real content, never that sentinel.
+    if p_content_item.has('text') then
+      l_text := p_content_item.get_string('text');
+      ut.expect(l_text,
+              p_test_name || ': Reasoning content ' || p_content_index || ' in message ' || p_message_index || ' text must not be the literal ''null'' string').not_to_equal('null');
+    end if;
 
     if p_content_item.has('providerOptions') then
       l_provider_options := treat(p_content_item.get('providerOptions') as json_object_t);

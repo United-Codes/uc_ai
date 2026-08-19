@@ -478,6 +478,131 @@ procedure tool_clock_in_user_gpt_oss
   end tool_clock_in_user_gpt_oss;
 
 
+  procedure pdf_file_input_generic
+  as
+    l_messages json_array_t := json_array_t();
+    l_content json_array_t := json_array_t();
+    l_result json_object_t;
+    l_final_message clob;
+  begin
+    uc_ai_oci.g_compartment_id := get_oci_compratment_id;
+    uc_ai_oci.g_region := 'eu-frankfurt-1';
+    uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false; -- exercise the GENERIC converter
+
+    l_messages.append(uc_ai_message_api.create_system_message(
+      'You are an assistant answering trivia questions about TV Shows. Please answer in super short sentences.'));
+
+    -- PDF is sent as an OCI DOCUMENT content part
+    l_content.append(uc_ai_message_api.create_file_content(
+      p_media_type => 'application/pdf',
+      p_data_blob  => uc_ai_test_utils.get_emp_pdf,
+      p_filename   => 'data.pdf'
+    ));
+    l_content.append(uc_ai_message_api.create_text_content(
+      'Which is the TV show of the characters that are inside the attached PDF?'
+    ));
+    l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+    uc_ai.g_enable_tools := false;
+
+    -- NOTE: model must be a GENERIC-format model that supports DOCUMENT input in your OCI region
+    l_result := uc_ai_oci.generate_text(
+      p_messages => l_messages,
+      p_model    => uc_ai_oci.c_model_google_gemini_2_5_flash,
+      p_max_tool_calls => 3
+    );
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(lower(l_final_message)).to_be_like('%office%');
+
+    uc_ai_test_message_utils.valididate_return_object(l_result, 'OCI PDF file input');
+  end pdf_file_input_generic;
+
+
+  procedure image_file_input_generic
+  as
+    l_messages json_array_t := json_array_t();
+    l_content json_array_t := json_array_t();
+    l_result json_object_t;
+    l_final_message clob;
+  begin
+    uc_ai_oci.g_compartment_id := get_oci_compratment_id;
+    uc_ai_oci.g_region := 'eu-frankfurt-1';
+    uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false; -- exercise the GENERIC converter
+
+    l_messages.append(uc_ai_message_api.create_system_message(
+      'You are an image analysis assistant.'));
+
+    -- OCI only accepts PNG/JPG images (not webp/gif), sent as an IMAGE content part
+    l_content.append(uc_ai_message_api.create_file_content(
+      p_media_type => 'image/png',
+      p_data_blob  => uc_ai_test_utils.get_apple_png,
+      p_filename   => 'data.png'
+    ));
+    l_content.append(uc_ai_message_api.create_text_content(
+      'What is the fruit depicted in the attached image?'
+    ));
+    l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+    uc_ai.g_enable_tools := false;
+
+    -- NOTE: model must be a GENERIC-format vision model available in your OCI region
+    l_result := uc_ai_oci.generate_text(
+      p_messages => l_messages,
+      p_model    => uc_ai_oci.c_model_llama_3_2_90b_vision,
+      p_max_tool_calls => 3
+    );
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(lower(l_final_message)).to_be_like('%apple%');
+
+    uc_ai_test_message_utils.valididate_return_object(l_result, 'OCI image file input');
+  end image_file_input_generic;
+
+
+  -- LLM-free: OCI GENERIC only supports PNG/JPG and PDF; anything else must be rejected
+  -- during message conversion (before any HTTP call is made).
+  procedure rejects_unsupported_file
+  as
+    l_messages json_array_t := json_array_t();
+    l_content json_array_t := json_array_t();
+    l_result json_object_t;
+  begin
+    uc_ai_oci.g_compartment_id := get_oci_compratment_id;
+    uc_ai_oci.g_region := 'eu-frankfurt-1';
+    uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+    uc_ai_oci.g_use_responses_api := false;
+
+    -- webp is valid for other providers but unsupported by OCI
+    l_content.append(uc_ai_message_api.create_file_content(
+      p_media_type => 'image/webp',
+      p_data_blob  => uc_ai_test_utils.get_apple_webp,
+      p_filename   => 'data.webp'
+    ));
+    l_content.append(uc_ai_message_api.create_text_content('What is this?'));
+    l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+    uc_ai.g_enable_tools := false;
+
+    begin
+      l_result := uc_ai_oci.generate_text(
+        p_messages => l_messages,
+        p_model    => uc_ai_oci.c_model_llama_3_2_90b_vision,
+        p_max_tool_calls => 1
+      );
+      ut.fail('Expected unhandled format error for image/webp, but no exception was raised');
+    exception
+      when others then
+        ut.expect(sqlcode).to_equal(uc_ai_error.c_err_unhandled_format);
+        ut.expect(sqlerrm).to_be_like('%image/webp%');
+    end;
+  end rejects_unsupported_file;
+
+
   procedure basic_recipe_cohere
   as
     l_result json_object_t;

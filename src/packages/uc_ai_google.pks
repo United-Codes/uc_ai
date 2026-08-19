@@ -53,6 +53,7 @@ as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
+  , p_settings       in uc_ai_settings.t_settings default null
   ) return json_object_t;
 
   -- Optimize embeddings for a specific task
@@ -74,7 +75,23 @@ as
   function generate_embeddings (
     p_input in json_array_t
   , p_model in uc_ai.model_type
+  , p_settings in uc_ai_settings.t_settings default null
   ) return json_array_t;
+
+
+  /*
+   * Converts standardized LM messages into Google's contents array, lifting the
+   * system prompt out into its own field.
+   *
+   * Exposed so the request payload can be asserted without an HTTP call (see
+   * test_uc_ai_reasoning_replay). Not part of the stable public API - the part
+   * shape follows whatever the provider requires and may change.
+   */
+  procedure convert_lm_messages_to_google(
+    p_lm_messages in json_array_t,
+    po_system_prompt out nocopy clob,
+    po_google_messages out nocopy json_array_t
+  );
 
 end uc_ai_google;
 /

@@ -184,10 +184,8 @@ For `agent_type = 'workflow'`, the `workflow_definition` CLOB contains:
       "output_mapping": {
         "workflow_state.analysis": "${step_output}"
       },
-      "condition": {
-        "type": "json_path|plsql",
-        "expression": "$.priority == 'high'"  // PL/SQL evaluated via APEX_PLUGIN_UTIL
-      },
+      "condition": "'{$.input.priority}' = 'high'",  // PL/SQL boolean expression, evaluated via APEX_PLUGIN_UTIL
+
       "timeout_seconds": 30,
       "on_error": "continue|stop|retry"
     }
@@ -198,10 +196,7 @@ For `agent_type = 'workflow'`, the `workflow_definition` CLOB contains:
   },
   "loop_config": {
     "max_iterations": 5,
-    "exit_condition": {
-      "type": "json_path|plsql",
-      "expression": "$.completed == true"
-    }
+    "exit_condition": "'{$.steps.check.completed}' = 'true'"
   }
 }
 ```
@@ -518,9 +513,19 @@ BEGIN
 END;
 ```
 
-#### 3.2 Handoff Pattern
+#### 3.2 Handoff Pattern (IMPLEMENTED - tool-based)
 
-Agents pass control to each other based on capability and context.
+Agents pass control to each other. The final answer comes from the agent that
+received the last handoff - control transfers, it does not report back.
+
+The implemented mechanism is **tool-based** (Swarm-style), not structured
+output: the engine registers a temporary `transfer_to_<agent>` tool per handoff
+target for the currently active agent's LLM call. Calling the tool records the
+transfer request; after the agent's turn returns, the engine switches to the
+target agent. Every hop gets transfer tools for all *other* mesh members (full
+mesh minus self), so specialists can transfer back or sideways. The hop that
+reaches `max_handoffs` runs without transfer tools and must answer (graceful
+cap, no error).
 
 **Orchestration Config JSON**:
 ```json
@@ -530,107 +535,64 @@ Agents pass control to each other based on capability and context.
   "handoff_agents": [
     {
       "agent_code": "technical_support",
-      "handoff_triggers": ["technical", "bug", "error"],
-      "capabilities": ["debugging", "technical_advice"]
+      "description": "Technical issues: debugging, bugs, errors",
+      "can_transfer_to": ["product_a_technician", "triage_agent"]
     },
     {
       "agent_code": "sales_agent",
-      "handoff_triggers": ["pricing", "purchase", "upgrade"],
-      "capabilities": ["sales", "billing"]
+      "description": "Sales: pricing, purchases, upgrades, billing"
     }
   ],
-  "handoff_mechanism": "structured_output",
   "max_handoffs": 3,
-  "handoff_schema": {
-    "type": "object",
-    "properties": {
-      "should_handoff": {"type": "boolean"},
-      "target_agent": {"type": "string"},
-      "handoff_reason": {"type": "string"},
-      "context_for_next_agent": {"type": "string"}
-    }
+  "history_management": {
+    "strategy": "sliding_window",
+    "max_messages": 20
   }
 }
 ```
 
-**Implementation**:
-```sql
-FUNCTION execute_handoff_agent(
-  p_agent_id          IN NUMBER,
-  p_input_parameters  IN JSON_OBJECT_T,
-  p_session_id        IN VARCHAR2
-) RETURN JSON_OBJECT_T
-IS
-  l_current_agent VARCHAR2(255);
-  l_handoff_count NUMBER := 0;
-  l_max_handoffs NUMBER;
-  l_conversation_history JSON_ARRAY_T := JSON_ARRAY_T();
-  l_result JSON_OBJECT_T;
-  l_handoff_decision JSON_OBJECT_T;
-BEGIN
-  -- Get initial agent and config
-  SELECT orchestration_config INTO l_config_clob
-  FROM uc_ai_agents WHERE id = p_agent_id;
-  
-  l_config := JSON_OBJECT_T(l_config_clob);
-  l_current_agent := l_config.get_string('initial_agent_code');
-  l_max_handoffs := l_config.get_number('max_handoffs');
-  
-  -- Handoff loop
-  WHILE l_handoff_count < l_max_handoffs LOOP
-    -- Execute current agent
-    l_result := uc_ai_agents_api.execute_agent(
-      p_agent_code => l_current_agent,
-      p_input_parameters => p_input_parameters
-    );
-    
-    -- Add to conversation history
-    l_conversation_history.append(JSON_OBJECT_T(
-      JSON_OBJECT(
-        'agent' VALUE l_current_agent,
-        'response' VALUE l_result.get_clob('final_message')
-      )
-    ));
-    
-    -- Check if agent wants to handoff
-    l_handoff_decision := JSON_OBJECT_T(l_result.get_clob('handoff_decision'));
-    EXIT WHEN NOT l_handoff_decision.get_boolean('should_handoff');
-    
-    -- Prepare context for next agent
-    l_current_agent := l_handoff_decision.get_string('target_agent');
-    p_input_parameters.put('handoff_context', l_handoff_decision.get_string('context_for_next_agent'));
-    p_input_parameters.put('conversation_history', l_conversation_history);
-    
-    l_handoff_count := l_handoff_count + 1;
-  END LOOP;
-  
-  -- Return final result with full history
-  l_result.put('conversation_history', l_conversation_history);
-  l_result.put('handoff_count', l_handoff_count);
-  
-  RETURN l_result;
-END;
-```
+The `description` of each entry becomes the transfer tool's description - the
+routing instructions the AI sees. All referenced agents (initial + targets)
+must be existing ACTIVE profile agents; this is validated at `create_agent`
+time.
 
-**Agent Handoff via Structured Output**:
-```sql
--- Each participating agent has a response schema that includes handoff decision
-l_response_schema := '{
-  "type": "object",
-  "properties": {
-    "answer": {"type": "string"},
-    "handoff_decision": {
-      "type": "object",
-      "properties": {
-        "should_handoff": {"type": "boolean"},
-        "target_agent": {"type": "string", "enum": ["technical_support", "sales_agent", "none"]},
-        "handoff_reason": {"type": "string"},
-        "context_for_next_agent": {"type": "string"}
-      }
-    }
-  }
-}';
-```
+**Transfer graph (multi-level hierarchies)**: an entry's optional
+`can_transfer_to` array restricts its outgoing edges (validated to reference
+other entries). Without it an agent may transfer to every other entry (full
+mesh). This expresses trees like triage -> product support -> product
+technician, where triage never sees the level-3 technicians. Give every
+specialist a back-edge to triage so conversations cannot get stuck.
+
+**Sticky multi-turn**: handoff agents accept `p_follow_up_message`. A
+follow-up turn resumes with the agent that answered the previous turn (read
+from the wrapper's last completed execution; falls back to
+`initial_agent_code` when it left the mesh). The resumed agent continues its
+own conversation history and keeps its transfer tools, so it can hand off
+when the topic changes.
+
+**Execution flow** (see `uc_ai_agent_exec_api.execute_handoff_agent`):
+
+1. Execute the current agent (starting with `initial_agent_code`) as a nested
+   child execution, with an extra tool tag exposing the transfer tools on top
+   of the agent's own tools.
+2. The transfer tool callback records `{target_agent, context}` in package
+   state keyed by the handoff wrapper's execution id
+   (`record_transfer_request` / `pop_transfer_request`).
+3. If a transfer was recorded: switch to the target agent, passing the original
+   input plus `handoff_context` (the tool's context argument) and
+   `conversation_history` (TOON-encoded `{agent, response}` trail, trimmed via
+   `history_management`). Targets consume these via `{handoff_context}` /
+   `{conversation_history}` template placeholders.
+4. If no transfer was recorded, that agent's answer is final.
+
+**Result fields**: `final_agent_code`, `handoff_count`, `handoff_trail`
+(`{hop, from_agent, to_agent, reason?, context}` per transfer),
+`conversation_history`, `max_handoffs_reached`. The wrapper reports zero own
+tokens (children own theirs); the combined `messages` array preserves the
+transfer tool calls in the `uc_ai_agent_messages` log.
+
+See the docs site guide `guides/multi-agent-systems/handoff.mdx` and the test
+suite `test/test_uc_ai_agent_handoff.pkb` (customer-support triage scenario).
 
 #### 3.3 Conversation-Driven Pattern
 

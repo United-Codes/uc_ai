@@ -1,0 +1,3 @@
+[submodule "ext/uc-ai-pro"]
+	path = ext/uc-ai-pro
+	url = https://github.com/United-Codes/uc-ai-pro.git

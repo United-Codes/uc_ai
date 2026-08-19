@@ -5,17 +5,17 @@ sidebar:
   order: 70
 ---
 
-UC AI can push events to a PL/SQL procedure of your choice while a `generate_text` call is running. This is useful for:
+UC AI can send events to a PL/SQL procedure of your choice during a `generate_text` call. Use these events for:
 
-- **Streaming-style UIs** — render assistant text or tool call activity as it happens instead of waiting for the whole response.
-- **Audit logging** — record every tool call and its result for compliance or debugging.
-- **Observability** — correlate events across providers or long-running agent runs via a request id.
+- **A streaming-style UI** — show the assistant text or the tool call activity at once, and do not wait for the whole answer.
+- **Audit logging** — record every tool call and its result, for compliance or to find a fault.
+- **Observability** — group the events of one request id across providers, or across a long agent run.
 
-Event callbacks are global to the session — register once, then every subsequent `generate_text` call in that session will deliver events to your procedure until you clear it.
+An event callback is global to the session. Register it once. Every later `generate_text` call in that session then sends its events to your procedure, until you clear the callback.
 
 ## Registering a callback
 
-Your callback must be a top-level (schema-visible) procedure with this exact signature:
+Your callback must be a top-level procedure that the schema can see. It must have this exact signature:
 
 ```sql
 procedure my_ai_event_handler(
@@ -25,7 +25,7 @@ procedure my_ai_event_handler(
 );
 ```
 
-`p_event_data` is a CLOB instead of `json_object_t` because PL/SQL object types cannot be bound via `execute immediate`. You can parse it with `json_object_t.parse(p_event_data)` if you need structured access.
+`p_event_data` is a `CLOB` and not a `json_object_t`, because `execute immediate` cannot bind a PL/SQL object type. For structured access, parse it with `json_object_t.parse(p_event_data)`.
 
 Register it with:
 
@@ -39,23 +39,23 @@ And clear it with:
 uc_ai.clear_event_callback;
 ```
 
-The registered callback name is preserved across `uc_ai.reset_globals` calls so you don't have to re-register it in every session setup.
+`uc_ai.reset_globals` keeps the registered callback name. You therefore do not register it again in each session.
 
 ## Event types
 
 | Constant | Event type | When it fires |
 |---|---|---|
-| `uc_ai.c_event_assistant_text` | `assistant_text` | Whenever the assistant returns a text content block |
-| `uc_ai.c_event_assistant_reasoning` | `assistant_reasoning` | Whenever a reasoning/thinking block is returned |
-| `uc_ai.c_event_tool_call` | `tool_call` | Before a tool is executed |
-| `uc_ai.c_event_tool_result` | `tool_result` | After a tool executes, with its result |
-| `uc_ai.c_event_response_complete` | `response_complete` | At the very end of `generate_text`, with the final result object |
+| `uc_ai.c_event_assistant_text` | `assistant_text` | The assistant returns a text content block |
+| `uc_ai.c_event_assistant_reasoning` | `assistant_reasoning` | The assistant returns a reasoning block |
+| `uc_ai.c_event_tool_call` | `tool_call` | Before a tool runs |
+| `uc_ai.c_event_tool_result` | `tool_result` | After a tool runs, with its result |
+| `uc_ai.c_event_response_complete` | `response_complete` | At the end of `generate_text`, with the final result object |
 
-All events are session-scoped: `uc_ai.g_request_id` is set by the framework at the start of each `generate_text` call and cleared at the end. Events emitted outside of a `generate_text` call (e.g. while you are building input messages yourself) will **not** fire.
+Every event is session-scoped. UC AI sets `uc_ai.g_request_id` at the start of each `generate_text` call, and clears it at the end. An event outside a `generate_text` call does **not** fire. This includes the time when you build the input messages yourself.
 
 ## Example
 
-A minimal logging handler that writes events to `dbms_output`:
+This small handler writes each event to `dbms_output`:
 
 ```sql
 create or replace package my_pkg is
@@ -114,7 +114,7 @@ end;
 /
 ```
 
-Typical output (tool-calling path):
+The output of a tool-calling path looks like this:
 
 ```
 [A1B2C3...] tool_call
@@ -128,22 +128,22 @@ Typical output (tool-calling path):
 
 ## Error handling
 
-If your callback raises an exception, UC AI swallows it by default so a bad handler can never break an AI call. Failures are logged via `uc_ai_logger` (including a backtrace) for diagnostics.
+If your callback raises an exception, UC AI catches it by default. A broken handler therefore never breaks an AI call. UC AI writes each failure to `uc_ai_logger`, with a backtrace for the diagnosis.
 
-If you instead want callback errors to abort the `generate_text` call — useful during development so you notice bugs in your handler — set:
+During development, an error in your handler must be visible. To abort the `generate_text` call on a callback error, set:
 
 ```sql
 uc_ai.g_callback_fatal := true;
 ```
 
-Unlike `g_event_callback`, `g_callback_fatal` is reset by `uc_ai.reset_globals`.
+`uc_ai.reset_globals` resets `g_callback_fatal`, but it does not reset `g_event_callback`.
 
 ## Correlating events
 
-`p_request_id` is a per-call correlation id (a hex GUID). Two sequential `generate_text` calls get two different request ids — use this to group events belonging to the same AI call when multiple calls run in the same session (e.g. inside a multi-agent workflow).
+`p_request_id` is a correlation id for one call, as a hex GUID. Two sequential `generate_text` calls get two different request ids. Use this id to group the events of one AI call when several calls run in the same session, for example inside a multi-agent workflow.
 
-You can also read the current request id directly from `uc_ai.g_request_id` while a call is in progress.
+During a call, you can also read the current request id from `uc_ai.g_request_id`.
 
 ## Validation
 
-`set_event_callback` validates the procedure name via `dbms_assert.qualified_sql_name`, so passing a malformed name (for example `not a valid name!!!`) will raise `ORA-44003` or `ORA-44004` before any event ever fires.
+`set_event_callback` validates the procedure name with `dbms_assert.qualified_sql_name`. A malformed name such as `not a valid name!!!` therefore raises `ORA-44003` or `ORA-44004` before the first event.

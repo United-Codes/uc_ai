@@ -5,6 +5,33 @@ sidebar:
   order: 3
 ---
 
+## v26.3 (unreleased)
+
+**Features**:
+
+Request customization:
+
+- **Custom request-body properties** (`uc_ai.g_extra_body`): shallow-merge arbitrary provider parameters (e.g. `top_p`, `stop_sequences`, `service_tier`, `cache_control`) into the outgoing request body for options the SDK does not wrap explicitly. Overrides framework values but protects the conversation-defining core keys (`model`, `messages`, `input`, `instructions`, `system`, `tools`). Also settable via the `g_extra_body` config key. See [generate_text](/products/uc-ai/docs/api/generate_text/#custom-request-body-properties).
+- **Provider (server-side) tools** (`uc_ai.g_provider_tools`): enable a provider's own server-side tools — Anthropic web search, OpenAI Responses API web search, Google search, etc. — by appending raw, provider-native tool definitions to the request `tools` array. Executed by the provider, not locally; sent even when local tools are disabled. Also settable via the `g_provider_tools` config key. See [generate_text](/products/uc-ai/docs/api/generate_text/#provider-server-side-tools).
+- **[Programmatic Tool Calling / Code Mode](/products/uc-ai/docs/guides/programmatic-tool-calling/)** (`uc_ai.g_enable_programmatic_tools`): the model can write one JavaScript program that orchestrates many tool calls in-database instead of one round-trip per call, returning only the final result (large token savings on data-heavy work). The program runs in a `PURE` MLE execution context inside an isolated, low-privilege sandbox schema (installed once via `scripts/install_ptc_sandbox.sql`): it has no SQL access whatsoever — it cannot read data and cannot commit or roll back the caller's transaction — and reaches tools only through a single gateway that enforces a per-run allow-list, a call budget and the `before_tool_call` hook. Per-tool `p_code_mode_access` (`direct` | `code` | `both`) controls whether a tool is a normal tool, code-only, or both. Works across all providers. Requires Oracle 23ai with MLE JavaScript.
+
+Conversations:
+
+- **Conversation titles** (`uc_ai_agents_api.set_session_title`): name a conversation on its session header (`uc_ai_agent_sessions.title`). Front ends decide how a title is produced — an LLM summary of the first exchange, or the user typing one — the engine never sets it itself. Setting an existing title overwrites it, so this doubles as "rename"; pass `p_created_by` to restrict the update to the user who opened the session. `list_sessions` now returns `title`, making that cursor directly usable as a conversation list.
+- **Conversation feedback** (`uc_ai_agents_api.set_session_feedback`): record the end user's verdict on a conversation on its session header (`uc_ai_agent_sessions.feedback_rating` `up`/`down`, plus an optional `feedback_comment` and `feedback_at`). Front ends decide how and whether to ask; the engine never sets it itself. An existing rating is overwritten, so this doubles as "change my mind", and a null rating withdraws the feedback — rating, comment and timestamp are cleared together. An unrecognized rating is normalized to null rather than raising, so a newer front end can never hit the check constraint. `list_sessions` now returns all three columns, so quality can be reported on alongside token cost.
+
+  Note on `p_created_by` (both setters): a session opened from a background job has no APEX session, so its header records the **DB user**, not the end user. If you pass `APP_USER` against such a session, no row matches and the setter does not write. The setter writes a warning to the log, so you can find the cause. If you authorized the user yourself, pass `null`.
+
+Multi-Agent Systems:
+
+- **[Handoff agents](/products/uc-ai/docs/guides/multi-agent-systems/handoff/)** (`c_type_handoff`) are now fully implemented with tool-based transfers: the engine registers a temporary `transfer_to_<agent>` tool per handoff target, the AI transfers by calling it with a context summary (and optional reason), and the target agent answers the user directly. The hop at `max_handoffs` runs without transfer tools and must answer. Results include `final_agent_code`, `handoff_count`, `handoff_trail`, and `max_handoffs_reached`; transfer tool calls are persisted in the session message log. Handoff orchestration configs are now validated at `create_agent` time (targets must be existing active profile agents).
+- **Multi-level handoff routing**: `handoff_agents` entries accept an optional `can_transfer_to` array restricting each agent's outgoing transfer edges — build hierarchies like triage → product support → product technician where the entry agent never sees the deeper specialists. Without it, every agent may transfer to every other entry (full mesh, unchanged behavior).
+- **Multi-turn handoff conversations (sticky active agent)**: handoff agents now accept `p_follow_up_message`. A follow-up turn resumes with the agent that answered the previous turn, continuing its conversation history — and it keeps its transfer tools so it can hand off when the topic changes.
+- **Per-step execution checkpointing**: workflow, conversation, and handoff agents now write their state to `uc_ai_agent_executions.current_state` after every step/turn. Running executions can be monitored from other sessions, and failed or crashed executions keep their last known state for diagnosis (cleared automatically on success). `uc_ai_agents_api.get_execution_details` includes the checkpoint when present.
+- **Durable execution telemetry**: execution rows are now written in autonomous transactions (like Logger). They are visible immediately to other sessions and survive a rollback of the calling transaction, so failed executions and their token accounting are never lost. **Breaking**: an agent must be committed before it can be executed in the same session transaction — creating and executing an agent in one uncommitted transaction now raises a clear error.
+- **Input mapping engine rewrite**: `{$.path}` expressions are now resolved by walking the workflow state natively instead of reserializing and reparsing the full state via `APEX_JSON` for every expression — significantly faster for large workflows and loops. Mapped values are no longer capped at 32k characters (large step outputs like long LLM messages now flow through mappings intact). Resolution errors raise `-20455` instead of silently returning `NULL`; unresolvable paths still substitute an empty string as before.
+- Loop workflows now snapshot each iteration's state explicitly (guards against JSON DOM reference aliasing in `_loop_iteration_state`).
+
 ## v26.2
 
 To upgrade run `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.2).

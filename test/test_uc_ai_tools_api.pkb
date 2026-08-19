@@ -695,5 +695,131 @@ create or replace package body test_uc_ai_tools_api as
 
   end test_merge_tool_replaces_tags;
 
+  /*
+   * Regression: a p_tags array with case-variant / repeated values collapses
+   * to the same lowercased tag_name. Before the fix these were inserted blindly
+   * and collided on uc_ai_tool_tags_uk (tool_id, tag_name), raising ORA-00001
+   * and aborting the merge (leaving row locks that looked like a deploy
+   * "deadlock"). Tags must be de-duplicated case-insensitively instead.
+   */
+  procedure test_merge_tool_dedups_tags as
+    l_tool_id   uc_ai_tools.id%type;
+    l_schema    clob;
+    l_tag_count number;
+  begin
+    l_schema := '{
+      "type": "object",
+      "properties": {
+        "value": { "type": "string", "description": "A value" }
+      }
+    }';
+
+    -- 'Foo', 'foo' and 'FOO' all lower() to 'foo'; 'bar' is distinct.
+    -- This must not raise ORA-00001.
+    l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+      p_tool_code => gc_test_prefix || 'DEDUP_TAGS',
+      p_description => 'Tool with duplicate tags',
+      p_function_call => 'return tag_function(:parameters);',
+      p_json_schema => json_object_t.parse(l_schema),
+      p_created_by => gc_test_user,
+      p_tags => apex_t_varchar2('Foo', 'foo', 'FOO', 'bar')
+    );
+
+    -- Exactly two distinct tags survive: 'foo' and 'bar'
+    select count(*) into l_tag_count
+    from uc_ai_tool_tags
+    where tool_id = l_tool_id;
+
+    ut.expect(l_tag_count).to_equal(2);
+
+    select count(*) into l_tag_count
+    from uc_ai_tool_tags
+    where tool_id = l_tool_id and tag_name = 'foo';
+
+    ut.expect(l_tag_count).to_equal(1);
+  end test_merge_tool_dedups_tags;
+
+  /*
+   * Regression: re-running a deploy that merges the same tool with the SAME
+   * tags must be idempotent. On update the tags are deleted and re-inserted in
+   * one transaction; re-inserting the identical (tool_id, tag_name) keys must
+   * succeed and leave the tag set unchanged.
+   */
+  procedure test_merge_tool_same_tags_twice as
+    l_tool_id   uc_ai_tools.id%type;
+    l_schema    clob;
+    l_tag_count number;
+  begin
+    l_schema := '{
+      "type": "object",
+      "properties": {
+        "value": { "type": "string", "description": "A value" }
+      }
+    }';
+
+    -- First deploy: tags absent
+    l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+      p_tool_code => gc_test_prefix || 'SAME_TAGS',
+      p_description => 'First deploy',
+      p_function_call => 'return tag_function(:parameters);',
+      p_json_schema => json_object_t.parse(l_schema),
+      p_created_by => gc_test_user,
+      p_tags => apex_t_varchar2('alpha', 'beta')
+    );
+
+    -- Second deploy: identical tags already present
+    l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+      p_tool_code => gc_test_prefix || 'SAME_TAGS',
+      p_description => 'Second deploy',
+      p_function_call => 'return tag_function(:parameters);',
+      p_json_schema => json_object_t.parse(l_schema),
+      p_created_by => gc_test_user,
+      p_tags => apex_t_varchar2('alpha', 'beta')
+    );
+
+    select count(*) into l_tag_count
+    from uc_ai_tool_tags
+    where tool_id = l_tool_id;
+
+    ut.expect(l_tag_count).to_equal(2);
+  end test_merge_tool_same_tags_twice;
+
+  /*
+   * The per-call settings snapshot threads enable_tools explicitly; the global
+   * is only a fallback for direct callers. A stale/mutated global must not
+   * override the threaded value (re-entrancy: a nested agent flipping the
+   * global must not affect its caller's in-flight tool fetch).
+   */
+  procedure test_enable_tools_param_wins as
+    l_tool_id uc_ai_tools.id%type;
+    l_tools_array json_array_t;
+  begin
+    l_tool_id := uc_ai_tools_api.create_tool_from_schema(
+      p_tool_code => gc_test_prefix || 'ENABLE_PARAM',
+      p_description => 'Test enable_tools threading',
+      p_function_call => 'return ''Test result'';',
+      p_json_schema => json_object_t.parse('{"type": "object", "properties": {"message": {"type": "string", "description": "Test message"}}, "required": ["message"]}'),
+      p_created_by => gc_test_user
+    );
+
+    -- global disabled, threaded value enabled -> tools are returned
+    uc_ai.g_enable_tools := false;
+    l_tools_array := uc_ai_tools_api.get_tools_array(
+      p_provider     => uc_ai.c_provider_openai
+    , p_enable_tools => true
+    );
+    ut.expect(l_tools_array.get_size).to_be_greater_than(0);
+
+    -- global enabled, threaded value disabled -> no tools
+    uc_ai.g_enable_tools := true;
+    l_tools_array := uc_ai_tools_api.get_tools_array(
+      p_provider     => uc_ai.c_provider_openai
+    , p_enable_tools => false
+    );
+    ut.expect(l_tools_array.get_size).to_equal(0);
+
+    uc_ai.g_enable_tools := false;
+  end test_enable_tools_param_wins;
+
 end test_uc_ai_tools_api;
 /

@@ -1,48 +1,51 @@
 ---
 title: Installation
-description: Quick setup guide for UC Local APEX Dev environment
+description: How to install UC AI in your Oracle schema and set up your provider API keys.
 sidebar:
   order: 1
 ---
 
+import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
 ## Prerequisites
 
 - Oracle Database 12.2 or later
-- Oracle APEX (older versions are fine, this project uses some of the APIs)
+- Oracle APEX (old versions also work, because UC AI uses only some of the APEX APIs)
+- Outbound HTTPS access to your AI provider. On on-premises and self-managed databases, you must first configure network ACLs and a TLS wallet. See [Network Setup (ACL & Wallet)](/products/uc-ai/docs/guides/network-setup/).
 
 ## Installing UC AI
 
-UC logs some debug relevant information. If you don't have [Logger](https://github.com/OraOpenSource/Logger) installed it will log via the `apex_debug` package.
+UC AI writes debug information to a log. If you do not have [Logger](https://github.com/OraOpenSource/Logger) installed, UC AI logs through the `apex_debug` package.
 
 ### Option 1: GitHub release scripts
 
-For each new release of UC AI the release page in GitHub will contain scripts to install the UC AI package and its dependencies.
+The GitHub release page of each UC AI version contains scripts. These scripts install the UC AI packages and their dependencies.
 
 - `install_uc_ai_complete.sql` installs all UC AI objects
 - `install_uc_ai_complete_with_logger.sql` installs all UC AI objects and the [Logger](https://github.com/OraOpenSource/Logger) package
-- `upgrade_packages.sql` upgrades the UC AI packages. Most of the time only packages get modified. So for most releases you just need to run this script to upgrade to a newer version. Please still keep an eye on the [release notes](https://github.com/United-Codes/uc_ai/releases) to see if there are any changes that require you to run the complete installation script.
+- `upgrade_packages.sql` upgrades the UC AI packages. Most releases change only the packages. For these releases, run this script to get the new version. Read the [release notes](https://github.com/United-Codes/uc_ai/releases) also. A release can contain changes that need the complete installation script.
 
-Just run the necessary script in your SQL client to install the UC AI package and its dependencies.
+Run the script that you need in your SQL client. It installs the UC AI packages and their dependencies.
 
 ### Option 2: Install GitHub repository
 
-Either download the source code of the latest release from the [GitHub releases page](https://github.com/United-Codes/uc_ai/releases/) or clone the [GitHub repository](https://github.com/United-Codes/uc_ai):
+Download the source code of the latest release from the [GitHub releases page](https://github.com/United-Codes/uc_ai/releases/), or clone the [GitHub repository](https://github.com/United-Codes/uc_ai).
 
-Make sure you are on the **main branch** (not the development branch). Run this script to install the UC AI with any SQL client:
+Make sure that you are on the **main branch**, not the development branch. Then run this script in any SQL client:
 
 ```bash
 # inside the uc_ai directory
 sql ./install_uc_ai.sql
 ```
 
-There is also a `install_with_logger.sql` script that installs the UC AI with the Logger package.
+The `install_with_logger.sql` script installs UC AI together with the Logger package.
 
 ```bash
 # inside the uc_ai directory
 sql ./install_with_logger.sql
 ```
 
-Alternatively if you don't want the logger installed you can install it's "no op" (no operation) version which installs the necessary objects so that the packages compile but does not log anything.
+If you do not want Logger, install its "no op" (no operation) version instead. This version creates the objects that the UC AI packages need to compile. It writes no log entries.
 
 ```bash
 # inside the uc_ai directory
@@ -52,7 +55,7 @@ sql ./logger_install_no_op.sql
 
 ## Set up API Keys
 
-There are two ways to manage your API keys for the AI providers: Key function or APEX Web Credentials.
+You can manage your API keys for the AI providers in two ways: a key function, or APEX Web Credentials.
 
 ### Option 1: Key function
 
@@ -88,16 +91,17 @@ end uc_ai_get_key;
 
 ### Option 2: APEX Web Credentials
 
-You can also store your secret API keys with APEX Web Credentials. For this you have to have an APEX Workspace for the schema where UC AI is installed. Log in there and head to Workspace Utilities → Web Credentials ([guide with screenshots](/products/uc-ai/docs/help/create-oci-key/#create-apex-web-credential)). Check out the following guides on how to set up the web credentials:
+You can also store your secret API keys as APEX Web Credentials. This needs an APEX workspace for the schema that holds UC AI. Log in to that workspace. Then go to Workspace Utilities → Web Credentials ([guide with screenshots](/products/uc-ai/docs/help/create-oci-key/#create-apex-web-credential)). These guides show how to create the web credential of each provider:
 
 - [Anthropic](/products/uc-ai/docs/providers/anthropic/#creating-a-web-credential)
 - [Google](/products/uc-ai/docs/providers/google/#creating-a-web-credential)
+- [Mistral](/products/uc-ai/docs/providers/mistral/#creating-a-web-credential)
 - [OCI](/products/uc-ai/docs/providers/oci/#prerequisites)
 - [OpenAI](/products/uc-ai/docs/providers/openai/#creating-a-web-credential)
 - [OpenRouter](/products/uc-ai/docs/providers/openrouter/#creating-a-web-credential)
 - [xAI](/products/uc-ai/docs/providers/xai/#creating-a-web-credential)
 
-Now before calling any UC AI functions you have to set the package variable for the provider you want to use to the static ID of your web credential. For example if you created a web credential with the static ID `OPENAI` for OpenAI you would run this code:
+Before you call a UC AI function, set the package variable of your provider to the static ID of the web credential. For example, an OpenAI web credential with the static ID `OPENAI` needs this code:
 
 ```sql
 uc_ai_openai.g_apex_web_credential := 'OPENAI';
@@ -126,6 +130,48 @@ END;
 
 ## Upgrades
 
-Most of the time you just need to run the `upgrade_packages.sql` script to upgrade to a newer version of UC AI. This script will only upgrade the packages that have changed since the last version.
+For most versions, run only the `upgrade_packages.sql` script. It upgrades the packages that changed since the last version.
 
-Please still keep an eye on the [release notes](https://github.com/United-Codes/uc_ai/releases) to see if there are any changes that require you to run the complete installation script.
+Read the [release notes](https://github.com/United-Codes/uc_ai/releases) also. A release can contain changes that need the complete installation script.
+
+## Next steps
+
+UC AI is now installed. Read these pages next:
+
+<CardGrid>
+  <LinkCard
+    title="Network Setup (ACL & Wallet)"
+    description="Configure Oracle network ACLs and a TLS wallet so calls to providers can go through."
+    href="/products/uc-ai/docs/guides/network-setup/"
+  />
+  <LinkCard
+    title="Quickstart"
+    description="Go from a plain text call to your first tool-calling agent in ~10 minutes."
+    href="/products/uc-ai/docs/guides/quickstart/"
+  />
+  <LinkCard
+    title="Use Cases"
+    description="See what you can build with UC AI: classification, document Q&A, chatbots, and more."
+    href="/products/uc-ai/docs/guides/use-cases/"
+  />
+  <LinkCard
+    title="AI Providers"
+    description="Learn how to pick and switch between OpenAI, Anthropic, Google, and others."
+    href="/products/uc-ai/docs/guides/providers/"
+  />
+  <LinkCard
+    title="Tools / Functions"
+    description="Let the model call your PL/SQL functions to read and act on your data."
+    href="/products/uc-ai/docs/guides/tools/"
+  />
+  <LinkCard
+    title="Structured Output"
+    description="Force responses into a JSON schema you can insert straight into tables."
+    href="/products/uc-ai/docs/guides/structured_output/"
+  />
+  <LinkCard
+    title="Agentic AI"
+    description="Build agents and multi-agent workflows that reason and take action."
+    href="/products/uc-ai/docs/guides/agentic-ai/"
+  />
+</CardGrid>

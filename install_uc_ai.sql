@@ -24,6 +24,7 @@ PROMPT - Installing utility functions...
 @@src/dependencies/key_function.sql
 
 PROMPT - Installing API package specifications...
+@@src/packages/uc_ai_settings.pks
 @@src/packages/uc_ai_tools_api.pks
 @@src/packages/uc_ai_prompt_profiles_api.pks
 @@src/packages/uc_ai_message_api.pks
@@ -39,6 +40,7 @@ PROMPT - Installing API package specifications...
 PROMPT - Installing AI provider package specifications...
 @@src/packages/uc_ai_anthropic.pks
 @@src/packages/uc_ai_google.pks
+@@src/packages/uc_ai_mistral.pks
 @@src/packages/uc_ai_oci.pks
 @@src/packages/uc_ai_ollama.pks
 @@src/packages/uc_ai_openai.pks
@@ -48,6 +50,7 @@ PROMPT - Installing AI provider package specifications...
 
 PROMPT Installing package bodies (implementations)...
 PROMPT - Installing API package bodies...
+@@src/packages/uc_ai_settings.pkb
 @@src/packages/uc_ai_tools_api.pkb
 @@src/packages/uc_ai_prompt_profiles_api.pkb
 @@src/packages/uc_ai_message_api.pkb

@@ -7,7 +7,9 @@ sidebar:
 
 ## Parameters
 
-The `uc_ai.generate_text()` function has two overloaded signatures:
+The `uc_ai.generate_text()` function has four overloaded signatures. Two of them
+read the configuration from the package globals. The other two take a `p_config`
+JSON object instead. See [Config-driven variants](#config-driven-variants-p_config).
 
 ### Function Signatures
 
@@ -36,6 +38,32 @@ FUNCTION generate_text (
 ) RETURN JSON_OBJECT_T;
 ```
 
+#### Signatures 3 & 4: Config-driven
+
+The same two shapes, each with an extra `p_config` parameter placed right after
+`p_model`:
+
+```sql
+FUNCTION generate_text (
+  p_user_prompt           IN CLOB,
+  p_system_prompt         IN CLOB DEFAULT NULL,
+  p_provider              IN provider_type,
+  p_model                 IN model_type,
+  p_config                IN JSON_OBJECT_T,
+  p_max_tool_calls        IN PLS_INTEGER DEFAULT NULL,
+  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL
+) RETURN JSON_OBJECT_T;
+
+FUNCTION generate_text (
+  p_messages              IN JSON_ARRAY_T,
+  p_provider              IN provider_type,
+  p_model                 IN model_type,
+  p_config                IN JSON_OBJECT_T,
+  p_max_tool_calls        IN PLS_INTEGER DEFAULT NULL,
+  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL
+) RETURN JSON_OBJECT_T;
+```
+
 ### Parameter Reference
 
 #### For Signature 1 (Individual Prompts)
@@ -43,11 +71,11 @@ FUNCTION generate_text (
 | Parameter                | Type            | Required | Description                                                                      |
 | ------------------------ | --------------- | -------- | -------------------------------------------------------------------------------- |
 | `p_user_prompt`          | `CLOB`          | Yes      | The main prompt from the user. This is the primary input for the AI model.       |
-| `p_system_prompt`        | `CLOB`          | No       | System-level instructions that guide the AI's behavior and response style.       |
+| `p_system_prompt`        | `CLOB`          | No       | System-level instructions that guide the behavior and response style of the AI.       |
 | `p_provider`             | `provider_type` | Yes      | AI provider to use. See `uc_ai` spec for constants.                              |
 | `p_model`                | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants.   |
 | `p_max_tool_calls`       | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).          |
-| `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. If provided, response will conform to schema. |
+| `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. The response then conforms to this schema. |
 
 #### For Signature 2 (Message Array)
 
@@ -57,7 +85,7 @@ FUNCTION generate_text (
 | `p_provider`             | `provider_type` | Yes      | AI provider to use. See `uc_ai` spec for constants.                                  |
 | `p_model`                | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants.       |
 | `p_max_tool_calls`       | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).              |
-| `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. If provided, response will conform to schema.     |
+| `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. The response then conforms to this schema.     |
 
 ### Parameter Details
 
@@ -75,7 +103,7 @@ l_result := uc_ai.generate_text(
 
 #### p_system_prompt (Optional - Signature 1)
 
-System-level instructions that define the AI's role, behavior, and response style. This helps shape how the AI interprets and responds to user prompts.
+System-level instructions that define the role, behavior, and response style of the AI. They shape how the AI reads a user prompt and how it answers.
 
 ```sql
 -- Professional assistant
@@ -97,7 +125,7 @@ l_result := uc_ai.generate_text(
 
 #### p_messages (Required - Signature 2)
 
-A pre-constructed conversation in the form of a `JSON_ARRAY_T` containing message objects. This allows you to provide a complete conversation history or continue from a previous conversation. Each message must follow the standard message format with `role` and `content` properties.
+A conversation that you build yourself, as a `JSON_ARRAY_T` of message objects. With it, you can give a complete conversation history, or continue an earlier conversation. Each message must follow the standard message format, with the `role` and `content` properties.
 
 ```sql
 DECLARE
@@ -140,17 +168,17 @@ END;
 ```
 
 **Message Structure:**
-Each message in the array should have this structure:
+Each message in the array must have this structure:
 
 - `role`: One of `"system"`, `"user"`, `"assistant"`, or `"tool"`
 - `content`: The message content (can be `null` for assistant messages with tool calls)
 - `tool_calls`: (Optional) Array of tool calls for assistant messages
-- `tool_call_id`: (Required for tool messages) ID of the tool call being responded to
+- `tool_call_id`: (Required for tool messages) the ID of the tool call that this message answers
 
 **Use Cases for Message Array:**
 
 - Continue previous conversations
-- Implement conversation memory/history
+- Implement conversation memory and history
 - Fine-tune conversation context
 - Handle complex multi-turn interactions
 - Process conversation logs or transcripts
@@ -163,7 +191,7 @@ Each message in the array should have this structure:
 
 - Starting a new conversation
 - Making simple, single-turn requests
-- You want the function to handle message array construction
+- You want the function to build the message array
 
 **Use Signature 2 (Message Array)** when:
 
@@ -194,7 +222,7 @@ END;
 
 This example shows how to continue a conversation using the message array signature.
 
-Because UC AI does two-way conversions between the provider-specific message formats and the standard format we can actually change the provider and model in the middle of a conversation, allowing for flexibility in AI interactions.
+UC AI converts in both directions between the standard message format and the format of each provider. You can therefore change the provider and the model in the middle of a conversation.
 
 ```sql
 declare
@@ -308,13 +336,191 @@ END IF;
 
 #### p_response_json_schema (Optional - Both Signatures)
 
-You can provide a custom JSON schema and force the AI to answer in this format. This is useful for ensuring consistent and predictable output structures, especially when using that output in automated systems or storing the results.
+You can give a custom JSON schema and force the AI to answer in this format. The output structure is then consistent and predictable. This matters most when an automated system reads the output, or when you store the result.
 
 [See Structured Output](/products/uc-ai/docs/guides/structured_output) for more information and usage examples.
 
+## Config-driven variants (p_config)
+
+By default, `generate_text` reads its configuration from the `uc_ai` globals and
+the provider package globals. This configuration holds the base URL, the
+credential, the reasoning level, the tool tags, and the provider-specific
+options. Set these globals first, then call `generate_text`.
+
+The `p_config` overloads take all of this configuration as one JSON object,
+**without a change to the globals**. They exist for another library or package
+that calls UC AI directly and self-contained:
+
+- The call neither reads nor changes the globals. It takes its configuration only
+  from `p_config`.
+- The call is safe for concurrent and re-entrant use. Each call owns its
+  configuration for its whole duration. A nested call, for example an agent that
+  runs as a tool, cannot disturb it.
+- A key that you omit falls back to the framework default, that is the value that
+  `uc_ai.reset_globals` restores. It does **not** fall back to the current global
+  value.
+
+`p_config` takes the same JSON structure as
+[`uc_ai_prompt_profiles_api.apply_model_config`](/products/uc-ai/docs/guides/prompt-profiles).
+It holds root-level keys such as `g_base_url`, `g_enable_tools`, `g_tool_tags`,
+`g_reasoning_level`, `g_max_tool_calls`, `g_apex_web_credential`, and
+`g_extra_headers`. It also takes an optional nested object with the name of the
+provider, for the provider-specific settings. An unknown key raises `ORA-20503`.
+An unknown provider raises `ORA-20306`.
+
+```sql
+DECLARE
+  l_config JSON_OBJECT_T;
+  l_result JSON_OBJECT_T;
+BEGIN
+  l_config := JSON_OBJECT_T('{
+    "g_enable_tools": true,
+    "g_tool_tags": ["timetracking"],
+    "g_apex_web_credential": "MY_OPENAI_CRED",
+    "openai": {
+      "g_use_responses_api": false,
+      "g_reasoning_effort": "low"
+    }
+  }');
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Clock me in to the marketing project.',
+    p_provider    => uc_ai.c_provider_openai,
+    p_model       => uc_ai_openai.c_model_gpt_4o_mini,
+    p_config      => l_config
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+For structured output in a config-driven call, pass the schema in
+`p_response_json_schema`. UC AI ignores a `response_schema` key inside `p_config`.
+
+## Custom HTTP headers
+
+Set `uc_ai.g_extra_headers` before the call to send extra HTTP headers with every
+provider REST request. Examples are a tenant ID, a tracing header, or a header
+that an API gateway needs:
+
+```sql
+BEGIN
+  uc_ai.g_extra_headers('X-Tenant-Id') := 'acme';
+  uc_ai.g_extra_headers('X-Trace-Id')  := 'abc123';
+
+  -- next generate_text / generate_embeddings call sends both headers
+END;
+/
+```
+
+With the config-driven overloads, pass them as a JSON object under the
+`g_extra_headers` key instead:
+
+```json
+{ "g_extra_headers": { "X-Tenant-Id": "acme", "X-Trace-Id": "abc123" } }
+```
+
+UC AI appends your headers after its own headers for `Content-Type`,
+authentication, and the provider version. Do not use a name that the framework
+already sets. UC AI sends such a header in addition to its own header, and not
+instead of it. `uc_ai.reset_globals` clears `g_extra_headers`, the same as every
+other global.
+
+## Custom request-body properties
+
+Set `uc_ai.g_extra_body` to a JSON object to send a provider parameter that the
+SDK does not wrap. Examples are `top_p`, `stop_sequences`, `service_tier`,
+`metadata`, and the Anthropic `cache_control`. UC AI merges the top-level keys of
+this object into the outgoing request body:
+
+```sql
+BEGIN
+  uc_ai.g_extra_body := json_object_t('{"top_p": 0.9, "stop_sequences": ["END"]}');
+
+  -- next generate_text call adds top_p and stop_sequences to the request body
+END;
+/
+```
+
+With the config-driven overloads, pass the same object under the `g_extra_body`
+key:
+
+```json
+{ "g_extra_body": { "top_p": 0.9, "stop_sequences": ["END"] } }
+```
+
+Notes:
+
+- The shape is **provider-specific**. Write each key exactly as the API of the
+  target provider expects it. A key here **overwrites** the value of the
+  framework. You can therefore also change a parameter that the SDK sets, for
+  example the Anthropic temperature.
+- A nested object replaces the whole object. There is no deep merge.
+- The "core" keys that define the conversation are **protected**: `model`,
+  `messages`, `input`, `instructions`, `system`, and `tools`. UC AI ignores a
+  value for these keys in `g_extra_body` and writes it to the log. This escape
+  hatch therefore cannot corrupt the request that the framework built. Use
+  `p_model`, `p_messages`, and `g_provider_tools` for these values.
+- For OCI, `g_extra_body` merges into the `chatRequest` object and not into the
+  outer request body. OCI keeps its generation parameters in `chatRequest`.
+- `uc_ai.reset_globals` clears `g_extra_body`.
+
+## Provider (server-side) tools
+
+You can also enable the **server-side tools** of a provider, next to the local
+PL/SQL [tools](/products/uc-ai/docs/guides/tools/) that you register. The provider
+runs these tools, not your database. Examples are Anthropic web search and the
+OpenAI Responses API web search. Set `uc_ai.g_provider_tools` to a JSON array of
+provider-native tool definitions. UC AI appends them to the `tools` array of the
+request without a change:
+
+```sql
+BEGIN
+  -- Anthropic server-side web search
+  uc_ai.g_provider_tools := json_array_t(
+    '[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}]'
+  );
+
+  DECLARE
+    l_result json_object_t;
+  BEGIN
+    l_result := uc_ai.generate_text(
+      p_user_prompt => 'What is the latest stable version of Oracle APEX?'
+    , p_provider    => uc_ai.c_provider_anthropic
+    , p_model       => uc_ai_anthropic.c_model_claude_4_5_haiku
+    );
+  END;
+END;
+/
+```
+
+For the OpenAI Responses API (the default OpenAI path):
+
+```json
+{ "g_provider_tools": [ { "type": "web_search_preview" } ] }
+```
+
+Notes:
+
+- UC AI passes each definition **without a change**. You must match the exact
+  schema of the provider, and you must enable the tool in your provider account.
+  The provider documentation gives the details:
+  [Anthropic tool use](https://platform.claude.com/docs/en/agents-and-tools/tool-use/overview),
+  [OpenAI tools](https://developers.openai.com/api/docs/guides/tools-web-search).
+- UC AI sends provider tools **also when local tools are disabled**
+  (`g_enable_tools = false`). When you set both, UC AI sends both.
+- The provider runs these tools and returns the results inline. UC AI never calls
+  them locally. The result blocks in the response, such as `server_tool_use` and
+  `web_search_tool_result`, pass through the conversation. They do not count as
+  local tool calls.
+- UC AI appends a Google server tool, for example `{"googleSearch": {}}`, next to
+  the function-declarations entry. The Gemini API expects this position.
+- `uc_ai.reset_globals` clears `g_provider_tools`.
+
 ## Return Object Overview
 
-The `uc_ai.generate_text()` function returns a comprehensive `JSON_OBJECT_T` containing detailed information about the AI interaction, including the conversation history, usage statistics, and metadata about the AI model and provider used.
+The `uc_ai.generate_text()` function returns a `JSON_OBJECT_T` with information about the AI interaction. This object holds the conversation history, the usage statistics, and metadata about the model and the provider.
 
 ### Structure
 
@@ -348,7 +554,7 @@ The return object contains the following properties:
 | `finish_reason`     | `VARCHAR2`      | Completion reason: `stop`, `tool_calls`, `length`, `content_filter`, `max_tool_calls_exceeded`       |
 | `usage`             | `JSON_OBJECT_T` | Token usage statistics with `prompt_tokens`, `completion_tokens`, and `total_tokens`                 |
 | `tool_calls_count`  | `NUMBER`        | Total number of tool calls executed during the conversation                                          |
-| `model`             | `VARCHAR2`      | The AI model used (e.g., `gpt-4o-mini`, `claude-3-5-haiku`)                                          |
+| `model`             | `VARCHAR2`      | The AI model used (for example `gpt-4o-mini` or `claude-3-5-haiku`)                                  |
 | `provider`          | `VARCHAR2`      | AI provider identifier (`openai`, `anthropic`, `google`)                                             |
 
 ### Accessing Return Values
@@ -486,9 +692,9 @@ The `finish_reason` indicates how the AI conversation ended:
 | ------------------------- | ---------------------------------------------- |
 | `stop`                    | The model completed its response naturally     |
 | `tool_calls`              | The response ended with tool calls             |
-| `length`                  | Response was truncated due to max tokens limit |
-| `content_filter`          | Response was filtered due to content policy    |
-| `max_tool_calls_exceeded` | Maximum number of tool calls was reached       |
+| `length`                  | The maximum token limit truncated the response |
+| `content_filter`          | The content policy filtered the response        |
+| `max_tool_calls_exceeded` | The conversation reached the maximum number of tool calls |
 
 #### Handling Different Finish Reasons
 
@@ -526,4 +732,4 @@ END;
 
 ### Error Handling
 
-The `uc_ai.generate_text` function will raise an exception if the AI provider returns an error or if the request fails.
+If the AI provider returns an error, or if the request fails, `uc_ai.generate_text` raises an exception.

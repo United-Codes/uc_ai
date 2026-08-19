@@ -1,0 +1,329 @@
+---
+title: Handoff (Transfer of Control)
+description: Let agents transfer a conversation to the right specialist via transfer tools
+sidebar:
+  order: 35
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**The handoff pattern lets agents pass control of a conversation to each other. The agent that receives the handoff answers the user directly. It does not report back to the agent that transferred.**
+
+<Aside type="tip" title="When to use this">
+Choose handoff when exactly one specialist must own the answer. An example is a support triage desk that routes to a product, shipping, or billing expert. If a central agent must *combine* results from several specialists into one answer, use the [orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/) instead.
+</Aside>
+
+## How it works
+
+A handoff uses a tool. This is the same mechanism as the OpenAI Swarm and Agents SDK:
+
+1. UC AI runs the configured initial agent, for example a triage agent
+2. For every other agent in the handoff mesh, UC AI registers a temporary `transfer_to_<agent>` tool for that call. The agent keeps its own tools also
+3. When the AI decides that another agent must take over, it calls the transfer tool with a `context` summary
+4. UC AI ends the turn of that agent and runs the target agent. It passes the original input, the transfer context, and the conversation trail
+5. The target agent can answer, or it can transfer again. Every hop sees the transfer tools of all *other* agents in the mesh
+6. When an agent answers without a call to a transfer tool, its answer is final
+
+`max_handoffs` bounds the length of the chain. The hop that reaches the cap runs *without* transfer tools, so it must answer. The chain therefore ends with an answer and not with an error.
+
+### Handoff vs. orchestrator
+
+| | Orchestrator | Handoff |
+|---|---|---|
+| Control flow | Central agent calls specialists and gets their results back | Control moves to the specialist, and it answers directly |
+| Final answer | The orchestrator writes it | The last agent in the chain writes it |
+| Specialist tools | Specialists run as sub-agents with their own tools | The same, and each hop also gets the transfer tools of the mesh |
+| Good for | Combining multiple sources into one plan | Routing to the one correct expert |
+
+## Example: customer support desk
+
+A triage agent is the single point of entry. It hands off to a product specialist, a shipping specialist, and a customer account specialist. The product specialist has its own catalog lookup tool.
+
+### Step 1: Create prompt profiles
+
+In a real system, each specialist queries real data with [tools](/products/uc-ai/docs/guides/tools/). This example holds the shipping data and the customer data in the system prompts, to stay simple. The product agent uses a real tool.
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+BEGIN
+  -- Triage: routes, answers only smalltalk itself
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'support_triage_profile',
+    p_description           => 'Support triage agent',
+    p_system_prompt_template => 'You are the triage agent of an online shop''s customer support.
+You can transfer the conversation to specialist agents using the available transfer tools.
+For any question about products, shipping, or customer accounts you MUST transfer to the
+matching specialist - never answer such questions yourself.
+Only greetings and smalltalk you answer yourself, briefly and politely.',
+    p_user_prompt_template  => '{prompt}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_5_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  -- Product specialist: uses a catalog lookup tool (register it via
+  -- uc_ai_tools_api with the tag "product_catalog" beforehand)
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'support_product_profile',
+    p_description           => 'Product details specialist',
+    p_system_prompt_template => 'You are the product specialist of an online shop.
+Use the product details tool to look up product facts and answer concisely.',
+    p_user_prompt_template  => 'Customer question: {prompt}
+Triage notes: {handoff_context}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_5_mini,
+    p_model_config_json     => '{"g_enable_tools": true, "g_tool_tags": ["product_catalog"], "g_max_tool_calls": 3}',
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  -- Shipping specialist
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                  => 'support_shipping_profile',
+    p_description           => 'Shipping specialist',
+    p_system_prompt_template => 'You are the shipping specialist. Shipping rules:
+- Standard: 4 business days, $4.99
+- Express: 1 business day, $19.99
+- Orders over $100 ship free (standard)
+Answer concisely with exact numbers.',
+    p_user_prompt_template  => 'Customer question: {prompt}
+Triage notes: {handoff_context}',
+    p_provider              => uc_ai.c_provider_openai,
+    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_status                => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+<Aside type="note">
+  The engine passes three input parameters to every hop after the first one.
+  `handoff_context` is the summary of the transferring agent. `handoff_from` is
+  the code of the transferring agent. `conversation_history` is the trail of
+  earlier agent answers, in TOON format. A specialist uses these values through
+  the `{handoff_context}`, `{handoff_from}`, and `{conversation_history}`
+  placeholders in its templates. UC AI ignores a parameter that a template does
+  not use.
+</Aside>
+
+### Step 2: Create the profile agents
+
+Every agent in a handoff mesh must be an **active profile agent**.
+
+```sql
+DECLARE
+  l_agent_id NUMBER;
+BEGIN
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'support_triage',
+    p_description         => 'Support triage agent',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'support_triage_profile',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'support_product',
+    p_description         => 'Product details specialist',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'support_product_profile',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'support_shipping',
+    p_description         => 'Shipping specialist',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'support_shipping_profile',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+
+  COMMIT; -- agents must be committed before the handoff agent references them
+END;
+/
+```
+
+### Step 3: Create the handoff agent
+
+The AI sees the `description` of each entry on its transfer tool. Write this description as a routing instruction. Include the triage agent in `handoff_agents`, so that a specialist can transfer back.
+
+```sql
+DECLARE
+  l_handoff_id NUMBER;
+  l_config     CLOB;
+BEGIN
+  l_config := '{
+    "pattern_type": "handoff",
+    "initial_agent_code": "support_triage",
+    "handoff_agents": [
+      {"agent_code": "support_triage",   "description": "Triage and general support - transfer back for questions outside your specialty"},
+      {"agent_code": "support_product",  "description": "Product details: specs, prices, availability of catalog products"},
+      {"agent_code": "support_shipping", "description": "Shipping: options, costs, delivery times"}
+    ],
+    "max_handoffs": 3
+  }';
+
+  l_handoff_id := uc_ai_agents_api.create_agent(
+    p_code                 => 'customer_support',
+    p_description          => 'Customer support entry point',
+    p_agent_type           => uc_ai_agents_api.c_type_handoff,
+    p_orchestration_config => l_config,
+    p_status               => uc_ai_agents_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+### Step 4: Execute
+
+```sql
+DECLARE
+  l_result json_object_t;
+BEGIN
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'customer_support',
+    p_input_parameters => json_object_t('{"prompt": "How fast is your fastest shipping option?"}'),
+    p_session_id       => uc_ai_agents_api.generate_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE('Answer: '      || l_result.get_clob('final_message'));
+  DBMS_OUTPUT.PUT_LINE('Answered by: ' || l_result.get_string('final_agent_code'));
+  DBMS_OUTPUT.PUT_LINE('Handoffs: '    || l_result.get_number('handoff_count'));
+END;
+/
+```
+
+The triage agent recognizes a shipping question, calls `transfer_to_support_shipping` with a context summary, and the shipping specialist answers the user directly.
+
+## Config reference
+
+| Field                | Type   | Description                                                                                                        |
+| -------------------- | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| `pattern_type`       | String | Must be `"handoff"`                                                                                                 |
+| `initial_agent_code` | String | Agent that receives every new conversation (must be an active profile agent)                                       |
+| `handoff_agents`     | Array  | Transfer targets: `{"agent_code", "description", "can_transfer_to"?}`                                              |
+| `can_transfer_to`    | Array  | Optional for each entry: the agent codes that this agent can transfer to. Without it, the agent can transfer to every other entry (a full mesh) |
+| `max_handoffs`       | Number | Maximum transfers per turn (default 3). The hop at the cap runs without transfer tools                             |
+| `history_management` | Object | Optional trail trimming: `{"strategy": "sliding_window"\|"summarize"\|"full", "max_messages": 20}`                 |
+
+## Multi-level routing
+
+`can_transfer_to` restricts the outgoing edges of each agent. With it, you can
+build a hierarchy. The entry agent then sees only the department level, and each
+department delegates down to its own specialists:
+
+```
+Customer Service Agent
+├── Product Support ──────┬── Product A Technician
+│                         └── Product B Technician
+├── Shipping & Returns ───── Return Policy Specialist
+└── Customer Details
+```
+
+```json
+{
+  "pattern_type": "handoff",
+  "initial_agent_code": "support_triage",
+  "handoff_agents": [
+    {"agent_code": "support_triage",   "description": "Triage and general support",
+     "can_transfer_to": ["support_product", "support_shipping", "support_customer"]},
+    {"agent_code": "support_product",  "description": "Products: specs, prices, technical problems",
+     "can_transfer_to": ["tech_product_a", "tech_product_b", "support_triage"]},
+    {"agent_code": "support_shipping", "description": "Shipping, delivery, returns",
+     "can_transfer_to": ["return_policy", "support_triage"]},
+    {"agent_code": "support_customer", "description": "Customer accounts and orders",
+     "can_transfer_to": ["support_triage"]},
+    {"agent_code": "tech_product_a",   "description": "Technical problems with Product A",
+     "can_transfer_to": ["support_triage"]},
+    {"agent_code": "tech_product_b",   "description": "Technical problems with Product B",
+     "can_transfer_to": ["support_triage"]},
+    {"agent_code": "return_policy",    "description": "Return window, fees, refunds",
+     "can_transfer_to": ["support_triage"]}
+  ],
+  "max_handoffs": 5
+}
+```
+
+A technical question now travels from triage to product support to the
+technician. The technician answers the user directly. Every level keeps a
+back-edge to triage, so the conversation never stops inside a specialist. UC AI
+validates the edges at `create_agent` time. Each `can_transfer_to` code must name
+another `handoff_agents` entry.
+
+## Multi-turn conversations
+
+A handoff agent supports a follow-up message with a **sticky active agent**. The
+next user message goes to the agent that answered the previous turn. This agent
+keeps its transfer tools. When the topic changes, it can hand off again.
+
+```sql
+DECLARE
+  l_result     json_object_t;
+  l_session_id VARCHAR2(100);
+BEGIN
+  l_session_id := uc_ai_agents_api.generate_session_id;
+
+  -- Turn 1: routed triage -> shipping specialist
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'customer_support',
+    p_input_parameters => json_object_t('{"prompt": "How much does standard shipping cost?"}'),
+    p_session_id       => l_session_id
+  );
+
+  -- Turn 2: resumes directly with the shipping specialist (no re-routing)
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code        => 'customer_support',
+    p_follow_up_message => 'And how much is the express option?',
+    p_session_id        => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+The resumed agent continues its own conversation history from the previous
+turn. If it transfers, the receiving agent gets the follow-up message in its
+`prompt` parameter, with the usual `handoff_context`. If the mesh no longer holds
+the previous final agent, the turn falls back to the initial agent.
+
+## Result fields
+
+A handoff run returns these fields, next to the standard fields `final_message`, `execution_id`, and `status`:
+
+| Field                  | Description                                                    |
+| ---------------------- | -------------------------------------------------------------- |
+| `final_agent_code`     | The agent that produced the final answer                              |
+| `handoff_count`        | Number of transfers in this turn                                      |
+| `handoff_trail`        | One array entry for each transfer: `{hop, from_agent, to_agent, reason?, context}` |
+| `conversation_history` | Array of `{agent, response}` for every hop                            |
+| `max_handoffs_reached` | `true` when the chain reached `max_handoffs`                          |
+
+## Session tracking
+
+Each hop runs as a child execution under the handoff wrapper. The full chain is therefore visible in `uc_ai_agent_executions`, through `parent_execution_id`. The transfer tool calls appear in the `uc_ai_agent_messages` log, with `role = 'tool_call'` and a `tool_name` like `transfer_to_%`. UC AI records the token usage on the hop executions, and totals it on the session header. The wrapper itself reports zero tokens of its own.
+
+### Message log at a glance
+
+The [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript records the whole chain: the user question, each transfer tool call, and the answer of the specialist. The `transfer_to_*` value in `tool_name` names the transfer *target*. `agent_code` names the *producer* of each row, so you can see which specialist spoke.
+
+| seq | role          | agent_code             | tool_name                     | content                          |
+| --- | ------------- | ---------------------- | ----------------------------- | -------------------------------- |
+| 1   | `user`        | *(null)*               |                               | `Where is my order #12345?`      |
+| 2   | `tool_call`   | `triage_agent`         | `transfer_to_shipping_agent`  |                                  |
+| 3   | `tool_result` | `triage_agent`         | `transfer_to_shipping_agent`  | `Transferred to shipping_agent`  |
+| 4   | `assistant`   | `shipping_agent`       |                               | `Your order shipped yesterday...` |
+
+## Tips
+
+- **Descriptions are routing rules**: the `description` in `handoff_agents` becomes the description of the transfer tool. Write it as an instruction for the moment to transfer.
+- **Tell the entry agent to transfer**: instruct the triage agent to never answer a specialist question itself. Without this instruction, a capable model guesses an answer instead of a transfer.
+- **Tell mid-level agents to delegate down**: in a hierarchy, instruct each department agent to transfer a technical question to its specialists. An example instruction is "if transfer tools are available and the problem is technical, transfer to the matching technician".
+- **Use a capable model for the entry agent**: the triage decision is a tool-calling task. A small model transfers less reliably.
+- **Always give a back-edge**: give every specialist a `can_transfer_to` edge back to the entry agent. A conversation then cannot stop outside the scope of an agent.
+- **Specialists keep their tools**: UC AI merges the transfer tools with the own tool configuration of the agent. A specialist can therefore read data *and* transfer back.
+- **Loops are bounded, not detected**: a reverse edge makes an A→B→A loop possible inside one turn. `max_handoffs` caps this loop, and the last hop must answer.

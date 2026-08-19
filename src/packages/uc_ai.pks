@@ -12,8 +12,8 @@ as
   * https://www.united-codes.com
   */
 
-  c_version     constant varchar2(16 char) := '26.2';
-  c_version_num constant number := 20260200;
+  c_version     constant varchar2(16 char) := '26.3';
+  c_version_num constant number := 20260300;
 
   subtype provider_type is varchar2(64 char);
   c_provider_openai     constant provider_type := 'openai';
@@ -23,7 +23,8 @@ as
   c_provider_oci        constant provider_type := 'oci';
   c_provider_xai        constant provider_type := 'xai';
   c_provider_openrouter constant provider_type := 'openrouter';
-  
+  c_provider_mistral    constant provider_type := 'mistral';
+
   -- not a real provider, but usable for any provider that supports Responses API
   c_provider_responses_api constant provider_type := 'responses_api';
 
@@ -39,6 +40,30 @@ as
   -- general global settings
   g_base_url varchar2(4000 char);
 
+  -- extra HTTP request headers sent with every provider REST request,
+  -- appended after the framework's base headers (Content-Type, auth, ...)
+  -- e.g. uc_ai.g_extra_headers('X-Tenant-Id') := 'acme';
+  type t_extra_headers is table of varchar2(4000 char) index by varchar2(255 char);
+  -- @dblinter ignore(g-9105): public package-global collection, g_ prefix is intended (not a local var)
+  g_extra_headers t_extra_headers;
+
+  -- extra top-level JSON properties shallow-merged into every provider request
+  -- body, for parameters the SDK does not wrap (e.g. top_p, stop_sequences,
+  -- service_tier, metadata, Anthropic cache_control). Applied after the
+  -- framework's own keys but BEFORE messages/model are added, so those reserved
+  -- keys cannot be clobbered. Top-level keys override; nested objects replace
+  -- wholesale. e.g. uc_ai.g_extra_body := json_object_t('{"top_p":0.9}');
+  -- @dblinter ignore(g-9105): public package-global, g_ prefix is intended (not a local var)
+  g_extra_body json_object_t;
+
+  -- raw, provider-native tool definitions appended verbatim to the request's
+  -- `tools` array. These are executed server-side by the provider, NOT locally,
+  -- so they are sent as-is with no framework wrapping. e.g.
+  --   Anthropic:         {"type":"web_search_20250305","name":"web_search"}
+  --   OpenAI Responses:  {"type":"web_search_preview"}
+  -- @dblinter ignore(g-9105): public package-global, g_ prefix is intended (not a local var)
+  g_provider_tools json_array_t;
+
   -- reasoning level constants
   c_reasoning_level_low    constant varchar2(10 char) := 'low';
   c_reasoning_level_medium constant varchar2(10 char) := 'medium';
@@ -52,6 +77,13 @@ as
   g_enable_tools boolean := false;
   g_tool_tags apex_t_varchar2;
   g_max_tool_calls pls_integer;
+  -- Programmatic tool calling ("code mode"): when true (and tools are enabled),
+  -- generate_text also offers the uc_ai__run_code meta-tool, letting the model
+  -- author a JS program that orchestrates the other tools in-database via Oracle
+  -- MLE, returning only its final result. Opt-in per call and requires the MLE
+  -- sandbox from scripts/install_ptc_sandbox.sql (23ai+): when the model calls the
+  -- meta-tool without it, the run fails with a clear "sandbox not installed" error.
+  g_enable_programmatic_tools boolean := false;
 
   -- global settings for APEX Web Credentials
   g_apex_web_credential varchar2(255 char);
@@ -73,6 +105,20 @@ as
 
   -- internal use only
   g_provider_override varchar2(4000 char);
+
+  -- Execution context (internal use only; set by the agent layer around a run).
+  -- generate_text runs (and their tool-calling loops) originate deep below the
+  -- agent layer, where the calling agent/user is otherwise unknown. The agent
+  -- layer publishes this context here so build_from_globals can snapshot it into
+  -- the per-call settings record and the per-tool-call hook can attribute a tool
+  -- call to its agent and caller. Fields are null for standalone generate_text.
+  type t_exec_context is record (
+    agent_id    number
+  , agent_code  varchar2(255 char)
+  , created_by  varchar2(255 char)
+  , session_id  varchar2(255 char)
+  , apex_app_id number
+  );
 
   e_max_calls_exceeded exception;
   pragma exception_init(e_max_calls_exceeded, -20301);
@@ -108,10 +154,64 @@ as
   , p_response_json_schema  in json_object_t default null
   ) return json_object_t;
 
+  /*
+   * Config-driven variants of generate_text.
+   *
+   * These take a JSON config object (the same structure accepted by
+   * uc_ai_prompt_profiles_api.apply_model_config, e.g.
+   *   {"g_enable_tools": true, "g_tool_tags": ["math"],
+   *    "g_extra_headers": {"X-Tenant-Id": "acme"},
+   *    "openai": {"g_use_responses_api": false}} )
+   * and derive this call's configuration from it directly, WITHOUT reading or
+   * mutating the package globals. This lets other libraries call generate_text
+   * with a self-contained config instead of setting globals first, and is safe to
+   * call concurrently / re-entrantly (each call owns its settings on the stack).
+   *
+   * Keys absent from p_config fall back to the framework defaults (the values
+   * uc_ai.reset_globals restores), not to the current global values.
+   */
+  function generate_text (
+    p_user_prompt           in clob
+  , p_system_prompt         in clob default null
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_config                in json_object_t
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
+  ) return json_object_t;
+
+  function generate_text (
+    p_messages              in json_array_t
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_config                in json_object_t
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
+  ) return json_object_t;
+
   function generate_embeddings (
     p_input in json_array_t
   , p_provider in provider_type
   , p_model in model_type
+  ) return json_array_t;
+
+  /*
+   * Config-driven variant of generate_embeddings.
+   *
+   * Takes the same JSON config object as the config-driven generate_text
+   * overloads (the structure accepted by uc_ai_prompt_profiles_api.apply_model_config)
+   * and derives this call's configuration from it directly, WITHOUT reading or
+   * mutating the package globals. Lets other libraries request embeddings with a
+   * self-contained config; safe to call concurrently / re-entrantly.
+   *
+   * Keys absent from p_config fall back to the framework defaults (the values
+   * uc_ai.reset_globals restores), not to the current global values.
+   */
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_provider in provider_type
+  , p_model in model_type
+  , p_config in json_object_t
   ) return json_array_t;
 
   /*
@@ -141,6 +241,27 @@ as
    * Clear the registered event callback.
    */
   procedure clear_event_callback;
+
+  /*
+   * Internal: returns the current execution context (see t_exec_context). Used
+   * by uc_ai_settings.build_from_globals to snapshot the context into the
+   * per-call settings record. Fields are null when set outside an agent run.
+   */
+  function get_exec_context return t_exec_context;
+
+  /*
+   * Internal: publishes the execution context for the currently running agent.
+   * Called by the agent layer (uc_ai_agents_api.execute_agent) around a run,
+   * using save/restore so nested executions do not clobber their caller's
+   * context. Not intended for user code.
+   */
+  procedure set_exec_context(p_context in t_exec_context);
+
+  /*
+   * Internal: clears the execution context (all fields null). Equivalent to
+   * set_exec_context with an uninitialised record.
+   */
+  procedure clear_exec_context;
 
   /*
    * Internal: invokes the registered event callback. Called by uc_ai_message_api content

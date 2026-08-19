@@ -34,11 +34,6 @@ as
   -- type: HTTP-Header, credential-name: Authorization, value: Bearer <token>
   g_apex_web_credential varchar2(255 char);
 
-  -- Extra HTTP headers to send with requests (e.g., opc-compartment-id for OCI)
-  -- Set by provider packages before calling generate_text, cleared after use.
-  g_extra_header_name  varchar2(255 char);
-  g_extra_header_value varchar2(4000 char);
-
   -- Skip Authorization header (for providers like Ollama that don't require auth)
   g_skip_auth boolean := false;
 
@@ -75,7 +70,27 @@ as
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
   , p_schema         in json_object_t default null
+  , p_settings       in uc_ai_settings.t_settings default null
   ) return json_object_t;
+
+
+  /*
+   * Converts standardized LM messages into the Responses API "input" items array.
+   *
+   * Exposed so the request payload can be asserted without an HTTP call (see
+   * test_uc_ai_reasoning_replay). Not part of the stable public API - the item
+   * shape follows whatever the provider requires and may change.
+   *
+   * p_settings is needed for reasoning replay: a reasoning item identified only
+   * by its rs_... id can be reconstituted by the provider when store=true, but
+   * not when store=false, so such items are skipped in that case.
+   */
+  procedure convert_lm_messages_to_items(
+    p_lm_messages   in json_array_t
+  , po_items        out nocopy json_array_t
+  , po_instructions out nocopy varchar2
+  , p_settings      in uc_ai_settings.t_settings default null
+  );
 
 end uc_ai_responses_api;
 /

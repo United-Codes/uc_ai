@@ -18,10 +18,20 @@ As of v26.2, UC AI routes OCI calls through OCI's Responses API endpoint by defa
 uc_ai_oci.g_use_responses_api := false;
 ```
 
+## Max output tokens
+
+OCI chat requests are capped by `maxTokens`, which defaults to `4096`. Raise it for long outputs (e.g. document extraction) to avoid silent truncation:
+
+```sql
+uc_ai_oci.g_max_tokens := 8192;
+```
+
+When the model stops because this cap was reached, UC AI reports `finish_reason = 'length'` so callers can detect truncation. (Can also be set per call via the provider config key `g_max_tokens`.)
+
 ## Prerequisites
 
 1. Create OCI API Key and APEX Web Credential (see [guide](/products/uc-ai/docs/help/create-oci-key/))
-2. Oracle database with internet access to OCI's API endpoints
+2. Oracle database with internet access to OCI's API endpoints (see [Network Setup (ACL & Wallet)](/products/uc-ai/docs/guides/network-setup/))
 3. UC AI package installed
 
 Note that OCI uses a complex credential-based authentication system with a private key and three other components rather than a simple API key. Unfortunately Oracle does not provide a PL/SQL SDK to do the cryptographic operations, so the UC AI package builds on Oracle APEX Web Credentials which can do the work.
@@ -116,6 +126,15 @@ end;
 ### Tools
 
 Tools / function calling is supported. Refer to the [model documentation page](https://docs.oracle.com/en-us/iaas/Content/generative-ai/pretrained-models.htm) to see which models support it.
+
+### File input (images & PDFs)
+
+OCI supports file input through the [file analysis](/products/uc-ai/docs/guides/file_analysis/) message API, but only via its GENERIC chat format:
+
+- Use a GENERIC-format vision model (Meta Llama vision, Google Gemini, xAI Grok). **Cohere models reject file content.**
+- **Images:** PNG or JPG only, ≤ 5 MB.
+- **Documents:** PDF only.
+- Other types (e.g. WebP, GIF) are rejected with `ORA-20303`.
 
 ## Generating Embeddings
 

@@ -7,10 +7,18 @@ create or replace package body test_uc_ai_openai_responses as
   procedure setup_tests
   as
   begin
+    -- Reset all globals before each test so leftover state from a previously
+    -- run suite (e.g. the chat suite sets g_use_responses_api := false and
+    -- leaks g_apex_web_credential) cannot make this suite order-dependent.
+    uc_ai.reset_globals;
+
     uc_ai.g_provider_override := null;
     uc_ai.g_enable_tools := false;
     uc_ai.g_enable_reasoning := false;
-    
+
+    -- This suite exercises the Responses API path explicitly.
+    uc_ai_openai.g_use_responses_api := true;
+
     -- Configure Responses API settings
     uc_ai_responses_api.g_store_responses := true;
     uc_ai_responses_api.g_include_encrypted_reasoning := false;
@@ -47,6 +55,36 @@ create or replace package body test_uc_ai_openai_responses as
     l_message_count := l_messages.get_size;
     ut.expect(l_message_count).to_equal(3); -- system message + user message + assistant response
   end test_simple_string_input;
+
+
+  -- e2e: g_provider_tools appends OpenAI's server-side web_search_preview tool to
+  -- the Responses API request. The model runs the search provider-side and the
+  -- run completes normally (the server-tool output items pass through without
+  -- being treated as local tool calls). Kept tiny to minimise token usage.
+  procedure provider_tool_web_search
+  as
+    l_result        json_object_t;
+    l_final_message clob;
+    l_messages      json_array_t;
+  begin
+    uc_ai.g_provider_tools := json_array_t('[{"type":"web_search_preview"}]');
+
+    l_result := uc_ai.generate_text(
+      p_user_prompt => 'Search the web: what is the capital of France? Answer in 3 words max.'
+    , p_provider    => uc_ai.c_provider_openai
+    , p_model       => uc_ai_openai.c_model_gpt_4o_mini
+    );
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+
+    ut.expect(l_final_message).to_be_not_null();
+    ut.expect(lower(l_final_message)).to_be_like('%paris%');
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    ut.expect(l_messages.get_size).to_be_greater_than(0);
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'Provider tool web search test');
+  end provider_tool_web_search;
 
 
   procedure test_multi_turn_conversation

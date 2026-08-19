@@ -11,6 +11,7 @@
 
 # API packages (in dependency order)
 declare -a API_PACKAGES=(
+    "uc_ai_settings"
     "uc_ai_tools_api"
     "uc_ai_prompt_profiles_api"
     "uc_ai_message_api"
@@ -28,6 +29,7 @@ declare -a API_PACKAGES=(
 declare -a PROVIDER_PACKAGES=(
     "uc_ai_anthropic"
     "uc_ai_google"
+    "uc_ai_mistral"
     "uc_ai_oci"
     "uc_ai_ollama"
     "uc_ai_openai"
@@ -89,6 +91,9 @@ get_package_description() {
         "uc_ai_google")
             echo "Google Gemini AI Provider Package"
             ;;
+        "uc_ai_mistral")
+            echo "Mistral AI Provider Package"
+            ;;
         "uc_ai_oci")
             echo "OCI AI Provider Package"
             ;;
@@ -100,6 +105,9 @@ get_package_description() {
             ;;
         "uc_ai")
             echo "Core UC AI Package"
+            ;;
+        "uc_ai_settings")
+            echo "Per-call Settings/Run-state Types Package"
             ;;
         *)
             echo "$package_name Package"
@@ -117,7 +125,7 @@ get_package_specs_ordered() {
     if [ -f "$src_dir/packages/uc_ai.pks" ]; then
         specs+=("$src_dir/packages/uc_ai.pks")
     fi
-    
+
     # 2. API packages (in dependency order)
     for api_pkg in "${API_PACKAGES[@]}"; do
         if [ -f "$src_dir/packages/${api_pkg}.pks" ]; then
@@ -140,7 +148,7 @@ get_package_specs_ordered() {
 get_package_bodies_ordered() {
     local src_dir="$1"
     local bodies=()
-    
+
     # 1. API packages first (in dependency order)
     for api_pkg in "${API_PACKAGES[@]}"; do
         if [ -f "$src_dir/packages/${api_pkg}.pkb" ]; then

@@ -42,6 +42,7 @@ DROP PACKAGE uc_ai_xai;
 DROP PACKAGE uc_ai_openai;
 DROP PACKAGE uc_ai_ollama;
 DROP PACKAGE uc_ai_oci;
+DROP PACKAGE uc_ai_mistral;
 DROP PACKAGE uc_ai_google;
 DROP PACKAGE uc_ai_anthropic;
 
@@ -57,6 +58,7 @@ DROP PACKAGE uc_ai_structured_output;
 DROP PACKAGE uc_ai_message_api;
 DROP PACKAGE uc_ai_prompt_profiles_api;
 DROP PACKAGE uc_ai_tools_api;
+DROP PACKAGE uc_ai_settings;
 
 PROMPT Packages dropped successfully.
 

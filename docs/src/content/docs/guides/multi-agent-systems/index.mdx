@@ -9,7 +9,7 @@ import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
 
 **Multi-agent systems let you coordinate multiple specialized AI agents to solve complex tasks that are too much for a single prompt.**
 
-Instead of writing one monolithic prompt, you break the problem into smaller steps handled by specialized agents. Each agent is backed by a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/) and can have its own model, provider, and instructions. UC AI then orchestrates the execution across agents, handling data flow, conversation history, and termination logic.
+One large prompt is not necessary. You break the problem into smaller steps, and a specialized agent handles each step. Each agent has a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/), and it can have its own model, provider, and instructions. UC AI then runs the agents in order. It manages the data flow, the conversation history, and the termination logic.
 
 ## Patterns
 
@@ -30,6 +30,11 @@ Instead of writing one monolithic prompt, you break the problem into smaller ste
     href="/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/"
   />
   <LinkCard
+    title="Handoff"
+    description="Agents transfer control of the conversation to the right specialist"
+    href="/products/uc-ai/docs/guides/multi-agent-systems/handoff/"
+  />
+  <LinkCard
     title="Conversations"
     description="Multiple agents collaborate in round-robin or AI-moderated dialogue"
     href="/products/uc-ai/docs/guides/multi-agent-systems/conversations/"
@@ -43,9 +48,10 @@ Instead of writing one monolithic prompt, you break the problem into smaller ste
 | **Profile agent**            | A single AI call with execution tracking and composability        | Classify a support ticket, answer a question                        |
 | **Sequential workflow**      | Steps must run in a fixed order, each building on the previous    | Classify text, then summarize based on category                     |
 | **Loop workflow**            | You need iterative refinement until a quality threshold is met    | Generate a haiku, rate it, improve it, repeat                       |
-| **Orchestrator**             | A central AI should decide which agents to call and in what order | Travel planner delegating to calendar, flight, and hotel agents     |
-| **Round-robin conversation** | Multiple perspectives should take turns in a fixed order          | Brainstormer, critic, and synthesizer collaborate on a plan         |
-| **AI-driven conversation**   | A moderator should dynamically decide who speaks next             | Panel discussion where the moderator picks the most relevant expert |
+| **Orchestrator**             | A central AI must decide which agents to call, and in what order  | Travel planner delegating to calendar, flight, and hotel agents     |
+| **Handoff**                  | One specialist must take over and answer the user directly        | Support triage routing to product, shipping, or account specialists |
+| **Round-robin conversation** | Multiple perspectives must take turns in a fixed order            | Brainstormer, critic, and synthesizer collaborate on a plan         |
+| **AI-driven conversation**   | A moderator must decide who speaks next                           | Panel discussion where the moderator picks the most relevant expert |
 
 ## Core concepts
 
@@ -68,7 +74,7 @@ END;
 /
 ```
 
-Profile agents execute the referenced prompt profile when called. You can then compose these agents into higher-level patterns.
+A profile agent runs its prompt profile on each call. You can then compose these agents into higher-level patterns.
 
 ### Agent types
 
@@ -77,6 +83,7 @@ Profile agents execute the referenced prompt profile when called. You can then c
 | Profile      | `c_type_profile`      | Wraps a prompt profile                     |
 | Workflow     | `c_type_workflow`     | Sequential or loop execution of steps      |
 | Orchestrator | `c_type_orchestrator` | AI-driven delegation to specialized agents |
+| Handoff      | `c_type_handoff`      | Agents transfer control to each other      |
 | Conversation | `c_type_conversation` | Multiple agents collaborate in dialogue    |
 
 ### Executing agents
@@ -101,11 +108,11 @@ END;
 /
 ```
 
-The `p_session_id` groups related executions together, useful for debugging and tracking token usage across all agents in a run.
+`p_session_id` groups related runs. Use it to debug a run, and to track the token usage of all its agents.
 
 ### Conversation continuation
 
-Profile and orchestrator agents support multi-turn conversations. After the initial call, you can send follow-up messages using `p_follow_up_message`. The system automatically loads the previous conversation history from the session and appends your new message:
+A profile agent and an orchestrator agent support a multi-turn conversation. After the first call, send a follow-up message with `p_follow_up_message`. UC AI loads the earlier conversation history from the session, and appends your new message:
 
 ```sql
 DECLARE
@@ -135,16 +142,16 @@ END;
 /
 ```
 
-See [profile agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/#conversation-continuation) for details on history management and configuration.
+[Profile agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/#conversation-continuation) describes the history management and the configuration.
 
 ### Input mapping
 
-Input mappings define how data flows between agents. They use a path syntax wrapped in curly braces to reference values from the workflow state:
+An input mapping defines how the data flows between agents. It uses a path in curly braces to reference a value in the workflow state:
 
 - `{$.input.*}` - original input parameters
 - `{$.steps.<output_key>}` - output from a previous step
 - `{$.chat_history}` - conversation history (for conversation patterns)
-- `{$.agent_description}` - the current agent's description
+- `{$.agent_description}` - the description of the current agent
 
 **Simple syntax** maps a value directly:
 
@@ -217,14 +224,14 @@ END;
 ```
 
 <Aside type="tip">
-  See the [prompt profiles guide](/products/uc-ai/docs/guides/prompt-profiles/)
-  for details on templates, placeholders, model configuration, and structured
-  output.
+  The [prompt profiles guide](/products/uc-ai/docs/guides/prompt-profiles/)
+  describes the templates, the placeholders, the model configuration, and the
+  structured output.
 </Aside>
 
 ## Structured output in agents
 
-Agents can return structured JSON responses using prompt profile response schemas. This is useful when other agents or workflow logic needs to parse the output - for example, a rating agent that returns a numeric score used in a loop exit condition.
+An agent can return a structured JSON answer with the response schema of its prompt profile. Use this when another agent or the workflow logic must parse the output. An example is a rating agent that returns a numeric score for a loop exit condition.
 
 ```sql
 DECLARE
@@ -266,11 +273,11 @@ A workflow can then reference the structured fields, for example in an exit cond
 "exit_condition": "{$.steps.haiku_rating.quality} >= 8"
 ```
 
-See the [structured output guide](/products/uc-ai/docs/guides/structured_output/) for more on response schemas.
+The [structured output guide](/products/uc-ai/docs/guides/structured_output/) has more information about response schemas.
 
 ## Session tracking and debugging
 
-Every agent execution is recorded in the `uc_ai_agent_executions` table. Use the session ID to inspect the full execution trace:
+UC AI records every agent run in the `uc_ai_agent_executions` table. Use the session ID to see the full trace:
 
 ```sql
 SELECT agent_id,
@@ -286,6 +293,33 @@ SELECT agent_id,
  ORDER BY started_at;
 ```
 
+### Caller environment context
+
+Each run also records who started it, and from where. UC AI captures this
+context once, at the start of the top-level run. Every nested run shares it: a
+workflow step, an orchestrator sub-agent, and a handoff hop.
+
+| Column | Content |
+|--------|---------|
+| `created_by` | APEX user if called from an APEX session, otherwise the database user |
+| `db_user`, `os_user`, `host`, `ip_address` | `SYS_CONTEXT('USERENV', ...)` values of the caller |
+| `module`, `action`, `client_identifier`, `sid` | Database session identification |
+| `apex_user`, `apex_session_id`, `apex_app_id`, `apex_page_id` | APEX session details (null when not called from a real APEX session) |
+| `env_context` | JSON with the full context snapshot (session_user, current_schema, os_user, client_identifier, client_info, ip_address, host, terminal, module, action, sid plus the APEX values) |
+
+Outside APEX, UC AI creates an internal APEX session named `UC_AI_AGENT_EXEC`.
+UC AI never records this synthetic session as the caller. The `apex_*` columns
+then stay null.
+
+```sql
+SELECT created_by,
+       apex_app_id,
+       apex_page_id,
+       e.env_context
+  FROM uc_ai_agent_executions e
+ WHERE session_id = :session_id;
+```
+
 You can also use the API:
 
 ```sql
@@ -298,11 +332,63 @@ END;
 /
 ```
 
+### Conversation message log
+
+`uc_ai_agent_executions` tracks *who ran*. The `uc_ai_agent_messages` table is
+the **normalized transcript of what was said**. It holds one row for each message
+content item, ordered by `seq` inside the session. Query this table to rebuild a
+chat, to build an audit trail, or to show a conversation in a UI.
+
+UC AI writes this table **once for each turn, with only the new messages**.
+History-window trimming therefore never damages the stored record. That trimming
+controls only what UC AI sends to the model. Only the **top-level turn** stores
+its messages. A nested sub-agent run reaches the table through the result of its
+parent turn. This covers a workflow step, an orchestrator delegate, a handoff
+hop, and a conversation participant.
+
+| Column                                            | Content                                                                                                      |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `seq`                                             | Order inside the session (a running `max(seq)+1`). The values are contiguous across turns                    |
+| `role`                                            | `user`, `assistant`, `tool_call`, `tool_result`, `reasoning`, or `system`                                    |
+| `agent_code`                                      | The agent that **produced** this message (see below). It is `null` for the `user` and `system` input of the caller |
+| `content`                                         | Message text (for `text`/`reasoning`, and for plain-string messages)                                         |
+| `tool_name`, `tool_input`, `tool_output`, `tool_status` | Populated for `tool_call` / `tool_result` rows                                                          |
+
+**Attribution (`agent_code`).** In a multi-agent pattern, UC AI stores the whole
+turn against the `execution_id` of the top-level wrapper. `agent_code` therefore
+tells you *which* agent produced a row:
+
+- **Wrapper patterns** (conversation, handoff): each row names the sub-agent
+  that produced it — the participant that spoke, or the specialist that answered
+  the hop.
+- **Direct patterns** (profile, orchestrator, workflow): each row names the own
+  agent of the turn.
+- **Caller input** (`user` and `system`) has no attribution. `agent_code` is
+  `null`.
+
+```sql
+SELECT seq,
+       role,
+       agent_code,
+       tool_name,
+       SUBSTR(content, 1, 80) AS content
+  FROM uc_ai_agent_messages
+ WHERE session_id = :session_id
+ ORDER BY seq;
+```
+
+<Aside type="note" title="Granularity differs per pattern">
+The pattern controls how much detail a turn records. The record can be a detailed
+`user → tool_call → tool_result → assistant` trace, a transcript with several
+speakers, or one summary row. Each pattern page has a **"Message log at a
+glance"** section with its exact output.
+</Aside>
+
 ## Best practices
 
-- **Start simple**: Begin with a profile agent, then compose into workflows or conversations as the task grows
-- **Use descriptive agent descriptions**: Orchestrators use agent descriptions to decide which agent to call. Clear descriptions improve delegation accuracy
-- **Set appropriate limits**: Always set `max_turns`, `max_iterations`, and `max_delegations` to prevent runaway executions
-- **Use structured output for decision points**: When exit conditions or routing logic depends on agent output, use response schemas to get reliable, parseable values
-- **Match model capability to task complexity**: Use capable models for orchestrators and moderators that need to make decisions. Use faster models for leaf agents that have narrow, well-defined tasks
-- **Test with small limits first**: Start with `max_turns: 2` or `max_iterations: 2` to validate the flow before increasing limits
+- **Start simple**: begin with a profile agent. Compose workflows or conversations later, when the task grows
+- **Write a clear agent description**: an orchestrator uses the agent descriptions to decide which agent to call. A clear description improves the delegation
+- **Set the limits**: always set `max_turns`, `max_iterations`, and `max_delegations`. These limits stop a runaway run
+- **Use structured output for a decision point**: if an exit condition or the routing logic depends on the output of an agent, use a response schema. The values are then reliable and easy to parse
+- **Match the model to the task**: use a capable model for an orchestrator or a moderator, because it must make decisions. Use a faster model for a leaf agent with one narrow task
+- **Test with small limits first**: start with `max_turns: 2` or `max_iterations: 2`. Validate the flow, then increase the limits

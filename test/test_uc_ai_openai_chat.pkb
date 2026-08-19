@@ -5,6 +5,10 @@ create or replace package body test_uc_ai_openai_chat as
   procedure setup_tests
   as
   begin
+    -- Reset all globals before each test so a prior test's leftover state
+    -- (e.g. g_enable_reasoning from the reasoning tests) cannot leak into the
+    -- next one and make the suite order-dependent.
+    uc_ai.reset_globals;
     uc_ai_openai.g_use_responses_api := false; -- to ensure the chat API is used disable Responses API
   end setup_tests;
 
@@ -39,6 +43,38 @@ create or replace package body test_uc_ai_openai_chat as
 
     ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
   end basic_recipe;
+
+
+
+  -- e2e: g_extra_body must flow into the request body. temperature is a normal
+  -- (non-reserved) chat param the SDK does not expose; setting it via the escape
+  -- hatch and getting a successful, deterministic answer proves the property was
+  -- accepted by the API (an unknown/invalid body property would 400). Kept tiny
+  -- to minimise token usage.
+  procedure extra_body_temperature
+  as
+    l_result        json_object_t;
+    l_final_message clob;
+    l_messages      json_array_t;
+  begin
+    uc_ai.g_extra_body := json_object_t('{"temperature": 0}');
+
+    l_result := uc_ai.generate_text(
+      p_user_prompt => 'Reply with only the number: what is 2+2?'
+    , p_provider    => uc_ai.c_provider_openai
+    , p_model       => uc_ai_openai.c_model_gpt_4o_mini
+    );
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+
+    ut.expect(l_result.get_string('finish_reason')).to_equal(uc_ai.c_finish_reason_stop);
+    ut.expect(l_final_message).to_be_like('%4%');
+
+    l_messages := treat(l_result.get('messages') as json_array_t);
+    uc_ai_test_message_utils.valididate_return_object(l_result, 'Extra body temperature test');
+    ut.expect(lower(l_messages.to_clob)).not_to_be_like('%error%');
+  end extra_body_temperature;
 
 
 

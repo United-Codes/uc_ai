@@ -45,6 +45,20 @@ as
   c_exec_failed    constant varchar2(50 char) := 'failed';
   c_exec_timeout   constant varchar2(50 char) := 'timeout';
 
+  -- Caller-class ("audience") constants, recorded on every execution row and on
+  -- the session header. Classified once per top-level run, before uc_ai's own
+  -- synthetic APEX session can mask the real caller.
+  --   public        - an APEX session that is not authenticated (anonymous visitor)
+  --   authenticated - a logged-in APEX user
+  --   db            - no APEX session, or uc_ai's synthetic one: a database
+  --                   session, scheduler job or trigger
+  -- Consumers (e.g. usage-governance extensions) use these to tell anonymous
+  -- traffic apart from signed-in traffic, which a username cannot do: every
+  -- anonymous visitor of an app shares one APEX public user name.
+  c_audience_public constant varchar2(20 char) := 'public';
+  c_audience_auth   constant varchar2(20 char) := 'authenticated';
+  c_audience_db     constant varchar2(20 char) := 'db';
+
   -- ============================================================================
   -- Types
   -- ============================================================================
@@ -64,6 +78,71 @@ as
    * @return  A unique session ID (based on SYS_GUID)
    */
   function generate_session_id return varchar2;
+
+  /*
+   * Sets the human-readable title of a conversation on its session header.
+   *
+   * Front ends name conversations however they like (an LLM summary of the first
+   * exchange, the user typing one in); the engine never sets this itself. The
+   * title is overwritten if one already exists, so this doubles as "rename" —
+   * a write-once policy, if wanted, belongs in the caller.
+   *
+   * Silently does nothing (logged as a warning) when the session header does not
+   * exist yet (a session only gets a header once its first top-level execution
+   * starts) or when p_created_by does not match the opening user.
+   *
+   * Commits in an autonomous transaction, so the caller's transaction must not
+   * hold an uncommitted change to the session header — the write cannot wait for
+   * a lock held by its own caller and raises instead.
+   *
+   * @param p_session_id  The session to name
+   * @param p_title       The title; trimmed to 200 characters. Null or blank
+   *                      clears the title (back to unnamed)
+   * @param p_created_by  Optional guard: only update when the session was opened
+   *                      by this user. Beware that a session opened from a
+   *                      background job (no APEX session) records the DB user
+   *                      here, not the end user — passing APP_USER against such
+   *                      a session matches nothing and the write is lost. Pass
+   *                      null when you have authorized the user yourself.
+   */
+  procedure set_session_title(
+    p_session_id in varchar2,
+    p_title      in varchar2,
+    p_created_by in varchar2 default null
+  );
+
+  /*
+   * Records the end user's verdict on a conversation on its session header.
+   *
+   * Front ends decide how (and whether) to ask; the engine never sets this
+   * itself. An existing rating is overwritten, so this doubles as "change my
+   * mind" — a write-once policy, if wanted, belongs in the caller.
+   *
+   * A null p_rating withdraws the feedback: rating, comment and timestamp are
+   * cleared together, so "not rated" never decays into "rated, comment lost".
+   * A rating the engine does not recognize is treated as null rather than
+   * raising — the check constraint must never be what a front end hits.
+   *
+   * Silently does nothing (logged as a warning) when the session header does not
+   * exist yet (a session only gets a header once its first top-level execution
+   * starts) or when p_created_by does not match the opening user.
+   *
+   * Commits in an autonomous transaction, with the same caller-lock caveat as
+   * set_session_title's.
+   *
+   * @param p_session_id  The session to rate
+   * @param p_rating      'up' | 'down', or null to withdraw the feedback
+   * @param p_comment     Optional free text; trimmed to 2000 characters, and
+   *                      cleared along with a null rating
+   * @param p_created_by  Optional guard, with the same background-job caveat as
+   *                      set_session_title's
+   */
+  procedure set_session_feedback(
+    p_session_id in varchar2,
+    p_rating     in varchar2,
+    p_comment    in varchar2 default null,
+    p_created_by in varchar2 default null
+  );
 
   -- ============================================================================
   -- Agent Management
@@ -325,6 +404,123 @@ as
 
 
   -- ============================================================================
+  -- Execution Hooks (generic extension point)
+  -- ============================================================================
+
+  /*
+   * Registers a package that receives execution lifecycle callbacks around the
+   * top-level of execute_agent. This is a general-purpose extension point
+   * (budgeting, auditing, rate-limiting, ...); this package stays agnostic of
+   * what the hook does.
+   *
+   * The hook package must implement:
+   *
+   *   procedure before_execution(
+   *     p_agent_id    in number,     -- uc_ai_agents.id
+   *     p_agent_code  in varchar2,   -- uc_ai_agents.code
+   *     p_created_by  in varchar2,   -- coalesce(APEX user, DB user) of the caller
+   *     p_apex_app_id in number,     -- APEX application id (null outside APEX)
+   *     p_session_id  in varchar2    -- execution session id
+   *   );
+   *   -- Called before any execution row is created or tokens are spent.
+   *   -- May RAISE to veto the execution (e.g. a budget hard-cap); the exception
+   *   -- propagates out of execute_agent and no run happens.
+   *
+   *   procedure after_execution(
+   *     p_exec_id       in number,   -- top-level uc_ai_agent_executions.id
+   *     p_status        in varchar2, -- 'completed' or 'failed'
+   *     p_input_tokens  in number,
+   *     p_output_tokens in number
+   *   );
+   *   -- Called after the top-level execution finishes (success or failure).
+   *   -- Best-effort: exceptions raised here are logged and swallowed so a
+   *   -- completed run is never turned into a failure by the hook.
+   *
+   * The hook package MAY additionally implement (optional — a package without it
+   * is detected and simply not called, so existing hooks keep working):
+   *
+   *   procedure before_tool_call(
+   *     p_agent_id    in number,     -- uc_ai_agents.id (null if called standalone)
+   *     p_agent_code  in varchar2,   -- uc_ai_agents.code (null if called standalone)
+   *     p_tool_code   in varchar2,   -- uc_ai_tools.code about to be executed
+   *     p_created_by  in varchar2,   -- coalesce(APEX user, DB user) of the caller
+   *     p_session_id  in varchar2,   -- execution session id (null if standalone)
+   *     p_apex_app_id in number      -- APEX application id (null outside APEX)
+   *   );
+   *   -- Called before EACH tool call inside a generate_text tool-calling loop
+   *   -- (fired at the provider call sites, before provider-local error handling).
+   *   -- May RAISE to veto the tool call mid-run; the exception propagates out of
+   *   -- generate_text and stops the run. Fires for agent runs and standalone
+   *   -- generate_text tool calls alike (context fields null in the latter).
+   *
+   *   procedure augment_system_prompt(
+   *     pio_system_prompt in out nocopy clob  -- rendered profile system prompt (may be null)
+   *   );
+   *   -- Called after a prompt profile's system prompt template has been
+   *   -- rendered (placeholders substituted), before the model call. May append
+   *   -- to or rewrite the prompt (e.g. inject standing instructions); it may
+   *   -- also set a prompt where the profile had none. Fires for every
+   *   -- uc_ai_prompt_profiles_api.execute_profile call, which covers agent
+   *   -- first turns (profile/orchestrator/workflow-nested agents); follow-up
+   *   -- turns reuse the persisted system message from the conversation
+   *   -- history, so an augmentation made on the first turn travels with the
+   *   -- session. Standalone generate_text calls with a raw p_system_prompt are
+   *   -- NOT augmented. Read uc_ai.get_exec_context inside the hook to know
+   *   -- which agent is running (fields null outside an agent run). Dispatch is
+   *   -- best-effort: errors are logged and swallowed and the prompt is used
+   *   -- unchanged — this hook cannot veto a run.
+   *
+   * Resolution: if no override is set, the hook is auto-resolved by convention
+   * to a VALID package named UC_AI_HOOK in the current schema (so simply
+   * installing an extension that provides UC_AI_HOOK activates it, with no
+   * per-session registration). Pass an explicit name to override the
+   * convention; pass NULL to clear the override and fall back to the convention.
+   *
+   * @param p_package_name Hook package name (schema-qualified allowed). Null clears the override.
+   */
+  procedure set_execution_hook(p_package_name in varchar2 default null);
+
+  /*
+   * Fires the optional per-tool-call hook (before_tool_call) on the resolved hook
+   * package, if that package implements it. Called by uc_ai_tools_api at each
+   * provider tool-call site, immediately before a tool runs. Exceptions PROPAGATE
+   * by design: a hook raising here (e.g. a rate-limit hard-cap) vetoes the tool
+   * call and stops the run. No-ops when no hook is resolved or the hook package
+   * does not implement before_tool_call.
+   *
+   * @param p_tool_code   uc_ai_tools.code about to be executed
+   * @param p_agent_id    calling agent id (null if standalone generate_text)
+   * @param p_agent_code  calling agent code (null if standalone generate_text)
+   * @param p_created_by  caller (coalesced to the DB session user if unknown)
+   * @param p_session_id  execution session id (null if standalone)
+   * @param p_apex_app_id APEX application id (null outside APEX)
+   */
+  procedure fire_before_tool_hook(
+    p_tool_code   in varchar2
+  , p_agent_id    in number   default null
+  , p_agent_code  in varchar2 default null
+  , p_created_by  in varchar2 default null
+  , p_session_id  in varchar2 default null
+  , p_apex_app_id in number   default null
+  );
+
+  /*
+   * Fires the optional system-prompt augmentation hook (augment_system_prompt)
+   * on the resolved hook package, if that package implements it. Called by
+   * uc_ai_prompt_profiles_api.execute_profile after the profile's system
+   * prompt template has been rendered. Best-effort by design: hook errors are
+   * logged and swallowed and the prompt is left unchanged, so a broken
+   * augmenter can never fail a run. No-ops when no hook is resolved or the
+   * hook package does not implement augment_system_prompt.
+   *
+   * @param pio_system_prompt  the rendered system prompt; the hook may modify it
+   */
+  procedure fire_augment_prompt_hook(
+    pio_system_prompt in out nocopy clob
+  );
+
+
+  -- ============================================================================
   -- Agent Execution
   -- ============================================================================
 
@@ -334,10 +530,15 @@ as
    * @param p_agent_code        Code of the agent to execute
    * @param p_agent_version     Version number (null = latest active)
    * @param p_input_parameters  JSON input parameters
-   * @param p_follow_up_message Follow-up message to continue an existing conversation (profile/orchestrator agents only)
+   * @param p_follow_up_message Follow-up message to continue an existing conversation (profile/orchestrator/handoff
+   *                            agents; handoff agents resume with the agent that answered the previous turn)
    * @param p_session_id        Optional session ID for grouping executions (required when using p_follow_up_message)
    * @param p_parent_exec_id    Optional parent execution ID for nested calls
    * @param p_response_schema   Optional JSON schema for response validation (profile agents only)
+   * @param p_files             Optional files (documents/images) to attach to the user message
+   *                            (profile/orchestrator agents only). Build with uc_ai_message_api.t_files.
+   * @param p_extra_tool_tag    Engine-internal: extra tool tag merged into the profile's model
+   *                            config (profile agents only; used for handoff transfer tools)
    *
    * @return                    JSON result object
    */
@@ -348,7 +549,9 @@ as
     p_follow_up_message in clob default null,
     p_session_id        in varchar2 default null,
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
-    p_response_schema   in json_object_t default null
+    p_response_schema   in json_object_t default null,
+    p_files             in uc_ai_message_api.t_files default null,
+    p_extra_tool_tag    in varchar2 default null
   ) return json_object_t;
 
 
@@ -357,10 +560,15 @@ as
    *
    * @param p_agent_id          ID of the agent to execute
    * @param p_input_parameters  JSON input parameters
-   * @param p_follow_up_message Follow-up message to continue an existing conversation (profile/orchestrator agents only)
+   * @param p_follow_up_message Follow-up message to continue an existing conversation (profile/orchestrator/handoff
+   *                            agents; handoff agents resume with the agent that answered the previous turn)
    * @param p_session_id        Optional session ID for grouping executions (required when using p_follow_up_message)
    * @param p_parent_exec_id    Optional parent execution ID for nested calls
    * @param p_response_schema   Optional JSON schema for response validation (profile agents only)
+   * @param p_files             Optional files (documents/images) to attach to the user message
+   *                            (profile/orchestrator agents only). Build with uc_ai_message_api.t_files.
+   * @param p_extra_tool_tag    Engine-internal: extra tool tag merged into the profile's model
+   *                            config (profile agents only; used for handoff transfer tools)
    *
    * @return                    JSON result object
    */
@@ -370,8 +578,30 @@ as
     p_follow_up_message in clob default null,
     p_session_id        in varchar2 default null,
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
-    p_response_schema   in json_object_t default null
+    p_response_schema   in json_object_t default null,
+    p_files             in uc_ai_message_api.t_files default null,
+    p_extra_tool_tag    in varchar2 default null
   ) return json_object_t;
+
+
+  /*
+   * Persists a mid-run state checkpoint for a running execution into
+   * uc_ai_agent_executions.current_state.
+   *
+   * Commits in an autonomous transaction so running workflows can be monitored
+   * from other sessions and failed/crashed runs keep their last known state.
+   * Cleared automatically when the execution completes successfully.
+   * Best-effort: never raises.
+   *
+   * @param p_exec_id       ID of the running execution
+   * @param p_current_state Current workflow state (stored as a copy)
+   * @param p_last_step     Optional marker of the last completed step
+   */
+  procedure checkpoint_execution(
+    p_exec_id       in uc_ai_agent_executions.id%type,
+    p_current_state in json_object_t,
+    p_last_step     in varchar2 default null
+  );
 
 
   -- ============================================================================
@@ -408,6 +638,46 @@ as
   function get_execution_details(
     p_execution_id in uc_ai_agent_executions.id%type
   ) return json_object_t;
+
+
+  /*
+   * Lists conversation sessions (one row per session_id) with maintained
+   * aggregates (turn/message counts, summed token usage, last status/activity).
+   * The conversation-level counterpart to get_execution_history.
+   *
+   * Includes the conversation title when one has been set (see set_session_title),
+   * so the result is directly usable as a conversation list, and the end user's
+   * feedback when any was given (see set_session_feedback), so quality can be
+   * reported on alongside cost.
+   *
+   * @param p_agent_code  Filter by the session's root agent code
+   * @param p_status      Filter by the session's latest status
+   * @param p_created_by  Filter by the opening user
+   * @param p_start_date  Filter by session start date (from)
+   * @param p_end_date    Filter by session start date (to)
+   *
+   * @return              Cursor with one row per session
+   */
+  function list_sessions(
+    p_agent_code in uc_ai_agents.code%type default null,
+    p_status     in varchar2 default null,
+    p_created_by in varchar2 default null,
+    p_start_date in timestamp default null,
+    p_end_date   in timestamp default null
+  ) return sys_refcursor;
+
+
+  /*
+   * Returns the full, untrimmed message log of a session in conversation order
+   * (one row per message content item).
+   *
+   * @param p_session_id  The session to read
+   *
+   * @return              Cursor with the ordered message rows
+   */
+  function get_session_messages(
+    p_session_id in varchar2
+  ) return sys_refcursor;
 
 end uc_ai_agents_api;
 /

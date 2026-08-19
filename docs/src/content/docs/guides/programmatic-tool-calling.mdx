@@ -1,0 +1,170 @@
+---
+title: Programmatic Tool Calling (Code Mode)
+description: Let the model orchestrate many tools with a single in-database JavaScript program instead of one round-trip per tool call
+sidebar:
+  order: 35
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**Code mode lets the model write a small program that calls your tools, instead of calling them one at a time.**
+
+With normal [tool calling](/products/uc-ai/docs/guides/tools/), every tool call is a separate round-trip:
+
+1. The model asks for a tool.
+2. UC AI runs the tool.
+3. The result goes back into the context of the model.
+4. The model asks for the next tool.
+
+Data-heavy work needs many of these round-trips. An example is "fetch every employee, then their expenses, sum the approved travel". Every raw tool result also stays in the context window.
+
+Code mode makes this **one** call. The model writes a short JavaScript program. UC AI runs the program in the database with the Oracle Multilingual Engine (MLE). The program calls your tools in a loop, filters the data, and aggregates it locally. It returns **only its final result** to the model. The intermediate tool output never reaches the context of the model.
+
+<Aside type="tip" title="When code mode helps">
+Code mode helps most when a task needs **many tool calls**, **loops over lists**, or **large intermediate data** for one aggregate. For a single tool call, it adds nothing. The model can call that tool directly, and both options stay available.
+</Aside>
+
+## Requirements
+
+Code mode is an **opt-in feature and needs Oracle Database 23ai**, for MLE JavaScript with `PURE` execution contexts. The rest of UC AI runs on [Oracle 12.2+](/products/uc-ai/docs/other/faq/). Only this feature needs 23ai.
+
+The code of the model is untrusted. Code mode therefore **always runs in a dedicated, locked-down sandbox**. There is no fallback without a sandbox. Install this sandbox once, as a DBA:
+
+```bash
+# connect as SYS / a DBA to the same PDB where UC AI is installed
+sql sys/<pwd>@<pdb> as sysdba
+
+@scripts/install_ptc_sandbox.sql
+```
+
+The script asks for two schema names. The first is the schema that holds UC AI. The second is the new sandbox schema for it. The defaults are `UC_AI` and `UC_AI_MLE_SBX`.
+
+The script then creates four objects:
+
+- the schema-only sandbox account (`NO AUTHENTICATION`, no login)
+- a `PURE` MLE environment
+- the MLE runner
+- a private synonym in your UC AI schema that points at the runner
+
+UC AI finds the sandbox through this synonym at run time. No schema name is compiled into the packages.
+
+Run the script **once for each UC AI installation**. Two installations must not share one sandbox, because the gateway synonym points at one UC AI schema. The script rejects a sandbox schema that already owns other objects. At the end, the script tests that the runner compiled and that the synonym points at it.
+
+To undo the installation, run `scripts/uninstall_ptc_sandbox.sql` with the same two answers. If you enable code mode without the sandbox, `generate_text` raises an error that names the script.
+
+## The security model
+
+**The JavaScript of the model has no database access.**
+
+- UC AI evaluates it in a [`PURE` MLE execution context](https://docs.oracle.com/en/database/oracle/oracle-database/26/mlejs/restricted-execution-contexts.html). This context removes every database-facing JavaScript API. The program can neither `require` nor `import` `mle-js-oracledb`, and the `oracledb`, `session`, `soda`, and `plsffi` globals do not exist. The program cannot run one SQL statement.
+- The program therefore cannot `COMMIT` or `ROLLBACK` either. This is important, because transaction control needs no privilege. A privilege wall alone does not stop generated code from discarding your pending work.
+- PL/SQL therefore **services** `callTool`. The program awaits a tool call and control returns to the runner. The runner calls the UC AI gateway. The program then continues with the result. This is the only channel in or out.
+- As a second barrier, the runner is a **definer's-rights** package. The low-privilege sandbox schema owns it. This schema has **no** privilege except `EXECUTE` on the one gateway package `uc_ai_ptc_api`. It has no tables, no quota, and no other packages.
+- Your tools still run with the full UC AI privileges, because the gateway is a UC AI package. They also run **in the transaction of the caller**, the same as a direct tool call. Each tool therefore keeps control of its own transaction. A tool that commits acts the same in both modes.
+
+<Aside type="caution" title="Tools are still real code">
+Give a code-mode run only safe, read-oriented tools. Use [tags](#enabling-code-mode) to keep write and destructive tools out of that set. The sandbox stops the *JavaScript* of the model from every action except a tool call. It does **not** change what your *tools* do. The model can still ask a tool that deletes data to delete data.
+</Aside>
+
+UC AI adds two more limits:
+
+- A per-run **allow-list**. A program can call only the tools of the current run, that is the same enabled and tag-filtered set that the model sees.
+- A **call budget**. This caps the tool calls of one program and bounds a runaway loop.
+
+The optional [`before_tool_call` hook](/products/uc-ai/docs/guides/agentic-ai/) fires for **every** `callTool` in a program, not only once for the whole program. Authorization and auditing through this hook therefore also work in code mode. A veto from the hook aborts the whole request.
+
+## Enabling code mode
+
+Code mode builds on normal tool calling. Enable tools as usual and add one flag:
+
+```sql
+begin
+  uc_ai.g_enable_tools              := true;                 -- tools on
+  uc_ai.g_enable_programmatic_tools := true;                 -- offer code mode
+  uc_ai.g_tool_tags                 := apex_t_varchar2('reporting');
+
+  declare
+    l_result json_object_t;
+  begin
+    l_result := uc_ai.generate_text(
+      p_user_prompt   => 'What is the total approved travel spend across all employees?'
+    , p_system_prompt => 'You are a data analyst. Prefer writing a program with the '
+                      || 'code tool over calling tools one by one.'
+    , p_provider      => uc_ai.c_provider_anthropic
+    , p_model         => uc_ai_anthropic.c_model_claude_4_6_sonnet
+    );
+  end;
+end;
+/
+```
+
+When `g_enable_programmatic_tools` is true, UC AI adds one extra tool `uc_ai__run_code` to your normal tools. Its description lists the exact tool codes that the program can call. The model can still call tools directly. Code mode is an *additional* option, and the model selects it for a task that gains from it.
+
+### Choosing which tools are available where
+
+By default, every enabled tool is available **both** ways: directly and inside a program. The `p_code_mode_access` parameter of `create_tool_from_schema` and `merge_tool_from_schema` narrows this per tool:
+
+```sql
+uc_ai_tools_api.merge_tool_from_schema(
+  p_tool_code        => 'GET_EXPENSES'
+, p_description      => 'Fetch expense rows for one employee'
+, p_function_call    => 'return my_pkg.get_expenses(:parameters);'
+, p_json_schema      => l_schema
+, p_code_mode_access => 'code'   -- direct | code | both  (default 'both')
+);
+```
+
+- `direct` — a normal tool only. A program **cannot** call it. Use this for an action that the model must call deliberately, for example "send email" or "delete record".
+- `code` — hidden from the direct tool list. Only `callTool` inside a program can call it. Use this for bulk read tools. It keeps them out of the tool list of the model, and their large output out of its context.
+- `both` — available either way (the default).
+
+UC AI enforces this setting. The allow-list rejects a `callTool` to a `direct`-only tool, also when the model guesses the tool code. The setting applies only when code mode is on. With code mode off, every tool is a normal tool.
+
+### Descriptions in the tool catalog
+
+Each code-callable tool gets one line in the catalog inside the `uc_ai__run_code` description. This line holds the `callTool` signature and the **full** tool description. For a `code`-only tool, this description is the only documentation that the model gets, because the catalog lists parameter *names* and not the JSON schema. Write in the description what each parameter expects, for example "`employee_id` — numeric id from `GET_EMPLOYEES`". The name alone is not enough.
+
+UC AI replaces each newline and tab in a description with a space, so every entry stays on one line. The whole catalog must fit in about 31 KB. If your descriptions are longer, UC AI leaves the tools that do not fit out of the catalog. A program then cannot call these tools, and UC AI writes a warning to the log. To correct this, shorten the descriptions, or move bulk tools to `direct`.
+
+<Aside type="note">
+Code mode works with every provider that supports tool calling. The more capable models write more reliable JavaScript. The [Tools guide](/products/uc-ai/docs/guides/tools/#best-practices) has notes on model quality.
+</Aside>
+
+## How the program calls your tools
+
+Inside the program the model calls:
+
+```js
+const data = await callTool("YOUR_TOOL_CODE", { some: "arg" });
+```
+
+- The program runs as the body of an **async function**, so `await` works at the top level.
+- `await callTool(code, args)` returns the result of the tool, already parsed from JSON into an object or an array. The program must await this call, because PL/SQL runs the tool call and not the JavaScript.
+- If the model forgets the `await`, UC AI inserts it. This rewrite leaves string literals, comments, and member calls of the same name unchanged. If the rewritten program does not parse, UC AI uses the original source. For an alias such as `const f = callTool`, UC AI cannot insert the `await`. The program then fails with the message "callTool() is asynchronous", instead of treating the promise as data.
+- The program returns its answer in a top-level variable named `result`, an object or a string. UC AI sends only this value back to the model.
+- The program is plain JavaScript: loops, `filter`, `reduce`, and arithmetic. It has no SQL, no network, no file access, and no modules.
+
+A typical program of the model looks like this:
+
+```js
+const employees = await callTool("GET_EMPLOYEES", {});
+let total = 0;
+for (const e of employees) {
+  const expenses = await callTool("GET_EXPENSES", { employee_id: e.id });
+  for (const x of expenses) {
+    if (x.category === "travel" && x.status === "approved") total += x.amount;
+  }
+}
+const result = { approved_travel_total: total };
+```
+
+This is one `uc_ai__run_code` call. Only `{ approved_travel_total: ... }` goes back to the model. The expense rows of each employee stay in the database.
+
+The program can throw an error, call an unknown or forbidden tool, or pass the call budget. In each case, UC AI returns the error to the model **as data** and does not abort the request. The model can then correct the program on its next turn.
+
+## Limitations
+
+- **Oracle 23ai only** (MLE JavaScript with `PURE` contexts). You must install the sandbox first.
+- **MLE enforces no time limit for one program.** Only the Database Resource Manager bounds an infinite JavaScript loop that calls no tool. The per-run call budget bounds the tool calls.
+- The program can call only the enabled and tag-filtered tools of the **current run**. UC AI rejects every other tool, also when the model guesses its code.
+- Sub-agents that are registered as tools ([orchestrator / handoff](/products/uc-ai/docs/guides/multi-agent-systems/handoff/)) are `direct`-only. Delegation to another agent costs LLM calls. It therefore stays a deliberate decision of the calling model, and a program cannot loop over it.

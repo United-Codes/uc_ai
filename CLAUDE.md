@@ -89,6 +89,41 @@ begin ut.run('test_uc_ai_anthropic'); end;
 
 Test packages follow the naming pattern `test_uc_ai_<feature>`. Shared utilities are in `uc_ai_test_utils`.
 
+## Linting PL/SQL with dbLinter
+
+After writing or changing any SQL or PL/SQL, lint it with dbLinter and fix
+every violation before considering the task complete.
+
+Run from the project root. The committed `dblinter.properties` holds the shared
+config; never store personal credentials there.
+
+Check everything:
+
+```sh
+dblinter check
+```
+
+Check only specific paths (faster, prefer this when you know what changed):
+
+```sh
+dblinter check src/packages
+```
+
+Then read the report at `./.dblinter/check.sarif.sarif`, address each finding,
+and re-run until it is clean.
+
+For a genuine false positive or a deliberate exception, suppress the specific
+rule inline and always give a reason. Scope is controlled by where you place the comment (line / block / file):
+
+```sql
+-- @dblinter ignore(<rule>): <reason>
+
+-- @dblinter ignore(G-9108): p0-p4 intentionally mirror the apex_lang.message parameter names they are passed to
+```
+
+Do not disable rules broadly, and do not ignore a finding just to make the
+report pass — only suppress with a real, written justification.
+
 ## Documentation Site
 
 ```bash
@@ -97,6 +132,16 @@ cd docs && bun run build                 # Production build
 ```
 
 Content lives in `docs/src/content/docs/` as MDX files. Provider setup guides are in `docs/src/content/docs/providers/`.
+
+**Writing style:** the docs follow ASD-STE100 Simplified Technical English. Invoke the
+`simple-english` skill before you write or edit any page under `docs/src/content/docs/`.
+Keep the terminology fixed: "make sure that" (never ensure / verify / confirm),
+"configuration" (never config / settings / options in prose), "call" for calling a
+procedure, "run" for one agent execution, "delete" for data (`drop` for DDL only),
+"error" for a raised exception, "failure" for an operation that did not finish. The
+landing page (`index.mdx`) and `guides/use-cases.mdx` keep their persuasive voice — fix
+only mechanics there. Never change heading text: `starlightLinksValidator` fails the
+build on anchors that other pages link to.
 
 ## Key Reference Files
 

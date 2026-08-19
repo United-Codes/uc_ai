@@ -11,6 +11,21 @@ as
   * https://www.united-codes.com
   */
 
+  -- File input type: pass one or more files (documents/images) to a message.
+  -- Users build a collection with t_files() and .extend, e.g.:
+  --   l_files := uc_ai_message_api.t_files();
+  --   l_files.extend;
+  --   l_files(1).media_type := 'application/pdf';
+  --   l_files(1).data_blob  := <your blob>;
+  --   l_files(1).filename   := 'doc.pdf';
+  type t_file is record (
+    media_type       varchar2(255 char),
+    data_blob        blob,
+    filename         varchar2(4000 char),
+    provider_options json_object_t
+  );
+  type t_files is table of t_file;
+
   -- Content type builders
   function create_text_content(
     p_text in clob,
@@ -71,6 +86,13 @@ as
   -- Helper functions for common patterns
   function create_simple_user_message(
     p_text in clob
+  ) return json_object_t;
+
+  -- Builds a user message from optional text plus a collection of files.
+  -- When p_files is null/empty this is equivalent to create_simple_user_message.
+  function create_user_message(
+    p_text  in clob,
+    p_files in t_files
   ) return json_object_t;
 
   function create_simple_assistant_message(

@@ -1,0 +1,141 @@
+---
+title: Execution Hooks
+description: Register a PL/SQL package that runs before and after an agent run, for budgeting, auditing, rate limiting, and other cross-cutting concerns.
+sidebar:
+  order: 75
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**Execution hooks let you plug custom logic into `uc_ai_agents_api.execute_agent` without changing UC AI.**
+
+A hook is a PL/SQL package that you write. UC AI calls it at the top level of every agent run: once *before* the run starts, and once *after* it finishes. UC AI does not know what your hook does. These are the typical uses:
+
+- **Budgeting / cost control** — when a run reaches a limit, veto it before it spends tokens.
+- **Auditing** — record who ran which agent, when, and how many tokens it used.
+- **Rate limiting** — when a caller passes an allowed frequency, reject the run.
+
+<Aside type="note">
+Hooks fire only at the **top level** of `execute_agent`. A nested run, such as a workflow step or an orchestrated sub-agent, fires no hook of its own. The top-level call covers the whole tree.
+</Aside>
+
+## The hook contract
+
+Your hook package must implement two procedures with exactly these signatures:
+
+```sql
+create or replace package my_ai_hook as
+
+  -- Called BEFORE any execution row is created or tokens are spent.
+  -- Raise to VETO the run: the exception propagates out of execute_agent
+  -- and no execution happens.
+  procedure before_execution(
+    p_agent_id    in number,     -- uc_ai_agents.id
+    p_agent_code  in varchar2,   -- uc_ai_agents.code
+    p_created_by  in varchar2,   -- coalesce(APEX user, DB user) of the caller
+    p_apex_app_id in number,     -- APEX application id (null outside APEX)
+    p_session_id  in varchar2    -- execution session id
+  );
+
+  -- Called AFTER the top-level execution finishes (success or failure).
+  -- Best-effort: any exception raised here is logged and swallowed, so a
+  -- completed run is never turned into a failure by the hook.
+  procedure after_execution(
+    p_exec_id       in number,   -- top-level uc_ai_agent_executions.id
+    p_status        in varchar2, -- 'completed' or 'failed'
+    p_input_tokens  in number,
+    p_output_tokens in number
+  );
+
+  -- OPTIONAL. Called BEFORE each tool call inside a generate_text tool-calling
+  -- loop. Raise to VETO the tool call mid-run: the exception propagates out of
+  -- generate_text and stops the run. A hook that does not implement this
+  -- procedure is detected and simply not called, so it stays fully optional.
+  procedure before_tool_call(
+    p_agent_id    in number,     -- uc_ai_agents.id  (null if standalone generate_text)
+    p_agent_code  in varchar2,   -- uc_ai_agents.code (null if standalone)
+    p_tool_code   in varchar2,   -- uc_ai_tools.code about to run
+    p_created_by  in varchar2,   -- coalesce(APEX user, DB user) of the caller
+    p_session_id  in varchar2,   -- execution session id (null if standalone)
+    p_apex_app_id in number      -- APEX application id (null outside APEX)
+  );
+
+  -- OPTIONAL. Called after a prompt profile's system prompt has been rendered
+  -- (placeholders substituted), before the model call. Append to or rewrite
+  -- the prompt to inject standing instructions. Best-effort: errors are
+  -- logged and swallowed and the prompt is used unchanged.
+  procedure augment_system_prompt(
+    pio_system_prompt in out nocopy clob  -- rendered system prompt (may be null)
+  );
+
+end my_ai_hook;
+/
+```
+
+### `before_execution`
+
+This procedure runs after UC AI resolves the agent, but **before** it creates the execution row and before any provider call. An exception here vetoes the run. The caller of `execute_agent` gets this exception, and the run spends no tokens. This is the enforcement point for a hard limit.
+
+The contract does *not* pass the class of the caller. It does not say whether the caller is an anonymous APEX visitor, a logged-in user, or a database session. The contract stays small and stable for this reason.
+
+A hook that needs the class reads it from the live session. Use `sys_context('APEX$SESSION', 'APP_USER')` together with `apex_authentication.is_authenticated`. Guard against `uc_ai_agent_exec_api.c_synthetic_apex_user`, the internal session of uc_ai. UC AI creates this session before the hook fires.
+
+Never call `apex_authentication.is_public_user` before you confirm that a real APEX session exists. Outside an APEX session, this function returns TRUE.
+
+Core also writes its own classification of every run to `uc_ai_agent_executions.audience`, as `public`, `authenticated`, or `db`. This column is the correct source for a count of *past* runs.
+
+`uc_ai.get_exec_context` is **not** yet filled at this point. UC AI publishes it after it creates the execution row. Use the parameters of the procedure here. Use `get_exec_context` in `before_tool_call` and in `augment_system_prompt`.
+
+### `after_execution`
+
+This procedure runs after the top-level run finishes, on the success path and on the failure path. It is **best-effort**. If it raises an error, UC AI logs the error and continues. Bookkeeping such as cost recording and audit writes can therefore never turn a finished run into a failure. The procedure fires at the top level, so `p_exec_id` is the root run. For the whole tree, walk `uc_ai_agent_executions` by `parent_execution_id`.
+
+### `before_tool_call` (optional)
+
+This procedure runs **before every tool call** inside a `generate_text` tool-calling loop. It gives you an enforcement point inside a run. `before_execution` cannot do this, because it fires only once, at the start.
+
+An exception here vetoes the tool call and stops the run at once. Use this procedure for a rate limit per tool call, or to block a specific tool dynamically.
+
+The procedure fires for an agent run and for a standalone `generate_text` call. In the standalone case, the agent context fields are null, and `p_created_by` falls back to the user of the database session.
+
+The procedure is **optional**. UC AI tests once per session whether your hook package declares it. A hook with only `before_execution` and `after_execution` therefore still works.
+
+### `augment_system_prompt` (optional)
+
+This procedure runs after `uc_ai_prompt_profiles_api.execute_profile` renders the system prompt of a profile and substitutes the placeholders. It runs directly before the model call. The hook gets the prompt as an `in out` CLOB. It can append to the prompt, rewrite it, or set a prompt where the profile had none.
+
+Use it for standing instructions such as a compliance note, or the memory protocol of the Pro [agent-memory feature](/products/uc-ai/docs/guides/agent-memory/). Read `uc_ai.get_exec_context` in the hook to see which agent runs. Its fields are null outside an agent run.
+
+The procedure covers the **first turn** of an agent. A profile agent, an orchestrator, and a workflow-nested agent all go through `execute_profile`. A follow-up turn of a conversation reuses the stored system message from the history. An augmentation from the first turn therefore travels with the session. UC AI does **not** augment a standalone `generate_text` call with a raw `p_system_prompt`.
+
+Dispatch is **best-effort**, unlike the veto hooks. If the hook raises an error, UC AI logs the error, discards the changes, and continues with the unchanged prompt. This hook can never fail a run. UC AI tests for it once per session, the same as `before_tool_call`. It is fully optional.
+
+## Registering a hook
+
+### By convention (recommended)
+
+If a **valid** package named `UC_AI_HOOK` exists in the current schema, UC AI dispatches to it automatically. No registration call is necessary. An extension that delivers `UC_AI_HOOK` therefore activates it for every session.
+
+### By explicit override
+
+Register any package name at run time. The registration is session-scoped:
+
+```sql
+-- point the hook at a specific package (schema-qualified names allowed)
+begin
+  uc_ai_agents_api.set_execution_hook('MY_AI_HOOK');
+end;
+/
+
+-- clear the override and fall back to the UC_AI_HOOK convention
+begin
+  uc_ai_agents_api.set_execution_hook(null);
+end;
+/
+```
+
+UC AI caches the resolved package name for the session. It resolves the name again on each call to `set_execution_hook`.
+
+<Aside type="caution">
+Keep your hook package correct and complete. To stop a hook, clear the override with `set_execution_hook(null)`. Do not leave a half-working hook in place. `before_execution` runs **fail-closed**: if the package is registered but broken, the error propagates and UC AI aborts the run. A missing procedure, a compile error, and an unexpected exception all abort the run.
+</Aside>

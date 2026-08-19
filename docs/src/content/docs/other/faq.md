@@ -13,15 +13,18 @@ UC AI is a comprehensive Oracle PL/SQL framework that enables direct integration
 
 UC AI supports Oracle Database 12.2 or later. You don't need Oracle 23ai - the framework works with existing Oracle databases.
 
+The one exception is [Programmatic Tool Calling (Code Mode)](/products/uc-ai/docs/guides/programmatic-tool-calling/), an opt-in feature that runs model-authored JavaScript via Oracle's Multilingual Engine and therefore requires Oracle 23ai plus a one-time sandbox install. Everything else works on 12.2+.
+
 ## Which AI providers are supported?
 
-Currently, UC AI supports seven AI providers:
+Currently, UC AI supports eight AI providers:
 - **OpenAI** (GPT models)
 - **Anthropic** (Claude models)
 - **Google** (Gemini models)
 - **OCI** (Oracle Cloud Infrastructure Generative AI)
 - **Ollama** (Open source models like Llama, Mistral, Qwen, etc.)
 - **xAI** (Grok models)
+- **Mistral** (Mistral Large/Medium/Small, Magistral, Codestral models)
 - **OpenRouter** (Unified access to models from many providers)
 
 The framework is designed to make it easy to switch between providers without changing your code.

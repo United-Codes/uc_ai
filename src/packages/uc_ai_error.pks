@@ -60,6 +60,7 @@ as
   c_err_agent_retrieval        constant number := -20402;
   c_err_speaker_not_found      constant number := -20403;
   c_err_unknown_conv_mode      constant number := -20404;
+  c_err_max_exec_depth         constant number := -20405;
 
   -- Workflow errors
   c_err_missing_output_key     constant number := -20450;
@@ -67,6 +68,8 @@ as
   c_err_input_mapping_eval     constant number := -20452;
   c_err_final_message_eval     constant number := -20453;
   c_err_apex_session           constant number := -20454;
+  c_err_jsonpath_resolve       constant number := -20455;
+  c_err_plsql_step_eval        constant number := -20456;
 
   -- Validation errors
   c_err_not_found              constant number := -20500;
@@ -100,6 +103,7 @@ as
   c_msg_agent_retrieval        constant varchar2(200 char) := 'Error retrieving agent: %0';
   c_msg_speaker_not_found      constant varchar2(200 char) := 'Next speaker "%0" not found among participants';
   c_msg_unknown_conv_mode      constant varchar2(200 char) := 'Unknown conversation mode: %0';
+  c_msg_max_exec_depth         constant varchar2(200 char) := 'Maximum agent nesting depth exceeded (limit: %0). Check for a circular agent reference (an agent that delegates back to itself).';
 
   -- Workflow messages
   c_msg_missing_output_key     constant varchar2(200 char) := 'Step definition missing output_key';
@@ -107,6 +111,8 @@ as
   c_msg_input_mapping_eval     constant varchar2(200 char) := 'Error evaluating input mapping key %0: %1';
   c_msg_final_message_eval     constant varchar2(200 char) := 'Error evaluating final_message: %0 - %1';
   c_msg_apex_session           constant varchar2(500 char) := 'Cannot create APEX session. Schema needs an APEX Workspace with at least one application.';
+  c_msg_jsonpath_resolve       constant varchar2(200 char) := 'Error resolving state expression %0: %1';
+  c_msg_plsql_step_eval        constant varchar2(200 char) := 'Error executing PL/SQL step: %0';
 
   -- Validation messages
   c_msg_not_found              constant varchar2(200 char) := '%0 not found: %1';

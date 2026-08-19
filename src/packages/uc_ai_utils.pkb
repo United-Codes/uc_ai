@@ -28,6 +28,7 @@ as
     l_rec.provider_name := 'OCI'; l_rec.provider_id := uc_ai.c_provider_oci; pipe row (l_rec);
     l_rec.provider_name := 'xAI'; l_rec.provider_id := uc_ai.c_provider_xai; pipe row (l_rec);
     l_rec.provider_name := 'OpenRouter'; l_rec.provider_id := uc_ai.c_provider_openrouter; pipe row (l_rec);
+    l_rec.provider_name := 'Mistral'; l_rec.provider_id := uc_ai.c_provider_mistral; pipe row (l_rec);
     return;
   end get_providers;
 
@@ -162,6 +163,23 @@ as
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_3; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_2_vision; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_code_fast_1; l_rec.model_type := c_chat; pipe row (l_rec);
+    end if;
+
+    -- Mistral
+    if p_provider is null or p_provider = uc_ai.c_provider_mistral then
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_mistral_large; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_mistral_medium; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_mistral_small; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_magistral_medium; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_magistral_small; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_codestral; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_devstral_medium; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_devstral_small; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_ministral_8b; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_ministral_3b; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_pixtral_large; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_mistral_embed; l_rec.model_type := c_embedding; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_codestral_embed; l_rec.model_type := c_embedding; pipe row (l_rec);
     end if;
 
     return;

@@ -45,12 +45,15 @@ create or replace package body test_uc_ai_agent_orchestrator as
           p_status              => uc_ai_agents_api.c_status_active
         );
     end;
+
+    commit; -- agents must be committed before execution (autonomous telemetry)
   end setup;
 
   procedure teardown
   as
   begin
     uc_ai_test_agent_utils.cleanup_test_data;
+    commit;
   end teardown;
 
   procedure execute_orchestrator_routing
@@ -78,8 +81,10 @@ create or replace package body test_uc_ai_agent_orchestrator as
       "required": ["prompt"]
     }');
 
-    delete from uc_ai_agents where code in ('calendar_agent', 'flight_booking_agent', 'hotel_booking_agent', 'finance_agent');
-    
+    uc_ai_test_agent_utils.delete_agents_cascade('calendar_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('flight_booking_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('hotel_booking_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('finance_agent');
 
     l_agent_id := uc_ai_agents_api.create_agent(
       p_code                => 'calendar_agent',
@@ -126,6 +131,7 @@ create or replace package body test_uc_ai_agent_orchestrator as
     }';
 
     -- Create the orchestrator agent
+    uc_ai_test_agent_utils.delete_agents_cascade(gc_orchestrator_code);
     l_orchestrator_id := uc_ai_agents_api.create_agent(
       p_code                 => gc_orchestrator_code,
       p_description          => 'Test orchestrator agent',
@@ -133,6 +139,7 @@ create or replace package body test_uc_ai_agent_orchestrator as
       p_orchestration_config => l_orch_config,
       p_status               => uc_ai_agents_api.c_status_active
     );
+    commit;
 
     ut.expect(l_orchestrator_id).to_be_not_null();
 
@@ -140,12 +147,17 @@ create or replace package body test_uc_ai_agent_orchestrator as
     l_session_id := uc_ai_agents_api.generate_session_id;
     l_result := uc_ai_agents_api.execute_agent(
       p_agent_code       => gc_orchestrator_code,
-      p_input_parameters => json_object_t('{"prompt": "I need to travel from New York to San Francisco for a tech conference on Tuesday morning. I have a board meeting Monday until 11 AM. I prefer direct flights and hotels close to the venue. What are my best options? (Today is Monday: 12.01.2026)"}'),
+      p_input_parameters => json_object_t('{"prompt": "I need to travel from New York (departing JFK) to San Francisco for a tech conference at the Moscone Center on Tuesday morning. I have a board meeting Monday until 11 AM. I prefer direct flights and a hotel within walking distance of the Moscone Center. Please put together a complete plan with both a flight and a hotel using your specialist agents. Make reasonable assumptions and do not ask me any clarifying questions. (Today is Monday: 12.01.2026)"}'),
       p_session_id       => l_session_id
     );
 
     sys.dbms_output.put_line('Orchestrator travel result JSON: ' || l_result.to_clob);
-    ut.expect(l_result.get_number('tool_calls_count')).to_be_greater_than(2);
+    -- The prompt explicitly requests both a flight and a hotel, so the
+    -- orchestrator should delegate to at least two specialist agents. We assert
+    -- >= 2 rather than a higher fan-out count: exactly which extra agents
+    -- (calendar/finance) a reasoning model consults is model-dependent and was
+    -- a source of flakiness (models increasingly return early to clarify).
+    ut.expect(l_result.get_number('tool_calls_count')).to_be_greater_than(1);
 
     -- Validate result
     uc_ai_test_agent_utils.validate_agent_result(l_result, 'Orchestrator Travel Planning');
@@ -159,6 +171,105 @@ create or replace package body test_uc_ai_agent_orchestrator as
     -- Should contain travel recommendations
     ut.expect(lower(l_final_msg)).to_be_like('%flight%');
     ut.expect(lower(l_final_msg)).to_be_like('%hotel%');
+
+    -- ------------------------------------------------------------------
+    -- Session rollup: one header, tokens summed across orchestrator + its
+    -- delegate sub-agents via session_id, with no parent/child double count.
+    -- ------------------------------------------------------------------
+    declare
+      l_sess_count    number;
+      l_turn_count    number;
+      l_status_hdr    varchar2(50 char);
+      l_top_index     number;
+      l_child_count   number;
+      l_bad_child_idx number;
+      l_bad_child_sid number;
+      l_orch_own_in   number;
+      l_child_own_in  number;
+      l_sess_in       number;
+      l_sess_out      number;
+      l_exec_in       number;
+      l_exec_out      number;
+    begin
+      select count(*) into l_sess_count
+        from uc_ai_agent_sessions where session_id = l_session_id;
+      ut.expect(l_sess_count, 'One session header for the orchestrator run').to_equal(1);
+
+      select turn_count, status into l_turn_count, l_status_hdr
+        from uc_ai_agent_sessions where session_id = l_session_id;
+      ut.expect(l_turn_count, 'Only the top-level orchestrator run counts as a turn').to_equal(1);
+      ut.expect(l_status_hdr, 'Session status completed').to_equal(uc_ai_agents_api.c_exec_completed);
+
+      -- Top-level orchestrator execution is turn 1
+      select turn_index into l_top_index
+        from uc_ai_agent_executions
+       where session_id = l_session_id and parent_execution_id is null;
+      ut.expect(l_top_index, 'Top-level execution is turn 1').to_equal(1);
+
+      -- Delegate sub-agents run under the same session, as nested (turn_index null)
+      select count(*),
+             count(case when turn_index is not null then 1 end),
+             count(case when session_id <> l_session_id then 1 end)
+        into l_child_count, l_bad_child_idx, l_bad_child_sid
+        from uc_ai_agent_executions
+       where parent_execution_id is not null
+         and session_id = l_session_id;
+      ut.expect(l_child_count, 'Orchestrator spawned delegate sub-agent executions').to_be_greater_than(0);
+      ut.expect(l_bad_child_idx, 'Nested executions carry no turn_index').to_equal(0);
+      ut.expect(l_bad_child_sid, 'Nested executions share the session_id').to_equal(0);
+
+      -- Both the orchestrator and its delegates recorded their OWN tokens
+      select total_input_tokens into l_orch_own_in
+        from uc_ai_agent_executions
+       where session_id = l_session_id and parent_execution_id is null;
+      ut.expect(l_orch_own_in, 'Orchestrator recorded its own input tokens').to_be_greater_than(0);
+
+      select nvl(sum(total_input_tokens), 0) into l_child_own_in
+        from uc_ai_agent_executions
+       where session_id = l_session_id and parent_execution_id is not null;
+      ut.expect(l_child_own_in, 'Delegate sub-agents recorded their own input tokens').to_be_greater_than(0);
+
+      -- Session total = SUM of every execution's own tokens (orchestrator + children)
+      select total_input_tokens, total_output_tokens into l_sess_in, l_sess_out
+        from uc_ai_agent_sessions where session_id = l_session_id;
+      select nvl(sum(total_input_tokens), 0), nvl(sum(total_output_tokens), 0)
+        into l_exec_in, l_exec_out
+        from uc_ai_agent_executions where session_id = l_session_id;
+
+      ut.expect(l_sess_in, 'Session input = SUM of orchestrator + delegate own tokens').to_equal(l_exec_in);
+      ut.expect(l_sess_out, 'Session output = SUM of orchestrator + delegate own tokens').to_equal(l_exec_out);
+      ut.expect(l_sess_in, 'Session input = orchestrator own + delegates own').to_equal(l_orch_own_in + l_child_own_in);
+    end;
+
+    -- ------------------------------------------------------------------
+    -- Message log: delegate calls are persisted as tool_call/tool_result rows
+    -- with their tool metadata (the mapping apex-chat now depends on).
+    -- ------------------------------------------------------------------
+    declare
+      l_tool_calls    number;
+      l_tool_results  number;
+      l_calls_no_name number;
+      l_res_no_name   number;
+      l_msg_rows      number;
+      l_hdr_count     number;
+    begin
+      select count(case when role = 'tool_call' then 1 end),
+             count(case when role = 'tool_result' then 1 end),
+             count(case when role = 'tool_call' and tool_name is null then 1 end),
+             count(case when role = 'tool_result' and tool_name is null then 1 end),
+             count(*)
+        into l_tool_calls, l_tool_results, l_calls_no_name, l_res_no_name, l_msg_rows
+        from uc_ai_agent_messages where session_id = l_session_id;
+
+      ut.expect(l_tool_calls, 'Delegate tool_call rows persisted').to_be_greater_than(0);
+      ut.expect(l_tool_results, 'Delegate tool_result rows persisted').to_be_greater_than(0);
+      ut.expect(l_calls_no_name, 'Every tool_call row has a tool_name').to_equal(0);
+      ut.expect(l_res_no_name, 'Every tool_result row has a tool_name').to_equal(0);
+
+      select message_count into l_hdr_count
+        from uc_ai_agent_sessions where session_id = l_session_id;
+      ut.expect(l_hdr_count, 'Header message_count matches persisted rows').to_equal(l_msg_rows);
+    end;
   end execute_orchestrator_routing;
 
   procedure execute_orchestrator_follow_up
@@ -186,7 +297,10 @@ create or replace package body test_uc_ai_agent_orchestrator as
       "required": ["prompt"]
     }');
 
-    delete from uc_ai_agents where code in ('calendar_agent', 'flight_booking_agent', 'hotel_booking_agent', 'finance_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('calendar_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('flight_booking_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('hotel_booking_agent');
+    uc_ai_test_agent_utils.delete_agents_cascade('finance_agent');
 
     l_agent_id := uc_ai_agents_api.create_agent(
       p_code                => 'calendar_agent',
@@ -247,6 +361,7 @@ create or replace package body test_uc_ai_agent_orchestrator as
           p_status               => uc_ai_agents_api.c_status_active
         );
     end;
+    commit;
 
     -- First call
     l_session_id := uc_ai_agents_api.generate_session_id;

@@ -7,23 +7,27 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-**Tools allow AI to interact with your data**
+<Aside type="tip" title="Start with the shortest example">
+The [Quickstart](/products/uc-ai/docs/guides/quickstart/) registers one tool without parameters. It then shows the model calling this tool. This guide gives more: parameters, best practices, and examples that read and write data.
+</Aside>
 
-If you want the AI to be able to interact with your database or external APIs, you can teach it some capabilities by registering tools. During the conversation the AI decides if it it needs to use one of the tools and requests an execution. UC AI will then call the tool and return the result to the AI, which can then use it in its response.
+**Tools give the AI access to your data**
+
+Register a tool to give the AI access to your database or to an external API. During the conversation, the AI decides if it needs a tool and requests a call. UC AI then calls the tool and returns the result to the AI. The AI uses this result in its answer.
 
 You can divide tools into two categories:
 
-- **Additional Context**: you don't want to bloat the context of your conversation with too much information that only might be useful. Too much context results in slower and more expensive responses and reduced accuracy. Instead a tool can provide context and then only be used if the user asks for information about it.
-- **Actions**: Tools can enable the AI to create, update, or delete data in your DB or just trigger some action in another system via a REST call.
+- **Additional Context**: too much information in a conversation makes the answers slower, more expensive, and less accurate. A tool gives this context only when the user asks for it.
+- **Actions**: a tool lets the AI create, update, or delete data in your database. A tool can also start an action in another system with a REST call.
 
 ## Tools call a PL/SQL function
 
-With UC AI a tool is just a PL/SQL funciton the AI can call. The PL/SQL function should have these attributes:
+In UC AI, a tool is a PL/SQL function that the AI can call. The function must have these attributes:
 
-- The AI can pass 1 parameter: `CLOB`. It will be a JSON so it is still possible to pass multiple arguments. It can also be just an empty object.
-- returns `CLOB` as a result
+- The AI passes one parameter of type `CLOB`. This parameter holds JSON, so it can carry more than one argument. It can also hold an empty object.
+- The function returns a `CLOB`.
 
-Similar to [Structured Output](/products/uc-ai/docs/guides/structured_output) tools require you to describe the parameters in a [JSON Schema](/products/uc-ai/docs/guides/structured_output/#json-schema). If you have a tool that is called `GET_WEATHER` which has two parameters: `city` and `unit` (defaults to celsius), the schema could look like this:
+Like [Structured Output](/products/uc-ai/docs/guides/structured_output), a tool needs a description of its parameters in a [JSON Schema](/products/uc-ai/docs/guides/structured_output/#json-schema). A tool `GET_WEATHER` has the two parameters `city` and `unit`, and `unit` defaults to celsius. Its schema looks like this:
 
 ```json
 {
@@ -45,21 +49,21 @@ Similar to [Structured Output](/products/uc-ai/docs/guides/structured_output) to
 }
 ```
 
-The better the schema definition the easier it is for AI to call the tool.
+A precise schema definition makes the tool call more reliable.
 
 <Aside type="tip">
-  Use [our JSON schema
-  builder](/products/uc-ai/docs/other/json-schema/#interactive-builder) to build
-  your own schemas easily.
+  [Our JSON schema
+  builder](/products/uc-ai/docs/other/json-schema/#interactive-builder) helps you
+  write your own schemas.
 </Aside>
 
 ## Best practices
 
-- **Always return feedback**: any information you have is useful can help the AI. If there was an error, return a descriptive error text. The AI can try to call it again with a corrected input next time. Also when an action succeeded, tell the AI. Then it knows that it succeeded.
-- **Validate inputs**: Check that you get all required parameters and that the values follow the constraints (enum, min, max, etc.). If there is a violation return an error text. The AI can respond and call the tool again with fixed parameters.
-- **Thoroughly describe the tool**: The more context about a tool is available the easier it is for the AI to decide when to call it. Take time optimize the descriptions and constraints of your JSON schema. For some providers it can also help to add text to the system prompt to give examples when to call which tools and with example parameters.
-- **There are huge gaps in provider performance**: Picking the correct tools and calling them correctly highly depends on the intelligence of the model. Enabling [Reasoning](/products/uc-ai/docs/guides/reasoning) helps the AI to plan steps and thus to call tools more precisely. Still some providers are just worse at calling tools effectively than others. In my experience [Anthropic](/products/uc-ai/docs/providers/anthropic/) is currently by far outperforming all other providers.
-- **Restrict available tools via tags**: if you have many tools registered it is a lot of context for the AI making decisions when to use which tools harder. If possible give less options by filtering by tags.
+- **Always return feedback**: every piece of information helps the AI. If an error occurs, return a text that describes the error. The AI can then call the tool again with corrected input. After a successful action, return a success message also. The AI then knows the result.
+- **Validate inputs**: make sure that all required parameters are present. Make sure also that each value obeys its constraints for enum, minimum, and maximum. If a value breaks a constraint, return an error text. The AI can then call the tool again with corrected parameters.
+- **Describe the tool completely**: more context about a tool helps the AI decide when to call it. Write careful descriptions and constraints in your JSON schema. For some providers, examples in the system prompt help also. Give an example call and example parameters for each tool.
+- **The providers differ greatly**: the intelligence of the model controls how well it picks and calls tools. [Reasoning](/products/uc-ai/docs/guides/reasoning) helps the AI plan its steps and call tools more precisely. Some providers are still weaker at tool calls than others. In my experience, [Anthropic](/products/uc-ai/docs/providers/anthropic/) is the best provider for tool calls today.
+- **Restrict the available tools with tags**: many registered tools add much context. This context makes the decision harder for the AI. Filter the tools by tag to give the AI fewer options.
 
 ## Registering a tool
 
@@ -92,17 +96,17 @@ end;
 
 Parameters:
 
-- `p_tool_code`: Unique identifier
-- `p_description`: General description of what your tool does. Having a good description can drastically improve performance
-- `p_function_call`: Which PL/SQL function it should call. It needs to return a CLOB and if you have parameters use `:paramaters` to pass them into a CLOB parameter.
-- `p_json_schema`: JSON schema of the parameters
-- `p_tags`: Add tags to the tool. You can enable/disable certain tools for a call via tags.
+- `p_tool_code`: a unique identifier
+- `p_description`: a description of the task of your tool. A good description improves the results.
+- `p_function_call`: the PL/SQL function that UC AI calls. This function must return a `CLOB`. If the tool has parameters, use `:parameters` to pass them into a `CLOB` parameter.
+- `p_json_schema`: the JSON schema of the parameters
+- `p_tags`: the tags of the tool. Tags enable or disable a tool for one call.
 
-`create_tool_from_schema` is **create-only** — if a tool with the same `p_tool_code` already exists it will raise an error.
+`create_tool_from_schema` is **create-only**. If a tool with the same `p_tool_code` exists, the function raises an error.
 
 ### Upserting a tool with `merge_tool_from_schema`
 
-If you want to create a tool if it doesn't exist yet, or update its description, parameters, and tags if it does, use `uc_ai_tools_api.merge_tool_from_schema` instead. It takes the exact same parameters as `create_tool_from_schema` and is useful for idempotent deployment scripts:
+`uc_ai_tools_api.merge_tool_from_schema` creates the tool, or updates its description, parameters, and tags. It takes the same parameters as `create_tool_from_schema`. Use it in idempotent deployment scripts:
 
 ```sql
 l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
@@ -114,11 +118,11 @@ l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
 );
 ```
 
-On update, the tool's parameters and tags are fully replaced — existing rows in `uc_ai_tool_parameters` and `uc_ai_tool_tags` for that tool are removed and rewritten from the new schema/tags.
+An update replaces the parameters and the tags of the tool completely. The function deletes the rows of that tool in `uc_ai_tool_parameters` and `uc_ai_tool_tags`. It then writes new rows from the new schema and the new tags.
 
 ## Using tools
 
-To allow the AI to use tools you have to manually enable them. By default it will use all tools that are enabled. You can use `uc_ai.g_tool_tags` to just give a subset of available tools to the AI.
+You must enable tools before the AI can use them. By default, the AI gets every enabled tool. Set `uc_ai.g_tool_tags` to give the AI a subset of the tools.
 
 ```sql
 declare
@@ -137,7 +141,7 @@ begin
 end;
 ```
 
-With `p_max_tool_calls` you can restrict how many tools the AI can call in one interaction.
+`p_max_tool_calls` limits how many tools the AI can call in one interaction.
 
 ## Examples
 
@@ -145,7 +149,7 @@ With `p_max_tool_calls` you can restrict how many tools the AI can call in one i
 
 #### Data structure
 
-We have a table with some data about employees:
+This table holds data about employees:
 
 ```sql
 SQL> select first_name, last_name, email from tt_users;
@@ -164,7 +168,7 @@ Kevin         Malone       kevin.malone@dundermifflin.com
 
 #### Function to return data
 
-Now we create a function that will return this data as a single `CLOB` (as JSON):
+Now create a function that returns this data as one `CLOB` in JSON format:
 
 ```sql
 FUNCTION get_all_users_json
@@ -192,12 +196,12 @@ END get_all_users_json;
 ```
 
 <Aside type="note" title="Return CLOB">
-  AIs work via text. So you have to transform all your data into a single `CLOB`
-  value. The AI will then be able to use it in its response.
+  An AI communicates in text. Your tool must therefore return all data in one
+  `CLOB` value. The AI then uses this value in its answer.
 </Aside>
 #### Tool registration
 
-Now we can register a tool that teaches the AI how to call this function:
+Now register a tool. It tells the AI how to call this function:
 
 ```sql
 declare
@@ -217,7 +221,7 @@ end;
 ```
 
 <Aside type="note" title="Function call">
-  You have to provide a function body that returns a `CLOB` value.
+  The function body must return a `CLOB` value.
 </Aside>
 #### Testing
 
@@ -304,17 +308,17 @@ And this is the message array from the return object:
 
 ### Write data and parameters
 
-This example is more advanced. The system is actually a timetracking system where each employee (from the users table) can clock in on any project (projects table) with a note.
+This example is more advanced. The system is a time tracking system. Each employee in the users table can clock in on any project in the projects table, with a note.
 
-To achieve this we actually will use three tools:
+This needs three tools:
 
 - `TT_GET_USERS`: to get the users
-- `TT_GET_PROJECTS`: to get the projects (works similar to the users example)
+- `TT_GET_PROJECTS`: to get the projects (the same pattern as the users example)
 - `TT_CLOCK_IN`: to clock in on a project
 
 #### Function definition
 
-The clock in tool is more advanced as it needs parameters to work. So let's take a closer look at the `TT_CLOCK_IN` function:
+The clock-in tool is more advanced, because it needs parameters. Examine the `TT_CLOCK_IN` function:
 
 ```sql
 FUNCTION clock_in_json(
@@ -352,15 +356,15 @@ begin
 end clock_in_json;
 ```
 
-Note that the only parameter is a `CLOB`. The AI speaks in JSON and that's why we get a CLOB and have to manually extract the attributes from it.
+The function has one parameter of type `CLOB`. The AI communicates in JSON. The function must therefore extract each attribute from this `CLOB`.
 
-We also return a `CLOB` again. We are talking to an LLM so it expects text responses. So on success we return something like "User (X) clocked in successfully on project (Y) with note (Z)".
+The function returns a `CLOB` again, because an LLM expects text. After a successful clock-in, it returns a text such as "User (X) clocked in on project (Y) with note (Z)".
 
-Also note that we don't raise errors but instead also return text with the error message. As LLMs understand the message they can actually recover. If you pass them a project with a typo, and the function returns "Error: Project 'ProjecX' not found", the AI can then either ask the user to correct the project name or call the project lookup tool again and try to spot the typos.
+The function raises no error. It returns the error message as text instead. The LLM reads this message and can recover. For a project name with a typo, the function returns "Error: Project 'ProjecX' not found". The AI then asks the user for the correct name, or calls the project lookup tool again.
 
 #### Create tool definition
 
-Now let's create the tool definition for the clock in function. Note that it is helpful to give and in-depth description even with example parameters. This helps the AI to understand what it can do with the tool.
+Now create the tool definition for the clock-in function. A detailed description with example parameters helps the AI. The AI then knows what it can do with the tool.
 
 ```sql
 declare
@@ -404,12 +408,38 @@ end;
 /
 ```
 
+## Provider (server-side) tools
+
+The tools above run **in your database**. Most providers also have their own
+**server-side tools** that run on the infrastructure of the provider. Examples
+are Anthropic web search, the OpenAI Responses API web search, and Google
+search. UC AI can pass these tools through. Set `uc_ai.g_provider_tools` to a
+JSON array of provider-native tool definitions. UC AI appends them to the
+`tools` array of the request without a change. The provider runs them, never
+your database:
+
+```sql
+BEGIN
+  uc_ai.g_provider_tools := json_array_t(
+    '[{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}]'
+  );
+
+  -- next generate_text call lets the model search the web provider-side
+END;
+/
+```
+
+Provider tools work together with your local tools. UC AI sends them also when
+`g_enable_tools` is `false`. See
+[Provider (server-side) tools](/products/uc-ai/docs/api/generate_text/#provider-server-side-tools)
+for the full reference and per-provider formats.
+
 ## Tools vs. MCP
 
-MCP and tools are very similar. The main benefit is that you can tell the AI what it can do with the tools and the AI decides based on the conversation if it needs to call a tool or not.
+MCP and tools are similar. In both, you tell the AI what it can do. The AI then decides from the conversation if it needs a call.
 
-The main difference between tools and MCPs is their architectural focus: MCPs are specifically designed for distributed systems. Meaning that you have an AI chat on your system but need to access context from another system. A nice example is your email provider that gives you access to an MCP server for your emails. On your system you can interact with the emails that are stored on the server of the mail provider.
+The architecture is the main difference. MCP targets distributed systems. In such a system, the AI chat runs on your system but needs context from another system. An email provider is a good example. It gives you an MCP server for your emails. Your system then works with the emails on the server of the email provider.
 
-As this package is designed to call AI from within the database (next to your data) there is no need to run an MCP server. You can directly access it via SQL and PL/SQL and make it available to the AI via the tool definitions.
+UC AI calls the AI from inside the database, next to your data. It therefore needs no MCP server. You read your data directly with SQL and PL/SQL, and you give it to the AI in a tool definition.
 
-One potential improvement is allowing UC AI to call foreign MCPs. So that your users can access for example their emails from the MCP of the email provider. This is not yet implemented but could be a future feature.
+UC AI does not call external MCP servers today. A future version can add this feature. Your users then reach their emails through the MCP of their email provider.

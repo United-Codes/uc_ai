@@ -1,0 +1,124 @@
+---
+title: Network Setup (ACL & Wallet)
+description: Configure Oracle network ACLs and a TLS wallet so UC AI can reach provider HTTPS endpoints.
+sidebar:
+  order: 2
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+UC AI calls every AI provider over HTTPS with `apex_web_service.make_rest_request`. The database needs two things before it can open an outbound connection:
+
+1. A **network ACL** that gives your schema permission to connect to each provider host. Without this ACL, the call fails with `ORA-24247: network access denied by access control list (ACL)`.
+2. A **trusted certificate**, in a wallet or in the system certificate store of the database. Without it, the call fails with `ORA-29024: Certificate validation failure`.
+
+## When you need this
+
+<Aside type="tip">
+  On **Oracle Autonomous Database** and most managed cloud databases, the
+  outbound ACLs and the system certificate store are already configured. This
+  page is then necessary only after a call to a provider fails. The
+  [installation guide](/products/uc-ai/docs/guides/installation/) is the next
+  step for these databases.
+</Aside>
+
+This page applies to **on-premises and self-managed** databases (19c, 23ai). A local model runner such as **Ollama** also needs an ACL for its host, for example `localhost` or an internal server name.
+
+## Network ACLs
+
+The UC AI schema is the schema that holds UC AI. This is your APEX parsing schema. Grant it the `connect` and `resolve` privileges for each provider host that you call. Run this block as a privileged user, for example `SYS` or a DBA:
+
+```sql
+BEGIN
+  DBMS_NETWORK_ACL_ADMIN.APPEND_HOST_ACE(
+    host => 'api.openai.com',
+    ace  => xs$ace_type(
+      privilege_list => xs$name_list('connect', 'resolve'),
+      principal_name => 'UC_AI',            -- your UC AI / APEX parsing schema
+      principal_type => xs_acl.ptype_db));
+END;
+/
+```
+
+Repeat the block for each provider that you use. Change the `host` value each time:
+
+| Provider   | Host                                                  |
+| ---------- | ----------------------------------------------------- |
+| OpenAI     | `api.openai.com`                                      |
+| Anthropic  | `api.anthropic.com`                                   |
+| Google     | `generativelanguage.googleapis.com`                   |
+| Mistral    | `api.mistral.ai`                                      |
+| xAI        | `api.x.ai`                                            |
+| OpenRouter | `openrouter.ai`                                       |
+| OCI        | `inference.generativeai.<region>.oci.oraclecloud.com` |
+| Ollama     | your local or remote Ollama host (for example `localhost`) |
+
+<Aside type="note">
+  For OCI, `<region>` is the region identifier of your tenancy, for example `us-chicago-1`. The [OCI provider guide](/products/uc-ai/docs/providers/oci/) has more information.
+</Aside>
+
+This query shows the ACLs that the database granted:
+
+```sql
+SELECT host, lower_port, upper_port, acl
+  FROM dba_host_acls
+ ORDER BY host;
+```
+
+## TLS wallet / certificates
+
+Because all traffic is HTTPS, the database must trust the certificate authority (CA) that signed the certificate of the provider.
+
+### Option 1: System certificate store (19c+)
+
+New Oracle Database releases have a system default certificate store. This store already trusts the public CAs of the providers in the table above. In many environments, HTTPS calls therefore work without your own wallet.
+
+<Aside type="tip">
+  From **Oracle Database 19c**, the database uses the **certificate store of the
+  host operating system** by default. If the CA bundle of the host trusts the
+  certificate of the provider, you need **no** wallet. The CA bundle covers the
+  public providers in the table above.
+</Aside>
+
+### Option 2: An explicit wallet
+
+If validation still fails with `ORA-29024`, create a wallet. Then add the CA certificate of the provider to this wallet. Use the `orapki` command-line utility of Oracle on the database server:
+
+```bash
+# Create a wallet
+orapki wallet create -wallet /path/to/wallet -auto_login -pwd <password>
+
+# Add the trusted CA certificate (download the provider's root/intermediate CA first)
+orapki wallet add -wallet /path/to/wallet -trusted_cert -cert /path/to/ca.crt -pwd <password>
+```
+
+Then send the HTTP calls of UC AI to this wallet. On an APEX-based database, set the wallet under **Manage Instance → Wallet**. On other databases, configure the wallet of `apex_web_service` at instance level. The [Oracle documentation for `orapki` and wallets](https://docs.oracle.com/en/database/oracle/oracle-database/) gives the exact steps for your version.
+
+## Common errors
+
+| Error                                                           | Likely cause                                              | Fix                                                                                           |
+| --------------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `ORA-24247: network access denied by access control list (ACL)` | No ACL for that host, or wrong principal/schema.          | Add the host ACL for your schema (see [Network ACLs](#network-acls)).                         |
+| `ORA-29024: Certificate validation failure`                     | The database does not trust the CA of the provider, or the certificate expired. | Use the system store or add the CA to a wallet (see [TLS wallet](#tls-wallet--certificates)). |
+| `ORA-29273: HTTP request failed` / `ORA-12535: TNS timeout`     | A firewall or a proxy blocks the outbound traffic.        | Allow outbound traffic to the provider host and port, or configure your proxy.                 |
+
+## Verify
+
+When the ACLs and the certificates are in place, run one small call. If the call returns a response, your network configuration is correct:
+
+```sql
+DECLARE
+  l_result JSON_OBJECT_T;
+BEGIN
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Say hello.',
+    p_provider    => uc_ai.c_provider_openai, -- change to your provider
+    p_model       => uc_ai_openai.c_model_gpt_4o_mini
+  );
+
+  DBMS_OUTPUT.PUT_LINE('AI Response: ' || l_result.get_string('final_message'));
+END;
+/
+```
+
+If the call fails, match the error against the [Common errors](#common-errors) table above.

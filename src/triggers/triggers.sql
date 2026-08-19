@@ -73,10 +73,59 @@ begin
 end uc_ai_agents_biu;
 /
 
-create or replace trigger uc_ai_agent_executions_bi
-    before insert on uc_ai_agent_executions
+create or replace trigger uc_ai_agent_executions_biu
+    before insert or update on uc_ai_agent_executions
     for each row
 begin
-    :new.started_at := systimestamp;
-end uc_ai_agent_executions_bi;
+    if inserting
+    then
+        :new.started_at := systimestamp;
+
+        -- fallbacks for inserts outside the API; API-captured values win
+        if :new.created_by is null
+        then
+            :new.created_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+        end if;
+
+        if :new.db_user is null
+        then
+            :new.db_user := user;
+        end if;
+    end if;
+
+    -- audit every state change (checkpoint, completion, failure)
+    :new.updated_at := systimestamp;
+end uc_ai_agent_executions_biu;
+/
+
+create or replace trigger uc_ai_agent_sessions_biu
+    before insert or update on uc_ai_agent_sessions
+    for each row
+begin
+    if inserting
+    then
+        if :new.started_at is null
+        then
+            :new.started_at := systimestamp;
+        end if;
+
+        if :new.created_by is null
+        then
+            :new.created_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+        end if;
+    end if;
+
+    :new.updated_at := systimestamp;
+end uc_ai_agent_sessions_biu;
+/
+
+create or replace trigger uc_ai_agent_messages_bi
+    before insert on uc_ai_agent_messages
+    for each row
+begin
+    if :new.created_at is null
+    then
+        :new.created_at := systimestamp;
+    end if;
+end uc_ai_agent_messages_bi;
 /

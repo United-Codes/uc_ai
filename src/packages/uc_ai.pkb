@@ -3,12 +3,24 @@ create or replace package body uc_ai as
   c_scope_prefix           constant varchar2(31 char) := lower($$plsql_unit) || '.';
   c_default_max_tool_calls constant pls_integer := 10;
 
-  function generate_text (
+  -- Current execution context (see uc_ai.t_exec_context). Session-scoped and set
+  -- by the agent layer around a run; null outside an agent execution.
+  -- @dblinter ignore(g-7230): allow use of global variables
+  g_exec_context t_exec_context;
+
+  -- Shared dispatch for all generate_text overloads. The caller builds the
+  -- settings record (from globals or from a JSON config) and hands it in; this
+  -- routes to the provider, threading the record so a nested call cannot corrupt
+  -- this call's in-flight configuration.
+  function dispatch_generate_text (
     p_messages              in json_array_t
   , p_provider              in provider_type
   , p_model                 in model_type
-  , p_max_tool_calls        in pls_integer default null
-  , p_response_json_schema  in json_object_t default null
+  , p_max_tool_calls        in pls_integer
+  , p_response_json_schema  in json_object_t
+  -- @dblinter ignore(g-7440): the settings record must round-trip through this dispatch, so in out is intentional
+  -- @dblinter ignore(g-9110): kept as p_settings for consistency with the providers, where the same record is passed in
+  , p_settings              in out nocopy uc_ai_settings.t_settings
   ) return json_object_t
   as
     l_result json_object_t;
@@ -21,29 +33,33 @@ create or replace package body uc_ai as
         l_result := uc_ai_openai.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
+        , p_settings       => p_settings
         );
       when c_provider_anthropic then
         l_result := uc_ai_anthropic.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
+        , p_settings       => p_settings
         );
       when c_provider_google then
         l_result := uc_ai_google.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
+        , p_settings       => p_settings
         );
       when c_provider_ollama then
         l_result := uc_ai_ollama.generate_text(
           p_messages       => p_messages
         , p_model          => p_model
-        , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
         , p_schema         => p_response_json_schema
+        , p_settings       => p_settings
         );
       when c_provider_oci then
         if p_response_json_schema is not null then
@@ -56,55 +72,42 @@ create or replace package body uc_ai as
           l_result := uc_ai_oci.generate_text(
             p_messages       => p_messages
           , p_model          => p_model
-          , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
+          , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
+          , p_settings       => p_settings
           );
         end if;
       when c_provider_xai then
-        declare
-          l_prev_base_url  varchar2(4000 char) := g_base_url;
-          l_prev_override  varchar2(4000 char) := g_provider_override;
-        begin
-          g_base_url := 'https://api.x.ai/v1';
-          g_provider_override := c_provider_xai;
-          begin
-            l_result := uc_ai_openai.generate_text(
-              p_messages       => p_messages
-            , p_model          => p_model
-            , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
-            , p_schema         => p_response_json_schema
-            );
-            g_base_url := l_prev_base_url;
-            g_provider_override := l_prev_override;
-          exception
-            when others then
-              g_base_url := l_prev_base_url;
-              g_provider_override := l_prev_override;
-              raise;
-          end;
-        end;
+        -- xAI delegates to the OpenAI implementation with its own endpoint/provider.
+        -- Set them on the settings record instead of mutating globals.
+        p_settings.base_url          := 'https://api.x.ai/v1';
+        p_settings.provider_override := c_provider_xai;
+        l_result := uc_ai_openai.generate_text(
+          p_messages       => p_messages
+        , p_model          => p_model
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
+        , p_schema         => p_response_json_schema
+        , p_settings       => p_settings
+        );
       when c_provider_openrouter then
-        declare
-          l_prev_base_url  varchar2(4000 char) := g_base_url;
-          l_prev_override  varchar2(4000 char) := g_provider_override;
-        begin
-          g_base_url := 'https://openrouter.ai/api/v1';
-          g_provider_override := c_provider_openrouter;
-          begin
-            l_result := uc_ai_openai.generate_text(
-              p_messages       => p_messages
-            , p_model          => p_model
-            , p_max_tool_calls => coalesce(p_max_tool_calls, g_max_tool_calls, c_default_max_tool_calls)
-            , p_schema         => p_response_json_schema
-            );
-            g_base_url := l_prev_base_url;
-            g_provider_override := l_prev_override;
-          exception
-            when others then
-              g_base_url := l_prev_base_url;
-              g_provider_override := l_prev_override;
-              raise;
-          end;
-        end;
+        p_settings.base_url          := 'https://openrouter.ai/api/v1';
+        p_settings.provider_override := c_provider_openrouter;
+        l_result := uc_ai_openai.generate_text(
+          p_messages       => p_messages
+        , p_model          => p_model
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
+        , p_schema         => p_response_json_schema
+        , p_settings       => p_settings
+        );
+      when c_provider_mistral then
+        p_settings.base_url          := 'https://api.mistral.ai/v1';
+        p_settings.provider_override := c_provider_mistral;
+        l_result := uc_ai_openai.generate_text(
+          p_messages       => p_messages
+        , p_model          => p_model
+        , p_max_tool_calls => coalesce(p_max_tool_calls, p_settings.max_tool_calls, c_default_max_tool_calls)
+        , p_schema         => p_response_json_schema
+        , p_settings       => p_settings
+        );
       else
         uc_ai_error.raise_error(
           p_error_code => uc_ai_error.c_err_unknown_provider
@@ -117,6 +120,51 @@ create or replace package body uc_ai as
     g_request_id := null;
 
     return l_result;
+  end dispatch_generate_text;
+
+  function generate_text (
+    p_messages              in json_array_t
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
+  ) return json_object_t
+  as
+    -- Snapshot the config globals once; thread the record to the provider so a
+    -- nested agent execution cannot corrupt this call's in-flight configuration.
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals;
+  begin
+    return dispatch_generate_text(
+      p_messages             => p_messages
+    , p_provider             => p_provider
+    , p_model                => p_model
+    , p_max_tool_calls       => p_max_tool_calls
+    , p_response_json_schema => p_response_json_schema
+    , p_settings             => l_settings
+    );
+  end generate_text;
+
+  function generate_text (
+    p_messages              in json_array_t
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_config                in json_object_t
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
+  ) return json_object_t
+  as
+    -- Derive this call's configuration straight from the JSON config, without
+    -- reading or mutating any global.
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_config(p_config, p_provider);
+  begin
+    return dispatch_generate_text(
+      p_messages             => p_messages
+    , p_provider             => p_provider
+    , p_model                => p_model
+    , p_max_tool_calls       => p_max_tool_calls
+    , p_response_json_schema => p_response_json_schema
+    , p_settings             => l_settings
+    );
   end generate_text;
 
   function generate_text (
@@ -151,10 +199,47 @@ create or replace package body uc_ai as
     );
   end generate_text;
 
-  function generate_embeddings (
-    p_input in json_array_t
+  function generate_text (
+    p_user_prompt           in clob
+  , p_system_prompt         in clob default null
+  , p_provider              in provider_type
+  , p_model                 in model_type
+  , p_config                in json_object_t
+  , p_max_tool_calls        in pls_integer default null
+  , p_response_json_schema  in json_object_t default null
+  ) return json_object_t
+  as
+    l_messages json_array_t;
+  begin
+    -- Build message array
+    l_messages := json_array_t();
+
+    if p_system_prompt is not null then
+      l_messages.append(uc_ai_message_api.create_system_message(p_system_prompt));
+    end if;
+
+    l_messages.append(uc_ai_message_api.create_simple_user_message(p_user_prompt));
+
+    -- Route through the config-driven message overload.
+    return generate_text(
+      p_messages              => l_messages
+    , p_provider              => p_provider
+    , p_model                 => p_model
+    , p_config                => p_config
+    , p_max_tool_calls        => p_max_tool_calls
+    , p_response_json_schema  => p_response_json_schema
+    );
+  end generate_text;
+
+  -- Shared dispatch for the generate_embeddings overloads. The caller builds the
+  -- settings record (from globals or from a JSON config) and hands it in.
+  function dispatch_generate_embeddings (
+    p_input    in json_array_t
   , p_provider in provider_type
-  , p_model in model_type
+  , p_model    in model_type
+  -- @dblinter ignore(g-7440): the settings record must round-trip through this dispatch, so in out is intentional
+  -- @dblinter ignore(g-9110): kept as p_settings for consistency with the providers, where the same record is passed in
+  , p_settings in out nocopy uc_ai_settings.t_settings
   ) return json_array_t
   as
     l_result json_array_t;
@@ -164,43 +249,42 @@ create or replace package body uc_ai as
         l_result := uc_ai_openai.generate_embeddings(
           p_input => p_input
         , p_model => p_model
+        , p_settings => p_settings
         );
       when c_provider_google then
         l_result := uc_ai_google.generate_embeddings(
           p_input => p_input
         , p_model => p_model
+        , p_settings => p_settings
         );
       when c_provider_oci then
         l_result := uc_ai_oci.generate_embeddings(
           p_input => p_input
         , p_model => p_model
+        , p_settings => p_settings
         );
       when c_provider_ollama then
         l_result := uc_ai_ollama.generate_embeddings(
           p_input => p_input
         , p_model => p_model
+        , p_settings => p_settings
         );
       when c_provider_openrouter then
-        declare
-          l_prev_base_url  varchar2(4000 char) := g_base_url;
-          l_prev_override  varchar2(4000 char) := g_provider_override;
-        begin
-          g_base_url := 'https://openrouter.ai/api/v1';
-          g_provider_override := c_provider_openrouter;
-          begin
-            l_result := uc_ai_openai.generate_embeddings(
-              p_input => p_input
-            , p_model => p_model
-            );
-            g_base_url := l_prev_base_url;
-            g_provider_override := l_prev_override;
-          exception
-            when others then
-              g_base_url := l_prev_base_url;
-              g_provider_override := l_prev_override;
-              raise;
-          end;
-        end;
+        p_settings.base_url          := 'https://openrouter.ai/api/v1';
+        p_settings.provider_override := c_provider_openrouter;
+        l_result := uc_ai_openai.generate_embeddings(
+          p_input => p_input
+        , p_model => p_model
+        , p_settings => p_settings
+        );
+      when c_provider_mistral then
+        p_settings.base_url          := 'https://api.mistral.ai/v1';
+        p_settings.provider_override := c_provider_mistral;
+        l_result := uc_ai_openai.generate_embeddings(
+          p_input => p_input
+        , p_model => p_model
+        , p_settings => p_settings
+        );
       else
         uc_ai_error.raise_error(
           p_error_code => uc_ai_error.c_err_unknown_provider
@@ -211,6 +295,39 @@ create or replace package body uc_ai as
     end case;
 
     return l_result;
+  end dispatch_generate_embeddings;
+
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_provider in provider_type
+  , p_model in model_type
+  ) return json_array_t
+  as
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals;
+  begin
+    return dispatch_generate_embeddings(
+      p_input    => p_input
+    , p_provider => p_provider
+    , p_model    => p_model
+    , p_settings => l_settings
+    );
+  end generate_embeddings;
+
+  function generate_embeddings (
+    p_input in json_array_t
+  , p_provider in provider_type
+  , p_model in model_type
+  , p_config in json_object_t
+  ) return json_array_t
+  as
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_config(p_config, p_provider);
+  begin
+    return dispatch_generate_embeddings(
+      p_input    => p_input
+    , p_provider => p_provider
+    , p_model    => p_model
+    , p_settings => l_settings
+    );
   end generate_embeddings;
 
   procedure reset_globals
@@ -223,10 +340,14 @@ create or replace package body uc_ai as
     g_enable_reasoning := false;
     g_reasoning_level := null;
     g_enable_tools := false;
+    g_enable_programmatic_tools := false;
     g_tool_tags := apex_t_varchar2();
     g_apex_web_credential := null;
     g_provider_override := null;
     g_max_tool_calls := null;
+    g_extra_headers.delete();
+    g_extra_body := null;
+    g_provider_tools := null;
     g_request_id := null;
     g_callback_fatal := false;
     -- g_event_callback intentionally preserved (long-lived registration)
@@ -237,9 +358,14 @@ create or replace package body uc_ai as
     uc_ai_openai.g_use_responses_api := true;
 
     -- Reset shared Responses API global variables
+    uc_ai_responses_api.g_base_url := null;
+    uc_ai_responses_api.g_reasoning_effort := null;
+    uc_ai_responses_api.g_reasoning_summary := null;
+    uc_ai_responses_api.g_text_verbosity := 'medium';
     uc_ai_responses_api.g_store_responses := false;
     uc_ai_responses_api.g_include_encrypted_reasoning := false;
-    uc_ai_responses_api.g_reasoning_summary := null;
+    uc_ai_responses_api.g_apex_web_credential := null;
+    uc_ai_responses_api.g_skip_auth := false;
 
     -- Reset Anthropic global variables
     uc_ai_anthropic.g_max_tokens := 8192;
@@ -270,6 +396,9 @@ create or replace package body uc_ai as
     -- Reset OpenRouter global variables
     uc_ai_openrouter.g_reasoning_effort := 'low';
     uc_ai_openrouter.g_apex_web_credential := null;
+
+    -- Reset Mistral global variables
+    uc_ai_mistral.g_apex_web_credential := null;
   end reset_globals;
 
   procedure set_event_callback(p_proc_name in varchar2)
@@ -288,6 +417,25 @@ create or replace package body uc_ai as
   begin
     g_event_callback := null;
   end clear_event_callback;
+
+  function get_exec_context return t_exec_context
+  as
+  begin
+    return g_exec_context;
+  end get_exec_context;
+
+  procedure set_exec_context(p_context in t_exec_context)
+  as
+  begin
+    g_exec_context := p_context;
+  end set_exec_context;
+
+  procedure clear_exec_context
+  as
+    l_empty t_exec_context;
+  begin
+    g_exec_context := l_empty;
+  end clear_exec_context;
 
   procedure fire_event(
     p_event_type in varchar2

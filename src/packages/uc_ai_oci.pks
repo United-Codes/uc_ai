@@ -69,6 +69,7 @@ as
   g_region varchar2(64 char) := 'us-ashburn-1'; -- OCI region for API endpoint
   g_apex_web_credential varchar2(255 char);
   g_use_responses_api boolean := true;
+  g_max_tokens pls_integer := 4096; -- Default max output tokens for OCI chat requests (GENERIC & COHERE)
 
   /*
    * Oracle Cloud Infrastructure (OCI) Generative AI implementation for text generation 
@@ -77,6 +78,7 @@ as
     p_messages       in json_array_t
   , p_model          in uc_ai.model_type
   , p_max_tool_calls in pls_integer
+  , p_settings       in uc_ai_settings.t_settings default null
   ) return json_object_t;
 
   /*
@@ -90,7 +92,36 @@ as
   function generate_embeddings (
     p_input in json_array_t
   , p_model in uc_ai.model_type
+  , p_settings in uc_ai_settings.t_settings default null
   ) return json_array_t;
+
+
+  /*
+   * Converts standardized LM messages into the OCI generic (non-Cohere) chat
+   * request format.
+   *
+   * Exposed so the request payload can be asserted without an HTTP call (see
+   * test_uc_ai_reasoning_replay). Not part of the stable public API - the message
+   * shape follows whatever the provider requires and may change.
+   */
+  procedure convert_lm_messages_to_generic_oci(
+    p_lm_messages in json_array_t,
+    po_oci_messages out nocopy json_array_t
+  );
+
+
+  /*
+   * Converts standardized LM messages into the OCI Cohere chat request format,
+   * which splits the system prompt and the current user message out of the history.
+   *
+   * Exposed for the same reason as convert_lm_messages_to_generic_oci above.
+   */
+  procedure convert_lm_messages_to_cohere_oci(
+    p_lm_messages in json_array_t,
+    po_oci_messages out nocopy json_array_t,
+    po_system_prompt out nocopy clob,
+    po_user_message out nocopy clob
+  );
 
 end uc_ai_oci;
 /

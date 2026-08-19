@@ -1,0 +1,220 @@
+---
+title: About guardrails
+description: Governance for AI spend and frequency. Cost budgets and rate limits around every agent run, built on the execution hooks of UC AI.
+sidebar:
+  order: 1
+---
+
+import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
+
+**Guardrails put governance around AI usage. They set a hard ceiling on what a user, an agent, or an app can spend, and on how often it can run. UC AI enforces this ceiling around every agent run.**
+
+Guardrails are part of the paid **UC AI Pro** layer. They install next to core UC AI and start automatically. Your agents and your `generate_text` calls need no change.
+
+<Aside type="note" title="Pro add-on">
+Guardrails are part of the commercial UC AI Pro layer, for support-pack customers. Core UC AI is the LGPL package. It gives the generic [execution hooks](/products/uc-ai/docs/guides/execution-hooks/) that Pro builds on. The enforcement mechanism is therefore open, and the guardrail features on top of it are the paid part.
+</Aside>
+
+## The two features
+
+<CardGrid>
+  <LinkCard
+    title="Budget guardrails"
+    description="Cap the cost per user, agent, or app over a period. Track the spend and forecast an overrun."
+    href="/products/uc-ai/docs/guides/guardrails/budget/"
+  />
+  <LinkCard
+    title="Rate limiting"
+    description="Cap how often runs happen: agent runs, tool calls, and concurrent runs per period"
+    href="/products/uc-ai/docs/guides/guardrails/rate-limiting/"
+  />
+</CardGrid>
+
+| Feature | Caps | Answers |
+| ------- | ---- | ------- |
+| **Budget** | Monetary **cost** (priced from token usage) | "This app can spend at most \$100 this month" |
+| **Rate limiting** | **Counts** — runs, tool calls, concurrency | "This user can start at most 100 runs per hour" |
+
+Both features share the same scope and **audience** vocabulary. Either one can
+express "anonymous visitors get a little, logged-in users get more". See
+[the recipe](#recipe-public-visitors-a-little-logged-in-users-more).
+
+Use them together. Budgets stop runaway *cost*. Rate limits stop runaway *frequency*: abuse, retry storms, and infinite tool loops.
+
+## How it plugs into core
+
+Core UC AI gives a generic [execution hook](/products/uc-ai/docs/guides/execution-hooks/): a package named `UC_AI_HOOK`. If this package is present and valid, UC AI calls it around every top-level `execute_agent` run, and before every tool call. In Pro, `UC_AI_HOOK` is a **dispatcher**. It sends each callback to every enabled feature in `uc_ai_pro_hook_subscribers`.
+
+```text
+uc_ai_agents_api.execute_agent
+        │  before_execution / after_execution
+        ▼
+   UC_AI_HOOK  (Pro dispatcher)
+        ├──► UC_AI_RATELIMIT_HOOK   (sort_order 50)
+        └──► UC_AI_BUDGET_HOOK      (sort_order 100)
+
+uc_ai_tools_api  (inside the tool-calling loop)
+        │  before_tool_call
+        ▼
+   UC_AI_HOOK ──► subscribers flagged tool_hook = 'Y'  (rate limiting)
+```
+
+Each feature reads the token counts, the identity, and the timestamps directly from the public `uc_ai_agent_executions` table. The Pro layer keeps only its own configuration, and a cost ledger for budgets. At the start of a run, core writes the class of the caller to `uc_ai_agent_executions.audience` as `public`, `authenticated`, or `db`. This column lets the guardrails separate anonymous traffic from signed-in traffic.
+
+- **`before_execution`** runs *before* a run starts. A guardrail raises an error here to **veto** the run. This is a hard cap, and the run spends no tokens.
+- **`before_tool_call`** runs *before each tool call*. When a run reaches a tool-call cap, rate limiting raises an error here and stops the run **in mid-flight**.
+- **`after_execution`** runs when a run finishes. Budgets use it to price the finished execution tree into the cost ledger. This step is best-effort. It never turns a completed run into a failure.
+
+## Shared concepts
+
+Both features share the same governance vocabulary.
+
+### Scope
+
+Every limit targets a **scope** — what it counts, and in which bucket:
+
+| `scope_type` | `scope_value` | Counts |
+| ------------ | ------------- | ------ |
+| `global` | *(null)* | Every execution in the schema |
+| `user` | the `created_by` value | Runs by one named user (APEX user, else DB user) |
+| `agent` | an agent `code` | Runs of one agent |
+| `app` | an APEX application id | Runs from one APEX app |
+| `apex_session` | *(must be null)* | Runs in **the APEX session of the calling visitor**. One bucket for each browser session |
+| `each_user` | *(must be null)* | Runs by **the calling user**. One row gives each user a separate bucket |
+
+The first four are **static**. You name the bucket in `scope_value`. The last two
+are **per-caller**. One configuration row then creates a separate bucket for each
+visitor or user. For these two, `scope_value` must be null. The database rejects
+any other value.
+
+UC AI evaluates every limit that matches a run. The strictest outcome wins.
+
+### Audience
+
+Every limit also targets an **audience** — which *callers* it governs:
+
+| `audience` | Governs |
+| ---------- | ------- |
+| `any` *(default)* | Every caller |
+| `public` | An anonymous APEX visitor (a session that is not authenticated) |
+| `authenticated` | A logged-in APEX user |
+| `db` | A database session (SQL client, scheduler job, or trigger), or the internal session of uc_ai |
+
+**`audience` selects which callers a limit governs. For every value except
+`any`, it also restricts what the limit counts to that same class of caller.** A
+`public` limit therefore counts only anonymous usage. Signed-in traffic can never
+consume an anonymous allowance, and anonymous traffic can never consume a
+signed-in allowance.
+
+For each run, UC AI reads the class of the caller from the live APEX session. It
+asks APEX whether the session is authenticated. A username cannot answer this
+question, because **every anonymous visitor of an application shares one APEX
+public user name**, `nobody` by default. With `scope_type = 'user'`, all these
+visitors share one bucket.
+
+<Aside type="caution" title="Leave an `any` backstop in place">
+Keep at least one `audience = 'any'` limit as a whole-system ceiling. A caller
+with no APEX session resolves to `db`. A limit for `public` or `authenticated`
+therefore never applies to a scheduler job or to backend code. If *every* limit
+targets `public` and `authenticated`, no limit governs your batch jobs.
+</Aside>
+
+### Enforcement mode
+
+| `enforcement_mode` | Behavior when the limit is reached |
+| ------------------ | ----------------------------------- |
+| `hard` | **Deny** — raise an exception and abort the run / tool call |
+| `soft` | **Warn** — log a warning, allow the run to proceed |
+| `advisory` | **Track only** — never warn or deny |
+
+`warn_threshold_pct` (default `80`) sets when a limit starts to warn. At the default, the limit warns at 80% of the cap and denies at 100%.
+
+<Aside type="tip">
+Install a new limit as `advisory` first. Watch the real usage in the status views. Then set it to `soft` to start the warnings. Set it to `hard` only when you trust the thresholds.
+</Aside>
+
+## Recipe: public visitors a little, logged-in users more
+
+This is the standard setup for an AI feature on a page that anonymous visitors can
+reach. It takes three rows, and **all three matter**:
+
+```sql
+-- 1. Each anonymous visitor: 3 runs per browser session per day
+insert into uc_ai_rate_limits (
+  code, description, audience, scope_type,
+  limit_type, limit_count, window_kind, period, enforcement_mode
+) values (
+  'PUBLIC_SESSION_DAY', 'Anonymous: 3 runs/session/day', 'public', 'apex_session',
+  'AGENT_EXEC', 3, 'calendar', 'day', 'hard'
+);
+
+-- 2. Backstop, NOT optional: a visitor can clear cookies for a fresh session and
+--    a fresh quota, so also cap anonymous traffic in aggregate.
+insert into uc_ai_rate_limits (
+  code, description, audience, scope_type, scope_value,
+  limit_type, limit_count, window_kind, period, enforcement_mode
+) values (
+  'PUBLIC_APP_DAY', 'Anonymous: 500 runs/day across the app', 'public', 'app', '512',
+  'AGENT_EXEC', 500, 'calendar', 'day', 'hard'
+);
+
+-- 3. Logged-in users: 100 runs EACH per day — one row covers everybody
+insert into uc_ai_rate_limits (
+  code, description, audience, scope_type,
+  limit_type, limit_count, window_kind, period, enforcement_mode
+) values (
+  'AUTH_USER_DAY', 'Logged in: 100 runs/user/day', 'authenticated', 'each_user',
+  'AGENT_EXEC', 100, 'calendar', 'day', 'hard'
+);
+commit;
+```
+
+Row 2 makes this a real control and not a courtesy. It has
+`audience = 'public'`, so its 500 counts **only anonymous runs**. Your employees
+in the same app cannot exhaust the allowance of the visitors. The visitors cannot
+exhaust the allowance of the company.
+
+The same three shapes work for [budgets](/products/uc-ai/docs/guides/guardrails/budget/)
+with `limit_amount` in place of `limit_count`. Examples are \$0.10 for each
+anonymous session per day, and \$5 for each logged-in user per day.
+
+### What to watch out for
+
+<Aside type="caution" title="An APEX session is not an identity">
+Always use a per-session limit together with the aggregate `public` cap above. A
+visitor who clears the cookies gets a new APEX session, and therefore a new
+`apex_session` bucket. Per-session limits shape behavior and stop accidental
+hammering. They are **not** a security boundary alone.
+</Aside>
+
+- **Do not use `each_user` for anonymous traffic.** All anonymous visitors share
+  one `created_by`. A per-user bucket therefore becomes a shared cap, and the
+  first visitor of the day locks out everybody else. The database rejects
+  `each_user` together with `audience = 'public'`. Use `apex_session` instead.
+- **`apex_session` cannot use `period = 'total'`.** APEX recycles its session ids.
+  An all-time bucket therefore gives a new visitor an exhausted quota, and the
+  cause is hard to find. The database rejects this combination also.
+- **Database and job callers resolve to `db`.** An `audience = 'any'` limit
+  governs them. An `each_user` limit governs them also, in a bucket for their
+  database username. An `apex_session` limit never applies to them.
+- **UC AI evaluates the audience again before every tool call.** A tool that opens
+  its own APEX session can therefore change the tier inside a run.
+- **The check-then-act race still applies.** Two runs that start at the same
+  moment can both pass, because neither row exists yet. A hard cap of *N* can
+  therefore allow *N+1* for a short time. Small per-visitor caps show this effect
+  more than coarse limits. If simultaneous requests matter, add a `CONCURRENCY`
+  limit.
+
+## Install
+
+Core UC AI must already be installed in the schema. Then run the Pro installer:
+
+```sql
+@ext/uc-ai-pro/install_uc_ai_pro.sql
+```
+
+The script installs the `UC_AI_HOOK` dispatcher and the subscriber registry. It then installs each feature: budget and rate limiting. A new database session activates the hook automatically. No per-session registration is necessary.
+
+<Aside type="caution">
+Guardrails govern only **agent runs** (`uc_ai_agents_api.execute_agent`) and the tool calls inside them. A direct `uc_ai.generate_text` call outside an agent has no agent context and no user context. Run-level budgets and rate limits therefore do not apply to it. `before_tool_call` still sees a tool call from such a call, and attributes it to the user of the database session.
+</Aside>

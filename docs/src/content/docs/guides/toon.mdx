@@ -7,46 +7,46 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-**Token-Oriented Object Notation (TOON)** is a compact, human-readable encoding of the JSON data model that minimizes tokens and makes structure easy for models to follow. It's intended for LLM input as a drop-in, lossless representation of your existing JSON.
+**Token-Oriented Object Notation (TOON)** is a compact and readable encoding of the JSON data model. It uses fewer tokens, and a model can follow its structure easily. TOON is a lossless representation of your existing JSON, for LLM input.
 
-TOON combines YAML's indentation-based structure for nested objects with a CSV-style tabular layout for uniform arrays. TOON's sweet spot is uniform arrays of objects (multiple fields per row, same structure across items), achieving CSV-like compactness while adding explicit structure that helps LLMs parse and validate data reliably.
+TOON takes the indentation structure of YAML for a nested object, and a CSV-style table layout for a uniform array. TOON works best for a uniform array of objects, that is several fields per row and the same structure in every item. Such an array is as compact as CSV, and its explicit structure helps an LLM parse and validate the data.
 
 <Aside type="tip">
-  Think of TOON as a translation layer: use JSON programmatically, and encode it
-  as TOON for LLM input.
+  TOON is a translation layer. Use JSON in your code, and encode it as TOON for
+  LLM input.
 </Aside>
 
 ## Why Use TOON?
 
-When sending data to LLMs, every token counts:
+Every token counts when you send data to an LLM:
 
-- **Cost reduction**: Fewer tokens means lower API costs
-- **Context efficiency**: More room for actual content in the context window
-- **Better parsing**: The structured format helps LLMs understand and work with data reliably
+- **Cost reduction**: fewer tokens give a lower API cost
+- **Context efficiency**: more room for content in the context window
+- **Better parsing**: the structured format helps an LLM read and use the data
 
-The similarity to CSV is intentional: CSV is simple and ubiquitous, and TOON aims to keep that familiarity while remaining a lossless, drop-in representation of JSON for Large Language Models.
+The similarity to CSV is intentional. CSV is simple and well known, and TOON keeps that familiarity. TOON is still a lossless representation of JSON for a Large Language Model.
 
 <Aside type="caution">
-  For deeply nested or non-uniform data, JSON may be more efficient. TOON excels
-  with uniform arrays of objects.
+  For deeply nested data, or for data without a uniform structure, use JSON. It
+  can need fewer tokens. TOON works best for a uniform array of objects.
 </Aside>
 
 ## TOON Format Rules
 
 ### Simple Objects
 
-Objects use YAML-like `key: value` notation with newlines between properties:
+An object uses the YAML-style `key: value` notation, with a newline between the properties:
 
 ```
 name: Alice
 age: 30
 ```
 
-This is equivalent to the JSON: `{"name": "Alice", "age": 30}`
+This is the same as the JSON `{"name": "Alice", "age": 30}`
 
 ### Nested Objects
 
-Nested objects use indentation (2 spaces per level):
+A nested object uses indentation, with 2 spaces for each level:
 
 ```
 user:
@@ -57,17 +57,17 @@ user:
 
 ### Primitive Arrays
 
-Arrays of primitives are shown inline with count notation:
+An array of primitives is inline, with a count:
 
 ```
 [3]: 1,2,3
 ```
 
-This represents `[1, 2, 3]`.
+This is `[1, 2, 3]`.
 
 ### Homogeneous Object Arrays (Tabular Format)
 
-Arrays of objects with the same structure use a CSV-like columnar format:
+An array of objects with the same structure uses a CSV-style column format:
 
 ```
 [2]{id,active}:
@@ -75,11 +75,11 @@ Arrays of objects with the same structure use a CSV-like columnar format:
   2,false
 ```
 
-This represents `[{"id": 1, "active": true}, {"id": 2, "active": false}]`.
+This is `[{"id": 1, "active": true}, {"id": 2, "active": false}]`.
 
 ### Irregular Arrays
 
-Arrays with mixed structures use dash notation:
+An array with mixed structures uses the dash notation:
 
 ```
 [3]:
@@ -91,19 +91,19 @@ Arrays with mixed structures use dash notation:
 
 ### Special Values
 
-- **Null values**: Represented as `null`
-- **Booleans**: Represented as `true` or `false`
-- **Empty arrays**: Shown as `key[0]:`
-- **Empty objects**: Shown as `key:`
-- **Strings with special characters**: Quoted and escaped (e.g., `"He said \"hello\""`)
+- **Null values**: `null`
+- **Booleans**: `true` or `false`
+- **Empty arrays**: `key[0]:`
+- **Empty objects**: `key:`
+- **Strings with special characters**: in quotes, with escapes, for example `"He said \"hello\""`
 
 ## Using TOON in UC AI
 
-The `uc_ai_toon` package provides functions to convert JSON to TOON format.
+The `uc_ai_toon` package converts JSON to the TOON format.
 
 ### Converting a Single Row to TOON
 
-Use `JSON_OBJECT` to build a JSON object from a single row and convert it to TOON:
+Use `JSON_OBJECT` to build a JSON object from one row. Then convert it to TOON:
 
 ```sql
 DECLARE
@@ -134,7 +134,7 @@ END;
 
 ### Converting Multiple Rows to TOON
 
-Use `JSON_ARRAYAGG` to aggregate multiple rows into a JSON array:
+Use `JSON_ARRAYAGG` to aggregate several rows into a JSON array:
 
 ```sql
 DECLARE
@@ -167,7 +167,7 @@ END;
 
 ### Converting a JSON String
 
-You can also pass a JSON string (CLOB) directly:
+You can also pass a JSON string as a `CLOB`:
 
 ```sql
 DECLARE
@@ -194,7 +194,7 @@ END;
 
 ## Practical Example: Sending Data Context to LLM
 
-Here's a complete example showing how to use TOON to efficiently send database records to an LLM:
+This example sends database rows to an LLM as TOON, with few tokens:
 
 ```sql
 DECLARE
@@ -240,7 +240,7 @@ END;
 
 ## Complex Example: Nested Data Structures
 
-TOON handles complex nested structures efficiently. Use nested `JSON_OBJECT` and `JSON_ARRAYAGG` calls:
+TOON also encodes a complex nested structure. Use nested `JSON_OBJECT` and `JSON_ARRAYAGG` calls:
 
 ```sql
 DECLARE
@@ -295,7 +295,7 @@ Converts a `json_object_t` to TOON format.
 
 - `p_json_object`: The JSON object to convert
 
-**Returns:** CLOB containing the TOON representation
+**Returns:** a CLOB with the TOON representation
 
 ### `uc_ai_toon.to_toon` (JSON Array)
 
@@ -309,7 +309,7 @@ Converts a `json_array_t` to TOON format.
 
 - `p_json_array`: The JSON array to convert
 
-**Returns:** CLOB containing the TOON representation
+**Returns:** a CLOB with the TOON representation
 
 ### `uc_ai_toon.to_toon` (JSON String)
 
@@ -323,19 +323,19 @@ Converts a JSON string (CLOB) to TOON format.
 
 - `p_json_string`: The JSON string to convert
 
-**Returns:** CLOB containing the TOON representation
+**Returns:** a CLOB with the TOON representation
 
 <Aside type="note">
-  All `to_toon` functions return `null` if the input is `null`.
+  Every `to_toon` function returns `null` for a `null` input.
 </Aside>
 
 ## When to Use TOON
 
 | Scenario                                   | Recommendation                                |
 | ------------------------------------------ | --------------------------------------------- |
-| Uniform arrays of objects (same structure) | ✅ **Use TOON** - Maximum token savings       |
-| Tabular data from database queries         | ✅ **Use TOON** - CSV-like efficiency         |
-| Simple flat objects                        | ✅ **Use TOON** - Cleaner than JSON           |
-| Deeply nested irregular structures         | ⚠️ Consider JSON - May be more efficient      |
-| Non-uniform arrays with varied schemas     | ⚠️ Consider JSON - TOON overhead may not help |
-| Data that will be returned by the LLM      | ❌ **Use JSON** - Standard format for parsing |
+| Uniform arrays of objects (same structure) | ✅ **Use TOON** - the largest token saving     |
+| Tabular data from database queries         | ✅ **Use TOON** - as compact as CSV            |
+| Simple flat objects                        | ✅ **Use TOON** - clearer than JSON            |
+| Deeply nested irregular structures         | ⚠️ Use JSON - it can need fewer tokens         |
+| Non-uniform arrays with varied schemas     | ⚠️ Use JSON - the TOON header adds no value    |
+| Data that the LLM returns                  | ❌ **Use JSON** - the standard format to parse  |

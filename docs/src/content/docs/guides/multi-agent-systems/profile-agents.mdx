@@ -7,13 +7,13 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-**A profile agent is the simplest agent type. It wraps a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/) and executes it when called.**
+**A profile agent is the simplest agent type. It wraps a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/) and runs it on each call.**
 
-On the surface, running a profile agent produces the same AI response as calling `uc_ai_prompt_profiles_api.execute_profile` directly. The difference is what happens around the call:
+A profile agent gives the same AI answer as a direct call to `uc_ai_prompt_profiles_api.execute_profile`. The difference is the work around the call:
 
-- **Execution tracking**: Every call is logged in the `uc_ai_agent_executions` table with status, token counts, and timing. This gives you an audit trail and makes debugging straightforward.
-- **Session grouping**: Use a session ID to group related agent calls together, so you can trace an entire multi-step process as one unit.
-- **Composability**: Profile agents can be referenced by [workflows](/products/uc-ai/docs/guides/multi-agent-systems/workflows/), [orchestrators](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/), and [conversations](/products/uc-ai/docs/guides/multi-agent-systems/conversations/). They are the building blocks that all other patterns compose.
+- **Execution tracking**: UC AI logs every call in the `uc_ai_agent_executions` table, with the status, the token counts, and the timing. This log is your audit trail, and it makes a fault easier to find.
+- **Session grouping**: use a session ID to group related agent calls. You can then trace a whole multi-step process as one unit.
+- **Composability**: a [workflow](/products/uc-ai/docs/guides/multi-agent-systems/workflows/), an [orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/), and a [conversation](/products/uc-ai/docs/guides/multi-agent-systems/conversations/) can all reference a profile agent. Profile agents are the building blocks of every other pattern.
 
 ## Creating a profile agent
 
@@ -51,6 +51,8 @@ BEGIN
     p_prompt_profile_code => 'GEO_ASSISTANT',
     p_status              => uc_ai_agents_api.c_status_active
   );
+
+  COMMIT; -- agents must be committed before they can be executed
 END;
 /
 ```
@@ -83,16 +85,50 @@ END;
 /
 ```
 
-The `p_input_parameters` are passed as prompt profile parameters - each key maps to a `{placeholder}` in the profile templates.
+UC AI passes `p_input_parameters` as the prompt profile parameters. Each key maps to a `{placeholder}` in the profile templates.
+
+## Attaching files (documents & images)
+
+A profile agent and an orchestrator agent can also take files next to the text
+input, through the `p_files` parameter. Files include a PDF and an image. UC AI
+attaches each file to the user message, so the model can analyze it in the same
+call. Build the collection with `uc_ai_message_api.t_files`. The model must be
+multimodal (see [file analysis](/products/uc-ai/docs/guides/file_analysis/)).
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_files  uc_ai_message_api.t_files := uc_ai_message_api.t_files();
+BEGIN
+  l_files.extend;
+  l_files(1).media_type := 'application/pdf';
+  l_files(1).data_blob  := (SELECT blob_content FROM my_docs WHERE id = 1);
+  l_files(1).filename   := 'report.pdf';
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'doc_agent',
+    p_input_parameters => json_object_t('{"question": "Summarize the attached report."}'),
+    p_files            => l_files
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+`p_files` also works with `p_follow_up_message`, to attach a file to a follow-up
+turn. Only a **profile** agent and an **orchestrator** agent support it. A file
+for a workflow agent or a handoff agent raises an error.
 
 ## Execution tracking
 
-Every call to `execute_agent` creates a row in `uc_ai_agent_executions`. You can query this table to see what happened:
+Every call to `execute_agent` creates a row in `uc_ai_agent_executions`. Query this table to see what happened:
 
 ```sql
 SELECT ae.id,
        a.code AS agent_code,
        ae.status,
+       ae.created_by,
        ae.total_input_tokens,
        ae.total_output_tokens,
        ae.started_at,
@@ -103,11 +139,26 @@ SELECT ae.id,
  ORDER BY ae.started_at;
 ```
 
-This is especially useful when profile agents are composed into larger patterns. A workflow with three profile agent steps produces three execution rows under the same session, so you can see exactly which step took the most tokens or failed.
+Each row also holds the environment of the caller: `created_by`, the database user, the APEX user, session, app, and page, the module, and a full `env_context` JSON snapshot. [Session tracking](/products/uc-ai/docs/guides/multi-agent-systems/#caller-environment-context) describes these columns.
+
+This log helps most when a larger pattern holds your profile agents. A workflow with three profile agent steps writes three execution rows under one session. You can then see which step used the most tokens, or which step failed.
+
+### Message log at a glance
+
+A profile agent calls the model directly. Its turn therefore writes the most detailed [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript: the `user` prompt, the `reasoning`, `tool_call`, and `tool_result` rows, and the `assistant` answer. On every agent row, `agent_code` names the profile agent.
+
+| seq | role          | agent_code        | tool_name          | content                      |
+| --- | ------------- | ----------------- | ------------------ | ---------------------------- |
+| 1   | `user`        | *(null)*          |                    | `What's the weather in NYC?` |
+| 2   | `tool_call`   | `weather_agent`   | `get_weather`      |                              |
+| 3   | `tool_result` | `weather_agent`   | `get_weather`      | `{"tempC":18,"sky":"clear"}` |
+| 4   | `assistant`   | `weather_agent`   |                    | `It's 18 C and clear in NYC.` |
+
+On a follow-up turn, UC AI appends only the new messages of that turn, and continues the `seq` of the session. An earlier turn keeps its own rows.
 
 ## Profile agents as building blocks
 
-Profile agents become powerful when composed into other patterns. Every [workflow step](/products/uc-ai/docs/guides/multi-agent-systems/workflows/), [orchestrator delegate](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/), and [conversation participant](/products/uc-ai/docs/guides/multi-agent-systems/conversations/) is ultimately a profile agent.
+A profile agent does more inside another pattern. Every [workflow step](/products/uc-ai/docs/guides/multi-agent-systems/workflows/), every [orchestrator delegate](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/), and every [conversation participant](/products/uc-ai/docs/guides/multi-agent-systems/conversations/) is a profile agent.
 
 For example, a sequential workflow references profile agents by their agent code:
 
@@ -148,16 +199,16 @@ And conversations list them as participants:
 }
 ```
 
-In all cases, the profile agent's execution is tracked individually, giving you full visibility into every AI call in the chain.
+In every pattern, UC AI tracks each profile agent run separately. You therefore see every AI call in the chain.
 
 ## Conversation continuation
 
-Profile agents support multi-turn conversations across multiple `execute_agent` calls. Instead of each call being independent, you can send follow-up messages that build on the previous conversation.
+A profile agent supports a multi-turn conversation across several `execute_agent` calls. A follow-up message builds on the earlier conversation, so the calls are not independent.
 
 ### How it works
 
-1. On the **first call**, the agent executes its prompt profile normally (system prompt + user prompt from template). The full conversation — including any tool call exchanges — is stored in the execution result.
-2. On **follow-up calls**, you pass `p_follow_up_message` with the same `p_session_id`. The system loads the previous conversation messages, appends your new message, and sends the full history to the LLM.
+1. On the **first call**, the agent runs its prompt profile as usual, with the system prompt and the user prompt from the templates. UC AI stores the full conversation in the execution result, with every tool call exchange.
+2. On a **follow-up call**, pass `p_follow_up_message` with the same `p_session_id`. UC AI loads the earlier conversation messages, appends your new message, and sends the full history to the LLM.
 
 ```sql
 DECLARE
@@ -196,11 +247,11 @@ END;
 /
 ```
 
-Each follow-up call creates its own execution record in `uc_ai_agent_executions`, all linked by the same `session_id`.
+Each follow-up call creates its own execution row in `uc_ai_agent_executions`. The same `session_id` links all of these rows.
 
 ### History management
 
-As conversations grow longer, you may want to limit how much history is sent to the LLM to control token usage. Set `p_max_history_messages` when creating the agent to use a sliding window:
+A long conversation sends much history to the LLM. To control the token usage, set `p_max_history_messages` at the creation of the agent. The agent then uses a sliding window:
 
 ```sql
 DECLARE
@@ -218,16 +269,16 @@ END;
 /
 ```
 
-With `p_max_history_messages` set, the system keeps the system message (first message) plus the most recent N messages when the history exceeds the limit.
+When the history passes the limit of `p_max_history_messages`, UC AI keeps the system message, which is the first message, and the most recent N messages.
 
 <Aside type="note">
-  `p_follow_up_message` requires `p_session_id` — the system needs to know which session's conversation to continue. If no previous completed execution exists for the given session and agent, an error is raised.
+  `p_follow_up_message` needs `p_session_id`, because UC AI must know which conversation to continue. If the session and the agent have no completed run, UC AI raises an error.
 </Aside>
 
 ## When to use profile agents directly
 
-You don't always need workflows or conversations. Use a profile agent on its own when:
+A workflow or a conversation is not always necessary. Use a profile agent alone when:
 
-- You have a **single AI task** but want execution tracking (token usage, timing, success/failure)
-- You want to **gradually adopt** the agent framework - start by wrapping existing prompt profiles, then compose them later
-- You need a **consistent API** across your application - `execute_agent` works the same regardless of agent type, so switching from a single profile agent to a workflow later requires no changes to calling code
+- You have a **single AI task**, and you want execution tracking for the token usage, the timing, and the success or failure
+- You want to **adopt the agent framework step by step**. Start with a wrapper around an existing prompt profile, and compose the agents later
+- You need a **consistent API** in your application. `execute_agent` works the same for every agent type, so a later change from a profile agent to a workflow needs no change in the calling code

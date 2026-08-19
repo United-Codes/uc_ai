@@ -1,0 +1,67 @@
+---
+title: Glossary
+description: Plain-English definitions of the AI terms used throughout the UC AI docs.
+sidebar:
+  order: 5
+---
+
+New to AI terminology? Here are short, practical definitions of the terms you'll meet in these docs. They're written for Oracle developers, not AI researchers.
+
+## Core concepts
+
+**LLM (Large Language Model)**
+: The AI model that generates text — for example OpenAI's GPT, Anthropic's Claude, or Google's Gemini. You send it text and it predicts a useful continuation. UC AI calls these models for you over HTTPS.
+
+**Provider**
+: The company/service hosting the model (OpenAI, Anthropic, Google, OCI, Ollama, xAI, Mistral, OpenRouter). In UC AI you pick one with the `p_provider` parameter. See [AI Providers](/products/uc-ai/docs/guides/providers/).
+
+**Model**
+: A specific version of an LLM (e.g. `gpt-4o-mini`, `claude-3-5-haiku`). Bigger models are usually smarter but slower and more expensive. Chosen with `p_model`.
+
+**Prompt**
+: The text you send to the model. UC AI distinguishes two kinds:
+: - **System prompt** (`p_system_prompt`) — standing instructions that set the AI's role and rules ("You are a helpful assistant to a ticketing system").
+: - **User prompt** (`p_user_prompt`) — the actual question or request for this turn.
+
+**Token**
+: The unit models read and bill in — roughly ¾ of a word. "Oracle Database" is about 3 tokens. Both your input and the model's output cost tokens, so shorter prompts and responses are cheaper and faster.
+
+**Context window**
+: The maximum number of tokens a model can consider at once (prompt + conversation history + response). Very long conversations or huge tool results can exceed it — one reason to return only the data the AI needs.
+
+## Working with responses
+
+**Finish reason** (`finish_reason`)
+: Why the model stopped generating — e.g. it finished normally (`stop`), hit a length limit, or paused to call a tool. Useful for detecting truncated or interrupted responses.
+
+**Structured output**
+: Forcing the model to return JSON that matches a schema you define, instead of free-form prose — so you can insert it straight into table columns. Set via `p_response_json_schema`. See [Structured Output](/products/uc-ai/docs/guides/structured_output/).
+
+**JSON schema**
+: A standard way to describe the shape of a JSON object (its fields, types, and which are required). UC AI uses it both for structured output and to describe tool parameters. Build one quickly with the [interactive schema builder](/products/uc-ai/docs/other/json-schema/).
+
+**Embedding**
+: A list of numbers (a *vector*) representing the *meaning* of a piece of text. Texts with similar meaning have similar vectors, which powers semantic search and RAG. Generated with [`generate_embeddings`](/products/uc-ai/docs/api/generate_embeddings/).
+
+## Tools and agents
+
+**Tool / function calling**
+: Registering a PL/SQL function the model is allowed to call to fetch data or take an action. The model decides *when* to call it; UC AI runs it and feeds the result back. See [Tools](/products/uc-ai/docs/guides/tools/).
+
+**Tool call** (`tool_calls`)
+: A single request from the model to run one of your registered tools, including the arguments it chose. UC AI executes it and returns a **tool result** to the model.
+
+**Reasoning / thinking**
+: A mode where the model works through a problem step by step before answering, improving accuracy on harder tasks (and on choosing tools). See [Reasoning](/products/uc-ai/docs/guides/reasoning/).
+
+**Agent**
+: An AI that can take multiple steps toward a goal — reasoning, calling tools, and using the results — rather than answering in a single shot.
+
+**Agentic AI**
+: The broader approach of building such agents, including coordinating several of them. See [Agentic AI](/products/uc-ai/docs/guides/agentic-ai/) and [Multi-Agent Systems](/products/uc-ai/docs/guides/multi-agent-systems/).
+
+**Prompt profile**
+: A reusable, versioned prompt template with `{variable}` placeholders and its own model settings — so you manage prompts as data instead of hard-coding them. See [Prompt Profiles](/products/uc-ai/docs/guides/prompt-profiles/).
+
+**RAG (Retrieval-Augmented Generation)**
+: A pattern where you first *retrieve* relevant text (often via embeddings) and include it in the prompt, so the model answers using your own up-to-date content instead of only its training data.

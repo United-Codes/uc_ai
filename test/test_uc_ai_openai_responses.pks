@@ -18,7 +18,7 @@ create or replace package test_uc_ai_openai_responses as
   --%suite(UC AI OpenAI Responses API Tests)
   --%suitepath(uc_ai)
 
-  --%beforeall
+  --%beforeeach
   procedure setup_tests;
 
   --%test(Simple text generation with string input)
@@ -29,6 +29,9 @@ create or replace package test_uc_ai_openai_responses as
 
   --%test(Function calling with Responses API)
   procedure test_function_calling;
+
+  --%test(g_provider_tools enables server-side web search)
+  procedure provider_tool_web_search;
 
   --%test(Function calling - clock in user)
   procedure test_tool_clock_in_user;

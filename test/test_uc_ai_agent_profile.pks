@@ -3,6 +3,7 @@ create or replace package test_uc_ai_agent_profile as
 
   --%suite(Profile Agent Tests)
   --%suitepath(uc_ai.agents)
+  --%rollback(manual)
 
   --%beforeall
   procedure setup;
@@ -16,8 +17,14 @@ create or replace package test_uc_ai_agent_profile as
   --%test(Execute profile agent with input parameters)
   procedure execute_with_parameters;
 
+  --%test(Execution records caller context)
+  procedure execution_records_context;
+
   --%test(Continue conversation with follow-up message)
   procedure execute_follow_up_message;
+
+  --%test(Multi-turn conversation records one session header with summed tokens and message log)
+  procedure session_header_and_messages;
 
   --%test(Follow-up without session_id raises error)
   --%throws(-20503)
