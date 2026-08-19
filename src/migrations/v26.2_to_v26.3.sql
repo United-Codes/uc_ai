@@ -254,8 +254,8 @@ update uc_ai_agent_executions e
    set e.total_input_tokens = 0,
        e.total_output_tokens = 0
  where e.agent_id in (
-   select id from uc_ai_agents
-    where agent_type in ('workflow', 'handoff', 'conversation')
+   select a.id from uc_ai_agents a
+    where a.agent_type in ('workflow', 'handoff', 'conversation')
  );
 
 -- 2) Number the historical turns (top-level executions) within each session.
@@ -349,6 +349,7 @@ declare
     );
   end ins;
 begin
+  <<sessions_loop>>
   for s in (
     select session_id, id as exec_id, output_result from (
       select session_id, id, output_result,
@@ -367,6 +368,7 @@ begin
 
       if l_result.has('messages') then
         l_messages := l_result.get_array('messages');
+        <<messages_loop>>
         for i in 0 .. l_messages.get_size - 1 loop
           l_msg := treat(l_messages.get(i) as json_object_t);
           l_role := l_msg.get_string('role');
@@ -380,6 +382,7 @@ begin
             continue;
           end if;
           l_arr := treat(l_content as json_array_t);
+          <<content_items_loop>>
           for j in 0 .. l_arr.get_size - 1 loop
             l_item := treat(l_arr.get(j) as json_object_t);
             l_type := l_item.get_string('type');
@@ -404,18 +407,20 @@ begin
               else
                 null;
             end case;
-          end loop;
-        end loop;
+          end loop content_items_loop;
+        end loop messages_loop;
       elsif l_result.has('final_message') then
         l_seq := l_seq + 1;
         ins(s.session_id, s.exec_id, l_seq, 'assistant', l_result.get_clob('final_message'));
       end if;
     exception
+      -- @dblinter ignore(G-5040): best-effort backfill of historical rows. Any
+      -- error on one session (unparsable output_result, a shape from an older
+      -- release) must skip that session, never abort the whole migration.
       when others then
-        -- best-effort: skip sessions whose output_result cannot be parsed
         null;
     end;
-  end loop;
+  end loop sessions_loop;
 
   -- refresh the maintained message_count on the headers
   update uc_ai_agent_sessions ss
