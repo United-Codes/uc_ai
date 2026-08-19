@@ -733,6 +733,9 @@ create or replace package body uc_ai_agents_api as
     -- field so each row attributes to the sub-agent that produced it.
     l_exec_agent   uc_ai_agents.code%type;
 
+    -- @dblinter ignore(G-7130): ins() deliberately closes over l_seq. One shared,
+    -- monotonically increasing sequence across every call is the point - passing it
+    -- in and out of each of the ~10 call sites would only move the same state around.
     procedure ins(
       p_role        in varchar2,
       p_content     in clob     default null,
@@ -2548,10 +2551,10 @@ create or replace package body uc_ai_agents_api as
     p_end_date   in timestamp default null
   ) return sys_refcursor
   as
-    l_scope    uc_ai_logger.scope := gc_scope_prefix || 'list_sessions';
-    l_cur      sys_refcursor;
+    l_scope        uc_ai_logger.scope := gc_scope_prefix || 'list_sessions';
+    l_sessions_cur sys_refcursor;
   begin
-    open l_cur for
+    open l_sessions_cur for
       select s.session_id,
              s.root_agent_id,
              s.title,
@@ -2578,7 +2581,7 @@ create or replace package body uc_ai_agents_api as
         and (p_end_date is null or s.started_at <= p_end_date)
       order by s.last_activity_at desc;
 
-    return l_cur;
+    return l_sessions_cur;
   exception
     when others then
       uc_ai_logger.log_error('Error listing sessions', l_scope);
@@ -2593,10 +2596,10 @@ create or replace package body uc_ai_agents_api as
     p_session_id in varchar2
   ) return sys_refcursor
   as
-    l_scope uc_ai_logger.scope := gc_scope_prefix || 'get_session_messages';
-    l_cur   sys_refcursor;
+    l_scope        uc_ai_logger.scope := gc_scope_prefix || 'get_session_messages';
+    l_messages_cur sys_refcursor;
   begin
-    open l_cur for
+    open l_messages_cur for
       select m.id,
              m.session_id,
              m.execution_id,
@@ -2612,7 +2615,7 @@ create or replace package body uc_ai_agents_api as
       where m.session_id = p_session_id
       order by m.seq;
 
-    return l_cur;
+    return l_messages_cur;
   exception
     when others then
       uc_ai_logger.log_error('Error getting session messages', l_scope);
