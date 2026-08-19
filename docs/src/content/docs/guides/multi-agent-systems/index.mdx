@@ -302,6 +302,7 @@ workflow step, an orchestrator sub-agent, and a handoff hop.
 | Column | Content |
 |--------|---------|
 | `created_by` | APEX user if called from an APEX session, otherwise the database user |
+| `audience` | Caller class at the start of the run: `public` (anonymous APEX visitor), `authenticated` (logged-in APEX user), or `db` (database or job session) |
 | `db_user`, `os_user`, `host`, `ip_address` | `SYS_CONTEXT('USERENV', ...)` values of the caller |
 | `module`, `action`, `client_identifier`, `sid` | Database session identification |
 | `apex_user`, `apex_session_id`, `apex_app_id`, `apex_page_id` | APEX session details (null when not called from a real APEX session) |
@@ -331,6 +332,97 @@ BEGIN
 END;
 /
 ```
+
+### Conversation sessions
+
+`uc_ai_agent_executions` holds one row for each run. `uc_ai_agent_sessions` holds
+one row for each conversation. UC AI writes this header row with the first turn,
+and it maintains the row with each later turn.
+
+| Column | Content |
+|--------|---------|
+| `session_id` | Primary key. The same ID that every execution row of the conversation carries |
+| `root_agent_id` | Agent that opened the session (the first top-level turn) |
+| `title` | Conversation title. Your front end sets it with `set_session_title` |
+| `feedback_rating`, `feedback_comment`, `feedback_at` | Verdict of the end user. Your front end sets it with `set_session_feedback` |
+| `status` | Status of the most recent top-level turn |
+| `turn_count`, `message_count` | Maintained counts of top-level turns and of message rows |
+| `total_input_tokens`, `total_output_tokens` | Sum of the own tokens of every run in the session |
+| `started_at`, `last_activity_at`, `updated_at` | First activity, most recent activity, and last change |
+| `created_by`, `db_user`, `apex_user`, `audience`, `apex_*`, `env_context` | Caller context of the opening turn. These are the columns of the table above |
+
+Each run records only the tokens of the LLM calls that it made itself. The session
+totals are therefore a true sum, and a nested sub-agent run does not double count.
+
+`list_sessions` reads the headers. Use it as the conversation list of a front end:
+
+```sql
+DECLARE
+  l_sessions SYS_REFCURSOR;
+BEGIN
+  l_sessions := uc_ai_agents_api.list_sessions(p_created_by => :APP_USER);
+END;
+/
+```
+
+`get_session_messages` reads the full transcript of one session, in `seq` order:
+
+```sql
+DECLARE
+  l_messages SYS_REFCURSOR;
+BEGIN
+  l_messages := uc_ai_agents_api.get_session_messages(p_session_id => :session_id);
+END;
+/
+```
+
+#### Naming a conversation
+
+Your front end decides how a title is made. An LLM can summarize the first
+exchange, or the user can type a title. The engine never sets a title itself.
+
+```sql
+BEGIN
+  uc_ai_agents_api.set_session_title(
+    p_session_id => :session_id
+  , p_title      => 'Invoice question from March'
+  , p_created_by => :APP_USER
+  );
+END;
+/
+```
+
+A second call overwrites the title, so this procedure also renames a conversation.
+`p_created_by` restricts the change to the user that opened the session.
+
+#### Rating a conversation
+
+`set_session_feedback` records the verdict of the end user. The rating is `up` or
+`down`. A comment is optional.
+
+```sql
+BEGIN
+  uc_ai_agents_api.set_session_feedback(
+    p_session_id => :session_id
+  , p_rating     => 'up'
+  , p_comment    => 'Answered in one turn.'
+  , p_created_by => :APP_USER
+  );
+END;
+/
+```
+
+A null rating withdraws the feedback. UC AI then clears the rating, the comment,
+and the timestamp together. A rating that UC AI does not know becomes null. A newer
+front end can therefore never break the check constraint.
+
+<Aside type="caution" title="p_created_by and background jobs">
+A session that starts from a background job has no APEX session. Its header
+records the database user, not the end user. If you pass `APP_USER` against such a
+session, no row matches, and the procedure writes nothing. It writes a warning to
+the log, so you can find the cause. If you authorized the user yourself, pass
+`null`.
+</Aside>
 
 ### Conversation message log
 

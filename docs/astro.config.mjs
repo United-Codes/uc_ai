@@ -83,6 +83,8 @@ export default defineConfig({
 								{ autogenerate: { directory: "guides/multi-agent-systems" } },
 							],
 						},
+						"guides/execution-hooks",
+						"guides/agent-memory",
 						{
 							label: "Guardrails",
 							badge: {
