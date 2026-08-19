@@ -1,6 +1,6 @@
 ---
 name: uc-ai-multi-agent
-description: Use when building multi-agent AI systems in Oracle PL/SQL with UC AI — creating agents with uc_ai_agents_api.create_agent, running them via execute_agent with session IDs, sequential/loop/conditional workflow definitions, orchestrator agents that delegate to sub-agents as tools, round-robin or AI-moderated agent conversations, input mapping ({$.input.*}, {$.steps.*}), follow-up messages, and debugging via uc_ai_agent_executions.
+description: Use when building multi-agent AI systems in Oracle PL/SQL with UC AI — creating agents with uc_ai_agents_api.create_agent, running them via execute_agent with session IDs, sequential/loop/conditional workflow definitions, orchestrator agents that delegate to sub-agents as tools, round-robin or AI-moderated agent conversations, handoff agents with transfer tools and can_transfer_to graphs, input mapping ({$.input.*}, {$.steps.*}), follow-up messages, conversation sessions with titles and feedback, and debugging via uc_ai_agent_executions, uc_ai_agent_sessions and uc_ai_agent_messages.
 ---
 
 # UC AI Multi-Agent Systems
@@ -155,6 +155,42 @@ end;
 
 To cap token usage in long conversations, set `p_max_history_messages` on the agent — the system then keeps the system message plus the most recent N messages.
 
+## Handoff agents
+
+`c_type_handoff` transfers control between agents with **tools**. The engine registers a temporary `transfer_to_<agent>` tool for each allowed target. The AI transfers by calling one with a context summary, and the target agent answers the user directly.
+
+```sql
+l_config := '{
+  "initial_agent_code": "support_triage",
+  "handoff_agents": [
+    {"agent_code": "support_triage",   "description": "Triage and general support"},
+    {"agent_code": "support_product",  "description": "Product specs, prices, availability"},
+    {"agent_code": "support_shipping", "description": "Shipping options, costs, delivery times"}
+  ],
+  "max_handoffs": 3
+}';
+
+l_id := uc_ai_agents_api.create_agent(
+  p_code                 => 'customer_support'
+, p_description          => 'Customer support entry point'
+, p_agent_type           => uc_ai_agents_api.c_type_handoff
+, p_orchestration_config => l_config
+, p_status               => uc_ai_agents_api.c_status_active
+);
+```
+
+**Restricting the transfer graph.** Add `can_transfer_to` to an entry to limit its outgoing edges. Use it for hierarchies — triage reaches product support, and only product support reaches the product technician:
+
+```json
+{"agent_code": "support_triage", "description": "...", "can_transfer_to": ["support_product", "support_shipping"]}
+```
+
+Without `can_transfer_to`, every agent may transfer to every other one (full mesh).
+
+**Multi-turn (sticky agent).** Handoff agents accept `p_follow_up_message`. The follow-up turn resumes with the agent that answered the previous turn and continues its history. It keeps its transfer tools, so it can hand off again when the topic changes.
+
+**Results.** The result object carries `final_agent_code`, `handoff_count`, `handoff_trail`, and `max_handoffs_reached`. The hop at `max_handoffs` runs without transfer tools and must answer — a graceful cap, not an error. Transfer tool calls are persisted in the session message log.
+
 ## Input mapping cheat sheet
 
 Input mappings define how data flows between agents inside workflow definitions and orchestration configs. Paths are wrapped in `{...}`:
@@ -200,7 +236,25 @@ select ae.id, a.code as agent_code, ae.status, ae.iteration_count,
 
 Nested calls (workflow steps, orchestrator delegates) each get their own row linked via `parent_execution_id`, so you can see exactly which step burned tokens or failed. Rows also capture caller context (`created_by`, `apex_user`, `apex_app_id`, `module`, full `env_context` JSON).
 
+Rows also carry `audience` — the caller class at the start of the run: `public` (anonymous APEX visitor), `authenticated` (logged-in APEX user), or `db` (database or job session).
+
 Programmatic access: `uc_ai_agents_api.get_execution_details(p_execution_id)` returns a `json_object_t` (status, token counts, timing, error_message, caller context); `get_execution_history(...)` returns a filterable `sys_refcursor`.
+
+### Conversation sessions and transcript
+
+Two more tables sit above the executions:
+
+- **`uc_ai_agent_sessions`** — one row per conversation. Holds `title`, `feedback_rating`/`feedback_comment`/`feedback_at`, `status` of the latest turn, `turn_count`, `message_count`, summed `total_input_tokens`/`total_output_tokens`, and the caller context of the opening turn. Each execution records only its own LLM tokens, so the session totals never double count nested runs. Read it with `uc_ai_agents_api.list_sessions(...)` — a ready-made conversation list.
+- **`uc_ai_agent_messages`** — the normalized, untrimmed transcript: one row per message content item, ordered by `seq`, with `agent_code` attribution per message. History-window trimming only governs what is sent to the LLM, so the persisted record stays complete. Read it with `uc_ai_agents_api.get_session_messages(p_session_id)`.
+
+Your front end owns the title and the rating; the engine never sets them:
+
+```sql
+uc_ai_agents_api.set_session_title(:session_id, 'Invoice question from March', :APP_USER);
+uc_ai_agents_api.set_session_feedback(:session_id, 'up', 'Answered in one turn.', :APP_USER);
+```
+
+A second call overwrites, so these also rename and change a verdict. A null rating withdraws the feedback. `p_created_by` restricts the write to the user who opened the session — pass `null` for a session opened by a background job, whose header records the DB user.
 
 ## Best practices
 
@@ -218,7 +272,7 @@ Programmatic access: `uc_ai_agents_api.get_execution_details(p_execution_id)` re
 - **Referenced agent codes are validated.** Workflow/orchestration configs referencing nonexistent `agent_code` values fail validation; deleting an agent referenced by others raises an error.
 - **API keys still apply.** Agent execution ultimately calls providers — set up `uc_ai_get_key` or web credentials as in the `uc-ai-quickstart` skill before executing.
 - **Conversation cost multiplies**: a 3-agent round-robin with `max_turns: 5` is up to 15 AI calls.
-- **Handoff pattern is minimally documented** — `c_type_handoff` with `orchestration_config` keys `initial_agent_code` and `max_handoffs` (default 3); an agent triggers a handoff by returning a `handoff_decision` object (`should_handoff`, `target_agent`, `context_for_next_agent`). Prefer the documented patterns unless you need it.
+- **Handoff targets must be active profile agents.** `create_agent` validates every `agent_code` in `handoff_agents`. A draft or missing target fails validation.
 
 ## Full documentation
 
@@ -227,4 +281,5 @@ Programmatic access: `uc_ai_agents_api.get_execution_details(p_execution_id)` re
 - Workflows: https://www.united-codes.com/products/uc-ai/docs/guides/multi-agent-systems/workflows/
 - Orchestrator: https://www.united-codes.com/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/
 - Conversations: https://www.united-codes.com/products/uc-ai/docs/guides/multi-agent-systems/conversations/
+- Handoff: https://www.united-codes.com/products/uc-ai/docs/guides/multi-agent-systems/handoff/
 - Agentic AI concepts: https://www.united-codes.com/products/uc-ai/docs/guides/agentic-ai/

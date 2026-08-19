@@ -1,6 +1,6 @@
 ---
 name: uc-ai-tools
-description: Use when giving an AI/LLM access to database data or actions (tools / function calling) from Oracle PL/SQL with UC AI — registering tools with uc_ai_tools_api.create_tool_from_schema or merge_tool_from_schema, describing parameters with a JSON schema, enabling tools via uc_ai.g_enable_tools, restricting them with uc_ai.g_tool_tags, limiting p_max_tool_calls, testing with execute_tool, or writing robust CLOB-in/CLOB-out tool functions.
+description: Use when giving an AI/LLM access to database data or actions (tools / function calling) from Oracle PL/SQL with UC AI — registering tools with uc_ai_tools_api.create_tool_from_schema or merge_tool_from_schema, describing parameters with a JSON schema, enabling tools via uc_ai.g_enable_tools, restricting them with uc_ai.g_tool_tags, limiting p_max_tool_calls, testing with execute_tool, writing robust CLOB-in/CLOB-out tool functions, enabling code mode (programmatic tool calling) with uc_ai.g_enable_programmatic_tools, or adding provider server-side tools with uc_ai.g_provider_tools.
 ---
 
 # UC AI Tools — Let the AI Call Your PL/SQL
@@ -158,6 +158,45 @@ l_result := uc_ai.generate_text(
 );
 ```
 
+## Code mode (programmatic tool calling)
+
+Instead of one LLM round-trip per tool call, the model can write **one** JavaScript program that calls many tools in-database and returns only the final result. Big token savings on loops and large intermediate data.
+
+```sql
+uc_ai.reset_globals;
+uc_ai.g_enable_tools := true;
+uc_ai.g_enable_programmatic_tools := true;   -- opt in
+```
+
+Config style: `{"g_enable_programmatic_tools": true}`. Prompt profiles and agents accept the same key.
+
+Requirements and behavior:
+
+- Needs **Oracle 23ai** (MLE JavaScript with `PURE` execution contexts). The rest of UC AI runs on 12.2+.
+- A DBA installs the sandbox once per UC AI schema: `@scripts/install_ptc_sandbox.sql` (or `install_ptc_sandbox_complete.sql` from a release download). Without it, enabling code mode raises an error naming the script.
+- The model's JavaScript has **no SQL access at all** — it cannot read data, and it cannot `COMMIT` or `ROLLBACK`. It reaches tools only through one gateway that enforces a per-run allow-list and a call budget.
+- Your **tools** still run with full UC AI privileges and in the caller's transaction. The sandbox constrains the generated code, not your tools. Give a code-mode run read-oriented tools only — use `p_tool_tags` to keep write and destructive tools out.
+- Works with every provider. Both options stay available: the model can still call a tool directly.
+
+Per-tool availability is set at registration with `p_code_mode_access`:
+
+| Value | Meaning |
+|-------|---------|
+| `direct` | Normal tool only. Not callable from a program. |
+| `code` | Callable only from a code-mode program. |
+| `both` | Both (the default) |
+
+## Provider (server-side) tools
+
+Some providers run their own tools server-side (web search, for example). Append their raw, provider-native definitions — UC AI sends them verbatim and does not execute them:
+
+```sql
+uc_ai.g_provider_tools := json_array_t('[{"type":"web_search_preview"}]');   -- OpenAI Responses
+uc_ai.g_provider_tools := json_array_t('[{"type":"web_search_20250305","name":"web_search"}]');  -- Anthropic
+```
+
+Config style: `{"g_provider_tools": [{"type": "web_search_preview"}]}`. These are sent even when `g_enable_tools` is false, and they combine with your local tools.
+
 ## Writing robust tool functions
 
 The model reads whatever your function returns — use that channel:
@@ -236,5 +275,6 @@ For larger result sets, TOON encoding cuts token usage substantially compared to
 ## Full documentation
 
 - Tools guide: https://www.united-codes.com/products/uc-ai/docs/guides/tools/
+- Programmatic tool calling (code mode): https://www.united-codes.com/products/uc-ai/docs/guides/programmatic-tool-calling/
 - Interactive JSON schema builder: https://www.united-codes.com/products/uc-ai/docs/other/json-schema/
 - Reasoning (better tool planning): https://www.united-codes.com/products/uc-ai/docs/guides/reasoning/

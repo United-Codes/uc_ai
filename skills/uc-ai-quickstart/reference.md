@@ -70,6 +70,8 @@ The `p_config` overloads (and prompt-profile `model_config_json`) accept root-le
   "g_max_tool_calls": 5,
   "g_apex_web_credential": "MY_CRED",
   "g_extra_headers": {"X-Tenant-Id": "acme"},
+  "g_extra_body": {"top_p": 0.9},
+  "g_provider_tools": [{"type": "web_search_preview"}],
 
   "openai":    {"g_use_responses_api": false, "g_reasoning_effort": "low"},
   "anthropic": {"g_max_tokens": 16384, "g_reasoning_budget_tokens": 2048},
@@ -95,3 +97,28 @@ uc_ai.g_extra_headers('X-Trace-Id')  := 'abc123';
 Config style: `{"g_extra_headers": {"X-Tenant-Id": "acme"}}`.
 
 Headers are appended after the framework's own headers (Content-Type, auth, provider version headers) — avoid names the framework already sets.
+
+## Custom request-body properties
+
+For provider parameters the SDK does not wrap (`top_p`, `stop_sequences`, `service_tier`, `metadata`, Anthropic `cache_control`):
+
+```sql
+uc_ai.g_extra_body := json_object_t('{"top_p": 0.9, "service_tier": "flex"}');
+```
+
+Config style: `{"g_extra_body": {"top_p": 0.9}}`.
+
+Shallow-merged into every provider request body. Top-level keys override framework values; nested objects replace wholesale. The conversation-defining keys are protected and cannot be clobbered: `model`, `messages`, `input`, `instructions`, `system`, `tools`.
+
+## Provider (server-side) tools
+
+Raw, provider-native tool definitions appended verbatim to the request's `tools` array. The provider executes them, not your database, so they are sent with no framework wrapping — and they are sent even when local tools are disabled.
+
+```sql
+uc_ai.g_provider_tools := json_array_t('[{"type":"web_search_preview"}]');   -- OpenAI Responses
+uc_ai.g_provider_tools := json_array_t('[{"type":"web_search_20250305","name":"web_search"}]');  -- Anthropic
+```
+
+Config style: `{"g_provider_tools": [{"type": "web_search_preview"}]}`.
+
+These are provider-specific — check the provider's own API reference for the exact shape. They combine with local tools; the model can use both in one call.
