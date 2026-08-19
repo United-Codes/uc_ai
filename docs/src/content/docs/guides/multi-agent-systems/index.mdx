@@ -354,7 +354,7 @@ and it maintains the row with each later turn.
 Each run records only the tokens of the LLM calls that it made itself. The session
 totals are therefore a true sum, and a nested sub-agent run does not double count.
 
-`list_sessions` reads the headers. Use it as the conversation list of a front end:
+`list_sessions` reads the headers. It gives a front end its conversation list directly:
 
 ```sql
 DECLARE
@@ -378,7 +378,7 @@ END;
 
 #### Naming a conversation
 
-Your front end decides how a title is made. An LLM can summarize the first
+Your front end decides how it makes a title. An LLM can summarize the first
 exchange, or the user can type a title. The engine never sets a title itself.
 
 ```sql
@@ -416,10 +416,18 @@ A null rating withdraws the feedback. UC AI then clears the rating, the comment,
 and the timestamp together. A rating that UC AI does not know becomes null. A newer
 front end can therefore never break the check constraint.
 
+<Aside type="caution" title="Commit before you call either setter">
+Both setters write in an autonomous transaction and commit, so the value survives a
+rollback of your own transaction. If your transaction holds an uncommitted change to
+the same session header, the setter cannot get the lock, and the two transactions
+deadlock. UC AI detects this and raises a clear error that tells you to commit
+first. Commit your change to the header, then set the title or the rating.
+</Aside>
+
 <Aside type="caution" title="p_created_by and background jobs">
 A session that starts from a background job has no APEX session. Its header
 records the database user, not the end user. If you pass `APP_USER` against such a
-session, no row matches, and the procedure writes nothing. It writes a warning to
+session, no row matches, and the procedure changes no row. It writes a warning to
 the log, so you can find the cause. If you authorized the user yourself, pass
 `null`.
 </Aside>

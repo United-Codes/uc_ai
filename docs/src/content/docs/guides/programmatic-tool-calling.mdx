@@ -37,7 +37,7 @@ sql sys/<pwd>@<pdb> as sysdba
 @scripts/install_ptc_sandbox.sql
 ```
 
-If you installed UC AI from a release download, you do not have the repository files. Download `install_ptc_sandbox_complete.sql` from the same release and run that file instead. It holds the same steps with the package sources inlined.
+If you installed UC AI from a release download, you do not have the repository files. Download `install_ptc_sandbox_complete.sql` from the same release. Run that file instead. It holds the same steps with the package sources inlined.
 
 ```bash
 sql sys/<pwd>@<pdb> as sysdba
@@ -47,18 +47,19 @@ sql sys/<pwd>@<pdb> as sysdba
 
 The script asks for two schema names. The first is the schema that holds UC AI. The second is the new sandbox schema for it. The defaults are `UC_AI` and `UC_AI_MLE_SBX`.
 
-The script then creates four objects:
+The script then creates five objects:
 
 - the schema-only sandbox account (`NO AUTHENTICATION`, no login)
 - a `PURE` MLE environment
 - the MLE runner
+- a private synonym in the sandbox schema that points at the UC AI gateway
 - a private synonym in your UC AI schema that points at the runner
 
 UC AI finds the sandbox through this synonym at run time. No schema name is compiled into the packages.
 
 Run the script **once for each UC AI installation**. Two installations must not share one sandbox, because the gateway synonym points at one UC AI schema. The script rejects a sandbox schema that already owns other objects. At the end, the script tests that the runner compiled and that the synonym points at it.
 
-To undo the installation, run `scripts/uninstall_ptc_sandbox.sql` with the same two answers. This file is also attached to each release. If you enable code mode without the sandbox, `generate_text` raises an error that names the script.
+To undo the installation, run `scripts/uninstall_ptc_sandbox.sql` with the same two answers. Each release also holds this file, as `uninstall_ptc_sandbox.sql`. If you enable code mode without the sandbox, `generate_text` raises an error that names the script.
 
 ## The security model
 
@@ -67,7 +68,7 @@ To undo the installation, run `scripts/uninstall_ptc_sandbox.sql` with the same 
 - UC AI evaluates it in a [`PURE` MLE execution context](https://docs.oracle.com/en/database/oracle/oracle-database/26/mlejs/restricted-execution-contexts.html). This context removes every database-facing JavaScript API. The program can neither `require` nor `import` `mle-js-oracledb`, and the `oracledb`, `session`, `soda`, and `plsffi` globals do not exist. The program cannot run one SQL statement.
 - The program therefore cannot `COMMIT` or `ROLLBACK` either. This is important, because transaction control needs no privilege. A privilege wall alone does not stop generated code from discarding your pending work.
 - PL/SQL therefore **services** `callTool`. The program awaits a tool call and control returns to the runner. The runner calls the UC AI gateway. The program then continues with the result. This is the only channel in or out.
-- As a second barrier, the runner is a **definer's-rights** package. The low-privilege sandbox schema owns it. This schema has **no** privilege except `EXECUTE` on the one gateway package `uc_ai_ptc_api`. It has no tables, no quota, and no other packages.
+- As a second barrier, the runner is a **definer's-rights** package. The low-privilege sandbox schema owns it. This schema has no privilege that reaches data. It holds only the three privileges that MLE JavaScript needs (`CREATE MLE`, `EXECUTE DYNAMIC MLE`, `EXECUTE` on `sys.dbms_mle`) and `EXECUTE` on the one gateway package `uc_ai_ptc_api`. It has no tables, no quota, and no other packages.
 - Your tools still run with the full UC AI privileges, because the gateway is a UC AI package. They also run **in the transaction of the caller**, the same as a direct tool call. Each tool therefore keeps control of its own transaction. A tool that commits acts the same in both modes.
 
 <Aside type="caution" title="Tools are still real code">
@@ -118,13 +119,15 @@ uc_ai_tools_api.merge_tool_from_schema(
 , p_description      => 'Fetch expense rows for one employee'
 , p_function_call    => 'return my_pkg.get_expenses(:parameters);'
 , p_json_schema      => l_schema
-, p_code_mode_access => 'code'   -- direct | code | both  (default 'both')
+, p_code_mode_access => 'code'   -- direct | code | both
 );
 ```
 
 - `direct` — a normal tool only. A program **cannot** call it. Use this for an action that the model must call deliberately, for example "send email" or "delete record".
 - `code` — hidden from the direct tool list. Only `callTool` inside a program can call it. Use this for bulk read tools. It keeps them out of the tool list of the model, and their large output out of its context.
-- `both` — available either way (the default).
+- `both` — available either way.
+
+The two procedures have different defaults. `create_tool_from_schema` defaults to `both`. `merge_tool_from_schema` defaults to null, which keeps the value that an existing tool already has and uses `both` for a new tool. A merge script therefore never widens a tool that you narrowed.
 
 UC AI enforces this setting. The allow-list rejects a `callTool` to a `direct`-only tool, also when the model guesses the tool code. The setting applies only when code mode is on. With code mode off, every tool is a normal tool.
 

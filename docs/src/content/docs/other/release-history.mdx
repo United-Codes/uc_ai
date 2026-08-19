@@ -11,6 +11,11 @@ To upgrade first run `v26.2_to_v26.3.sql` followed by `upgrade_packages.sql` scr
 
 For new installations follow [this guide](https://www.united-codes.com/products/uc-ai/docs/guides/installation/).
 
+**Before you upgrade**:
+
+- **The migration resets the token totals on historical parent runs.** `v26.2_to_v26.3.sql` sets `total_input_tokens` and `total_output_tokens` to 0 on every existing `workflow`, `handoff`, and `conversation` row in `uc_ai_agent_executions`. These rows held the sum of their child runs. The new session totals sum every row, so the old parent values would count the same tokens twice. Profile and orchestrator rows are not touched. If you report on these two columns, keep a copy of the table before you upgrade.
+- **The message-log backfill covers the last completed turn of each session.** For each session the migration reconstructs the transcript from the most recent completed top-level run, whose stored result holds the accumulated conversation. A session whose last top-level run failed gets no transcript, and backfilled rows carry no `agent_code` attribution. Turns from the upgrade onward are recorded in full.
+
 **Breaking change**:
 
 - **Commit an agent before you execute it in the same session transaction.** Execution telemetry is now written in autonomous transactions, so `execute_agent` cannot see an agent row that the calling transaction has not committed. Earlier, this combination produced a cryptic `ORA-00060` self-deadlock. It now raises a clear error that names the cause. Add a `COMMIT` after `create_agent` (and after `change_status`) before the first `execute_agent` call.
@@ -25,7 +30,7 @@ Request customization:
 
 - **Custom request-body properties** (`uc_ai.g_extra_body`): shallow-merge arbitrary provider parameters (e.g. `top_p`, `stop_sequences`, `service_tier`, `cache_control`) into the outgoing request body for options the SDK does not wrap explicitly. Overrides framework values but protects the conversation-defining core keys (`model`, `messages`, `input`, `instructions`, `system`, `tools`). Also settable via the `g_extra_body` config key. See [generate_text](/products/uc-ai/docs/api/generate_text/#custom-request-body-properties).
 - **Provider (server-side) tools** (`uc_ai.g_provider_tools`): enable a provider's own server-side tools — Anthropic web search, OpenAI Responses API web search, Google search, etc. — by appending raw, provider-native tool definitions to the request `tools` array. Executed by the provider, not locally; sent even when local tools are disabled. Also settable via the `g_provider_tools` config key. See [generate_text](/products/uc-ai/docs/api/generate_text/#provider-server-side-tools).
-- **[Programmatic Tool Calling / Code Mode](/products/uc-ai/docs/guides/programmatic-tool-calling/)** (`uc_ai.g_enable_programmatic_tools`): the model can write one JavaScript program that orchestrates many tool calls in-database instead of one round-trip per call, returning only the final result (large token savings on data-heavy work). The program runs in a `PURE` MLE execution context inside an isolated, low-privilege sandbox schema (installed once via `scripts/install_ptc_sandbox.sql`): it has no SQL access whatsoever — it cannot read data and cannot commit or roll back the caller's transaction — and reaches tools only through a single gateway that enforces a per-run allow-list, a call budget and the `before_tool_call` hook. Per-tool `p_code_mode_access` (`direct` | `code` | `both`) controls whether a tool is a normal tool, code-only, or both. Works across all providers. Requires Oracle 23ai with MLE JavaScript.
+- **[Programmatic Tool Calling / Code Mode](/products/uc-ai/docs/guides/programmatic-tool-calling/)** (`uc_ai.g_enable_programmatic_tools`): the model can write one JavaScript program that orchestrates many tool calls in-database instead of one round-trip per call, returning only the final result (large token savings on data-heavy work). The program runs in a `PURE` MLE execution context inside an isolated, low-privilege sandbox schema (installed once via `scripts/install_ptc_sandbox.sql` from a repository checkout, or `install_ptc_sandbox_complete.sql` attached to this release): it has no SQL access whatsoever — it cannot read data and cannot commit or roll back the caller's transaction — and reaches tools only through a single gateway that enforces a per-run allow-list, a call budget and the `before_tool_call` hook. Per-tool `p_code_mode_access` (`direct` | `code` | `both`) controls whether a tool is a normal tool, code-only, or both. `create_tool_from_schema` defaults it to `both`. `merge_tool_from_schema` defaults it to null, which keeps the value an existing tool already has, so a merge script never widens a tool that you narrowed. Works across all providers. Requires Oracle 23ai with MLE JavaScript.
 - **Custom HTTP request headers** (`uc_ai.g_extra_headers`): send additional headers with every provider request, for example a tenant or trace ID. Set them with the name-indexed global (`uc_ai.g_extra_headers('X-Tenant-Id') := 'acme';`) or with the `g_extra_headers` config key. UC AI appends them after its own headers, so avoid names the framework already sets. See [generate_text](/products/uc-ai/docs/api/generate_text/#custom-http-headers).
 - **Config-driven overloads**: `uc_ai.generate_text` and `uc_ai.generate_embeddings` now have overloads that take a `p_config` JSON object. These overloads neither read nor change the package globals, so a library can call UC AI with a self-contained configuration and never touch shared session state. Omitted keys fall back to the framework defaults, not to the current global values.
 
@@ -36,7 +41,7 @@ Conversations:
 
   Note on `p_created_by` (both setters): a session opened from a background job has no APEX session, so its header records the **DB user**, not the end user. If you pass `APP_USER` against such a session, no row matches and the setter does not write. The setter writes a warning to the log, so you can find the cause. If you authorized the user yourself, pass `null`.
 - **Conversation sessions** (`uc_ai_agent_sessions`): a header row for each conversation, above the execution rows. It holds the root agent, the status of the latest turn, maintained `turn_count` and `message_count`, and the summed token usage. Each execution records only the tokens of the LLM calls it made itself, so the session totals never double count a nested sub-agent run. Read the headers with `uc_ai_agents_api.list_sessions`. See [multi-agent systems](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-sessions).
-- **Full conversation transcript with per-message attribution** (`uc_ai_agent_messages`): one row for each message content item, in `seq` order, written per turn as the delta of new messages. History-window trimming only governs what UC AI sends to the LLM, so the persisted record stays complete. Each row carries `agent_code`, the agent that produced the message — the sub-agent for wrapper turns, the turn's own agent otherwise. Read it with `uc_ai_agents_api.get_session_messages`.
+- **Full conversation transcript with per-message attribution** (`uc_ai_agent_messages`): one row for each message content item, in `seq` order, written per turn as the delta of new messages. History-window trimming only governs what UC AI sends to the LLM, so the persisted record of each new turn stays complete. Each row carries `agent_code`, the agent that produced the message — the sub-agent for wrapper turns, the turn's own agent otherwise. Read it with `uc_ai_agents_api.get_session_messages`.
 
 Multi-Agent Systems:
 
@@ -50,8 +55,8 @@ Multi-Agent Systems:
 - **[PL/SQL workflow steps](/products/uc-ai/docs/guides/multi-agent-systems/workflows/)** (`"step_type": "plsql"`): run an inline PL/SQL snippet between AI calls for deterministic post-processing without an LLM call. The step receives the full workflow state as `:parameters` and stores its return value under `output_key` with its real JSON type. A returned `{"__control__":"stop"}` halts the remaining steps.
 - **File input for agents**: `execute_agent` accepts `p_files`, so profile and orchestrator agents can receive documents and images alongside text. Files attach to the first user message and to follow-up messages.
 - **Caller environment context on executions**: `uc_ai_agent_executions` now records who started a run and from where — `created_by`, `db_user`, the APEX user, session, application and page, plus `os_user`, `host`, `ip_address`, `module`, `action`, `client_identifier`, `sid`, and an `env_context` JSON snapshot. UC AI takes the snapshot once, at the start of the top-level run, and every nested run shares it. See [caller environment context](/products/uc-ai/docs/guides/multi-agent-systems/#caller-environment-context).
-- **Caller class** (`audience`): each run and each session also records the class of the caller — `public` for an anonymous APEX visitor, `authenticated` for a logged-in APEX user, and `db` for a database or job session. A username cannot express this distinction, because every anonymous visitor of a public page shares one identity.
-- **Conditional step validation**: a step `condition` must be a string that holds a PL/SQL boolean expression. `create_agent` now rejects the object form with `ORA-20503` instead of silently ignoring it at run time.
+- **Caller class** (`audience`): each run and each session also records the class of the caller — `public` for an anonymous APEX visitor, `authenticated` for a logged-in APEX user, and `db` for a database or job session. A username cannot express this distinction, because every anonymous visitor of a public page shares one identity. Session headers that the migration backfills carry no `audience` value.
+- **Recursion guard**: agent delegation now has a maximum nesting depth. A circular reference — an agent that delegates back to itself — raises `ORA-20405` with a message that names the limit, instead of running until it exhausts a resource.
 
 Extension points:
 
@@ -67,10 +72,21 @@ Providers:
 Internal:
 
 - **New `uc_ai_settings` package** holding a per-call settings snapshot and run state. Provider implementations no longer read mutable package globals for configuration, and no longer write to global accumulators. `generate_text` snapshots the configuration once and threads it through the provider, its internal loop, and the URL and credential resolvers. This fixes state leaking between nested agent runs.
+- **Type-conditional constraints on `uc_ai_agents`**: a check constraint per agent type now enforces that the row carries the configuration its type needs (`uc_ai_agents_profile_ck`, `_workflow_ck`, `_orch_ck`). `uc_ai_agent_executions` also requires `completed_at` for a terminal status, and gains an `updated_at` audit column that the trigger maintains on update. Code that inserts into these tables directly must satisfy the constraints.
 - **Escaped state in generated PL/SQL**: resolved string values are escaped before UC AI embeds them in a PL/SQL expression (conditions, PL/SQL-expression input mappings, `final_message`), so untrusted state — LLM output, tool results, user input — cannot inject PL/SQL. Authors keep wrapping string tokens in quotes, so definitions do not change.
+
+Other:
+
+- **[Claude Code skills for consumers](https://github.com/United-Codes/uc_ai/tree/main/skills)**: the repository now ships agent skills that teach Claude Code (and other agents that read the skill format) how to call UC AI — quickstart, tools, reasoning, structured output, prompt profiles, multi-agent, file analysis, and event callbacks. Copy the ones you need into your project's `.claude/skills/` directory.
+- New [Oracle network setup guide](/products/uc-ai/docs/guides/network-setup/) covering the ACL and wallet configuration that HTTPS calls need.
+- New [glossary](/products/uc-ai/docs/other/glossary/) and [API cheatsheet](/products/uc-ai/docs/api/cheatsheet/).
 
 **Fixes**:
 
+- An orchestrator run left `uc_ai.g_enable_tools` and `uc_ai.g_tool_tags` set to null. Uninitialized locals were restored over them after every run, so a later call in the same session lost its tool configuration.
+- A step `condition` in an object form (`{"type": ..., "expression": ...}`) was read with `get_string` and therefore ignored, so the step always ran. `create_agent` now rejects anything that is not a string with `ORA-20503`.
+- Response IDs and media types longer than the old column width raised an error in `uc_ai_responses_api` ([#51](https://github.com/United-Codes/uc_ai/issues/51)).
+- A loop workflow that ran no step produced a null `final_message`.
 - Reasoning items were malformed when UC AI replayed conversation history, so a follow-up turn against the OpenAI Responses API failed with `HTTP 400 Missing required parameter: 'input[1].summary'`.
 - Reasoning content was stored as the literal string `null`, because Responses API reasoning items carry their text in `summary[].text` and not in a top-level field.
 - Duplicate or case-variant tool tags raised `ORA-00001` on `create_tool_from_schema` and `merge_tool_from_schema`. Tags are now de-duplicated after lowercasing.
@@ -87,7 +103,7 @@ Internal:
 
 **New models**:
 
-- Mistral: `mistral-large`, `mistral-medium`, `mistral-small`, `magistral-medium`, `magistral-small`, `codestral`, `devstral-medium`, `devstral-small`, `ministral-8b`, `ministral-3b`, `pixtral-large`, plus the `mistral-embed` and `codestral-embed` embedding models. See [Mistral](/products/uc-ai/docs/providers/mistral/).
+- Mistral, in `uc_ai_mistral`: `c_model_mistral_large`, `c_model_mistral_medium`, `c_model_mistral_small`, `c_model_magistral_medium`, `c_model_magistral_small`, `c_model_codestral`, `c_model_devstral_medium`, `c_model_devstral_small`, `c_model_ministral_8b`, `c_model_ministral_3b`, `c_model_pixtral_large`, plus the embedding models `c_model_mistral_embed` and `c_model_codestral_embed`. See [Mistral](/products/uc-ai/docs/providers/mistral/).
 
 ## v26.2
 

@@ -72,11 +72,16 @@ The `p_config` overloads (and prompt-profile `model_config_json`) accept root-le
   "g_extra_headers": {"X-Tenant-Id": "acme"},
   "g_extra_body": {"top_p": 0.9},
   "g_provider_tools": [{"type": "web_search_preview"}],
+  "g_enable_programmatic_tools": true,
 
-  "openai":    {"g_use_responses_api": false, "g_reasoning_effort": "low"},
-  "anthropic": {"g_max_tokens": 16384, "g_reasoning_budget_tokens": 2048},
-  "google":    {"g_reasoning_budget": -1},
-  "xai":       {"g_reasoning_effort": "high"}
+  "openai":     {"g_use_responses_api": false, "g_reasoning_effort": "low"},
+  "anthropic":  {"g_max_tokens": 16384, "g_reasoning_budget_tokens": 2048},
+  "google":     {"g_reasoning_budget": -1, "g_embedding_task_type": "RETRIEVAL_DOCUMENT"},
+  "ollama":     {"g_use_responses_api": false},
+  "oci":        {"g_compartment_id": "ocid1...", "g_region": "eu-frankfurt-1", "g_max_tokens": 8192},
+  "xai":        {"g_reasoning_effort": "high"},
+  "openrouter": {"g_reasoning_effort": "high"},
+  "mistral":    {"g_apex_web_credential": "MISTRAL"}
 }
 ```
 

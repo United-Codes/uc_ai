@@ -184,7 +184,12 @@ Per-tool availability is set at registration with `p_code_mode_access`:
 |-------|---------|
 | `direct` | Normal tool only. Not callable from a program. |
 | `code` | Callable only from a code-mode program. |
-| `both` | Both (the default) |
+| `both` | Both |
+
+Defaults differ per procedure: `create_tool_from_schema` defaults to `'both'`;
+`merge_tool_from_schema` defaults to **null**, which keeps whatever an existing tool
+already has and uses `both` for a new one — so re-running a merge script never
+widens a tool you deliberately narrowed.
 
 ## Provider (server-side) tools
 
