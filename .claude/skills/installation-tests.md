@@ -42,19 +42,22 @@ exit;
 EOF
 ```
 
-Expected counts for UC_AI* objects:
+Expected counts for UC_AI* objects (verified against a fresh v26.3 install):
 
 | Object type | Count | Notes |
 |---|---|---|
-| PACKAGE | 20 | all provider + API specs |
-| PACKAGE BODY | 18 | `uc_ai_xai` and `uc_ai_openrouter` are spec-only |
-| TABLE | 6 | agents, agent_executions, prompt_profiles, tools, tool_parameters, tool_tags |
-| SEQUENCE | 6 | one per table |
-| TRIGGER | 6 | `_BIU` / `_BI` per table, all ENABLED |
+| PACKAGE | 22 | 24 specs exist; `uc_ai_ptc_api` and `uc_ai_ptc_runner` are installed by the code-mode sandbox script, not the core installer |
+| PACKAGE BODY | 19 | 21 bodies exist, minus the same two sandbox packages |
+| TABLE | 8 | tools, tool_parameters, tool_tags, prompt_profiles, agents, agent_executions, agent_sessions, agent_messages |
+| SEQUENCE | 7 | one per table except `uc_ai_tool_tags` |
+| TRIGGER | 8 | `_BIU` / `_BI` per table, all ENABLED |
 | FUNCTION | 1 | `UC_AI_GET_KEY` |
-| INDEX | 14 named + system LOB indexes | PK/UK/IDX |
+| INDEX | 25 | all named `UC_AI%`; none system-generated |
 
 Invalid objects must be 0. If counts drift, cross-check against `install_uc_ai.sql` and `src/tables/install.sql`.
+
+Update this table whenever a release adds a table, a sequence, a trigger, or a
+package. The counts went stale between v26.2 and v26.3 and then failed step 3.
 
 ## Important notes
 

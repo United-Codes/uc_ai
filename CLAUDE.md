@@ -169,4 +169,4 @@ Check these files for context on specific topics:
 | Prompt profiles guide | `docs/src/content/docs/guides/prompt-profiles.mdx` |
 | Agentic AI guide | `docs/src/content/docs/guides/agentic-ai.mdx` |
 | Structured output guide | `docs/src/content/docs/guides/structured_output.mdx` |
-| Release history | `docs/src/content/docs/other/relase-history.mdx` |
+| Release history | `docs/src/content/docs/other/release-history.mdx` |

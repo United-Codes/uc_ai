@@ -21,7 +21,7 @@ If the user doesn't give you the version, ask before doing anything else.
 git log v<PREV>..HEAD --oneline
 ```
 
-Spot-check any commit whose message is ambiguous with `git show <sha> --stat` (and look at the diff if needed). Group commits into these buckets — this structure matches existing entries in `docs/src/content/docs/other/relase-history.mdx`:
+Spot-check any commit whose message is ambiguous with `git show <sha> --stat` (and look at the diff if needed). Group commits into these buckets — this structure matches existing entries in `docs/src/content/docs/other/release-history.mdx`:
 
 - **Headline features** (new packages, new user-facing APIs, new provider features)
 - **Existing feature enhancements** (defaults changed, new params, new helpers)
@@ -40,6 +40,29 @@ git diff v<PREV>..HEAD --stat -- src/tables/ src/triggers/ src/migrations/
   - Ask the user whether the DDL was a hotfix to the previous release (and thus already in users' schemas) or genuinely new.
   - If genuinely new, create `src/migrations/v<PREV>_to_v<NEW>.sql` with the DDL and reference it in the changelog as the first-run step before `upgrade_packages.sql`.
   - Confirm with `grep -n "trigger\|table" scripts/generate_upgrade_script.sh` that `upgrade_packages.sql` still skips DDL (it should).
+
+### 2b. Register any new package with the generators
+
+`scripts/package_utils.sh` drives every generator from three hardcoded arrays
+(`API_PACKAGES`, `PROVIDER_PACKAGES`, `SANDBOX_PACKAGES`). A `.pks`/`.pkb` pair that
+is in none of them is silently left out of `install_uc_ai.sql`,
+`upgrade_packages.sql` and `uninstall.sql` — the generators only print
+`WARNING: Unknown package found`, and nothing fails.
+
+```bash
+for f in src/packages/*.pks; do
+  grep -q "$(basename "$f" .pks)" scripts/package_utils.sh || echo "NOT REGISTERED: $f"
+done
+```
+
+Order inside `API_PACKAGES` is compile order, not taste: a spec that references
+another package's type must come after it. `uc_ai_message_api` before
+`uc_ai_prompt_profiles_api` is the case that already bit us (PLS-00302 on a fresh
+install).
+
+`SANDBOX_PACKAGES` (`uc_ai_ptc_api`, `uc_ai_ptc_runner`) is deliberately excluded
+from the core installer — those need 23ai MLE JavaScript, while the rest of UC AI
+runs on 12.2+.
 
 ### 3. Bump the version constants
 
@@ -77,7 +100,15 @@ bash scripts/generate_install_script.sh > /dev/null
 bash scripts/generate_upgrade_script.sh > /dev/null
 bash scripts/generate_install_script_complete.sh > /dev/null
 bash scripts/generate_uninstall_script.sh > /dev/null
+bash scripts/generate_ptc_sandbox_script.sh > /dev/null
 ```
+
+`install_ptc_sandbox_complete.sql` is the release-download path for code mode:
+`scripts/install_ptc_sandbox.sql` pulls the PTC sources in with `@@../src/packages/`
+relative includes, so it only runs from a checkout. `release.yml` attaches the
+inlined variant and `scripts/uninstall_ptc_sandbox.sql`. If you add a file to the
+sandbox installer, make sure the generator still resolves every `@@` include — it
+fails rather than emitting a partial script.
 
 If provider model constants changed, also run `bash scripts/generate_uc_ai_utils_body.sh` — or just use the `update-models` skill.
 
@@ -85,16 +116,54 @@ If provider model constants changed, also run `bash scripts/generate_uc_ai_utils
 
 Connection: `sql -name local-23ai-uc_ai`. Use `set serveroutput on size unlimited; set feedback off;` in each session.
 
-Run **all non-LLM tests first** (fast, no network, no cost):
+There is **no full-suite runner and no LLM-free entry point**. `ut.run` with no
+argument hits every live provider suite, and the `--%suitepath` coverage is partial
+(16 of the 37 suites carry none), so `ut.run('uc_ai')` silently reaches about half.
+Run the LLM-free suites by name.
+
+**LLM-free suites** — verified: none of these calls `generate_text`,
+`generate_embeddings`, `execute_agent` or `execute_profile` in a way that reaches a
+provider. 236 tests, all of them fast and free:
 
 ```sql
-begin ut.run('test_uc_ai_toon'); end;
+begin ut.run('test_uc_ai_toon'); end;                    -- 22
 /
-begin ut.run('test_uc_ai_tools_api'); end;
+begin ut.run('test_uc_ai_error'); end;                   -- 10
 /
-begin ut.run('test_uc_ai_prompt_profiles_api'); end;
+begin ut.run('test_uc_ai_utils'); end;                   --  6
+/
+begin ut.run('test_uc_ai_message_api'); end;             -- 17
+/
+begin ut.run('test_uc_ai_structured_output'); end;       -- 21
+/
+begin ut.run('test_uc_ai_tools_api'); end;               -- 12
+/
+begin ut.run('test_uc_ai_settings'); end;                --  9
+/
+begin ut.run('test_uc_ai_reset_globals'); end;           --  3
+/
+begin ut.run('test_uc_ai_passthrough'); end;             --  8
+/
+begin ut.run('test_uc_ai_reasoning_replay'); end;        -- 14
+/
+begin ut.run('test_uc_ai_workflow_mapping'); end;        -- 33
+/
+begin ut.run('test_uc_ai_agent_session_meta'); end;      -- 28
+/
+begin ut.run('test_uc_ai_agent_validation'); end;        -- 41
+/
+begin ut.run('test_uc_ai_hook'); end;                    -- 12
 /
 ```
+
+The last two do call `execute_agent`, but only on an agent that must fail first —
+uncommitted, or pointing at a missing prompt profile — so no provider is reached.
+
+**Do not** put these in the LLM-free set: `test_uc_ai_prompt_profiles_api` calls
+`execute_profile` 25 times, and every `test_uc_ai_agent_*` suite not named above
+(profile, orchestrator, conversation, handoff, integration, checkpoint, plsql_step)
+runs real profiles. `test_uc_ai_ptc` needs 23ai plus an installed code-mode sandbox
+and is LLM-backed too.
 
 Then **cherry-pick a few LLM-backed tests** for spot coverage (do not run full provider suites — they're slow and expensive):
 
@@ -118,6 +187,7 @@ Known recurring patterns worth remembering:
 - **State leaks between tests**: `uc_ai.reset_globals` is **not** automatically called between tests. If a test suite changes something (reasoning on/off, `g_max_tokens`, `g_base_url`), later tests inherit it. Fix: change the suite's `%beforeall` to `%beforeeach` and call `uc_ai.reset_globals` there.
 - **Responses API vs Chat API parity**: when adding events or new output processing, verify the feature fires/works on **both** paths. `uc_ai_responses_api.pkb` and each provider's chat path are separate code.
 - **Provider base URL overrides**: the xAI/OpenRouter branches in `uc_ai.pkb` mutate `g_base_url` and `g_provider_override`. Any code there must save/restore both (including in `exception when others` blocks) or later provider calls leak to the wrong host.
+- **Annotation spacing is fine, adjacency is not.** `-- %suite` with a space between `--` and `%` registers normally (verified on utPLSQL against 26ai). What does break a test is a comment **between** `--%test` and the procedure declaration — that detaches the annotation and utPLSQL skips the test silently. See the warning in `test/test_uc_ai_agent_workflow.pks`.
 
 ### 7. Update documentation
 
@@ -129,7 +199,7 @@ Walk through these doc locations for every release:
 - **New tool/function in an existing package** → update the relevant guide (e.g. tools, prompt-profiles).
 - **New model constants** → add to the relevant `docs/src/content/docs/providers/<name>.mdx` models section.
 
-Then the **release history** entry at the top of [docs/src/content/docs/other/relase-history.mdx](docs/src/content/docs/other/relase-history.mdx):
+Then the **release history** entry at the top of [docs/src/content/docs/other/release-history.mdx](docs/src/content/docs/other/release-history.mdx):
 
 - Group using the buckets from step 1 (Features, Fixes, New models, …).
 - **Link to the relevant doc page** from each bullet that introduces something new — the section headers themselves can be links (`[Tools API](/products/uc-ai/docs/guides/tools/#...)`). This is how v26.1 and v26.2 are structured.
