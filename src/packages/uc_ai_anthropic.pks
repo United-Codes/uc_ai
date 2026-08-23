@@ -14,22 +14,30 @@ as
 
 
   -- Anthropic Claude models
-  -- See https://docs.anthropic.com/en/docs/about-claude/models
-   c_model_claude_4_7_opus   constant uc_ai.model_type := 'claude-opus-4-7';
+  -- See https://platform.claude.com/docs/en/about-claude/models/overview
+  c_model_claude_5_fable    constant uc_ai.model_type := 'claude-fable-5';
+  c_model_claude_5_opus     constant uc_ai.model_type := 'claude-opus-5';
+  c_model_claude_5_sonnet   constant uc_ai.model_type := 'claude-sonnet-5';
+  c_model_claude_4_5_haiku  constant uc_ai.model_type := 'claude-haiku-4-5';
+
+  c_model_claude_4_8_opus   constant uc_ai.model_type := 'claude-opus-4-8';
+  c_model_claude_4_7_opus   constant uc_ai.model_type := 'claude-opus-4-7';
 
   c_model_claude_4_6_opus   constant uc_ai.model_type := 'claude-opus-4-6';
   c_model_claude_4_6_sonnet constant uc_ai.model_type := 'claude-sonnet-4-6';
 
   c_model_claude_4_5_opus   constant uc_ai.model_type := 'claude-opus-4-5';
   c_model_claude_4_5_sonnet constant uc_ai.model_type := 'claude-sonnet-4-5';
-  c_model_claude_4_5_haiku  constant uc_ai.model_type := 'claude-haiku-4-5';
 
-  c_model_claude_4_1_opus constant uc_ai.model_type := 'claude-opus-4-1';
-  c_model_claude_4_sonnet constant uc_ai.model_type := 'claude-sonnet-4-0';
+  -- Anthropic retired these models. Requests to them fail.
+  -- They stay here for backward compatibility of code that references the constants.
+  -- See https://platform.claude.com/docs/en/about-claude/model-deprecations
+  c_model_claude_4_1_opus   constant uc_ai.model_type := 'claude-opus-4-1';
+  c_model_claude_4_sonnet   constant uc_ai.model_type := 'claude-sonnet-4-0';
   c_model_claude_3_7_sonnet constant uc_ai.model_type := 'claude-3-7-sonnet-latest';
   c_model_claude_3_5_sonnet constant uc_ai.model_type := 'claude-3-5-sonnet-latest';
   c_model_claude_3_5_haiku  constant uc_ai.model_type := 'claude-3-5-haiku-latest';
-  c_model_claude_4_opus constant uc_ai.model_type := 'claude-opus-4-0';
+  c_model_claude_4_opus     constant uc_ai.model_type := 'claude-opus-4-0';
   c_model_claude_3_opus     constant uc_ai.model_type := 'claude-3-opus-latest';
 
   g_max_tokens pls_integer := 8192; -- Default maximum tokens for Claude models

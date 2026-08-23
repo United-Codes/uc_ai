@@ -14,7 +14,14 @@ as
 
   g_use_responses_api boolean := true;
 
-  -- get from https://platform.openai.com/docs/pricing
+  -- get from https://developers.openai.com/api/docs/pricing
+  c_model_gpt_5_6_sol constant uc_ai.model_type := 'gpt-5.6-sol';
+  c_model_gpt_5_6_terra constant uc_ai.model_type := 'gpt-5.6-terra';
+  c_model_gpt_5_6_luna constant uc_ai.model_type := 'gpt-5.6-luna';
+
+  c_model_gpt_5_5 constant uc_ai.model_type := 'gpt-5.5';
+  c_model_gpt_5_5_pro constant uc_ai.model_type := 'gpt-5.5-pro';
+
   c_model_gpt_5_4 constant uc_ai.model_type := 'gpt-5.4';
   c_model_gpt_5_4_mini constant uc_ai.model_type := 'gpt-5.4-mini';
   c_model_gpt_5_4_nano constant uc_ai.model_type := 'gpt-5.4-nano';

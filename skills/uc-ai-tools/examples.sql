@@ -258,7 +258,7 @@ begin
     Your tools give you access to user, project and timetracking information.
     Answer concise and short.'
   , p_provider       => uc_ai.c_provider_google
-  , p_model          => uc_ai_google.c_model_gemini_2_5_flash
+  , p_model          => uc_ai_google.c_model_gemini_3_7_flash
     -- model constants change with releases: check the installed uc_ai_google spec
   , p_max_tool_calls => 6
   );

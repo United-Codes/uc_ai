@@ -54,19 +54,30 @@ Refer to [this list of available models](https://docs.oracle.com/en-us/iaas/Cont
 
 ### Cohere
 
+- `uc_ai_oci.c_model_cohere_command_a_reasoning`
+- `uc_ai_oci.c_model_cohere_command_a_vision`
 - `uc_ai_oci.c_model_cohere_command_a_03_2025`
 
 ### xAI Grok
 
-- `uc_ai_oci.c_model_grok_4`
-- `uc_ai_oci.c_model_grok_3`
-- `uc_ai_oci.c_model_grok_3_mini`
-- `uc_ai_oci.c_model_grok_3_fast`
-- `uc_ai_oci.c_model_grok_3_mini_fast`
+- `uc_ai_oci.c_model_grok_4_3`
+- `uc_ai_oci.c_model_grok_4_20`
+- `uc_ai_oci.c_model_grok_4_20_multi_agent`
+
+### OpenAI
+
+- `uc_ai_oci.c_model_gpt_oss_120b`
+- `uc_ai_oci.c_model_gpt_oss_20b`
 
 ### Google Gemini
 
-Coming soon...
+- `uc_ai_oci.c_model_google_gemini_2_5_pro`
+- `uc_ai_oci.c_model_google_gemini_2_5_flash`
+- `uc_ai_oci.c_model_google_gemini_2_5_flash_lite`
+
+### Retired Models
+
+Oracle marks the Grok 3 and Grok 4 models, `grok-code-fast-1`, the Llama 3.1 and Llama 3.2 models, and the Command R models as deprecated. The same applies to the Cohere embedding models of version 3. The package keeps their constants, but use a current model for new code.
 
 :::tip
 If a new model is not yet available as a constant, you can pass the model name directly as a string. See the [FAQ](/products/uc-ai/docs/other/faq/#custom-model-strings) for details.

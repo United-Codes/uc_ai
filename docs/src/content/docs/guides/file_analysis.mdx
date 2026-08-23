@@ -62,7 +62,7 @@ begin
   -- Call the AI service to generate a response based on the messages
   l_result := uc_ai_google.generate_text(
     p_messages => l_messages,
-    p_model => uc_ai_google.c_model_gemini_2_5_flash,
+    p_model => uc_ai_google.c_model_gemini_3_7_flash,
     p_max_tool_calls => 3
   );
 
@@ -104,7 +104,7 @@ begin
 
   l_result := uc_ai_anthropic.generate_text(
     p_messages => l_messages,
-    p_model => uc_ai_anthropic.c_model_claude_3_5_haiku,
+    p_model => uc_ai_anthropic.c_model_claude_4_5_haiku,
     p_max_tool_calls => 3
   );
 

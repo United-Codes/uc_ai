@@ -55,7 +55,7 @@ BEGIN
     p_system_prompt_template => 'You are a {style} assistant that creates concise summaries.',
     p_user_prompt_template => 'Summarize the following text: {text}',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o_mini,
+    p_model => uc_ai_openai.c_model_gpt_5_6_luna,
     p_version => 1,
     p_status => uc_ai_prompt_profiles_api.c_status_draft
   );
@@ -72,7 +72,7 @@ END;
 - `p_system_prompt_template`: System prompt with placeholders (`{placeholder}`)
 - `p_user_prompt_template`: User prompt with placeholders
 - `p_provider`: AI provider (for example `uc_ai.c_provider_openai`)
-- `p_model`: Model identifier (for example `uc_ai_openai.c_model_gpt_4o_mini`)
+- `p_model`: Model identifier (for example `uc_ai_openai.c_model_gpt_5_6_luna`)
 - `p_model_config_json`: Optional JSON configuration (see [Configuration](#model-configuration))
 - `p_response_schema`: Optional JSON schema for [structured output](/products/uc-ai/docs/guides/structured_output)
 - `p_parameters_schema`: Optional JSON schema defining expected parameters
@@ -200,7 +200,7 @@ BEGIN
     p_system_prompt_template => 'You are an analytical assistant.',
     p_user_prompt_template => 'Analyze: {scenario}',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_o4,
+    p_model => uc_ai_openai.c_model_gpt_5_6_terra,
     p_model_config_json => l_config
   );
 END;
@@ -311,7 +311,7 @@ BEGIN
     p_system_prompt_template => 'Analyze text and provide structured results.',
     p_user_prompt_template => 'Analyze: {text}',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o_mini,
+    p_model => uc_ai_openai.c_model_gpt_5_6_luna,
     p_response_schema => l_schema
   );
 END;
@@ -428,7 +428,7 @@ BEGIN
     p_system_prompt_template => 'New system prompt with {param}',
     p_user_prompt_template => 'New user prompt: {input}',
     p_provider => uc_ai.c_provider_anthropic,
-    p_model => uc_ai_anthropic.c_model_claude_3_5_sonnet
+    p_model => uc_ai_anthropic.c_model_claude_5_sonnet
   );
 
   COMMIT;
@@ -447,7 +447,7 @@ BEGIN
     p_system_prompt_template => 'Updated system prompt',
     p_user_prompt_template => 'Updated user prompt',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o
+    p_model => uc_ai_openai.c_model_gpt_5_6_terra
   );
 
   COMMIT;
@@ -479,7 +479,7 @@ BEGIN
     p_code => 'SUMMARIZE_TEXT',
     p_parameters => l_params,
     p_provider_override => uc_ai.c_provider_anthropic,
-    p_model_override => uc_ai_anthropic.c_model_claude_3_5_sonnet,
+    p_model_override => uc_ai_anthropic.c_model_claude_5_sonnet,
     p_config_override => l_override_config
   );
 END;
@@ -511,7 +511,7 @@ BEGIN
     p_system_prompt_template => 'You are an assistant with access to user data.',
     p_user_prompt_template => 'What is the email of {user_name}?',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o_mini,
+    p_model => uc_ai_openai.c_model_gpt_5_6_luna,
     p_model_config_json => l_config
   );
 END;
@@ -652,7 +652,7 @@ BEGIN
     p_system_prompt_template => 'You are a support ticket classifier. Analyze issues and categorize them accurately.',
     p_user_prompt_template => 'Classify this issue: {issue_text}',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o_mini,
+    p_model => uc_ai_openai.c_model_gpt_5_6_luna,
     p_response_schema => l_schema,
     p_version => 1,
     p_status => uc_ai_prompt_profiles_api.c_status_draft

@@ -61,7 +61,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt          => 'Ticket: "The invoice total looks wrong and I was charged twice."',
     p_provider             => uc_ai.c_provider_openai,
-    p_model                => uc_ai_openai.c_model_gpt_4o_mini,
+    p_model                => uc_ai_openai.c_model_gpt_5_6_luna,
     p_response_json_schema => l_schema
   );
   -- l_result.get_clob('final_message') is guaranteed to match the schema.
@@ -91,7 +91,7 @@ l_messages.append(uc_ai_message_api.create_user_message(l_content));
 
 l_result := uc_ai_google.generate_text(
   p_messages => l_messages,
-  p_model    => uc_ai_google.c_model_gemini_2_5_flash
+  p_model    => uc_ai_google.c_model_gemini_3_7_flash
 );
 ```
 
@@ -124,7 +124,7 @@ begin
     p_system_prompt => 'You are an assistant to a time tracking system.
       Use the provided tools to access user, project and timetracking data.',
     p_provider      => uc_ai.c_provider_anthropic,
-    p_model         => uc_ai_anthropic.c_model_claude_3_5_haiku
+    p_model         => uc_ai_anthropic.c_model_claude_4_5_haiku
   );
   -- "Jim's email address is jim.halpert@dundermifflin.com."
 end;

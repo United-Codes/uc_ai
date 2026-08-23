@@ -222,7 +222,7 @@ Outside an agent, pass the context to `generate_text`:
 l_result := uc_ai.generate_text(
   p_user_prompt => 'Summarize this document',
   p_provider    => uc_ai.c_provider_openai,
-  p_model       => uc_ai_openai.c_model_gpt_5,
+  p_model       => uc_ai_openai.c_model_gpt_5_6_sol,
   p_run_context => json_object_t('{"document_id": "7"}')
 );
 ```
@@ -242,7 +242,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'How is the weather in Paris?',
     p_provider => UC_AI.c_provider_openai,
-    p_model => UC_AI_OPENAI.c_model_gpt_5,
+    p_model => UC_AI_OPENAI.c_model_gpt_5_6_sol,
     p_max_tool_calls => 6
   );
 end;
@@ -345,7 +345,7 @@ begin
     Your tools give you access to user, project and timetracking information.
     Answer concise and short.',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_2_5_flash
+    p_model => uc_ai_google.c_model_gemini_3_7_flash
   );
 
   l_final_message := l_result.get_clob('final_message');

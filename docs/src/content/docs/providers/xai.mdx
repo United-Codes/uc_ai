@@ -7,7 +7,7 @@ The UC AI xAI package provides integration with xAI's Grok models, allowing you 
 
 ## Features
 
-- Support for latest Grok models (Grok-4, Grok-3, Grok-2)
+- Support for the current Grok models (Grok 4.6, Grok 4.5, Grok 4.3, Grok 4.20)
 - Full function calling (tools) support
 - Advanced reasoning capabilities with reasoning effort control
 - Multi-modal support (text, images)
@@ -40,30 +40,26 @@ uc_ai_xai.g_apex_web_credential := 'XAI';
 
 ## Models
 
-xAI offers a range of Grok models optimized for different use cases. The UC AI xAI package provides constants for all current models:
+xAI offers a range of Grok models optimized for different use cases. The UC AI xAI package provides constants for the current models:
 
 ### Grok-4 Models
 
 The latest and most capable models in the Grok family:
 
-- `uc_ai_xai.c_model_grok_4` - Full Grok-4 model with reasoning capabilities
-- `uc_ai_xai.c_model_grok_4_fast` - Fast non-reasoning variant for quick responses
-- `uc_ai_xai.c_model_grok_4_1_fast` - Latest Grok-4.1 fast model
-
-### Grok-3 Models
-
-Previous generation models:
-
-- `uc_ai_xai.c_model_grok_3` - Full Grok-3 model
-- `uc_ai_xai.c_model_grok_3_mini` - Smaller, faster Grok-3 variant
-
-### Grok-2 Models
-
-- `uc_ai_xai.c_model_grok_2_vision` - Grok-2 with vision capabilities
+- `uc_ai_xai.c_model_grok_4_6` - Most capable Grok model
+- `uc_ai_xai.c_model_grok_4_5`
+- `uc_ai_xai.c_model_grok_4_3`
+- `uc_ai_xai.c_model_grok_4_20_reasoning` - Grok 4.20 with reasoning
+- `uc_ai_xai.c_model_grok_4_20_non_reasoning` - Grok 4.20 without reasoning
+- `uc_ai_xai.c_model_grok_4_20_multi_agent` - Grok 4.20 with a multi-agent architecture
 
 ### Specialized Models
 
-- `uc_ai_xai.c_model_grok_code_fast_1` - Optimized for code generation tasks
+- `uc_ai_xai.c_model_grok_build_0_1` - Coding model for agentic development tasks
+
+### Retired Models
+
+xAI no longer lists the Grok 2, Grok 3, Grok 4, and Grok 4.1 models, and `grok-code-fast-1`. The package keeps their constants for code that still references them, but requests with these models can fail.
 
 See [xAI's models documentation](https://docs.x.ai/docs/models) for the latest model information and capabilities.
 
@@ -82,7 +78,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is Oracle APEX?',
     p_provider => uc_ai.c_provider_xai,
-    p_model => uc_ai_xai.c_model_grok_4_fast
+    p_model => uc_ai_xai.c_model_grok_4_6
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -100,7 +96,7 @@ begin
     p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
     p_system_prompt => 'You are an assistant helping users to get recipes. Please answer in short sentences.',
     p_provider => uc_ai.c_provider_xai,
-    p_model => uc_ai_xai.c_model_grok_4_fast
+    p_model => uc_ai_xai.c_model_grok_4_6
   );
 
   dbms_output.put_line('Recipe: ' || l_result.get_string('final_message'));
@@ -123,7 +119,7 @@ begin
     p_user_prompt => 'What is the email address of Jim?',
     p_system_prompt => 'You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.',
     p_provider => uc_ai.c_provider_xai,
-    p_model => uc_ai_xai.c_model_grok_4_fast
+    p_model => uc_ai_xai.c_model_grok_4_6
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -163,7 +159,7 @@ begin
   l_result := uc_ai.generate_text(
     p_messages => l_messages,
     p_provider => uc_ai.c_provider_xai,
-    p_model => uc_ai_xai.c_model_grok_4_fast
+    p_model => uc_ai_xai.c_model_grok_4_6
   );
 
   dbms_output.put_line('Analysis: ' || l_result.get_string('final_message'));
@@ -185,7 +181,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
     p_provider => uc_ai.c_provider_xai,
-    p_model => uc_ai_xai.c_model_grok_4_fast
+    p_model => uc_ai_xai.c_model_grok_4_6
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -205,7 +201,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Your complex question here',
     p_provider => uc_ai.c_provider_xai,
-    p_model => uc_ai_xai.c_model_grok_4_fast
+    p_model => uc_ai_xai.c_model_grok_4_6
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -253,7 +249,7 @@ begin
     p_user_prompt => 'What is the capital of France? Please respond with confidence.',
     p_system_prompt => 'You are a helpful assistant that provides accurate information.',
     p_provider => uc_ai.c_provider_xai,
-    p_model => uc_ai_xai.c_model_grok_4_fast,
+    p_model => uc_ai_xai.c_model_grok_4_6,
     p_response_json_schema => l_schema
   );
 

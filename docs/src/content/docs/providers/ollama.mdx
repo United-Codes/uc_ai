@@ -112,7 +112,7 @@ begin
   l_result := uc_ai.GENERATE_TEXT(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
     p_provider => uc_ai.c_provider_ollama,
-    p_model => c_model_qwen_4b
+    p_model => 'qwen3:8b'
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));

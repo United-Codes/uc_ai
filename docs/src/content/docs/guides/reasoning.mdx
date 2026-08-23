@@ -22,6 +22,10 @@ Each provider implements reasoning in its own way. UC AI therefore has provider-
 - [xAI Grok](/products/uc-ai/docs/providers/xai/#reasoning--thinking)
 - [Mistral](/products/uc-ai/docs/providers/mistral/#reasoning--thinking)
 
+<Aside type="caution">
+Anthropic removed the extended thinking parameter for Claude Opus 4.7 and later models. These models think adaptively, and UC AI cannot set a reasoning budget for them. Use Claude Sonnet 4.5 or Claude Haiku 4.5 if you want to control the budget.
+</Aside>
+
 ## Basic Usage
 
 To enable reasoning, set the global flag `uc_ai.g_enable_reasoning := true;`. The AI can then reason during the generation of its answer.
@@ -45,7 +49,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why?',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_2_5_flash
+    p_model => uc_ai_google.c_model_gemini_3_7_flash
   );
 
   l_final_message := l_result.get_clob('final_message');
@@ -70,7 +74,7 @@ BEGIN
   l_result := uc_ai.GENERATE_TEXT(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_o4_mini
+    p_model => uc_ai_openai.c_model_gpt_5_6_terra
   );
 
   l_final_message := l_result.get_clob('final_message');
@@ -99,7 +103,7 @@ BEGIN
   l_result := uc_ai.GENERATE_TEXT(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_o4_mini
+    p_model => uc_ai_openai.c_model_gpt_5_6_terra
   );
 
   l_final_message := l_result.get_clob('final_message');
@@ -151,7 +155,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why?',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_2_5_flash
+    p_model => uc_ai_google.c_model_gemini_3_7_flash
   );
 
   l_messages := treat(l_result.get('messages') as json_array_t);
@@ -185,6 +189,6 @@ END;
 
 These provider guides give the best practices for reasoning:
 
-- [Anthropic Reasoning Best Practices](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#best-practices-and-considerations-for-extended-thinking)
+- [Anthropic Reasoning Best Practices](https://platform.claude.com/docs/en/build-with-claude/extended-thinking#best-practices-and-considerations-for-extended-thinking)
 - [Google Reasoning Best Practices](https://ai.google.dev/gemini-api/docs/thinking#best-practices)
 - [OpenAI Reasoning Best Practices](https://platform.openai.com/docs/guides/reasoning-best-practices#page-top)

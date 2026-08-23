@@ -23,7 +23,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why?'
   , p_provider    => uc_ai.c_provider_openai
-  , p_model       => uc_ai_openai.c_model_gpt_o4_mini -- must be a reasoning-capable model
+  , p_model       => uc_ai_openai.c_model_gpt_5_6_terra -- must be a reasoning-capable model
   );
 
   dbms_output.put_line('Answer: ' || l_result.get_clob('final_message'));
@@ -67,7 +67,7 @@ Globals are session-scoped; for reusable/library code prefer the `p_config` over
 l_result := uc_ai.generate_text(
   p_user_prompt => 'Plan the migration steps and answer concisely.'
 , p_provider    => uc_ai.c_provider_openai
-, p_model       => uc_ai_openai.c_model_gpt_o4_mini
+, p_model       => uc_ai_openai.c_model_gpt_5_6_terra
 , p_config      => json_object_t('{
     "g_enable_reasoning": true,
     "openai": {"g_reasoning_effort": "medium"}
@@ -96,7 +96,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why?'
   , p_provider    => uc_ai.c_provider_google
-  , p_model       => uc_ai_google.c_model_gemini_2_5_flash
+  , p_model       => uc_ai_google.c_model_gemini_3_7_flash
   );
 
   l_messages := treat(l_result.get('messages') as json_array_t);

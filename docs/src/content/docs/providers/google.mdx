@@ -7,7 +7,7 @@ The UC AI Google package provides integration with Google's Gemini models, allow
 
 ## Features
 
-- Support for latest Gemini models (Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.0 Flash, Gemini 1.5 series)
+- Support for the current Gemini models (Gemini 3.x Flash and Flash-Lite, Gemini 3.1 Pro, Gemini 2.5 series)
 - Full function calling (tools) support
 - Advanced reasoning capabilities with reasoning budget control
 - Multi-modal support (text, images, PDFs)
@@ -39,34 +39,29 @@ uc_ai_google.g_apex_web_credential := 'GOOGLE';
 
 ## Models
 
-Google offers the Gemini family of models with different capabilities and performance characteristics. The UC AI Google package provides constants for all current models:
+Google offers the Gemini family of models with different capabilities and performance characteristics. The UC AI Google package provides constants for the current models:
 
 ### Gemini 3 Series
 
-- `uc_ai_google.c_model_gemini_3_pro` - Most capable model for complex tasks
+- `uc_ai_google.c_model_gemini_3_7_flash` - Latest Flash model, fast and good for most tasks
+- `uc_ai_google.c_model_gemini_3_6_flash`
+- `uc_ai_google.c_model_gemini_3_5_flash`
+- `uc_ai_google.c_model_gemini_3_5_flash_lite` - Lightweight model for simple tasks
+- `uc_ai_google.c_model_gemini_3_1_flash_lite`
+- `uc_ai_google.c_model_gemini_3_1_pro` - Most capable model for complex tasks (preview)
+- `uc_ai_google.c_model_gemini_3_flash` - Frontier-class Flash model (preview)
 
 ### Gemini 2.5 Series
 
-Enhanced second generation models:
+- `uc_ai_google.c_model_gemini_3_1_pro`
+- `uc_ai_google.c_model_gemini_3_7_flash`
+- `uc_ai_google.c_model_gemini_3_5_flash_lite`
 
-- `uc_ai_google.c_model_gemini_2_5_pro` - Most capable model for complex tasks
-- `uc_ai_google.c_model_gemini_2_5_flash` - Fast and efficient for most tasks
-- `uc_ai_google.c_model_gemini_2_5_flash_lite` - Lightweight version for simple tasks
+### Retired Models
 
-### Gemini 2.0 Series
+Google shut down the Gemini 2.0 models, the Gemini 1.5 models, and the `gemini-3-pro-preview` model. The package keeps their constants for code that still references them, but requests with these models fail.
 
-Second generation Gemini models:
-
-- `uc_ai_google.c_model_gemini_2_0_flash`
-- `uc_ai_google.c_model_gemini_2_0_flash_lite`
-
-### Gemini 1.5 Series
-
-- `uc_ai_google.c_model_gemini_1_5_pro`
-- `uc_ai_google.c_model_gemini_1_5_flash`
-- `uc_ai_google.c_model_gemini_1_5_flash_8b`
-
-See [Google's model documentation](https://ai.google.dev/gemini-api/docs/models/gemini) for detailed model information and [Artificial Analysis](https://artificialanalysis.ai/providers/google) for a comparison of intelligence, speed, and price.
+See [Google's model documentation](https://ai.google.dev/gemini-api/docs/models) for detailed model information and [Artificial Analysis](https://artificialanalysis.ai/providers/google) for a comparison of intelligence, speed, and price.
 
 :::tip
 If a new model is not yet available as a constant, you can pass the model name directly as a string. See the [FAQ](/products/uc-ai/docs/other/faq/#custom-model-strings) for details.
@@ -83,7 +78,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is Oracle APEX?',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_2_5_flash
+    p_model => uc_ai_google.c_model_gemini_3_7_flash
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -101,7 +96,7 @@ begin
     p_user_prompt => 'Write a SQL query to find all employees hired this year',
     p_system_prompt => 'You are a helpful SQL expert. Write clean, efficient queries.',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_2_5_pro
+    p_model => uc_ai_google.c_model_gemini_3_1_pro
   );
 
   dbms_output.put_line('SQL Query: ' || l_result.get_string('final_message'));
@@ -111,7 +106,7 @@ end;
 
 ### Using Tools/Function Calling
 
-[All Gemini 2.5 models](https://ai.google.dev/gemini-api/docs/function-calling?example=meeting#supported-models) support tools/function calling. You can define tools in your application and Gemini will call them as needed.
+[All current Gemini models](https://ai.google.dev/gemini-api/docs/function-calling?example=meeting#supported-models) support tools/function calling. You can define tools in your application and Gemini will call them as needed.
 
 See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to set up and use tools. Also see Googles [best practices for function calling](https://ai.google.dev/gemini-api/docs/function-calling?example=meeting#best-practices).
 
@@ -135,7 +130,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_2_5_flash
+    p_model => uc_ai_google.c_model_gemini_3_7_flash
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -149,7 +144,7 @@ The reasoning budget parameter controls how many thinking tokens the model uses:
 - `0` - No reasoning budget
 - Positive number - Fixed token budget
 
-Note that reasoning cannot be disabled with Gemini 2.5 Pro models as they always use some level of reasoning.
+Note that reasoning cannot be disabled with the Pro models as they always use some level of reasoning.
 
 Refer to Google's [thinking documentation](https://ai.google.dev/gemini-api/docs/thinking#set-budget) for more details on reasoning capabilities.
 

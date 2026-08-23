@@ -58,7 +58,7 @@ matching specialist - never answer such questions yourself.
 Only greetings and smalltalk you answer yourself, briefly and politely.',
     p_user_prompt_template  => '{prompt}',
     p_provider              => uc_ai.c_provider_openai,
-    p_model                 => uc_ai_openai.c_model_gpt_5_mini,
+    p_model                 => uc_ai_openai.c_model_gpt_5_6_luna,
     p_status                => uc_ai_prompt_profiles_api.c_status_active
   );
 
@@ -72,7 +72,7 @@ Use the product details tool to look up product facts and answer concisely.',
     p_user_prompt_template  => 'Customer question: {prompt}
 Triage notes: {handoff_context}',
     p_provider              => uc_ai.c_provider_openai,
-    p_model                 => uc_ai_openai.c_model_gpt_5_mini,
+    p_model                 => uc_ai_openai.c_model_gpt_5_6_luna,
     p_model_config_json     => '{"g_enable_tools": true, "g_tool_tags": ["product_catalog"], "g_max_tool_calls": 3}',
     p_status                => uc_ai_prompt_profiles_api.c_status_active
   );
@@ -89,7 +89,7 @@ Answer concisely with exact numbers.',
     p_user_prompt_template  => 'Customer question: {prompt}
 Triage notes: {handoff_context}',
     p_provider              => uc_ai.c_provider_openai,
-    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_model                 => uc_ai_openai.c_model_gpt_5_6_luna,
     p_status                => uc_ai_prompt_profiles_api.c_status_active
   );
 

@@ -16,7 +16,7 @@
     "total_tokens": 68
   },
   "tool_calls_count": 2,
-  "model": "gpt-4o-mini",
+  "model": "gpt-5.6-luna",
   "provider": "openai"
 }
 ```

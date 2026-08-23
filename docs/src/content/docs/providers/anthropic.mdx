@@ -7,7 +7,7 @@ The UC AI Anthropic package provides integration with Anthropic's Claude models,
 
 ## Features
 
-- Support for latest Claude models (Opus, Sonnet, Haiku)
+- Support for the current Claude models (Fable, Opus, Sonnet, Haiku)
 - Full function calling (tools) support
 - Structured output (JSON schema-based responses)
 - Advanced reasoning capabilities with Extended Thinking
@@ -41,25 +41,26 @@ uc_ai_anthropic.g_apex_web_credential := 'ANTHROPIC';
 
 ## Models
 
-Anthropic builds a range of models called Claude. The Haiku models are optimized for speed and cost, Sonnet models balance performance and speed, while Opus models are the most capable but also the most expensive. See [this model reference](https://docs.anthropic.com/en/docs/about-claude/models/overview) for details on each model. Refer to [Artifical Analysis](https://artificialanalysis.ai/providers/anthropic) for a comparison of intelligence, speed, and price.
+Anthropic builds a range of models called Claude. The Haiku models are optimized for speed and cost. The Sonnet models balance performance and speed. The Opus and Fable models are the most capable, and also the most expensive. See [this model reference](https://platform.claude.com/docs/en/about-claude/models/overview) for details on each model. Refer to [Artifical Analysis](https://artificialanalysis.ai/providers/anthropic) for a comparison of intelligence, speed, and price.
 
 The UC AI Anthropic package provides constants for these Claude models:
 
-### Claude 4 Models (Latest)
+### Current Models
 
-- `uc_ai_anthropic.c_model_claude_4_7_opus` - Claude Opus 4.7, the most capable model
+- `uc_ai_anthropic.c_model_claude_5_fable` - Claude Fable 5, for long-running agents
+- `uc_ai_anthropic.c_model_claude_5_opus` - Claude Opus 5, for complex agentic coding
+- `uc_ai_anthropic.c_model_claude_5_sonnet` - Claude Sonnet 5, a balance of speed and intelligence
+- `uc_ai_anthropic.c_model_claude_4_5_haiku` - Claude Haiku 4.5, the fastest model
+- `uc_ai_anthropic.c_model_claude_4_8_opus`
+- `uc_ai_anthropic.c_model_claude_4_7_opus`
 - `uc_ai_anthropic.c_model_claude_4_6_opus`
 - `uc_ai_anthropic.c_model_claude_4_6_sonnet`
 - `uc_ai_anthropic.c_model_claude_4_5_opus`
-- `uc_ai_anthropic.c_model_claude_4_5_sonnet` - Balanced performance and speed
-- `uc_ai_anthropic.c_model_claude_4_5_haiku` - Smaller model
+- `uc_ai_anthropic.c_model_claude_4_5_sonnet`
 
-### Claude 3.x Models
+### Retired Models
 
-- `uc_ai_anthropic.c_model_claude_3_7_sonnet`
-- `uc_ai_anthropic.c_model_claude_3_5_sonnet`
-- `uc_ai_anthropic.c_model_claude_3_5_haiku`
-- `uc_ai_anthropic.c_model_claude_3_opus`
+Anthropic retired the Claude 3 models, the Claude 4.0 models, and Claude Opus 4.1. The package keeps their constants for code that still references them, but requests with these models fail. See the [Anthropic deprecation list](https://platform.claude.com/docs/en/about-claude/model-deprecations) for the dates.
 
 :::tip
 If a new model is not yet available as a constant, you can pass the model name directly as a string. See the [FAQ](/products/uc-ai/docs/other/faq/#custom-model-strings) for details.
@@ -76,7 +77,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is Oracle APEX?',
     p_provider => uc_ai.c_provider_anthropic,
-    p_model => uc_ai_anthropic.c_model_claude_4_sonnet
+    p_model => uc_ai_anthropic.c_model_claude_5_sonnet
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -94,7 +95,7 @@ begin
     p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
     p_system_prompt => 'You are an assistant helping users to get recipes. Please just list 3 possible dish names without instructions.',
     p_provider => uc_ai.c_provider_anthropic,
-    p_model => uc_ai_anthropic.c_model_claude_3_5_haiku
+    p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
   );
 
   dbms_output.put_line('Recipe suggestions: ' || l_result.get_string('final_message'));
@@ -118,7 +119,7 @@ See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to 
 
 ### Structured Output
 
-Claude models support structured output, allowing you to constrain responses to a specific JSON schema. UC AI automatically converts your schema to the format required by Anthropic's API. See Anthropic's [structured output documentation](https://docs.anthropic.com/en/docs/build-with-claude/structured-outputs) for model support and best practices.
+Claude models support structured output, allowing you to constrain responses to a specific JSON schema. UC AI automatically converts your schema to the format required by Anthropic's API. See Anthropic's [structured output documentation](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) for model support and best practices.
 
 ```sql
 declare
@@ -171,7 +172,11 @@ Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) f
 
 ### Reasoning / Extended Thinking
 
-Claude models support advanced reasoning capabilities. When enabled, Claude uses an internal reasoning process before providing its final answer. Refer to Anthropics [Extended Thinking guide](https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking) for model support and best practices.
+Claude models support advanced reasoning capabilities. When enabled, Claude uses an internal reasoning process before providing its final answer. Refer to Anthropics [Extended Thinking guide](https://platform.claude.com/docs/en/build-with-claude/extended-thinking) for model support and best practices.
+
+:::caution
+Anthropic removed the extended thinking parameter for Claude Opus 4.7 and later models. These models think adaptively, and UC AI cannot set a reasoning budget for them. Use Claude Sonnet 4.5 or Claude Haiku 4.5 if you want to control the budget.
+:::
 
 Make sure to set the `uc_ai.g_enable_reasoning` variable to `true`. Additionally you can configure the reasoning budget to limit the number of tokens used for reasoning:
 
@@ -185,7 +190,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Why have relational databases been so successful?',
     p_provider => uc_ai.c_provider_anthropic,
-    p_model => uc_ai_anthropic.c_model_claude_4_sonnet
+    p_model => uc_ai_anthropic.c_model_claude_4_5_sonnet
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));

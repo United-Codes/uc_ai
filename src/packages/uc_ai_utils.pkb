@@ -40,6 +40,11 @@ as
   begin
     -- OpenAI
     if p_provider is null or p_provider = uc_ai.c_provider_openai then
+      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_5_6_sol; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_5_6_terra; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_5_6_luna; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_5_5; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_5_5_pro; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_5_4; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_5_4_mini; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_5_4_nano; l_rec.model_type := c_chat; pipe row (l_rec);
@@ -78,12 +83,16 @@ as
 
     -- Anthropic
     if p_provider is null or p_provider = uc_ai.c_provider_anthropic then
+      l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_5_fable; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_5_opus; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_5_sonnet; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_5_haiku; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_8_opus; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_7_opus; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_6_opus; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_6_sonnet; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_5_opus; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_5_sonnet; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_5_haiku; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_1_opus; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_4_sonnet; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_3_7_sonnet; l_rec.model_type := c_chat; pipe row (l_rec);
@@ -95,9 +104,13 @@ as
 
     -- Google
     if p_provider is null or p_provider = uc_ai.c_provider_google then
+      l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_7_flash; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_6_flash; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_5_flash; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_5_flash_lite; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_1_flash_lite; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_1_pro; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_flash; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_1_flash_lite; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_pro; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_2_5_pro; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_2_5_flash; l_rec.model_type := c_chat; pipe row (l_rec);
@@ -127,6 +140,7 @@ as
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_google_gemini_2_5_pro; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_google_gemini_2_5_flash; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_google_gemini_2_5_flash_lite; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_4_3; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_4_20_multi_agent; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_4_20; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_code_fast_1; l_rec.model_type := c_chat; pipe row (l_rec);
@@ -152,6 +166,10 @@ as
 
     -- xAI
     if p_provider is null or p_provider = uc_ai.c_provider_xai then
+      l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_6; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_5; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_3; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_build_0_1; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_20_reasoning; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_20_non_reasoning; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_20_multi_agent; l_rec.model_type := c_chat; pipe row (l_rec);

@@ -57,7 +57,7 @@ begin
   , p_system_prompt_template => 'You are a support ticket classifier. Analyze issues and categorize them accurately.'
   , p_user_prompt_template   => 'Classify this issue: {issue_text}'
   , p_provider               => uc_ai.c_provider_openai
-  , p_model                  => uc_ai_openai.c_model_gpt_4o_mini
+  , p_model                  => uc_ai_openai.c_model_gpt_5_6_luna
   , p_response_schema        => l_schema
   , p_version                => 1
   , p_status                 => uc_ai_prompt_profiles_api.c_status_draft

@@ -15,15 +15,24 @@ as
 
   -- Google Gemini models
   -- See https://ai.google.dev/gemini-api/docs/models/gemini
+  c_model_gemini_3_7_flash        constant uc_ai.model_type := 'gemini-3.7-flash';
+  c_model_gemini_3_6_flash        constant uc_ai.model_type := 'gemini-3.6-flash';
+  c_model_gemini_3_5_flash        constant uc_ai.model_type := 'gemini-3.5-flash';
+  c_model_gemini_3_5_flash_lite   constant uc_ai.model_type := 'gemini-3.5-flash-lite';
+  c_model_gemini_3_1_flash_lite   constant uc_ai.model_type := 'gemini-3.1-flash-lite';
+
   c_model_gemini_3_1_pro          constant uc_ai.model_type := 'gemini-3.1-pro-preview';
   c_model_gemini_3_flash          constant uc_ai.model_type := 'gemini-3-flash-preview';
-  c_model_gemini_3_1_flash_lite   constant uc_ai.model_type := 'gemini-3.1-flash-lite-preview';
+
+  -- Google shut down this preview model. Requests to it fail.
   c_model_gemini_3_pro            constant uc_ai.model_type := 'gemini-3-pro-preview';
 
   c_model_gemini_2_5_pro        constant uc_ai.model_type := 'gemini-2.5-pro';
   c_model_gemini_2_5_flash      constant uc_ai.model_type := 'gemini-2.5-flash';
   c_model_gemini_2_5_flash_lite constant uc_ai.model_type := 'gemini-2.5-flash-lite';
 
+  -- Google shut down the models below. Requests to them fail.
+  -- They stay here for backward compatibility of code that references the constants.
   c_model_gemini_2_0_flash        constant uc_ai.model_type := 'gemini-2.0-flash';
   c_model_gemini_2_0_flash_lite   constant uc_ai.model_type := 'gemini-2.0-flash_lite';
 

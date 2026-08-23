@@ -113,7 +113,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Say hello.',
     p_provider    => uc_ai.c_provider_openai, -- change to your provider
-    p_model       => uc_ai_openai.c_model_gpt_4o_mini
+    p_model       => uc_ai_openai.c_model_gpt_5_6_luna
   );
 
   DBMS_OUTPUT.PUT_LINE('AI Response: ' || l_result.get_string('final_message'));

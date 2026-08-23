@@ -208,7 +208,7 @@ begin
   , p_system_prompt_template => 'You are a haiku critic. Rate haikus based on form, imagery, and emotional impact.'
   , p_user_prompt_template   => 'Rate this haiku about "{topic}": {haiku}'
   , p_provider               => uc_ai.c_provider_openai
-  , p_model                  => uc_ai_openai.c_model_gpt_4o_mini
+  , p_model                  => uc_ai_openai.c_model_gpt_5_6_luna
   , p_response_schema        => l_schema
   , p_status                 => uc_ai_prompt_profiles_api.c_status_active
   );

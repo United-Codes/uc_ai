@@ -131,7 +131,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt    => 'How is the weather in Paris?'
   , p_provider       => uc_ai.c_provider_openai
-  , p_model          => uc_ai_openai.c_model_gpt_4o_mini
+  , p_model          => uc_ai_openai.c_model_gpt_5_6_luna
   , p_max_tool_calls => 6  -- default 10
   );
 
@@ -150,7 +150,7 @@ For reusable/library code prefer the `p_config` overload of `generate_text` — 
 l_result := uc_ai.generate_text(
   p_user_prompt => 'How is the weather in Paris?'
 , p_provider    => uc_ai.c_provider_openai
-, p_model       => uc_ai_openai.c_model_gpt_4o_mini
+, p_model       => uc_ai_openai.c_model_gpt_5_6_luna
 , p_config      => json_object_t('{
     "g_enable_tools": true,
     "g_tool_tags": ["weather"]

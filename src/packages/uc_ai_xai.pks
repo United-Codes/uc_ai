@@ -14,6 +14,13 @@ as
 
 
   -- get from https://docs.x.ai/docs/models
+  c_model_grok_4_6                constant uc_ai.model_type := 'grok-4.6';
+  c_model_grok_4_5                constant uc_ai.model_type := 'grok-4.5';
+  c_model_grok_4_3                constant uc_ai.model_type := 'grok-4.3';
+
+  -- Coding model for agentic development tasks
+  c_model_grok_build_0_1          constant uc_ai.model_type := 'grok-build-0.1';
+
   c_model_grok_4_20_reasoning     constant uc_ai.model_type := 'grok-4.20-0309-reasoning';
   c_model_grok_4_20_non_reasoning constant uc_ai.model_type := 'grok-4.20-0309-non-reasoning';
   c_model_grok_4_20_multi_agent   constant uc_ai.model_type := 'grok-4.20-multi-agent-0309';

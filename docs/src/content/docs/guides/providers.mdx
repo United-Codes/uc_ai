@@ -32,7 +32,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is APEX Office Print?',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o_mini
+    p_model => uc_ai_openai.c_model_gpt_5_6_luna
   );
 
   DBMS_OUTPUT.PUT_LINE('OpenAI Response: '
@@ -42,7 +42,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is APEX Office Print?',
     p_provider => uc_ai.c_provider_anthropic,
-    p_model => uc_ai_anthropic.c_model_claude_3_5_haiku
+    p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
   );
   DBMS_OUTPUT.PUT_LINE('Anthropic Response: '
   || l_result.get_string('final_message'));
@@ -51,7 +51,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is APEX Office Print?',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_2_5_flash
+    p_model => uc_ai_google.c_model_gemini_3_7_flash
   );
   DBMS_OUTPUT.PUT_LINE('Google Response: '
   || l_result.get_string('final_message'));

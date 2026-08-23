@@ -38,7 +38,7 @@ begin
     p_user_prompt   => 'What is Oracle APEX?'
   , p_system_prompt => 'You are a helpful assistant. Answer briefly.'
   , p_provider      => uc_ai.c_provider_openai
-  , p_model         => uc_ai_openai.c_model_gpt_4o_mini
+  , p_model         => uc_ai_openai.c_model_gpt_5_6_luna
   );
 
   dbms_output.put_line('Response: ' || l_result.get_clob('final_message'));
@@ -53,12 +53,12 @@ end;
 
 | Provider | Constant | Example model constants |
 |----------|----------|------------------------|
-| OpenAI | `uc_ai.c_provider_openai` | `uc_ai_openai.c_model_gpt_5_4`, `c_model_gpt_5_4_mini`, `c_model_gpt_4o_mini` |
-| Anthropic | `uc_ai.c_provider_anthropic` | `uc_ai_anthropic.c_model_claude_4_7_opus`, `c_model_claude_4_5_haiku` |
-| Google | `uc_ai.c_provider_google` | `uc_ai_google.c_model_gemini_3_pro`, `c_model_gemini_2_5_flash` |
+| OpenAI | `uc_ai.c_provider_openai` | `uc_ai_openai.c_model_gpt_5_6_sol`, `c_model_gpt_5_6_terra`, `c_model_gpt_5_6_luna` |
+| Anthropic | `uc_ai.c_provider_anthropic` | `uc_ai_anthropic.c_model_claude_5_opus`, `c_model_claude_4_5_haiku` |
+| Google | `uc_ai.c_provider_google` | `uc_ai_google.c_model_gemini_3_1_pro`, `c_model_gemini_3_7_flash` |
 | Ollama (local) | `uc_ai.c_provider_ollama` | see `uc_ai_ollama` spec; also set `uc_ai.g_base_url` |
 | OCI GenAI | `uc_ai.c_provider_oci` | `uc_ai_oci.c_model_llama_4_maverick`, `c_model_cohere_command_a_reasoning` |
-| xAI | `uc_ai.c_provider_xai` | `uc_ai_xai.c_model_grok_4`, `c_model_grok_3_mini` |
+| xAI | `uc_ai.c_provider_xai` | `uc_ai_xai.c_model_grok_4_6`, `c_model_grok_4_3` |
 | OpenRouter | `uc_ai.c_provider_openrouter` | see `uc_ai_openrouter` spec |
 | Mistral | `uc_ai.c_provider_mistral` | `uc_ai_mistral.c_model_mistral_small`, `c_model_codestral` |
 
@@ -94,7 +94,7 @@ function generate_text (
 l_result := uc_ai.generate_text(
   p_user_prompt => 'Summarize open tickets.'
 , p_provider    => uc_ai.c_provider_openai
-, p_model       => uc_ai_openai.c_model_gpt_4o_mini
+, p_model       => uc_ai_openai.c_model_gpt_5_6_luna
 , p_config      => json_object_t('{
     "g_enable_tools": true,
     "g_tool_tags": ["tickets"],
@@ -130,7 +130,7 @@ l_messages.append(
 l_result := uc_ai.generate_text(
   p_messages => l_messages
 , p_provider => uc_ai.c_provider_google
-, p_model    => uc_ai_google.c_model_gemini_2_5_flash
+, p_model    => uc_ai_google.c_model_gemini_3_7_flash
 );
 ```
 

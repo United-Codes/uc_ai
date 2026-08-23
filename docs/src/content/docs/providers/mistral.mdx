@@ -49,11 +49,6 @@ Mistral offers a range of models optimized for different use cases. The UC AI Mi
 - `uc_ai_mistral.c_model_mistral_medium` - Balanced frontier-class multimodal model
 - `uc_ai_mistral.c_model_mistral_small` - Fast and cost-efficient multimodal model
 
-### Reasoning Models
-
-- `uc_ai_mistral.c_model_magistral_medium` - Frontier-class reasoning model
-- `uc_ai_mistral.c_model_magistral_small` - Small reasoning model
-
 ### Edge Models
 
 - `uc_ai_mistral.c_model_ministral_8b` - Powerful edge model
@@ -62,16 +57,19 @@ Mistral offers a range of models optimized for different use cases. The UC AI Mi
 ### Specialized Models
 
 - `uc_ai_mistral.c_model_codestral` - Optimized for code generation tasks
-- `uc_ai_mistral.c_model_devstral_medium` - Model for coding agents
-- `uc_ai_mistral.c_model_devstral_small` - Small model for coding agents
-- `uc_ai_mistral.c_model_pixtral_large` - Vision-capable frontier model
 
 ### Embedding Models
 
 - `uc_ai_mistral.c_model_mistral_embed` - General purpose text embeddings
 - `uc_ai_mistral.c_model_codestral_embed` - Code-specific embeddings
 
-See [Mistral's models documentation](https://docs.mistral.ai/getting-started/models/models_overview/) for the latest model information and capabilities.
+Most of these constants hold a `-latest` name, such as `mistral-small-latest`. Mistral resolves such a name to the newest version of that model family. The two embedding constants hold a fixed name.
+
+### Retired Models
+
+Mistral marks the Magistral, Devstral, and Pixtral models as deprecated. The package keeps the constants `c_model_magistral_medium`, `c_model_magistral_small`, `c_model_devstral_medium`, `c_model_devstral_small`, and `c_model_pixtral_large` for code that still references them.
+
+See [Mistral's models documentation](https://docs.mistral.ai/models) for the latest model information and capabilities.
 
 :::tip
 If a new model is not yet available as a constant, you can pass the model name directly as a string. See the [FAQ](/products/uc-ai/docs/other/faq/#custom-model-strings) for details.

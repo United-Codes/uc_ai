@@ -77,7 +77,7 @@ begin
     p_system_prompt => 'You are an... First analyze the ticket and think of actions that make sense from the given tools...',
     p_user_prompt => 'Ticket #1243: ...',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_o4_mini
+    p_model => uc_ai_openai.c_model_gpt_5_6_terra
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -108,7 +108,7 @@ BEGIN
     p_system_prompt_template => 'You are an... First analyze the ticket and think of actions that make sense from the given tools...',
     p_user_prompt_template  => '{ticket_text}',
     p_provider              => uc_ai.c_provider_openai,
-    p_model                 => uc_ai_openai.c_model_gpt_o4_mini,
+    p_model                 => uc_ai_openai.c_model_gpt_5_6_terra,
     p_model_config_json     => l_config,
     p_status                => uc_ai_prompt_profiles_api.c_status_active
   );

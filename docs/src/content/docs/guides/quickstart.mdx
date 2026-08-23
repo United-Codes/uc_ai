@@ -34,7 +34,7 @@ The examples use OpenAI, but every [provider](/products/uc-ai/docs/guides/provid
      l_result := uc_ai.generate_text(
        p_user_prompt => 'In one sentence, what is Oracle APEX?',
        p_provider    => uc_ai.c_provider_openai,
-       p_model       => uc_ai_openai.c_model_gpt_4o_mini
+       p_model       => uc_ai_openai.c_model_gpt_5_6_luna
      );
 
      dbms_output.put_line(l_result.get_clob('final_message'));
@@ -97,7 +97,7 @@ The examples use OpenAI, but every [provider](/products/uc-ai/docs/guides/provid
      l_result := uc_ai.generate_text(
        p_user_prompt => 'What day of the week is it today?',
        p_provider    => uc_ai.c_provider_openai,
-       p_model       => uc_ai_openai.c_model_gpt_4o_mini
+       p_model       => uc_ai_openai.c_model_gpt_5_6_luna
      );
 
      dbms_output.put_line(l_result.get_clob('final_message'));

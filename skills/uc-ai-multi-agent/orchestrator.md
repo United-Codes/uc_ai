@@ -48,7 +48,7 @@ Note: User is in New York, needs ~6 hours for cross-country travel to SF.
 Answer shortly and precisely.'
   , p_user_prompt_template   => 'Calendar query: {prompt}'
   , p_provider               => uc_ai.c_provider_openai
-  , p_model                  => uc_ai_openai.c_model_gpt_4o_mini
+  , p_model                  => uc_ai_openai.c_model_gpt_5_6_luna
   , p_status                 => uc_ai_prompt_profiles_api.c_status_active
   );
 
@@ -66,7 +66,7 @@ Return flights available 2 hours later same day.
 Return 3 best options based on preferences. No additional text.'
   , p_user_prompt_template   => 'Flight search: {prompt}'
   , p_provider               => uc_ai.c_provider_openai
-  , p_model                  => uc_ai_openai.c_model_gpt_4o_mini
+  , p_model                  => uc_ai_openai.c_model_gpt_5_6_luna
   , p_status                 => uc_ai_prompt_profiles_api.c_status_active
   );
 
@@ -83,7 +83,7 @@ Available hotels near SF Tech Conference:
 Return 3 best options based on preferences. No additional text.'
   , p_user_prompt_template   => 'Hotel search: {prompt}'
   , p_provider               => uc_ai.c_provider_openai
-  , p_model                  => uc_ai_openai.c_model_gpt_4o_mini
+  , p_model                  => uc_ai_openai.c_model_gpt_5_6_luna
   , p_status                 => uc_ai_prompt_profiles_api.c_status_active
   );
 
@@ -97,7 +97,7 @@ First check the calendar for constraints, then find flights and hotels that fit.
 Provide a recommended travel plan with reasoning.'
   , p_user_prompt_template   => '{prompt}'
   , p_provider               => uc_ai.c_provider_openai
-  , p_model                  => uc_ai_openai.c_model_gpt_5_mini
+  , p_model                  => uc_ai_openai.c_model_gpt_5_6_luna
   , p_status                 => uc_ai_prompt_profiles_api.c_status_active
   );
 

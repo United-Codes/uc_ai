@@ -162,7 +162,7 @@ Three things then use these values:
 - Every tool in the run receives them under the reserved key `_ctx`. Read
   [the run context](/products/uc-ai/docs/guides/tools/#the-run-context).
 - A `{document_id}` placeholder in the prompt profile resolves from them.
-- Pro [agent memory](/products/uc-ai/docs/guides/agent-memory/) can keep one
+- [Agent memory](/products/uc-ai/docs/guides/agent-memory/) can keep one
   store per value.
 
 Every nested run inherits the context. A workflow step, an orchestrator delegate,
@@ -233,7 +233,7 @@ BEGIN
     p_system_prompt_template => 'You are an assistant that does X.',
     p_user_prompt_template  => 'Do X with this input: {prompt}',
     p_provider              => uc_ai.c_provider_openai,
-    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_model                 => uc_ai_openai.c_model_gpt_5_6_luna,
     p_status                => uc_ai_prompt_profiles_api.c_status_active
   );
 
@@ -293,7 +293,7 @@ BEGIN
     p_system_prompt_template => 'You are a critic. Rate the given content.',
     p_user_prompt_template  => 'Rate this: {text}',
     p_provider              => uc_ai.c_provider_openai,
-    p_model                 => uc_ai_openai.c_model_gpt_4o_mini,
+    p_model                 => uc_ai_openai.c_model_gpt_5_6_luna,
     p_response_schema       => l_schema,
     p_status                => uc_ai_prompt_profiles_api.c_status_active
   );

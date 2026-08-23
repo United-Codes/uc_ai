@@ -103,7 +103,7 @@ The main user input that you want the AI to respond to. This can be a question, 
 l_result := uc_ai.generate_text(
   p_user_prompt => 'What is Oracle APEX?',
   p_provider => uc_ai.c_provider_openai,
-  p_model => uc_ai_openai.c_model_gpt_4o_mini
+  p_model => uc_ai_openai.c_model_gpt_5_6_luna
 );
 ```
 
@@ -117,7 +117,7 @@ l_result := uc_ai.generate_text(
   p_user_prompt => 'Explain database normalization',
   p_system_prompt => 'You are a professional database consultant. Provide clear, technical explanations with practical examples.',
   p_provider => uc_ai.c_provider_openai,
-  p_model => uc_ai_openai.c_model_gpt_4o
+  p_model => uc_ai_openai.c_model_gpt_5_6_terra
 );
 
 -- Casual tone
@@ -125,7 +125,7 @@ l_result := uc_ai.generate_text(
   p_user_prompt => 'How do I optimize this SQL query?',
   p_system_prompt => 'You are a friendly database expert. Use simple language and provide step-by-step guidance.',
   p_provider => uc_ai.c_provider_anthropic,
-  p_model => uc_ai_anthropic.c_model_claude_3_5_haiku
+  p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
 );
 ```
 
@@ -167,7 +167,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_messages => l_messages,
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o_mini
+    p_model => uc_ai_openai.c_model_gpt_5_6_luna
   );
 END;
 /
@@ -218,7 +218,7 @@ BEGIN
     p_user_prompt => 'What are the benefits of using Oracle APEX?',
     p_system_prompt => 'You are an Oracle APEX expert consultant.',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o_mini
+    p_model => uc_ai_openai.c_model_gpt_5_6_luna
   );
 END;
 /
@@ -241,7 +241,7 @@ begin
     p_user_prompt => 'What is the rarest chemical element?',
     p_system_prompt => 'You are an assistant for chemical students in school.',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o_mini
+    p_model => uc_ai_openai.c_model_gpt_5_6_luna
   );
 
   dbms_output.put_line('Response: ' || l_result.get_string('final_message'));
@@ -260,7 +260,7 @@ begin
   l_result := uc_ai.generate_text(
     p_messages => l_messages,
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_2_5_flash
+    p_model => uc_ai_google.c_model_gemini_3_7_flash
   );
 
   dbms_output.put_line('Follow-up response: ' || l_result.get_string('final_message'));
@@ -284,7 +284,7 @@ Specifies which AI provider to use. Available providers:
 l_result := uc_ai.generate_text(
   p_user_prompt => 'Explain machine learning',
   p_provider => uc_ai.c_provider_openai,  -- or c_provider_anthropic, c_provider_google
-  p_model => uc_ai_openai.c_model_gpt_4o_mini
+  p_model => uc_ai_openai.c_model_gpt_5_6_luna
 );
 ```
 
@@ -305,14 +305,14 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Summarize this paragraph',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o_mini
+    p_model => uc_ai_openai.c_model_gpt_5_6_luna
   );
 
-  -- For complex analysis - use more capable models (GPT-4.5, Sonnet 4, Gemini 2.5 Pro, etc.)
+  -- For complex analysis - use more capable models (GPT-5.6 Sol, Claude Opus 5, Gemini 3.1 Pro)
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Analyze this complex financial dataset and provide strategic recommendations',
     p_provider => uc_ai.c_provider_anthropic,
-    p_model => uc_ai_anthropic.c_model_claude_4_sonnet
+    p_model => uc_ai_anthropic.c_model_claude_5_sonnet
   );
 END;
 /
@@ -330,7 +330,7 @@ l_result := uc_ai.generate_text(
   p_user_prompt => 'Calculate monthly sales totals and create a summary report',
   p_system_prompt => 'You have access to database tools to query sales data',
   p_provider => uc_ai.c_provider_openai,
-  p_model => uc_ai_openai.c_model_gpt_4o,
+  p_model => uc_ai_openai.c_model_gpt_5_6_terra,
   p_max_tool_calls => 5  -- Allow up to 5 tool calls
 );
 
@@ -392,7 +392,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Clock me in to the marketing project.',
     p_provider    => uc_ai.c_provider_openai,
-    p_model       => uc_ai_openai.c_model_gpt_4o_mini,
+    p_model       => uc_ai_openai.c_model_gpt_5_6_luna,
     p_config      => l_config
   );
 
@@ -414,7 +414,7 @@ a value that the model cannot choose:
 l_result := uc_ai.generate_text(
   p_user_prompt => 'What are the payment terms?',
   p_provider    => uc_ai.c_provider_openai,
-  p_model       => uc_ai_openai.c_model_gpt_5,
+  p_model       => uc_ai_openai.c_model_gpt_5_6_sol,
   p_run_context => json_object_t('{"document_id": "7"}')
 );
 ```
@@ -566,7 +566,7 @@ The return object contains the following properties:
     "total_tokens": 68,        -- total tokens used (NUMBER)
   },
   "tool_calls_count": 2,       -- Number of tools executed (NUMBER)
-  "model": "gpt-4o-mini",      -- AI model used (VARCHAR2)
+  "model": "gpt-5.6-luna",     -- AI model used (VARCHAR2)
   "provider": "openai"         -- AI provider (VARCHAR2)
 }
 ```
@@ -581,7 +581,7 @@ The return object contains the following properties:
 | `finish_reason`     | `VARCHAR2`      | Completion reason: `stop`, `tool_calls`, `length`, `content_filter`, `max_tool_calls_exceeded`       |
 | `usage`             | `JSON_OBJECT_T` | Token usage statistics with `prompt_tokens`, `completion_tokens`, and `total_tokens`                 |
 | `tool_calls_count`  | `NUMBER`        | Total number of tool calls executed during the conversation                                          |
-| `model`             | `VARCHAR2`      | The AI model used (for example `gpt-4o-mini` or `claude-3-5-haiku`)                                  |
+| `model`             | `VARCHAR2`      | The AI model used (for example `gpt-5.6-luna` or `claude-sonnet-5`)                                  |
 | `provider`          | `VARCHAR2`      | AI provider identifier (`openai`, `anthropic`, `google`)                                             |
 
 ### Accessing Return Values

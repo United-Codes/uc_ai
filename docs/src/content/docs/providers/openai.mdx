@@ -7,7 +7,7 @@ The UC AI OpenAI package provides integration with OpenAI's GPT models, allowing
 
 ## Features
 
-- Support for latest GPT models (GPT-4.5, GPT-4.1, GPT-4o, o1 series, o3 series, o4 series)
+- Support for the current GPT models (GPT-5.6 Sol, Terra, and Luna, and the GPT-5.x series)
 - Full function calling (tools) support
 - Advanced reasoning capabilities with reasoning effort control
 - Multi-modal support (text, images, PDFs)
@@ -47,51 +47,35 @@ uc_ai_openai.g_apex_web_credential := 'OPENAI';
 
 ## Models
 
-OpenAI offers a wide range of models optimized for different use cases. The UC AI OpenAI package provides constants for all current models:
+OpenAI offers a wide range of models optimized for different use cases. The UC AI OpenAI package provides constants for the current models:
 
 ### Core GPT Models
 
-Standard GPT (Generative Pre-trained Transformer) models are designed for general-purpose text generation tasks. The latest models include:
+The GPT-5.6 family is the current generation. Each model has a different balance of intelligence, speed, and price:
 
+- `uc_ai_openai.c_model_gpt_5_6_sol` - Frontier model for complex professional work
+- `uc_ai_openai.c_model_gpt_5_6_terra` - Balance of intelligence and cost
+- `uc_ai_openai.c_model_gpt_5_6_luna` - Cheapest model of the family
+
+The previous generations are still available:
+
+- `uc_ai_openai.c_model_gpt_5_5`
+- `uc_ai_openai.c_model_gpt_5_5_pro`
+- `uc_ai_openai.c_model_gpt_5_4`
+- `uc_ai_openai.c_model_gpt_5_4_mini`
+- `uc_ai_openai.c_model_gpt_5_4_nano`
+- `uc_ai_openai.c_model_gpt_5_4_pro`
+- `uc_ai_openai.c_model_gpt_5_2`
+- `uc_ai_openai.c_model_gpt_5_2_pro`
 - `uc_ai_openai.c_model_gpt_5_1`
-- `uc_ai_openai.c_model_gpt_5`
-- `uc_ai_openai.c_model_gpt_5_mini`
-- `uc_ai_openai.c_model_gpt_5_nano`
-- `uc_ai_openai.c_model_gpt_5_pro`
-
-Mini and Nano versions of these models are optimized for speed and cost:
-
-- `uc_ai_openai.c_model_gpt_4_1_mini`
-- `uc_ai_openai.c_model_gpt_4_1_nano`
-
-The `o` suffix stands for "omni", indicating these models can handle both text and images:
-
-- `uc_ai_openai.c_model_gpt_4o`
-- `uc_ai_openai.c_model_gpt_4o_mini`
-- `uc_ai_openai.c_model_chatgpt_4o`
 
 ### Reasoning Models
 
-Reasoning models have the prefix `o` and are designed to think longer and harder about complex tasks. They are more expensive and slower, but provide better results for complex tasks:
+All GPT-5.x models reason internally. You control the amount of reasoning with `uc_ai_openai.g_reasoning_effort`, as described in the [Reasoning / Thinking](#reasoning--thinking) section.
 
-- `uc_ai_openai.c_model_gpt_o1`
-- `uc_ai_openai.c_model_gpt_o1_pro`
-- `uc_ai_openai.c_model_gpt_o1_mini`
-- `uc_ai_openai.c_model_gpt_o3`
-- `uc_ai_openai.c_model_gpt_o3_pro`
-- `uc_ai_openai.c_model_gpt_o3_deep_research`
-- `uc_ai_openai.c_model_gpt_o3_mini`
-- `uc_ai_openai.c_model_gpt_o4_mini`
-- `uc_ai_openai.c_model_gpt_o4_mini_deep_research`
+The package also has constants for the older `o` series (`c_model_gpt_o1`, `c_model_gpt_o3`, `c_model_gpt_o4_mini`, and more) and for the GPT-4 and GPT-3.5 generations. These models are legacy. OpenAI can retire them at any time, so use a GPT-5.x model for new code.
 
-### Legacy Models
-
-- `uc_ai_openai.c_model_gpt_4_turbo` - GPT-4 Turbo
-- `uc_ai_openai.c_model_gpt_4` - GPT-4
-- `uc_ai_openai.c_model_gpt_4_32k` - GPT-4 32k context
-- `uc_ai_openai.c_model_gpt_3_5_turbo` - GPT-3.5 Turbo
-
-See [OpenAI's pricing page](https://platform.openai.com/docs/pricing) for the latest model information and costs. Also see [Artificial Analysis](https://artificialanalysis.ai/providers/openai) for a comparison of intelligence, speed, and price.
+See [OpenAI's pricing page](https://developers.openai.com/api/docs/pricing) for the latest model information and costs. Also see [Artificial Analysis](https://artificialanalysis.ai/providers/openai) for a comparison of intelligence, speed, and price.
 
 :::tip
 If a new model is not yet available as a constant, you can pass the model name directly as a string. See the [FAQ](/products/uc-ai/docs/other/faq/#custom-model-strings) for details.
@@ -108,7 +92,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is Oracle APEX?',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4o_mini
+    p_model => uc_ai_openai.c_model_gpt_5_6_luna
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -126,7 +110,7 @@ begin
     p_user_prompt => 'Write a SQL query to find all employees hired this year',
     p_system_prompt => 'You are a helpful SQL expert. Write clean, efficient queries.',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_4_1
+    p_model => uc_ai_openai.c_model_gpt_5_6_terra
   );
 
   dbms_output.put_line('SQL Query: ' || l_result.get_string('final_message'));
@@ -142,25 +126,25 @@ See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to 
 
 ### Multi-modal Analysis
 
-The GPT models with the `o` suffix (`GPT-4o`, `GPT-4o-mini`, etc.) have vision capabilities for Image and PDF Analysis.
+All GPT-5.x models accept text and image input. Use them for Image and PDF Analysis.
 
 Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for examples on how to analyze images and PDFs.
 
 ### Reasoning / Thinking
 
-OpenAI's reasoning models (o1, o3, o4 series) support enhanced reasoning capabilities. You can control the reasoning effort level to balance speed and cost:
+The GPT-5.x models reason before they answer. You can control the reasoning effort level to balance speed and cost:
 
 ```sql
 declare
   l_result json_object_t;
 begin
   uc_ai.g_enable_reasoning := true;
-  uc_ai_openai.g_reasoning_effort := 'medium'; -- 'low', 'medium', 'high'
+  uc_ai_openai.g_reasoning_effort := 'medium'; -- 'minimal', 'low', 'medium', 'high', 'xhigh'
 
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
     p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_o4_mini
+    p_model => uc_ai_openai.c_model_gpt_5_6_terra
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -209,7 +193,7 @@ OpenAI provides powerful embedding models for semantic search, clustering, and o
 - `uc_ai_openai.c_model_text_embedding_3_large` - Higher quality, more dimensions
 - `uc_ai_openai.c_model_text_embedding_ada_002` - Legacy model
 
-Refer to the [OpenAI embedding documentation](https://platform.openai.com/docs/guides/embeddings#embedding-models) for additional information and potential new models that are not listed here yet.
+Refer to the [OpenAI embedding documentation](https://developers.openai.com/api/docs/guides/embeddings) for additional information and potential new models that are not listed here yet.
 
 ```sql
 declare

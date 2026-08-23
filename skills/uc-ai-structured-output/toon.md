@@ -98,7 +98,7 @@ begin
                        l_toon_data || chr(10) || chr(10) ||
                        'Which products are running low on stock (less than 10 units)?'
   , p_provider      => uc_ai.c_provider_openai
-  , p_model         => uc_ai_openai.c_model_gpt_4o_mini
+  , p_model         => uc_ai_openai.c_model_gpt_5_6_luna
   );
 
   dbms_output.put_line(l_result.get_clob('final_message'));

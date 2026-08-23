@@ -90,7 +90,7 @@ begin
   l_result := uc_ai.generate_text(
     p_messages => l_messages
   , p_provider => uc_ai.c_provider_google
-  , p_model    => uc_ai_google.c_model_gemini_2_5_flash
+  , p_model    => uc_ai_google.c_model_gemini_3_7_flash
   );
 
   l_final_message := l_result.get_clob('final_message');
