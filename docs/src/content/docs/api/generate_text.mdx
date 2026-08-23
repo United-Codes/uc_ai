@@ -22,7 +22,8 @@ FUNCTION generate_text (
   p_provider              IN provider_type,
   p_model                 IN model_type,
   p_max_tool_calls        IN PLS_INTEGER DEFAULT NULL,
-  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL
+  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL,
+  p_run_context           IN JSON_OBJECT_T DEFAULT NULL
 ) RETURN JSON_OBJECT_T;
 ```
 
@@ -34,7 +35,8 @@ FUNCTION generate_text (
   p_provider              IN provider_type,
   p_model                 IN model_type,
   p_max_tool_calls        IN PLS_INTEGER DEFAULT NULL,
-  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL
+  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL,
+  p_run_context           IN JSON_OBJECT_T DEFAULT NULL
 ) RETURN JSON_OBJECT_T;
 ```
 
@@ -51,7 +53,8 @@ FUNCTION generate_text (
   p_model                 IN model_type,
   p_config                IN JSON_OBJECT_T,
   p_max_tool_calls        IN PLS_INTEGER DEFAULT NULL,
-  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL
+  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL,
+  p_run_context           IN JSON_OBJECT_T DEFAULT NULL
 ) RETURN JSON_OBJECT_T;
 
 FUNCTION generate_text (
@@ -60,7 +63,8 @@ FUNCTION generate_text (
   p_model                 IN model_type,
   p_config                IN JSON_OBJECT_T,
   p_max_tool_calls        IN PLS_INTEGER DEFAULT NULL,
-  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL
+  p_response_json_schema  IN JSON_OBJECT_T DEFAULT NULL,
+  p_run_context           IN JSON_OBJECT_T DEFAULT NULL
 ) RETURN JSON_OBJECT_T;
 ```
 
@@ -76,6 +80,7 @@ FUNCTION generate_text (
 | `p_model`                | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants.   |
 | `p_max_tool_calls`       | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).          |
 | `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. The response then conforms to this schema. |
+| `p_run_context`          | `JSON_OBJECT_T` | No       | Name/value pairs bound to this call. Every tool receives them under `_ctx`. See [the run context](/products/uc-ai/docs/guides/tools/#the-run-context). |
 
 #### For Signature 2 (Message Array)
 
@@ -86,6 +91,7 @@ FUNCTION generate_text (
 | `p_model`                | `model_type`    | Yes      | Specific AI model to use (varies by provider). See `uc_ai` spec for constants.       |
 | `p_max_tool_calls`       | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).              |
 | `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. The response then conforms to this schema.     |
+| `p_run_context`          | `JSON_OBJECT_T` | No       | Name/value pairs bound to this call. Every tool receives them under `_ctx`. See [the run context](/products/uc-ai/docs/guides/tools/#the-run-context). |
 
 ### Parameter Details
 
@@ -397,6 +403,27 @@ END;
 
 For structured output in a config-driven call, pass the schema in
 `p_response_json_schema`. UC AI ignores a `response_schema` key inside `p_config`.
+
+## The run context
+
+`p_run_context` binds name/value pairs to one call. UC AI adds them to the
+arguments of every tool under the reserved key `_ctx`, so a tool handler can read
+a value that the model cannot choose:
+
+```sql
+l_result := uc_ai.generate_text(
+  p_user_prompt => 'What are the payment terms?',
+  p_provider    => uc_ai.c_provider_openai,
+  p_model       => uc_ai_openai.c_model_gpt_5,
+  p_run_context => json_object_t('{"document_id": "7"}')
+);
+```
+
+Inside an agent run the run context of that run wins. A `p_run_context` passed to
+a nested `generate_text` call is ignored, so it cannot widen the scope of the run.
+
+[The run context](/products/uc-ai/docs/guides/tools/#the-run-context) describes
+the whole feature.
 
 ## Custom HTTP headers
 

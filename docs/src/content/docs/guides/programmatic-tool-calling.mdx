@@ -82,6 +82,8 @@ UC AI adds two more limits:
 
 The optional [`before_tool_call` hook](/products/uc-ai/docs/guides/agentic-ai/) fires for **every** `callTool` in a program, not only once for the whole program. Authorization and auditing through this hook therefore also work in code mode. A veto from the hook aborts the whole request.
 
+The [run context](/products/uc-ai/docs/guides/tools/#the-run-context) also reaches a tool that a program calls. UC AI adds it on the PL/SQL side of the gateway, after the allow-list check. The program never sees the context and cannot change it. A `_ctx` key in the arguments of a `callTool` is overwritten.
+
 ## Enabling code mode
 
 Code mode builds on normal tool calling. Enable tools as usual and add one flag:

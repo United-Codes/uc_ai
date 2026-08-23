@@ -37,13 +37,19 @@ as
     initialized                    boolean
     -- execution context (from uc_ai.get_exec_context; null outside an agent run).
     -- Threaded down so the per-tool-call hook can attribute a tool call to its
-    -- agent and caller. Not part of the JSON config surface (build_from_config
-    -- leaves these null).
+    -- agent and caller, and so execute_tool can hand the run context to a tool.
+    -- Not part of the JSON config surface: both builders read them from
+    -- uc_ai.get_exec_context, never from p_config.
   , ctx_agent_id                   number
   , ctx_agent_code                 varchar2(255 char)
   , ctx_created_by                 varchar2(255 char)
   , ctx_session_id                 varchar2(255 char)
   , ctx_apex_app_id                number
+    -- Run context bound to this run: name/value pairs (document_id, ...) as a
+    -- JSON object. Threaded down so execute_tool can hand it to every tool
+    -- under uc_ai.c_run_context_key. Comes from the execution context inside an
+    -- agent run, otherwise from the caller's p_run_context.
+  , ctx_run_context                clob
     -- common (from uc_ai.g_*)
   , base_url                       varchar2(4000 char)
   , provider_override              varchar2(4000 char)
@@ -113,8 +119,15 @@ as
   /*
    * Snapshot the current global configuration into a settings record.
    * Read once per top-level uc_ai.generate_text call.
+   *
+   * p_run_context is the caller's run context (uc_ai.generate_text's
+   * p_run_context, serialized). It applies only outside an agent run: when the
+   * execution context carries an agent, that run's context wins, so a
+   * standalone argument can never widen or re-target a bound run.
    */
-  function build_from_globals return t_settings;
+  function build_from_globals(
+    p_run_context in clob default null
+  ) return t_settings;
 
   /*
    * Build a settings record directly from a JSON config object WITHOUT reading
@@ -134,8 +147,9 @@ as
    * (pass the schema via p_response_json_schema instead).
    */
   function build_from_config(
-    p_config   in json_object_t
-  , p_provider in varchar2
+    p_config      in json_object_t
+  , p_provider    in varchar2
+  , p_run_context in clob default null
   ) return t_settings;
 
   /*

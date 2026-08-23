@@ -49,6 +49,7 @@ Every memory file lives in a **store**, and one store is one virtual filesystem.
 | `session` | conversation session      | scratch memory that must not outlive the conversation      |
 | `shared`  | explicitly named store    | several agents that work on one knowledge base             |
 | `global`  | whole installation        | one common memory for everything                           |
+| `context` | value of a run-context key | one memory per document, per case, or per tenant           |
 
 ```sql
 -- per-user memory
@@ -60,6 +61,44 @@ uc_ai_memory.enable_for_agent('WRITER_AGENT',   p_scope => 'shared', p_store_cod
 ```
 
 UC AI creates a store at its first use. It resolves the store at tool-call time from the execution context. One tool row therefore gives every agent and every user a separate filesystem.
+
+### One memory per document with the `context` scope
+
+The `context` scope keys the store on a value of the
+[run context](/products/uc-ai/docs/guides/tools/#the-run-context). A "talk to
+this document" agent then keeps a separate memory for each document:
+
+```sql
+uc_ai_memory.enable_for_agent(
+  p_agent_code  => 'DOC_AGENT',
+  p_scope       => 'context',
+  p_context_key => 'document_id'
+);
+```
+
+Every run that starts with `p_run_context => json_object_t('{"document_id":"7"}')`
+resolves to the store `context:DOC_AGENT:document_id:7`. A run for document 8 gets
+its own store, and neither run can read the files of the other.
+
+By default the store belongs to the agent alone. Name a `p_store_code` to let
+several agents share one memory per document:
+
+```sql
+uc_ai_memory.enable_for_agent('DOC_CHAT',    p_scope => 'context',
+  p_context_key => 'document_id', p_store_code => 'DOCS');
+uc_ai_memory.enable_for_agent('DOC_SUMMARY', p_scope => 'context',
+  p_context_key => 'document_id', p_store_code => 'DOCS');
+```
+
+Both agents then resolve to `context:DOCS:document_id:7`.
+
+Two rules apply to the value:
+
+- If the run does not supply the key, the tool returns an instructive text and
+  reads no files. The memory is unavailable, not open.
+- The value must be at most 200 characters from `A-Z`, `a-z`, `0-9`, underscore,
+  dot, and hyphen. UC AI refuses any other value, because the store key is built
+  by concatenation.
 
 ## Size caps and housekeeping
 

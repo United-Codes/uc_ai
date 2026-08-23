@@ -79,6 +79,7 @@ as
   c_err_tool_not_found         constant number := -20504;
   c_err_has_references         constant number := -20505;
   c_err_missing_placeholder    constant number := -20506;
+  c_err_run_context_conflict   constant number := -20507;
   c_err_unsupported_content    constant number := -20508;
 
   -- =============================================
@@ -122,6 +123,7 @@ as
   c_msg_tool_not_found         constant varchar2(200 char) := 'Tool not found: %0';
   c_msg_has_references         constant varchar2(200 char) := 'Cannot delete "%0": referenced by %1 record(s)';
   c_msg_missing_placeholder    constant varchar2(200 char) := 'Missing parameter for placeholder: %0';
+  c_msg_run_context_conflict   constant varchar2(200 char) := 'Run context key "%0" is already bound to "%1" and cannot be changed to "%2"';
   c_msg_unsupported_content    constant varchar2(200 char) := 'Unsupported content type: %0';
 
   /**

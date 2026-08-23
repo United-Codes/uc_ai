@@ -272,6 +272,9 @@ create table uc_ai_agent_executions (
   sid                    number,
   env_context            clob,
 
+  -- Run context in force for this run (JSON name/value pairs)
+  run_context            clob,
+
   constraint uc_ai_agent_executions_pk primary key (id),
   constraint uc_ai_agent_exec_agent_fk foreign key (agent_id) 
     references uc_ai_agents(id),
@@ -300,6 +303,7 @@ comment on column uc_ai_agent_executions.apex_session_id is 'APEX APP_SESSION';
 comment on column uc_ai_agent_executions.apex_app_id is 'APEX application ID';
 comment on column uc_ai_agent_executions.apex_page_id is 'APEX page ID';
 comment on column uc_ai_agent_executions.env_context is 'JSON dump of SYS_CONTEXT USERENV + APEX session values';
+comment on column uc_ai_agent_executions.run_context is 'Run-context bag (JSON name/value pairs) in force for this run; inherited by nested sub-agent runs';
 comment on column uc_ai_agent_executions.turn_index is 'Sequential turn number within the session (top-level executions only; null for nested sub-agent runs)';
 
 
@@ -351,6 +355,9 @@ create table uc_ai_agent_sessions (
   sid                    number,
   env_context            clob,
 
+  -- Run context bound to this conversation on its first turn
+  run_context            clob,
+
   constraint uc_ai_agent_sessions_pk primary key (session_id),
   constraint uc_ai_agent_sess_agent_fk foreign key (root_agent_id)
     references uc_ai_agents(id),
@@ -373,6 +380,7 @@ comment on column uc_ai_agent_sessions.title is 'Optional human-readable convers
 comment on column uc_ai_agent_sessions.feedback_rating is 'Optional end-user verdict on the conversation: up | down. Null = not rated, set by the front end via set_session_feedback';
 comment on column uc_ai_agent_sessions.feedback_comment is 'Optional free-text comment the end user left alongside feedback_rating';
 comment on column uc_ai_agent_sessions.feedback_at is 'When feedback_rating was last set; nulled together with the rating when feedback is withdrawn';
+comment on column uc_ai_agent_sessions.run_context is 'Run-context bag bound to this conversation on its first turn. Keys already present are immutable: a later turn can add a key but cannot change one.';
 comment on column uc_ai_agent_sessions.status is 'Status of the most recent top-level turn';
 comment on column uc_ai_agent_sessions.total_input_tokens is 'SUM of own input tokens across all executions in the session';
 comment on column uc_ai_agent_sessions.total_output_tokens is 'SUM of own output tokens across all executions in the session';

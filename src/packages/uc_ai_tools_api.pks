@@ -53,10 +53,16 @@ as
    * 
    * Finds the tool's function_call PL/SQL code, binds the arguments JSON as :ARGUMENTS,
    * executes it and returns the result. Only supports single bind variable for security.
+   *
+   * p_run_context is the run context of the surrounding run (name/value pairs as a
+   * JSON object). It is added to the arguments under uc_ai.c_run_context_key before
+   * the handler runs, so a handler can read a value the model cannot choose. The key
+   * is always present, holding an empty object when the run carries no context.
    */
   function execute_tool(
-    p_tool_code in uc_ai_tools.code%type
-  , p_arguments in json_object_t
+    p_tool_code   in uc_ai_tools.code%type
+  , p_arguments   in json_object_t
+  , p_run_context in clob default null
   ) return clob;
 
 
@@ -104,9 +110,15 @@ as
    * It also fires the per-tool-call hook (before_tool_call) for the inner call, so
    * hook-based authorization and auditing cover tools called from a program. A veto
    * blocks the call and makes execute_agent_tool abort the request after the run.
+   *
+   * po_run_context returns the run's context so the gateway can pass it into
+   * execute_tool. It is delivered here, behind the active-run check, rather than
+   * through a getter of its own: the model-authored program must never be able to
+   * read or forge it.
    */
   procedure check_ptc_tool_allowed(
-    p_tool_code in uc_ai_tools.code%type
+    p_tool_code    in  uc_ai_tools.code%type
+  , po_run_context out nocopy clob
   );
 
 

@@ -476,6 +476,93 @@ create or replace package body uc_ai_agents_api as
 
 
   /*
+   * Works out the run context in force for this execution.
+   *
+   * A run inherits the context it is nested in, or - for a top-level turn that
+   * continues a conversation - the one the session was bound to. p_run_context may
+   * ADD keys but may not change one that is already bound: a session that answers
+   * about document 7 has persisted messages, and possibly memory files, under that
+   * binding, so silently re-targeting it would expose them to another document.
+   * Re-passing the same value every turn is idempotent and expected of a front end.
+   *
+   * "Already bound" means the key holds a value. A key the base does not have, or
+   * holds as JSON null, is not bound yet and the caller's value is taken. A JSON
+   * null from the caller carries no value either, so it never replaces a binding
+   * and never counts as a conflict - the same reading of JSON null that
+   * uc_ai.run_context_value uses everywhere else.
+   *
+   * Returns the effective bag serialized as a JSON object, or null when neither
+   * side supplied anything.
+   */
+  function resolve_run_context(
+    p_run_context in json_object_t,
+    p_inherited   in clob,
+    p_session_id  in varchar2,
+    p_top_level   in boolean
+  ) return clob
+  as
+    l_scope    uc_ai_logger.scope := gc_scope_prefix || 'resolve_run_context';
+    l_base     clob := p_inherited;
+    l_incoming clob;
+    l_obj      json_object_t;
+    l_keys     json_key_list;
+    l_key      varchar2(4000 char);
+    l_existing varchar2(4000 char);
+    l_new      varchar2(4000 char);
+  begin
+    -- A top-level turn is not nested inside anything, so its starting point is
+    -- whatever the session was bound to on its first turn.
+    if p_top_level and p_session_id is not null then
+      begin
+        select run_context
+          into l_base
+          from uc_ai_agent_sessions
+         where session_id = p_session_id;
+      exception
+        when no_data_found then
+          l_base := null;
+      end;
+    end if;
+
+    if p_run_context is null then
+      return l_base;
+    end if;
+
+    if l_base is null then
+      return p_run_context.to_clob;
+    end if;
+
+    l_obj  := json_object_t.parse(l_base);
+    -- Serialized once, not once per key: the loop below reads it for every key
+    -- the caller supplied.
+    l_incoming := p_run_context.to_clob;
+    l_keys     := p_run_context.get_keys;
+
+    <<merge_keys>>
+    for i in 1 .. l_keys.count loop
+      l_key      := l_keys(i);
+      l_new      := uc_ai.run_context_value(l_incoming, l_key);
+      l_existing := uc_ai.run_context_value(l_base, l_key);
+
+      if l_existing is null then
+        -- Not bound yet: take the caller's element as it stands.
+        l_obj.put(l_key, p_run_context.get(l_key));
+      elsif l_new is not null and l_new != l_existing then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_run_context_conflict
+        , p_scope      => l_scope
+        , p0           => l_key
+        , p1           => l_existing
+        , p2           => l_new
+        );
+      end if;
+    end loop merge_keys;
+
+    return l_obj.to_clob;
+  end resolve_run_context;
+
+
+  /*
    * Creates an execution record and returns its ID.
    * Commits in an autonomous transaction (Logger-style telemetry): execution
    * rows are immediately visible to other sessions and survive a rollback of
@@ -485,7 +572,8 @@ create or replace package body uc_ai_agents_api as
     p_agent_id         in uc_ai_agents.id%type,
     p_session_id       in varchar2,
     p_parent_exec_id   in uc_ai_agent_executions.id%type,
-    p_input_parameters in json_object_t
+    p_input_parameters in json_object_t,
+    p_run_context      in clob default null
   ) return uc_ai_agent_executions.id%type
   as
     -- @dblinter ignore(g-3330): intentional Logger-style telemetry; execution rows must survive a rollback of the calling transaction
@@ -514,17 +602,24 @@ create or replace package body uc_ai_agents_api as
       merge into uc_ai_agent_sessions s
       using (select p_session_id as session_id from sys.dual) src
       on (s.session_id = src.session_id)
+      when matched then
+        -- The caller may have added a key this turn (resolve_run_context already
+        -- rejected any change to a key the session was bound to on turn 1).
+        update set s.run_context = p_run_context
+        where p_run_context is not null
       when not matched then insert (
         session_id, root_agent_id, status, started_at, last_activity_at,
         created_by, db_user, apex_user, audience, apex_session_id, apex_app_id, apex_page_id,
-        os_user, host, ip_address, module, action, client_identifier, sid, env_context
+        os_user, host, ip_address, module, action, client_identifier, sid, env_context,
+        run_context
       ) values (
         p_session_id, p_agent_id, c_exec_running, systimestamp, systimestamp,
         g_exec_env.created_by, g_exec_env.db_user, g_exec_env.apex_user, g_exec_env.audience,
         g_exec_env.apex_session_id, g_exec_env.apex_app_id, g_exec_env.apex_page_id,
         g_exec_env.os_user, g_exec_env.host, g_exec_env.ip_address,
         g_exec_env.module, g_exec_env.action, g_exec_env.client_identifier,
-        g_exec_env.sid, g_exec_env.env_context
+        g_exec_env.sid, g_exec_env.env_context,
+        p_run_context
       );
 
       select coalesce(max(turn_index), 0) + 1
@@ -554,7 +649,8 @@ create or replace package body uc_ai_agents_api as
       action,
       client_identifier,
       sid,
-      env_context
+      env_context,
+      run_context
     ) values (
       p_agent_id,
       p_parent_exec_id,
@@ -576,7 +672,8 @@ create or replace package body uc_ai_agents_api as
       g_exec_env.action,
       g_exec_env.client_identifier,
       g_exec_env.sid,
-      g_exec_env.env_context
+      g_exec_env.env_context,
+      p_run_context
     )
     returning id into l_exec_id;
 
@@ -2147,13 +2244,15 @@ create or replace package body uc_ai_agents_api as
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
     p_response_schema   in json_object_t default null,
     p_files             in uc_ai_message_api.t_files default null,
-    p_extra_tool_tag    in varchar2 default null
+    p_extra_tool_tag    in varchar2 default null,
+    p_run_context       in json_object_t default null
   ) return json_object_t
   as
     l_scope         uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
     l_agent         uc_ai_agents%rowtype;
     l_exec_id       uc_ai_agent_executions.id%type;
     l_session_id    varchar2(255 char);
+    l_run_context   clob;
     l_result        json_object_t;
     l_usage         json_object_t;
     l_input_tokens  number := 0;
@@ -2254,32 +2353,50 @@ create or replace package body uc_ai_agents_api as
       );
     end if;
 
+    -- Work out the run context before the execution row exists, so both the row
+    -- and the session header record the binding this run actually ran under.
+    --
+    -- Nesting is decided by the execution depth, not by p_parent_exec_id: a run
+    -- started from inside a tool handler or a PL/SQL workflow step (and the
+    -- workflow summarizer agent) passes no parent id, yet it is nested and must
+    -- inherit the context it runs under - even when it opens a session of its
+    -- own. Reading the session binding is reserved for a genuine top-level turn,
+    -- where it also discards any execution context a previously failed run left
+    -- behind instead of letting it leak into this one.
+    l_prev_ctx    := uc_ai.get_exec_context;
+    l_run_context := resolve_run_context(
+                       p_run_context => p_run_context
+                     , p_inherited   => l_prev_ctx.run_context
+                     , p_session_id  => l_session_id
+                     , p_top_level   => l_is_top_level
+                     );
+
     -- Create execution record
-    l_exec_id := create_execution(l_agent.id, l_session_id, p_parent_exec_id, p_input_parameters);
+    l_exec_id := create_execution(l_agent.id, l_session_id, p_parent_exec_id, p_input_parameters, l_run_context);
 
     -- Publish this agent's context so the per-tool-call hook (fired deep inside
     -- generate_text) can attribute a tool call to its agent and caller. Set per
     -- execution (not just top-level) so a nested agent reports its own code;
     -- save the caller's context and restore it on every exit below.
-    l_prev_ctx             := uc_ai.get_exec_context;
     l_this_ctx.agent_id    := l_agent.id;
     l_this_ctx.agent_code  := p_agent_code;
     l_this_ctx.created_by  := g_exec_env.created_by;
     l_this_ctx.session_id  := l_session_id;
     l_this_ctx.apex_app_id := g_exec_env.apex_app_id;
+    l_this_ctx.run_context := l_run_context;
     uc_ai.set_exec_context(l_this_ctx);
 
     begin
       -- Execute based on agent type (delegating to sub-package)
       case l_agent.agent_type
         when c_type_profile then
-          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema, p_follow_up_message, l_session_id, p_files, p_extra_tool_tag);
+          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema, p_follow_up_message, l_session_id, p_files, p_extra_tool_tag, l_run_context);
 
         when c_type_workflow then
           l_result := uc_ai_agent_exec_api.execute_workflow_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
 
         when c_type_orchestrator then
-          l_result := uc_ai_agent_exec_api.execute_orchestrator_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message, p_files);
+          l_result := uc_ai_agent_exec_api.execute_orchestrator_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message, p_files, l_run_context);
 
         when c_type_handoff then
           l_result := uc_ai_agent_exec_api.execute_handoff_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message);
@@ -2387,7 +2504,8 @@ create or replace package body uc_ai_agents_api as
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
     p_response_schema   in json_object_t default null,
     p_files             in uc_ai_message_api.t_files default null,
-    p_extra_tool_tag    in varchar2 default null
+    p_extra_tool_tag    in varchar2 default null,
+    p_run_context       in json_object_t default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -2404,7 +2522,8 @@ create or replace package body uc_ai_agents_api as
       p_parent_exec_id    => p_parent_exec_id,
       p_response_schema   => p_response_schema,
       p_files             => p_files,
-      p_extra_tool_tag    => p_extra_tool_tag
+      p_extra_tool_tag    => p_extra_tool_tag,
+      p_run_context       => p_run_context
     );
   exception
     when others then

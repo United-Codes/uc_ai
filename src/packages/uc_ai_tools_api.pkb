@@ -841,13 +841,38 @@ create or replace package body uc_ai_tools_api as
   end before_tool_call;
 
 
+  /*
+   * The run context as an object, ready to be put into a tool's arguments.
+   * Always returns an object: a tool can read uc_ai.c_run_context_key without a
+   * null check, and finds it empty when the run carries no context.
+   */
+  function run_context_object(
+    p_run_context in clob
+  ) return json_object_t
+  as
+    l_scope uc_ai_logger.scope := gc_scope_prefix || 'run_context_object';
+  begin
+    if p_run_context is null or sys.dbms_lob.getlength(p_run_context) = 0 then
+      return json_object_t();
+    end if;
+
+    return json_object_t.parse(p_run_context);
+  exception
+    when others then -- @dblinter ignore(g-5030): a malformed bag must not break a tool call
+      uc_ai_logger.log_warn('Run context is not a JSON object, passing an empty one', l_scope,
+        sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+      return json_object_t();
+  end run_context_object;
+
   function execute_tool(
-    p_tool_code in uc_ai_tools.code%type
-  , p_arguments in json_object_t
+    p_tool_code   in uc_ai_tools.code%type
+  , p_arguments   in json_object_t
+  , p_run_context in clob default null
   ) return clob
   as
     l_scope   uc_ai_logger.scope := gc_scope_prefix || 'execute_tool';
     l_fc_code clob;
+    l_args    json_object_t;
   begin
     begin
       select function_call
@@ -863,9 +888,22 @@ create or replace package body uc_ai_tools_api as
         );
     end;
 
+    -- Hand the run context to the tool under a reserved key the model can never
+    -- set: a handler reads its scope (document_id, tenant_id, ...) from there
+    -- instead of trusting an argument the model chose. Work on a copy - the
+    -- provider still holds p_arguments and has already written it to the
+    -- transcript, so mutating it here would be an invisible side effect.
+    -- A tool without parameters may be called with no arguments at all.
+    if p_arguments is null then
+      l_args := json_object_t();
+    else
+      l_args := json_object_t.parse(p_arguments.to_clob);
+    end if;
+    l_args.put(uc_ai.c_run_context_key, run_context_object(p_run_context));
+
     return exec_function_call(
       p_function_call => l_fc_code
-    , p_arguments     => p_arguments
+    , p_arguments     => l_args
     );
   exception
     when others then
@@ -939,7 +977,8 @@ create or replace package body uc_ai_tools_api as
   end begin_ptc_run;
 
   procedure check_ptc_tool_allowed(
-    p_tool_code in uc_ai_tools.code%type
+    p_tool_code    in  uc_ai_tools.code%type
+  , po_run_context out nocopy clob
   )
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'check_ptc_tool_allowed';
@@ -1008,6 +1047,10 @@ create or replace package body uc_ai_tools_api as
         g_ptc_veto_msg := substr(sqlerrm, 1, 4000);
         raise;
     end;
+
+    -- Only now, past the allow-list, the budget and the hook: the gateway needs
+    -- the run context to pass into execute_tool. The program itself never sees it.
+    po_run_context := g_ptc_settings.ctx_run_context;
   end check_ptc_tool_allowed;
 
   /*
@@ -1088,7 +1131,11 @@ create or replace package body uc_ai_tools_api as
   begin
     -- Normal tool: unchanged behaviour.
     if p_tool_code <> c_code_mode_tool_code then
-      return execute_tool(p_tool_code => p_tool_code, p_arguments => p_arguments);
+      return execute_tool(
+               p_tool_code   => p_tool_code
+             , p_arguments   => p_arguments
+             , p_run_context => p_settings.ctx_run_context
+             );
     end if;
 
     -- Code mode is mandatory-sandboxed: run the model-authored program in the
@@ -1386,6 +1433,19 @@ create or replace package body uc_ai_tools_api as
     <<property_loop>>
     for i in 1 .. l_prop_keys_arr.count loop
       l_prop_name := l_prop_keys_arr(i);
+
+      -- Reserved: execute_tool puts the run context under this key, so a tool
+      -- parameter of the same name would be silently overwritten at call time.
+      if lower(l_prop_name) = lower(uc_ai.c_run_context_key) then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'tool parameter ' || l_prop_name
+        , p1           => 'the name "' || uc_ai.c_run_context_key
+                          || '" is reserved for the run context UC AI passes to every tool'
+        );
+      end if;
+
       l_prop_obj := treat(p_properties.get(l_prop_name) as json_object_t);
       
       if l_prop_obj is null then

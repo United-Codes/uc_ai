@@ -144,6 +144,42 @@ END;
 
 [Profile agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/#conversation-continuation) describes the history management and the configuration.
 
+### Binding a run to a value
+
+`p_run_context` binds name/value pairs to a run, for example the document that a
+conversation is about:
+
+```sql
+l_result := uc_ai_agents_api.execute_agent(
+  p_agent_code  => 'DOC_AGENT',
+  p_session_id  => l_session_id,
+  p_run_context => json_object_t('{"document_id": "7"}')
+);
+```
+
+Three things then use these values:
+
+- Every tool in the run receives them under the reserved key `_ctx`. Read
+  [the run context](/products/uc-ai/docs/guides/tools/#the-run-context).
+- A `{document_id}` placeholder in the prompt profile resolves from them.
+- Pro [agent memory](/products/uc-ai/docs/guides/agent-memory/) can keep one
+  store per value.
+
+Every nested run inherits the context. A workflow step, an orchestrator delegate,
+and a handoff target all work on the same document, and none of them can drop the
+binding.
+
+The first turn binds the context to the session. A later turn of that session
+inherits it, so a follow-up turn does not have to pass it again. A later turn can
+add a new key. It cannot change a key that is already bound: UC AI raises
+`-20507`. To work on another document, start another session.
+
+A key with the JSON value `null` is not bound. A later turn can give it a value,
+and a later `null` never changes a key that has one.
+
+UC AI records the effective context in `uc_ai_agent_executions.run_context` and in
+`uc_ai_agent_sessions.run_context`.
+
 ### Input mapping
 
 An input mapping defines how the data flows between agents. It uses a path in curly braces to reference a value in the workflow state:

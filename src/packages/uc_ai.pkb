@@ -128,11 +128,17 @@ create or replace package body uc_ai as
   , p_model                 in model_type
   , p_max_tool_calls        in pls_integer default null
   , p_response_json_schema  in json_object_t default null
+  , p_run_context           in json_object_t default null
   ) return json_object_t
   as
     -- Snapshot the config globals once; thread the record to the provider so a
     -- nested agent execution cannot corrupt this call's in-flight configuration.
-    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals;
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals(
+                                              p_run_context => case
+                                                                 when p_run_context is not null
+                                                                 then p_run_context.to_clob
+                                                               end
+                                            );
   begin
     return dispatch_generate_text(
       p_messages             => p_messages
@@ -151,11 +157,19 @@ create or replace package body uc_ai as
   , p_config                in json_object_t
   , p_max_tool_calls        in pls_integer default null
   , p_response_json_schema  in json_object_t default null
+  , p_run_context           in json_object_t default null
   ) return json_object_t
   as
     -- Derive this call's configuration straight from the JSON config, without
     -- reading or mutating any global.
-    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_config(p_config, p_provider);
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_config(
+                                              p_config      => p_config
+                                            , p_provider    => p_provider
+                                            , p_run_context => case
+                                                                 when p_run_context is not null
+                                                                 then p_run_context.to_clob
+                                                               end
+                                            );
   begin
     return dispatch_generate_text(
       p_messages             => p_messages
@@ -174,6 +188,7 @@ create or replace package body uc_ai as
   , p_model                 in model_type
   , p_max_tool_calls        in pls_integer default null
   , p_response_json_schema  in json_object_t default null
+  , p_run_context           in json_object_t default null
   ) return json_object_t
   as
     l_messages json_array_t;
@@ -196,6 +211,7 @@ create or replace package body uc_ai as
     , p_model                 => p_model
     , p_max_tool_calls        => p_max_tool_calls
     , p_response_json_schema  => p_response_json_schema
+    , p_run_context           => p_run_context
     );
   end generate_text;
 
@@ -207,6 +223,7 @@ create or replace package body uc_ai as
   , p_config                in json_object_t
   , p_max_tool_calls        in pls_integer default null
   , p_response_json_schema  in json_object_t default null
+  , p_run_context           in json_object_t default null
   ) return json_object_t
   as
     l_messages json_array_t;
@@ -228,6 +245,7 @@ create or replace package body uc_ai as
     , p_config                => p_config
     , p_max_tool_calls        => p_max_tool_calls
     , p_response_json_schema  => p_response_json_schema
+    , p_run_context           => p_run_context
     );
   end generate_text;
 
@@ -417,6 +435,49 @@ create or replace package body uc_ai as
   begin
     g_event_callback := null;
   end clear_event_callback;
+
+  function run_context_value(
+    p_run_context in clob
+  , p_key         in varchar2
+  ) return varchar2
+  as
+    c_scope constant varchar2(60 char) := c_scope_prefix || 'run_context_value';
+    l_obj json_object_t;
+    l_el  json_element_t;
+    l_val clob;
+  begin
+    if p_run_context is null or p_key is null then
+      return null;
+    end if;
+
+    begin
+      l_obj := json_object_t.parse(p_run_context);
+    exception
+      when others then -- @dblinter ignore(g-5030): a malformed bag must not break a tool call or a memory read
+        uc_ai_logger.log_warn('Run context is not a JSON object, ignoring it', c_scope,
+          sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+        return null;
+    end;
+
+    if l_obj is null or not l_obj.has(p_key) then
+      return null;
+    end if;
+
+    l_el := l_obj.get(p_key);
+    if l_el is null or l_el.is_null then
+      return null;
+    end if;
+
+    -- to_clob, not to_string: to_string puts a string element back in its JSON
+    -- quotes and raises once a value passes the varchar2 limit, while to_clob
+    -- gives the plain text of a scalar and the serialization of an object or an
+    -- array. The result is capped at 4000 characters, the width every consumer
+    -- holds it in (the conflict check in uc_ai_agents_api, the memory store key
+    -- in the Pro layer). A run context identifies something; it is not a place
+    -- to carry a document.
+    l_val := l_el.to_clob;
+    return sys.dbms_lob.substr(l_val, 4000, 1);
+  end run_context_value;
 
   function get_exec_context return t_exec_context
   as

@@ -2,6 +2,7 @@ create or replace package body uc_ai_agent_exec_api as
 
   gc_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
 
+
   -- Pending transfer requests of running handoff executions, keyed by the
   -- handoff wrapper's execution id (as string; ids can exceed pls_integer).
   -- Session-private package state: each slot lives only for the duration of
@@ -9,6 +10,52 @@ create or replace package body uc_ai_agent_exec_api as
   -- loop entry and in every error path.
   type t_transfer_requests is table of json_object_t index by varchar2(40 char);
   g_transfer_requests t_transfer_requests; -- @dblinter ignore(g-9105): package state map keyed by exec id, not a local collection
+
+
+  /*
+   * Prompt-template parameters for this run: the run context first, then the
+   * caller's input parameters on top. A {document_id} placeholder therefore
+   * resolves from the run context without the caller having to pass the value
+   * twice, and an input parameter of the same name still wins.
+   *
+   * Only prompt rendering sees this merge. The workflow state keeps the raw
+   * input parameters, so a step's input mapping means exactly what it did before.
+   */
+  function effective_prompt_params(
+    p_input_params in json_object_t,
+    p_run_context  in clob
+  ) return json_object_t
+  as
+    l_scope  uc_ai_logger.scope := gc_scope_prefix || 'effective_prompt_params';
+    l_merged json_object_t;
+    l_keys   json_key_list;
+  begin
+    if p_run_context is null or sys.dbms_lob.getlength(p_run_context) = 0 then
+      return p_input_params;
+    end if;
+
+    begin
+      l_merged := json_object_t.parse(p_run_context);
+    exception
+      when others then -- @dblinter ignore(g-5030): a malformed bag must not break prompt rendering
+        uc_ai_logger.log_warn('Run context is not a JSON object, ignoring it for placeholders', l_scope,
+          sqlerrm || ' ' || sys.dbms_utility.format_error_backtrace);
+        return p_input_params;
+    end;
+
+    if p_input_params is null then
+      return l_merged;
+    end if;
+
+    l_keys := p_input_params.get_keys;
+    <<input_wins>>
+    for i in 1 .. l_keys.count loop
+      l_merged.put(l_keys(i), p_input_params.get(l_keys(i)));
+    end loop input_wins;
+
+    return l_merged;
+  end effective_prompt_params;
+
 
 
   -- ============================================================================
@@ -619,7 +666,8 @@ create or replace package body uc_ai_agent_exec_api as
     p_follow_up_message in clob default null,
     p_session_id        in varchar2 default null,
     p_files             in uc_ai_message_api.t_files default null,
-    p_extra_tool_tag    in varchar2 default null
+    p_extra_tool_tag    in varchar2 default null,
+    p_run_context       in clob default null
   ) return json_object_t
   as
     l_scope           uc_ai_logger.scope := gc_scope_prefix || 'execute_profile_agent';
@@ -735,7 +783,7 @@ create or replace package body uc_ai_agent_exec_api as
     l_result := uc_ai_prompt_profiles_api.execute_profile(
       p_code            => p_agent.prompt_profile_code,
       p_version         => p_agent.prompt_profile_version,
-      p_parameters      => p_input_params,
+      p_parameters      => effective_prompt_params(p_input_params, p_run_context),
       p_config_override => l_config,
       p_files           => p_files
     );
@@ -1010,7 +1058,8 @@ end;!';
     p_session_id        in varchar2,
     p_exec_id           in uc_ai_agent_executions.id%type,
     p_follow_up_message in clob default null,
-    p_files             in uc_ai_message_api.t_files default null
+    p_files             in uc_ai_message_api.t_files default null,
+    p_run_context       in clob default null
   ) return json_object_t
   as
     l_scope            uc_ai_logger.scope := gc_scope_prefix || 'execute_orchestrator_agent';
@@ -1120,7 +1169,7 @@ end;!';
         -- Original first-call path: execute orchestrator profile
         l_result := uc_ai_prompt_profiles_api.execute_profile(
           p_code              => l_profile_code,
-          p_parameters        => p_input_params,
+          p_parameters        => effective_prompt_params(p_input_params, p_run_context),
           p_config_override   => l_profile_config,
           p_files             => p_files
         );

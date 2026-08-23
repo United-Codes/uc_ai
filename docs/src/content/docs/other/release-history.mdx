@@ -5,6 +5,29 @@ sidebar:
   order: 3
 ---
 
+## v26.4
+
+To upgrade first run `v26.3_to_v26.4.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.4).
+
+For new installations follow [this guide](https://www.united-codes.com/products/uc-ai/docs/guides/installation/).
+
+**Behavior note**:
+
+- **Every tool call now carries one more argument.** UC AI adds the run context to the arguments JSON of every tool, under the reserved key `_ctx`. It holds an empty object when the run carries no context. A handler that reads named keys is not affected. A handler that walks all keys, or that refuses an unknown key, sees the new one. A tool can no longer declare a parameter with the name `_ctx`.
+
+**Features**:
+
+- **[Run context](/products/uc-ai/docs/guides/tools/#the-run-context)**: `execute_agent` and `generate_text` take a new `p_run_context` parameter, a JSON object of name/value pairs bound to the run, for example `{"document_id":"7"}`. UC AI hands these values to every tool in the run under `_ctx`, so a tool handler can read a value that the model can neither see nor choose. Use it for an agent that must stay bound to one document, one case, or one tenant.
+- **The run context fills prompt placeholders**: a `{document_id}` placeholder resolves from the run context when the input parameters do not supply it. An input parameter of the same name wins.
+- **Nested runs inherit the context**: a workflow step, an orchestrator delegate, and a handoff target all run under the same binding, and none of them can drop it.
+- **A session keeps its binding**: the first turn binds the context to the session, so a follow-up turn does not have to pass it again. A later turn can add a key but cannot change one. A change raises the new error `-20507`.
+- **New columns**: `uc_ai_agent_executions.run_context` and `uc_ai_agent_sessions.run_context` record the effective context.
+- **Config-driven calls keep their execution context**: `uc_ai_settings.build_from_config` now snapshots the execution context, as `build_from_globals` does. A `generate_text` call with `p_config` inside an agent run therefore keeps its hook attribution and its run context.
+
+Pro layer:
+
+- **[Memory scope `context`](/products/uc-ai/docs/guides/agent-memory/#one-memory-per-document-with-the-context-scope)**: an agent can keep one memory store per run-context value, for example one memory per document. Set `p_scope => 'context'` and `p_context_key => 'document_id'`. Name a `p_store_code` to let several agents share one store per value.
+
 ## v26.3
 
 To upgrade first run `v26.2_to_v26.3.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.3).

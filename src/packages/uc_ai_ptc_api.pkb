@@ -9,6 +9,7 @@ create or replace package body uc_ai_ptc_api as
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'call_tool_json';
     l_args  json_object_t;
+    l_run_context clob;
   begin
     uc_ai_logger.log('Programmatic tool call', l_scope, p_tool_code);
 
@@ -16,7 +17,12 @@ create or replace package body uc_ai_ptc_api as
     -- per-tool-call hook. Raises if the tool is not part of this run's exposed set,
     -- the budget is exceeded or a hook vetoes; the runner turns that into a
     -- rejected callTool inside the program, so the model can self-correct.
-    uc_ai_tools_api.check_ptc_tool_allowed(p_tool_code);
+    -- The guard also hands back this run's context: the program never sees it,
+    -- so it cannot forge or widen its own scope.
+    uc_ai_tools_api.check_ptc_tool_allowed(
+      p_tool_code    => p_tool_code
+    , po_run_context => l_run_context
+    );
 
     if p_args_json is null or sys.dbms_lob.getlength(p_args_json) = 0 then
       l_args := json_object_t();
@@ -25,8 +31,9 @@ create or replace package body uc_ai_ptc_api as
     end if;
 
     return uc_ai_tools_api.execute_tool(
-      p_tool_code => p_tool_code
-    , p_arguments => l_args
+      p_tool_code   => p_tool_code
+    , p_arguments   => l_args
+    , p_run_context => l_run_context
     );
   exception
     when others then

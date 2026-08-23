@@ -96,6 +96,8 @@ This procedure runs **before every tool call** inside a `generate_text` tool-cal
 
 An exception here vetoes the tool call and stops the run at once. Use this procedure for a rate limit per tool call, or to block a specific tool dynamically.
 
+The hook cannot read or change the arguments of the tool. To give a handler a value that the model cannot choose, use [the run context](/products/uc-ai/docs/guides/tools/#the-run-context).
+
 The procedure fires for an agent run and for a standalone `generate_text` call. In the standalone case, the agent context fields are null, and `p_created_by` falls back to the user of the database session.
 
 The procedure is **optional**. UC AI tests once per session whether your hook package declares it. A hook with only `before_execution` and `after_execution` therefore still works.

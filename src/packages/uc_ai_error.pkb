@@ -40,6 +40,7 @@ create or replace package body uc_ai_error as
       when c_err_tool_not_found         then c_msg_tool_not_found
       when c_err_has_references         then c_msg_has_references
       when c_err_missing_placeholder    then c_msg_missing_placeholder
+      when c_err_run_context_conflict   then c_msg_run_context_conflict
       when c_err_unsupported_content    then c_msg_unsupported_content
       else 'Error ' || p_error_code
     end;

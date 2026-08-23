@@ -106,6 +106,11 @@ as
   -- internal use only
   g_provider_override varchar2(4000 char);
 
+  -- Key under which the run context is handed to every tool. The framework adds
+  -- it to the tool's arguments JSON after the model produced them, so no model
+  -- ever sees it. Reserved: a tool may not declare a parameter with this name.
+  c_run_context_key constant varchar2(30 char) := '_ctx';
+
   -- Execution context (internal use only; set by the agent layer around a run).
   -- generate_text runs (and their tool-calling loops) originate deep below the
   -- agent layer, where the calling agent/user is otherwise unknown. The agent
@@ -118,6 +123,14 @@ as
   , created_by  varchar2(255 char)
   , session_id  varchar2(255 char)
   , apex_app_id number
+    -- Run context: name/value pairs bound to this run (document_id, tenant_id,
+    -- ...), serialized as a JSON object. Never sent to a model. Handed to every
+    -- tool under c_run_context_key, used to fill prompt placeholders, and used
+    -- by the Pro memory layer to scope a store. Held as a CLOB, not a
+    -- json_object_t: JSON DOM types are references, so a record assignment
+    -- would copy a pointer and the save/restore around a nested run could not
+    -- protect the caller's bag.
+  , run_context clob
   );
 
   e_max_calls_exceeded exception;
@@ -144,6 +157,7 @@ as
   , p_model                 in model_type
   , p_max_tool_calls        in pls_integer default null
   , p_response_json_schema  in json_object_t default null
+  , p_run_context           in json_object_t default null
   ) return json_object_t;
 
   function generate_text (
@@ -152,6 +166,7 @@ as
   , p_model                 in model_type
   , p_max_tool_calls        in pls_integer default null
   , p_response_json_schema  in json_object_t default null
+  , p_run_context           in json_object_t default null
   ) return json_object_t;
 
   /*
@@ -178,6 +193,7 @@ as
   , p_config                in json_object_t
   , p_max_tool_calls        in pls_integer default null
   , p_response_json_schema  in json_object_t default null
+  , p_run_context           in json_object_t default null
   ) return json_object_t;
 
   function generate_text (
@@ -187,6 +203,7 @@ as
   , p_config                in json_object_t
   , p_max_tool_calls        in pls_integer default null
   , p_response_json_schema  in json_object_t default null
+  , p_run_context           in json_object_t default null
   ) return json_object_t;
 
   function generate_embeddings (
@@ -241,6 +258,24 @@ as
    * Clear the registered event callback.
    */
   procedure clear_event_callback;
+
+  /*
+   * Reads one key out of a serialized run-context bag (t_exec_context.run_context
+   * or uc_ai_settings.t_settings.ctx_run_context). Returns null when the bag is
+   * null, is not a JSON object, does not have the key, or holds JSON null there.
+   *
+   * A scalar comes back as its plain text ("7", 12, true); an object or an array
+   * comes back serialized. The result is capped at 4000 characters. Tools get the
+   * whole bag under c_run_context_key, so nothing is lost by the cap: it applies
+   * only where UC AI itself reads one key.
+   *
+   * Pure: it reads no package state, so it can never be used as an ambient
+   * getter. Callers must already hold the bag.
+   */
+  function run_context_value(
+    p_run_context in clob
+  , p_key         in varchar2
+  ) return varchar2;
 
   /*
    * Internal: returns the current execution context (see t_exec_context). Used

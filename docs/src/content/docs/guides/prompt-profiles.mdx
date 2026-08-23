@@ -119,6 +119,12 @@ END;
   match a parameter with the name 'country'.
 </Aside>
 
+In an agent run, a placeholder can also take its value from the
+[run context](/products/uc-ai/docs/guides/tools/#the-run-context). A caller that
+starts the run with `p_run_context => json_object_t('{"document_id":"7"}')` does
+not have to pass `document_id` a second time as an input parameter. An input
+parameter of the same name wins.
+
 ### Placeholder validation
 
 UC AI validates that every placeholder in your templates has a parameter. For a missing parameter, UC AI raises this error:

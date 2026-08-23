@@ -539,6 +539,12 @@ as
    *                            (profile/orchestrator agents only). Build with uc_ai_message_api.t_files.
    * @param p_extra_tool_tag    Engine-internal: extra tool tag merged into the profile's model
    *                            config (profile agents only; used for handoff transfer tools)
+   * @param p_run_context       Name/value pairs bound to this run, e.g. {"document_id":"7"}.
+   *                            Every tool in the run receives them under uc_ai.c_run_context_key,
+   *                            they fill prompt placeholders the input parameters do not supply,
+   *                            and the Pro memory layer can scope a store by one of the keys.
+   *                            Inherited by every nested run. Bound to the session on the first
+   *                            turn: a later turn can add a key but cannot change one.
    *
    * @return                    JSON result object
    */
@@ -551,7 +557,8 @@ as
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
     p_response_schema   in json_object_t default null,
     p_files             in uc_ai_message_api.t_files default null,
-    p_extra_tool_tag    in varchar2 default null
+    p_extra_tool_tag    in varchar2 default null,
+    p_run_context       in json_object_t default null
   ) return json_object_t;
 
 
@@ -569,6 +576,12 @@ as
    *                            (profile/orchestrator agents only). Build with uc_ai_message_api.t_files.
    * @param p_extra_tool_tag    Engine-internal: extra tool tag merged into the profile's model
    *                            config (profile agents only; used for handoff transfer tools)
+   * @param p_run_context       Name/value pairs bound to this run, e.g. {"document_id":"7"}.
+   *                            Every tool in the run receives them under uc_ai.c_run_context_key,
+   *                            they fill prompt placeholders the input parameters do not supply,
+   *                            and the Pro memory layer can scope a store by one of the keys.
+   *                            Inherited by every nested run. Bound to the session on the first
+   *                            turn: a later turn can add a key but cannot change one.
    *
    * @return                    JSON result object
    */
@@ -580,7 +593,8 @@ as
     p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
     p_response_schema   in json_object_t default null,
     p_files             in uc_ai_message_api.t_files default null,
-    p_extra_tool_tag    in varchar2 default null
+    p_extra_tool_tag    in varchar2 default null,
+    p_run_context       in json_object_t default null
   ) return json_object_t;
 
 

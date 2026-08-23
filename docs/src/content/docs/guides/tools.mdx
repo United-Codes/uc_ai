@@ -120,6 +120,113 @@ l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
 
 An update replaces the parameters and the tags of the tool completely. The function deletes the rows of that tool in `uc_ai_tool_parameters` and `uc_ai_tool_tags`. It then writes new rows from the new schema and the new tags.
 
+## The run context
+
+A tool gets its arguments from the model. For some values that is not safe. In a
+"talk to this document" agent, the tool must read document 7 because the run is
+bound to document 7. It must not read document 42 because the model asked for it.
+
+The **run context** carries such values. The caller supplies them when the run
+starts. UC AI adds them to the arguments of every tool in that run, under the
+reserved key `_ctx`. No model sees this key, and no model can set it.
+
+```sql
+l_result := uc_ai_agents_api.execute_agent(
+  p_agent_code  => 'DOC_AGENT',
+  p_run_context => json_object_t('{"document_id": "7", "tenant_id": "ACME"}')
+);
+```
+
+The handler of the tool then receives:
+
+```json
+{
+  "query": "invoice terms",
+  "_ctx": { "document_id": "7", "tenant_id": "ACME" }
+}
+```
+
+### Leave the scoped value out of the schema
+
+Do not declare the scoped value as a tool parameter. The model then cannot name a
+document at all, and there is one place the value can come from:
+
+```sql
+l_schema := json_object_t.parse('{
+  "type": "object",
+  "properties": {
+    "query": { "type": "string", "description": "What to look for in the document" }
+  },
+  "required": ["query"]
+}');
+
+l_tool_id := uc_ai_tools_api.create_tool_from_schema(
+  p_tool_code     => 'DOC_SEARCH',
+  p_description   => 'Search the current document',
+  p_function_call => 'return doc_pkg.search(:parameters);',
+  p_json_schema   => l_schema,
+  p_tags          => apex_t_varchar2('doc')
+);
+```
+
+The handler reads the document from `_ctx`:
+
+```sql
+function search(p_params in clob) return clob
+as
+  l_args json_object_t := json_object_t(p_params);
+  l_doc  number;
+begin
+  l_doc := to_number(l_args.get_object('_ctx').get_string('document_id'));
+  -- l_doc is 7, whatever the model sent
+  return doc_pkg.search_chunks(l_doc, l_args.get_string('query'));
+end search;
+```
+
+### What you must know
+
+`_ctx` is always present. It holds an empty object when the run carries no
+context. A tool that needs a value must decide what to do when the value is
+missing. A clear text result is better than an error, because the model can read
+it:
+
+```sql
+if l_doc is null then
+  return 'Error: this run is not bound to a document.';
+end if;
+```
+
+`_ctx` is a reserved name. A tool that declares a parameter with this name is
+rejected at registration.
+
+The run context reaches a tool through the arguments. It does not reach a
+[PL/SQL workflow step](/products/uc-ai/docs/guides/multi-agent-systems/workflows/),
+because a step is not a tool.
+
+<Aside type="caution">
+The run context binds the arguments of one tool. It does not limit which tools
+the agent has. A scoped `DOC_SEARCH` gives no protection when the same tag set
+also holds a tool that can read any table. Give a document agent only the tools
+that the run context can bind.
+</Aside>
+
+### Where else the run context applies
+
+The same values also fill prompt placeholders and can scope the memory of an
+agent. Read [Prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/) and
+[Agent memory](/products/uc-ai/docs/guides/agent-memory/).
+
+Outside an agent, pass the context to `generate_text`:
+
+```sql
+l_result := uc_ai.generate_text(
+  p_user_prompt => 'Summarize this document',
+  p_provider    => uc_ai.c_provider_openai,
+  p_model       => uc_ai_openai.c_model_gpt_5,
+  p_run_context => json_object_t('{"document_id": "7"}')
+);
+```
+
 ## Using tools
 
 You must enable tools before the AI can use them. By default, the AI gets every enabled tool. Set `uc_ai.g_tool_tags` to give the AI a subset of the tools.

@@ -18,6 +18,7 @@ as
     l_s.ctx_created_by                 := null;
     l_s.ctx_session_id                 := null;
     l_s.ctx_apex_app_id                := null;
+    l_s.ctx_run_context                := null;
 
     -- common
     l_s.base_url                       := null;
@@ -85,7 +86,9 @@ as
     return l_s;
   end default_settings;
 
-  function build_from_globals return t_settings
+  function build_from_globals(
+    p_run_context in clob default null
+  ) return t_settings
   as
     l_s   t_settings;
     l_ctx uc_ai.t_exec_context := uc_ai.get_exec_context;
@@ -98,6 +101,12 @@ as
     l_s.ctx_created_by                 := l_ctx.created_by;
     l_s.ctx_session_id                 := l_ctx.session_id;
     l_s.ctx_apex_app_id                := l_ctx.apex_app_id;
+    -- Inside an agent run the run's own context wins: a p_run_context passed to
+    -- a nested generate_text must not widen or re-target the bound run.
+    l_s.ctx_run_context                := case
+                                            when l_ctx.agent_code is not null then l_ctx.run_context
+                                            else p_run_context
+                                          end;
 
     -- common
     l_s.base_url                       := uc_ai.g_base_url;
@@ -166,18 +175,34 @@ as
   end build_from_globals;
 
   function build_from_config(
-    p_config   in json_object_t
-  , p_provider in varchar2
+    p_config      in json_object_t
+  , p_provider    in varchar2
+  , p_run_context in clob default null
   ) return t_settings
   as
     l_scope            uc_ai_logger.scope := c_scope_prefix || 'build_from_config';
     l_s                t_settings := default_settings;
+    l_ctx              uc_ai.t_exec_context := uc_ai.get_exec_context;
     l_key_arr          json_key_list;
     l_key              varchar2(4000 char);
     l_value            json_element_t;
     l_provider_obj     json_object_t;
     l_provider_key_arr json_key_list;
   begin
+    -- The execution context is not configuration: it describes who is running,
+    -- not what to run. Snapshot it here exactly as build_from_globals does, so a
+    -- config-driven call inside an agent run keeps its hook attribution and its
+    -- run context instead of silently losing both.
+    l_s.ctx_agent_id                   := l_ctx.agent_id;
+    l_s.ctx_agent_code                 := l_ctx.agent_code;
+    l_s.ctx_created_by                 := l_ctx.created_by;
+    l_s.ctx_session_id                 := l_ctx.session_id;
+    l_s.ctx_apex_app_id                := l_ctx.apex_app_id;
+    l_s.ctx_run_context                := case
+                                            when l_ctx.agent_code is not null then l_ctx.run_context
+                                            else p_run_context
+                                          end;
+
     if p_config is null then
       return l_s;
     end if;
