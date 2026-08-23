@@ -40,6 +40,9 @@ git diff v<PREV>..HEAD --stat -- src/tables/ src/triggers/ src/migrations/
   - Ask the user whether the DDL was a hotfix to the previous release (and thus already in users' schemas) or genuinely new.
   - If genuinely new, create `src/migrations/v<PREV>_to_v<NEW>.sql` with the DDL and reference it in the changelog as the first-run step before `upgrade_packages.sql`.
   - Confirm with `grep -n "trigger\|table" scripts/generate_upgrade_script.sh` that `upgrade_packages.sql` still skips DDL (it should).
+  - Views are the exception: `src/views/views.sql` is `create or replace`, so
+    `upgrade_packages.sql` ships it. A new view on a new table still needs the
+    table in the migration script, which users run first.
 
 ### 2b. Register any new package with the generators
 

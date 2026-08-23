@@ -18,6 +18,11 @@ declare -a API_PACKAGES=(
     # if message_api's spec is not created first.
     "uc_ai_message_api"
     "uc_ai_prompt_profiles_api"
+    # memory must follow prompt_profiles_api: uc_ai_memory wires the memory tool
+    # tag into an agent's prompt profile, and the profile API in turn appends the
+    # MEMORY PROTOCOL to a rendered system prompt (bodies only, so the mutual
+    # reference is fine).
+    "uc_ai_memory"
     "uc_ai_structured_output"
     "uc_ai_logger"
     "uc_ai_error"
@@ -92,6 +97,9 @@ get_package_description() {
             ;;
         "uc_ai_message_api")
             echo "Message API Package"
+            ;;
+        "uc_ai_memory")
+            echo "Agent Memory Package"
             ;;
         "uc_ai_structured_output")
             echo "Structured Output Package"

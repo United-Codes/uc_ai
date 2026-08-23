@@ -84,14 +84,7 @@ export default defineConfig({
 							],
 						},
 						"guides/execution-hooks",
-						{
-							label: "Agent Memory",
-							link: "guides/agent-memory",
-							badge: {
-								text: "Pro",
-								variant: "tip",
-							},
-						},
+						"guides/agent-memory",
 						{
 							label: "Guardrails",
 							badge: {

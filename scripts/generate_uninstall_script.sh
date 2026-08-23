@@ -153,18 +153,43 @@ END;
 
 PROMPT Triggers dropped successfully.
 
+-- ============================================================================
+-- 4. DROP VIEWS (before the tables they read)
+-- ============================================================================
+
+PROMPT
+PROMPT ===================================================
+PROMPT Step 4: Dropping Views...
+PROMPT ===================================================
+
+BEGIN
+    <<views_loop>>
+    FOR rec IN (
+        SELECT view_name
+        FROM user_views
+        WHERE view_name LIKE 'UC_AI%'
+        ORDER BY view_name
+    ) LOOP
+        EXECUTE IMMEDIATE 'DROP VIEW ' || rec.view_name;
+        sys.dbms_output.put_line('Dropped view: ' || rec.view_name);
+    END LOOP views_loop;
+END;
+/
+
+PROMPT Views dropped successfully.
+
 EOF
 
 # Drop tables - need to scan tables/install.sql to find what tables exist
 if [ -f "$SRC_DIR/tables/install.sql" ]; then
     cat >> "$OUTPUT_FILE" << 'EOF'
 -- ============================================================================
--- 4. DROP TABLES (Drop dependent tables first)
+-- 5. DROP TABLES (Drop dependent tables first)
 -- ============================================================================
 
 PROMPT
 PROMPT ===================================================
-PROMPT Step 4: Dropping Tables...
+PROMPT Step 5: Dropping Tables...
 PROMPT ===================================================
 
 BEGIN
@@ -194,12 +219,12 @@ fi
 # Drop sequences
 cat >> "$OUTPUT_FILE" << 'EOF'
 -- ============================================================================
--- 5. DROP SEQUENCES
+-- 6. DROP SEQUENCES
 -- ============================================================================
 
 PROMPT
 PROMPT ===================================================
-PROMPT Step 5: Dropping Sequences...
+PROMPT Step 6: Dropping Sequences...
 PROMPT ===================================================
 
 BEGIN
@@ -223,12 +248,12 @@ END;
 PROMPT Sequences dropped successfully.
 
 -- ============================================================================
--- 6. VERIFY CLEANUP
+-- 7. VERIFY CLEANUP
 -- ============================================================================
 
 PROMPT
 PROMPT ===================================================
-PROMPT Step 6: Verification - Checking for Remaining Objects...
+PROMPT Step 7: Verification - Checking for Remaining Objects...
 PROMPT ===================================================
 
 DECLARE
@@ -280,6 +305,7 @@ PROMPT
 PROMPT - All UC AI packages (core, API, and provider packages)
 PROMPT - Standalone functions (UC_AI_GET_KEY)
 PROMPT - Database triggers on UC AI tables
+PROMPT - All UC AI views
 PROMPT - All UC AI tables
 PROMPT - All UC AI sequences
 PROMPT
@@ -337,11 +363,15 @@ echo "3. Triggers:"
 echo "   - All triggers on UC AI tables"
 
 echo ""
-echo "4. Tables:"
+echo "4. Views:"
+echo "   - All UC_AI* views (dynamic detection)"
+
+echo ""
+echo "5. Tables:"
 echo "   - All UC_AI* tables (dynamic detection)"
 
 echo ""
-echo "5. Sequences:"
+echo "6. Sequences:"
 echo "   - All UC_AI* sequences (dynamic detection)"
 
 echo ""

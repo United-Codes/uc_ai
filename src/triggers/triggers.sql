@@ -129,3 +129,46 @@ begin
     end if;
 end uc_ai_agent_messages_bi;
 /
+
+-- uc_ai_memory already sets updated_by/updated_at on its own write paths, using
+-- the identical expression (see current_user_id); these triggers are the backstop
+-- for a hand-edited row, the same as the triggers above on tables the API also
+-- writes.
+--
+-- uc_ai_memory_files is DELIBERATELY EXCLUDED. It has a touch-only read path that
+-- sets last_accessed_at WITHOUT updated_at, so that "last modified" and "last
+-- read" stay distinct (expire_files relies on both via
+-- greatest(last_accessed_at, updated_at)). A before-update trigger would bump
+-- updated_at on every file read and collapse that distinction, turning
+-- "last modified" into "last accessed". Its write paths already maintain the
+-- audit columns themselves.
+
+create or replace trigger uc_ai_memory_stores_biu
+    before insert or update on uc_ai_memory_stores
+    for each row
+begin
+    if inserting
+    then
+        :new.created_at := systimestamp;
+        :new.created_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+    end if;
+
+    :new.updated_at := systimestamp;
+    :new.updated_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+end uc_ai_memory_stores_biu;
+/
+
+create or replace trigger uc_ai_memory_config_biu
+    before insert or update on uc_ai_memory_config
+    for each row
+begin
+    if inserting
+    then
+        :new.created_at := systimestamp;
+        :new.created_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+    end if;
+
+    :new.updated_at := systimestamp;
+    :new.updated_by := coalesce(sys_context('APEX$SESSION', 'APP_USER'), user);
+end uc_ai_memory_config_biu;
+/

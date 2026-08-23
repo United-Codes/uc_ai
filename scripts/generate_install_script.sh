@@ -45,6 +45,14 @@ if [ -f "$SRC_DIR/triggers/triggers.sql" ]; then
     echo "" >> "$OUTPUT_FILE"
 fi
 
+# Install views if they exist
+if [ -f "$SRC_DIR/views/views.sql" ]; then
+    echo "PROMPT Installing database views..." >> "$OUTPUT_FILE"
+    echo "PROMPT This creates the reporting views on the UC AI tables" >> "$OUTPUT_FILE"
+    echo "@@src/views/views.sql" >> "$OUTPUT_FILE"
+    echo "" >> "$OUTPUT_FILE"
+fi
+
 echo "PROMPT Installing PL/SQL packages..." >> "$OUTPUT_FILE"
 echo "PROMPT This includes all AI provider packages and utility functions" >> "$OUTPUT_FILE"
 
@@ -143,6 +151,9 @@ echo "Tables:"
 
 echo "Triggers:"
 [ -f "$SRC_DIR/triggers/triggers.sql" ] && echo "  - src/triggers/triggers.sql"
+
+echo "Views:"
+[ -f "$SRC_DIR/views/views.sql" ] && echo "  - src/views/views.sql"
 
 echo "Dependencies:"
 [ -f "$SRC_DIR/dependencies/key_function.sql" ] && echo "  - src/dependencies/key_function.sql"

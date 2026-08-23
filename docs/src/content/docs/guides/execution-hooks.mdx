@@ -106,7 +106,9 @@ The procedure is **optional**. UC AI tests once per session whether your hook pa
 
 This procedure runs after `uc_ai_prompt_profiles_api.execute_profile` renders the system prompt of a profile and substitutes the placeholders. It runs directly before the model call. The hook gets the prompt as an `in out` CLOB. It can append to the prompt, rewrite it, or set a prompt where the profile had none.
 
-Use it for standing instructions such as a compliance note, or the memory protocol of the Pro [agent-memory feature](/products/uc-ai/docs/guides/agent-memory/). Read `uc_ai.get_exec_context` in the hook to see which agent runs. Its fields are null outside an agent run.
+Use it for standing instructions such as a compliance note. Read `uc_ai.get_exec_context` in the hook to see which agent runs. Its fields are null outside an agent run.
+
+UC AI applies its own augmentation first: the MEMORY PROTOCOL block of [agent memory](/products/uc-ai/docs/guides/agent-memory/), for an agent with memory enabled. Your hook therefore gets the prompt with this block, and it can rewrite the block.
 
 The procedure covers the **first turn** of an agent. A profile agent, an orchestrator, and a workflow-nested agent all go through `execute_profile`. A follow-up turn of a conversation reuses the stored system message from the history. An augmentation from the first turn therefore travels with the session. UC AI does **not** augment a standalone `generate_text` call with a raw `p_system_prompt`.
 

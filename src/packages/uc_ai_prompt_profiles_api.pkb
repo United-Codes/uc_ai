@@ -968,9 +968,28 @@ create or replace package body uc_ai_prompt_profiles_api as
     l_system_prompt := replace_placeholders(l_profile.system_prompt_template, p_parameters);
     l_user_prompt := replace_placeholders(l_profile.user_prompt_template, p_parameters);
 
+    -- Built-in augmentation: the MEMORY PROTOCOL block for a memory-enabled
+    -- agent. A no-op outside an agent run and for an agent without memory.
+    -- Best-effort, like the hook dispatch below: the protocol is an addition to
+    -- the prompt, so a failure here (e.g. the memory tables were never created)
+    -- is logged and the run continues with the prompt unchanged.
+    begin
+      uc_ai_memory.augment_system_prompt(l_system_prompt);
+    exception
+      -- @dblinter ignore(g-5040): an addition to the prompt must never fail a run
+      when others then
+        uc_ai_logger.log_error(
+          p_text  => 'memory protocol augmentation failed - prompt left unchanged'
+        , p_scope => l_scope
+        , p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+        );
+    end;
+
     -- Optional execution-hook augmentation of the rendered system prompt
-    -- (e.g. an extension injecting standing instructions). Best-effort no-op
-    -- when no hook is installed or it does not implement augment_system_prompt.
+    -- (e.g. an extension injecting standing instructions). Runs after the
+    -- built-in augmentation, so a hook sees (and can rewrite) the whole
+    -- prompt. Best-effort no-op when no hook is installed or it does not
+    -- implement augment_system_prompt.
     uc_ai_agents_api.fire_augment_prompt_hook(l_system_prompt);
 
     -- Determine final provider and model (overrides take precedence)

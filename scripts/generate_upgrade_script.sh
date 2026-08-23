@@ -44,8 +44,9 @@ add_file_content() {
 cat > "$OUTPUT_FILE" << 'EOF'
 -- UC AI Framework Complete Package Upgrade Script
 -- This is a self-contained script with all package contents inlined
--- Run this script to upgrade package specifications and bodies only
--- This assumes tables and triggers are already installed
+-- Run this script to upgrade package specifications and bodies, plus the views
+-- This assumes tables and triggers are already installed (run the migration
+-- script of the release first)
 
 PROMPT ===================================================
 PROMPT UC AI Framework Package Upgrade Starting...
@@ -55,6 +56,7 @@ PROMPT This script will upgrade the following components:
 PROMPT - Core UC AI package and all provider packages
 PROMPT - API packages (tools and message APIs)
 PROMPT - Utility functions
+PROMPT - Reporting views
 PROMPT
 PROMPT Tables and triggers will NOT be modified.
 PROMPT ===================================================
@@ -122,6 +124,13 @@ while IFS= read -r body_file; do
         break
     fi
 done < <(get_package_bodies_ordered "$SRC_DIR")
+
+# Recreate the views (create or replace, so a changed definition ships with the
+# package upgrade). Needs the tables of the matching migration script.
+if [ -f "$SRC_DIR/views/views.sql" ]; then
+    echo "PROMPT Recreating database views..." >> "$OUTPUT_FILE"
+    add_file_content "$SRC_DIR/views/views.sql" "Database Views"
+fi
 
 # Run post-installation scripts
 if [ -d "$SRC_DIR/post-scripts" ]; then

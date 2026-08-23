@@ -20,8 +20,9 @@ src/
   packages/         PL/SQL package specs (.pks) and bodies (.pkb)
   tables/           Table DDL (install.sql)
   triggers/         Database triggers
+  views/            Reporting views (views.sql; recreated by upgrade_packages.sql)
   migrations/       Schema migration scripts
-  post-scripts/     Post-install verification
+  post-scripts/     Post-install verification and built-in tool registration
   dependencies/     External deps (Logger framework)
 test/
   test_uc_ai_*.pks/.pkb   utPLSQL test packages
@@ -50,6 +51,7 @@ scripts/
 | `uc_ai_agent_workflow_api` | Workflow helpers: input mapping, condition evaluation, step execution |
 | `uc_ai_tools_api` | Tool/function-calling registration and execution |
 | `uc_ai_prompt_profiles_api` | Versioned prompt templates with `{var}` substitution |
+| `uc_ai_memory` | Agent memory: virtual filesystem behind the `MEMORY` tool, store scoping, MEMORY PROTOCOL prompt block |
 | `uc_ai_message_api` | Message construction and conversation history |
 | `uc_ai_structured_output` | JSON schema-based output validation |
 | `uc_ai_logger` | Logging wrapper around OraOpenSource Logger |
@@ -165,6 +167,7 @@ Check these files for context on specific topics:
 | Input mapping syntax for workflows | `docs/input-mapping-guide.md` |
 | Provider setup guides | `docs/src/content/docs/providers/*.mdx` |
 | API reference (generate_text) | `docs/src/content/docs/api/generate_text.mdx` |
+| Agent memory guide | `docs/src/content/docs/guides/agent-memory.mdx` |
 | Tools / function calling guide | `docs/src/content/docs/guides/tools.mdx` |
 | Prompt profiles guide | `docs/src/content/docs/guides/prompt-profiles.mdx` |
 | Agentic AI guide | `docs/src/content/docs/guides/agentic-ai.mdx` |

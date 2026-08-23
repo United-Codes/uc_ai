@@ -5,15 +5,13 @@ sidebar:
   order: 78
 ---
 
-import { Aside, Steps } from "@astrojs/starlight/components";
+import { Steps } from "@astrojs/starlight/components";
 
 **Agent memory lets an agent store and read knowledge across conversations.** The agent gets a private virtual filesystem with the root `/memories`. CLOBs in Oracle tables hold this filesystem. A `memory` tool can `view`, `create`, `str_replace`, `insert`, `delete`, and `rename` the files in it. What the agent learns in one session is available in the next session: user preferences, decisions, and task progress.
 
 The tool implements the contract of the [Anthropic memory tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool). Claude models are trained on this command set. The tool is a normal UC AI function tool, so it works with **every provider**: OpenAI, Google, OCI, Ollama, and the others.
 
-<Aside type="note" title="Pro add-on">
-Agent memory is part of the paid UC AI Pro layer. [About guardrails](/products/uc-ai/docs/guides/guardrails/) describes how the Pro layer installs and connects to core.
-</Aside>
+The installer of UC AI creates the `MEMORY` tool row, so no tool setup is necessary. One tool row serves every agent, because the tool resolves the store of the caller at each call.
 
 ## Quickstart
 
@@ -32,7 +30,7 @@ This one call does three things:
 
 2. It adds the `memory` tool tag and `g_enable_tools` to the `model_config_json` of the prompt profile of the agent. The tool then reaches the model.
 
-3. From the next new session, the [`augment_system_prompt` hook](/products/uc-ai/docs/guides/execution-hooks/#augment_system_prompt-optional) appends the **MEMORY PROTOCOL** block to the system prompt of the agent. This block says: always view `/memories` first, record progress during the work, and expect an interruption.
+3. From the next new session, UC AI appends the **MEMORY PROTOCOL** block to the rendered system prompt of the agent. This block says: always view `/memories` first, record progress during the work, and expect an interruption.
 
 </Steps>
 
@@ -131,12 +129,12 @@ end;
 /
 ```
 
-A standalone call does not use the prompt hook. Add the protocol to your system prompt yourself. `uc_ai_memory.get_memory_protocol` returns the recommended block.
+A standalone call renders no prompt profile, so it gets no MEMORY PROTOCOL block. Add the protocol to your system prompt yourself. `uc_ai_memory.get_memory_protocol` returns the recommended block.
 
 ## Behavior notes
 
 - **Errors are messages, not exceptions.** The Anthropic contract says that the tool returns a text such as "The path … does not exist…". The model reacts to this text. A memory error never aborts a run.
 - **Path safety.** Every path must stay under `/memories`. The tool rejects a traversal attempt with `..`, with a backslash, or in a URL-encoded form.
 - **Transactions.** A memory write joins the transaction of the caller. If the run rolls back its work, the memory rolls back with it. The memory therefore stays consistent with the conversation history.
-- **Enabling memory inside a conversation.** UC AI injects the protocol when the first turn of a conversation renders the system prompt. Memory therefore takes full effect on the next *new* session. An open session keeps its original system prompt, but the tool itself works at once.
+- **Enabling memory inside a conversation.** UC AI appends the protocol when the first turn of a conversation renders the system prompt of the profile. Memory therefore takes full effect on the next *new* session. An open session keeps its original system prompt, but the tool itself works at once.
 - **Concurrency.** Parallel runs that write the same file serialize on row locks. The last committed write wins.

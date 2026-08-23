@@ -21,7 +21,6 @@ PROMPT ===================================================
 PROMPT
 PROMPT WARNING: This will remove all UC AI Framework objects
 PROMPT Press Ctrl+C to cancel or Enter to continue...
-PAUSE
 
 -- ============================================================================
 -- 1. DROP PACKAGES (Reverse order from installation)
@@ -55,6 +54,7 @@ DROP PACKAGE uc_ai_toon;
 DROP PACKAGE uc_ai_error;
 DROP PACKAGE uc_ai_logger;
 DROP PACKAGE uc_ai_structured_output;
+DROP PACKAGE uc_ai_memory;
 DROP PACKAGE uc_ai_prompt_profiles_api;
 DROP PACKAGE uc_ai_message_api;
 DROP PACKAGE uc_ai_tools_api;
@@ -105,12 +105,37 @@ END;
 PROMPT Triggers dropped successfully.
 
 -- ============================================================================
--- 4. DROP TABLES (Drop dependent tables first)
+-- 4. DROP VIEWS (before the tables they read)
 -- ============================================================================
 
 PROMPT
 PROMPT ===================================================
-PROMPT Step 4: Dropping Tables...
+PROMPT Step 4: Dropping Views...
+PROMPT ===================================================
+
+BEGIN
+    <<views_loop>>
+    FOR rec IN (
+        SELECT view_name
+        FROM user_views
+        WHERE view_name LIKE 'UC_AI%'
+        ORDER BY view_name
+    ) LOOP
+        EXECUTE IMMEDIATE 'DROP VIEW ' || rec.view_name;
+        sys.dbms_output.put_line('Dropped view: ' || rec.view_name);
+    END LOOP views_loop;
+END;
+/
+
+PROMPT Views dropped successfully.
+
+-- ============================================================================
+-- 5. DROP TABLES (Drop dependent tables first)
+-- ============================================================================
+
+PROMPT
+PROMPT ===================================================
+PROMPT Step 5: Dropping Tables...
 PROMPT ===================================================
 
 BEGIN
@@ -135,12 +160,12 @@ END;
 PROMPT Tables dropped successfully.
 
 -- ============================================================================
--- 5. DROP SEQUENCES
+-- 6. DROP SEQUENCES
 -- ============================================================================
 
 PROMPT
 PROMPT ===================================================
-PROMPT Step 5: Dropping Sequences...
+PROMPT Step 6: Dropping Sequences...
 PROMPT ===================================================
 
 BEGIN
@@ -164,12 +189,12 @@ END;
 PROMPT Sequences dropped successfully.
 
 -- ============================================================================
--- 6. VERIFY CLEANUP
+-- 7. VERIFY CLEANUP
 -- ============================================================================
 
 PROMPT
 PROMPT ===================================================
-PROMPT Step 6: Verification - Checking for Remaining Objects...
+PROMPT Step 7: Verification - Checking for Remaining Objects...
 PROMPT ===================================================
 
 DECLARE
@@ -221,6 +246,7 @@ PROMPT
 PROMPT - All UC AI packages (core, API, and provider packages)
 PROMPT - Standalone functions (UC_AI_GET_KEY)
 PROMPT - Database triggers on UC AI tables
+PROMPT - All UC AI views
 PROMPT - All UC AI tables
 PROMPT - All UC AI sequences
 PROMPT

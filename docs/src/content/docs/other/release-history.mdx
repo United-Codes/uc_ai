@@ -17,6 +17,8 @@ For new installations follow [this guide](https://www.united-codes.com/products/
 
 **Features**:
 
+Run context:
+
 - **[Run context](/products/uc-ai/docs/guides/tools/#the-run-context)**: `execute_agent` and `generate_text` take a new `p_run_context` parameter, a JSON object of name/value pairs bound to the run, for example `{"document_id":"7"}`. UC AI hands these values to every tool in the run under `_ctx`, so a tool handler can read a value that the model can neither see nor choose. Use it for an agent that must stay bound to one document, one case, or one tenant.
 - **The run context fills prompt placeholders**: a `{document_id}` placeholder resolves from the run context when the input parameters do not supply it. An input parameter of the same name wins.
 - **Nested runs inherit the context**: a workflow step, an orchestrator delegate, and a handoff target all run under the same binding, and none of them can drop it.
@@ -24,9 +26,13 @@ For new installations follow [this guide](https://www.united-codes.com/products/
 - **New columns**: `uc_ai_agent_executions.run_context` and `uc_ai_agent_sessions.run_context` record the effective context.
 - **Config-driven calls keep their execution context**: `uc_ai_settings.build_from_config` now snapshots the execution context, as `build_from_globals` does. A `generate_text` call with `p_config` inside an agent run therefore keeps its hook attribution and its run context.
 
-Pro layer:
+Agent memory:
 
-- **[Memory scope `context`](/products/uc-ai/docs/guides/agent-memory/#one-memory-per-document-with-the-context-scope)**: an agent can keep one memory store per run-context value, for example one memory per document. Set `p_scope => 'context'` and `p_context_key => 'document_id'`. Name a `p_store_code` to let several agents share one store per value.
+- **[Agent memory](/products/uc-ai/docs/guides/agent-memory/)**: an agent can store and read knowledge across conversations. It gets a private virtual filesystem with the root `/memories`. Three new tables hold the stores and the files.
+- **The new `MEMORY` tool works on every provider**: it follows the command set of the [Anthropic memory tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool), as a normal UC AI function tool. The installer creates the tool row.
+- **One call enables memory for an agent**: `uc_ai_memory.enable_for_agent` writes the configuration row and adds the tool tag to the prompt profile of the agent. UC AI then appends the MEMORY PROTOCOL block to the system prompt of each new session.
+- **A scope decides which agents and users share one memory**: `agent`, `user`, `session`, `shared`, `global`, or `context`. With the scope `context` an agent keeps one store per run-context value, for example one memory per document. Set `p_scope => 'context'` and `p_context_key => 'document_id'`. Name a `p_store_code` to let several agents share one store per value.
+- **Caps and housekeeping**: `max_file_chars`, `max_files`, and the optional `max_store_chars` bound the growth of a store. `uc_ai_memory.expire_files` deletes the files that nobody used for a number of days. The view `uc_ai_v_memory_files` shows what a store holds.
 
 ## v26.3
 
@@ -85,7 +91,7 @@ Extension points:
 
 - **[Execution hooks](/products/uc-ai/docs/guides/execution-hooks/)** around an agent run: an optional hook package can implement `before_execution` and `after_execution`. `before_execution` runs before any execution row or token spend and can raise to veto the run (fail-closed). `after_execution` is best-effort — UC AI logs an error there and continues.
 - **`before_tool_call` hook**: an optional per-tool-call hook that can veto a single tool call mid-run. The caller and agent context is threaded down to the tool layer, so the hook knows who is calling. This is what the paid [guardrails](/products/uc-ai/docs/guides/guardrails/) layer uses to enforce rate limits and budgets.
-- **`augment_system_prompt` hook**: an optional procedure that extends the system prompt after placeholder substitution. It applies to the first turn of profile, orchestrator, and workflow-nested agents; follow-up turns inherit the extended system message through the persisted history. Dispatch is best-effort — on an error UC AI logs it and leaves the prompt unchanged. The paid [agent memory](/products/uc-ai/docs/guides/agent-memory/) feature uses it.
+- **`augment_system_prompt` hook**: an optional procedure that extends the system prompt after placeholder substitution. It applies to the first turn of profile, orchestrator, and workflow-nested agents; follow-up turns inherit the extended system message through the persisted history. Dispatch is best-effort — on an error UC AI logs it and leaves the prompt unchanged.
 
 Providers:
 

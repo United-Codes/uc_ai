@@ -13,6 +13,10 @@ PROMPT Installing database triggers...
 PROMPT This sets up automatic data validation and logging triggers
 @@src/triggers/triggers.sql
 
+PROMPT Installing database views...
+PROMPT This creates the reporting views on the UC AI tables
+@@src/views/views.sql
+
 PROMPT Installing PL/SQL packages...
 PROMPT This includes all AI provider packages and utility functions
 
@@ -28,6 +32,7 @@ PROMPT - Installing API package specifications...
 @@src/packages/uc_ai_tools_api.pks
 @@src/packages/uc_ai_message_api.pks
 @@src/packages/uc_ai_prompt_profiles_api.pks
+@@src/packages/uc_ai_memory.pks
 @@src/packages/uc_ai_structured_output.pks
 @@src/packages/uc_ai_logger.pks
 @@src/packages/uc_ai_error.pks
@@ -54,6 +59,7 @@ PROMPT - Installing API package bodies...
 @@src/packages/uc_ai_tools_api.pkb
 @@src/packages/uc_ai_message_api.pkb
 @@src/packages/uc_ai_prompt_profiles_api.pkb
+@@src/packages/uc_ai_memory.pkb
 @@src/packages/uc_ai_structured_output.pkb
 @@src/packages/uc_ai_logger.pkb
 @@src/packages/uc_ai_error.pkb
@@ -74,6 +80,7 @@ PROMPT - Installing core UC AI package body...
 
 PROMPT Running post-installation scripts...
 @@src/post-scripts/check-logger.sql
+@@src/post-scripts/register_memory_tool.sql
 
 PROMPT ===================================================
 PROMPT UC AI installation complete!

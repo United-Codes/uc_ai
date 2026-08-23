@@ -40,6 +40,7 @@ as
   -- Error code constants
   -- Range -20301 to -20309: Core / provider errors
   -- Range -20400 to -20409: Agent errors
+  -- Range -20421 to -20429: Agent-memory errors (declared in uc_ai_memory)
   -- Range -20450 to -20459: Workflow errors
   -- Range -20500 to -20509: Validation errors
   -- =============================================
