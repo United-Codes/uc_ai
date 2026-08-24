@@ -42,6 +42,8 @@ commit;
 
 For each `(provider, model)`, the latest row with `effective_from <= today` wins. To prepare a price change, insert a row with a future date.
 
+The snapshot covers the models of `anthropic`, `openai`, `google`, `xai`, `mistral`, and `openrouter`. It has no row for an OCI model, and no row for a local Ollama model. It also has no row for a model that the public model catalogs no longer list, for example `claude-3-opus-latest` or `gemini-2.0-flash`. For one of these models, you must add a price row yourself.
+
 <Aside type="caution">
 Keep the pricing table complete for the models that you use. If a model has **no** price row, UC AI records its cost as `NULL` and not as zero. The usage is then visible but unpriced, and no budget counts it.
 </Aside>
