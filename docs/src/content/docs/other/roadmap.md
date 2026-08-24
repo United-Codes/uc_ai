@@ -19,10 +19,10 @@ These are the features that I think would be great to have in the future. Based 
 - Text-to-speech
 - Image generation
 - APEX App to configure tools
-- APEX Chat Plug-In
 
 ## Shipped Features
 
+- ✅️ [APEX Chat Plug-In](/products/uc-ai/docs/guides/apex-chat-plugin/)
 - ✅️ Reasoning settings
 - ✅️ Ollama provider support
 - Providers:

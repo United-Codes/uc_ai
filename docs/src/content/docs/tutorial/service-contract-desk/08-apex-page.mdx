@@ -41,6 +41,14 @@ page calls, and a procedure a job runs. Test it from SQLcl first, then wire a pa
 to it.
 </Aside>
 
+<Aside type="note" title="A plug-in does this for a chat page">
+This lesson builds the pattern so that you know how it works. For a chat
+interface you do not have to write it. The [APEX Chat
+plug-in](/products/uc-ai/docs/guides/apex-chat-plugin/) is a region plug-in with
+the same queue, the same job, and the same poll inside it. Build this lesson to
+learn the pattern. Use the plug-in when you want a chat region.
+</Aside>
+
 ## One table carries the request and the answer
 
 ```sql
@@ -163,6 +171,10 @@ stripped out of the audit trail. So a run from a job is honestly recorded as a r
 from the database, and lesson 9 can tell the two apart.
 
 ## Wiring the APEX page
+
+The steps below build the page by hand, which is what this lesson teaches. The
+[APEX Chat plug-in](/products/uc-ai/docs/guides/apex-chat-plugin/) replaces all
+four steps with one region.
 
 <Steps>
 

@@ -83,6 +83,14 @@ export default defineConfig({
 								{ autogenerate: { directory: "guides/multi-agent-systems" } },
 							],
 						},
+						{
+							label: "APEX Chat Plug-in",
+							link: "guides/apex-chat-plugin",
+							badge: {
+								text: "New",
+								variant: "success",
+							},
+						},
 						"guides/execution-hooks",
 						"guides/agent-memory",
 						{
