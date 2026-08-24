@@ -27,6 +27,25 @@ create or replace package body test_uc_ai_memory as
   end run_txt;
 
 
+  -- Drives the tool the way a provider does: the registered function_call of the
+  -- MEMORY row, with the arguments bound as one CLOB by the tool layer.
+  function run_tool(p_json in varchar2) return varchar2
+  as
+    l_args json_object_t;
+  begin
+    if p_json is not null then
+      l_args := json_object_t.parse(p_json);
+    end if;
+
+    return sys.dbms_lob.substr(
+      uc_ai_tools_api.execute_tool(
+        p_tool_code => uc_ai_memory.c_tool_code
+      , p_arguments => l_args
+      )
+    , 4000, 1);
+  end run_tool;
+
+
   procedure set_ctx(
     p_agent       in varchar2,
     p_user        in varchar2 default 'TEST_MEM_USER',
@@ -473,14 +492,75 @@ create or replace package body test_uc_ai_memory as
   end view_range_minus_one_to_eof;
 
 
-  procedure view_range_on_directory_errors
+  -- A listing has no lines, so no range can mean anything against one. A model
+  -- in strict mode has to send the argument and invents a value: [1,200],
+  -- [0,0], [-1,-1] and [-1,0] were all seen from one model in one run. Refusing
+  -- any of them makes the listing succeed or fail by luck, so all are ignored.
+  procedure view_directory_ignores_any_range
   as
+    l_ranges apex_t_varchar2 := apex_t_varchar2('[1,2]', '[1,200]', '[0,0]', '[-1,-1]', '[-1,0]', '[5,3]');
   begin
     uc_ai_memory.set_store(gc_shared);
     ut.expect(run_txt('{"command":"create","path":"/memories/dir/f.txt","file_text":"x"}')).to_be_like('File created%');
-    ut.expect(run_txt('{"command":"view","path":"/memories/dir","view_range":[1,2]}'))
-      .to_be_like('Error: `view_range` is only supported for files%');
-  end view_range_on_directory_errors;
+
+    <<range_loop>>
+    for i in 1 .. l_ranges.count loop
+      ut.expect(run_txt('{"command":"view","path":"/memories/dir","view_range":' || l_ranges(i) || '}'))
+        .to_be_like('Here''re the files and directories%');
+    end loop range_loop;
+  end view_directory_ignores_any_range;
+
+
+  -- A provider in strict mode (OpenAI) requires every declared property of the
+  -- tool schema to be present, so the model sends view_range on every call. The
+  -- value it sends is its whole-file default. Reading that as "the caller asked
+  -- for a range" made `view /memories` fail on every call, which left an agent
+  -- unable to find what it wrote in an earlier conversation.
+  procedure view_directory_with_default_range
+  as
+    l_res varchar2(4000 char);
+  begin
+    uc_ai_memory.set_store(gc_shared);
+    ut.expect(run_txt('{"command":"create","path":"/memories/test_mem_pref.txt","file_text":"x"}'))
+      .to_be_like('File created%');
+
+    l_res := run_txt('{"command":"view","path":"/memories","view_range":[1,-1]}');
+
+    ut.expect(l_res).to_be_like('Here''re the files and directories%');
+    ut.expect(l_res).to_be_like('%/memories/test_mem_pref.txt%');
+  end view_directory_with_default_range;
+
+
+  procedure view_directory_with_empty_range
+  as
+  begin
+    uc_ai_memory.set_store(gc_shared);
+    ut.expect(run_txt('{"command":"create","path":"/memories/test_mem_pref.txt","file_text":"x"}'))
+      .to_be_like('File created%');
+
+    ut.expect(run_txt('{"command":"view","path":"/memories","view_range":[]}'))
+      .to_be_like('Here''re the files and directories%');
+    ut.expect(run_txt('{"command":"view","path":"/memories","view_range":null}'))
+      .to_be_like('Here''re the files and directories%');
+  end view_directory_with_empty_range;
+
+
+  -- The exact argument set captured from an OpenAI strict-mode run.
+  procedure view_root_with_strict_mode_arguments
+  as
+    l_res varchar2(4000 char);
+  begin
+    uc_ai_memory.set_store(gc_shared);
+    ut.expect(run_txt('{"command":"create","path":"/memories/test_mem_pref.txt","file_text":"x"}'))
+      .to_be_like('File created%');
+
+    l_res := run_txt('{"command":"view","file_text":"","insert_line":0,"insert_text":"",'
+      || '"new_path":"","new_str":"","old_path":"","old_str":"","path":"/memories",'
+      || '"view_range":[1,-1]}');
+
+    ut.expect(l_res).to_be_like('Here''re the files and directories%');
+    ut.expect(l_res).to_be_like('%/memories/test_mem_pref.txt%');
+  end view_root_with_strict_mode_arguments;
 
 
   procedure view_truncates_over_16k
@@ -1289,6 +1369,107 @@ create or replace package body test_uc_ai_memory as
 
 
   -- ==========================================================================
+  -- run readiness
+  -- ==========================================================================
+
+  procedure run_ready_raises_without_key
+  as
+  begin
+    enable_a(p_scope => uc_ai_memory.c_scope_context, p_context_key => 'document_id');
+
+    begin
+      uc_ai_memory.check_run_ready(gc_agent_a, null);
+      ut.fail('Expected -20426 for a run without the context key');
+    exception
+      when others then
+        ut.expect(sqlcode).to_equal(uc_ai_memory.c_err_context_missing);
+        ut.expect(sqlerrm).to_be_like('%document_id%');
+    end;
+
+    -- a bag that has other keys but not this one is the same failure
+    begin
+      uc_ai_memory.check_run_ready(gc_agent_a, '{"tenant_id":"ACME"}');
+      ut.fail('Expected -20426 for a bag without the context key');
+    exception
+      when others then
+        ut.expect(sqlcode).to_equal(uc_ai_memory.c_err_context_missing);
+    end;
+  end run_ready_raises_without_key;
+
+
+  procedure run_ready_raises_on_bad_value
+  as
+  begin
+    enable_a(p_scope => uc_ai_memory.c_scope_context, p_context_key => 'document_id');
+
+    begin
+      uc_ai_memory.check_run_ready(gc_agent_a, '{"document_id":"x:forged"}');
+      ut.fail('Expected -20426 for a value that cannot identify a store');
+    exception
+      when others then
+        ut.expect(sqlcode).to_equal(uc_ai_memory.c_err_context_missing);
+    end;
+  end run_ready_raises_on_bad_value;
+
+
+  procedure run_ready_silent_when_fine
+  as
+  begin
+    -- the key is supplied
+    enable_a(p_scope => uc_ai_memory.c_scope_context, p_context_key => 'document_id');
+    uc_ai_memory.check_run_ready(gc_agent_a, '{"document_id":"7"}');
+
+    -- another scope needs no run context at all
+    enable_a(p_scope => uc_ai_memory.c_scope_agent);
+    uc_ai_memory.check_run_ready(gc_agent_a, null);
+
+    -- an agent without memory is none of its business
+    uc_ai_memory.check_run_ready('TEST_MEM_NO_SUCH_AGENT', null);
+
+    -- a disabled agent likewise
+    enable_a(p_scope => uc_ai_memory.c_scope_context, p_context_key => 'document_id');
+    uc_ai_memory.disable_for_agent(gc_agent_a, p_remove_tool_tag => false);
+    uc_ai_memory.check_run_ready(gc_agent_a, null);
+
+    ut.expect(1).to_equal(1); -- reached without raising
+  end run_ready_silent_when_fine;
+
+
+  -- The failure this guards against: the store holds content, the run omits the
+  -- key, the tool can only answer in text, and the model reports "nothing
+  -- recorded" while the run reports success. Failing at run start puts the error
+  -- in front of the developer instead.
+  procedure run_without_key_fails_the_run
+  as
+    l_res json_object_t;
+  begin
+    enable_a(p_scope => uc_ai_memory.c_scope_context, p_context_key => 'document_id');
+    commit;
+
+    begin
+      l_res := uc_ai_agents_api.execute_agent(
+        p_agent_code => gc_agent_a,
+        p_session_id => uc_ai_agents_api.generate_session_id
+      );
+      ut.fail('Expected the run to fail, got status ' || l_res.get_string('status'));
+    exception
+      when others then
+        ut.expect(sqlerrm).to_be_like('%document_id%');
+    end;
+  end run_without_key_fails_the_run;
+
+
+  procedure protocol_separates_failure_from_empty
+  as
+    l_protocol clob := uc_ai_memory.get_memory_protocol;
+  begin
+    ut.expect(instr(l_protocol, 'could not determine') > 0).to_be_true();
+    ut.expect(instr(l_protocol, 'NOT an empty memory') > 0).to_be_true();
+    ut.expect(instr(l_protocol, 'could not be read') > 0).to_be_true();
+  end protocol_separates_failure_from_empty;
+
+
+  -- ==========================================================================
   -- prompt hook
   -- ==========================================================================
 
@@ -1316,6 +1497,70 @@ create or replace package body test_uc_ai_memory as
 
     ut.expect(instr(l_prompt, 'MEMORY PROTOCOL') > 0).to_be_false();
   end augment_noop_when_not_enabled;
+
+
+  -- ==========================================================================
+  -- Tool layer
+  -- ==========================================================================
+  -- The tests above call uc_ai_memory.execute_command directly. These go through
+  -- uc_ai_tools_api.execute_tool, which reads the function_call of the registered
+  -- MEMORY row and binds the arguments as one CLOB - the path a provider uses.
+
+  procedure tool_layer_view_works
+  as
+  begin
+    uc_ai_memory.set_store(gc_shared);
+    ut.expect(run_tool('{"command":"view","path":"/memories"}'))
+      .to_equal('Here''re the files and directories up to 2 levels deep in /memories:'
+        || chr(10) || '0' || chr(9) || '/memories');
+  end tool_layer_view_works;
+
+
+  procedure tool_layer_create_and_view_file
+  as
+  begin
+    uc_ai_memory.set_store(gc_shared);
+    ut.expect(run_tool('{"command":"create","path":"/memories/tool.txt","file_text":"from the tool layer"}'))
+      .to_equal('File created successfully at: /memories/tool.txt');
+    ut.expect(run_tool('{"command":"view","path":"/memories/tool.txt"}'))
+      .to_be_like('%from the tool layer%');
+    ut.expect(file_count('shared:' || gc_shared)).to_equal(1);
+  end tool_layer_create_and_view_file;
+
+
+  procedure tool_layer_malformed_json_error
+  as
+  begin
+    uc_ai_memory.set_store(gc_shared);
+    -- the tool layer binds a CLOB, and a model can send anything: the handler
+    -- must answer with an error string and must not raise
+    ut.expect(sys.dbms_lob.substr(uc_ai_memory.execute_command(to_clob('{"command":')), 4000, 1))
+      .to_be_like('Error: the memory arguments are not a JSON object%');
+    ut.expect(sys.dbms_lob.substr(uc_ai_memory.execute_command(to_clob('view /memories')), 4000, 1))
+      .to_be_like('Error: the memory arguments are not a JSON object%');
+    ut.expect(sys.dbms_lob.substr(uc_ai_memory.execute_command(to_clob('["view"]')), 4000, 1))
+      .to_be_like('Error: the memory arguments are not a JSON object%');
+  end tool_layer_malformed_json_error;
+
+
+  procedure tool_layer_empty_arguments_error
+  as
+  begin
+    uc_ai_memory.set_store(gc_shared);
+    ut.expect(run_tool(null)).to_be_like('Error: parameter `command` is required%');
+    ut.expect(run_tool('{}')).to_be_like('Error: parameter `command` is required%');
+  end tool_layer_empty_arguments_error;
+
+
+  procedure tool_layer_wrapped_arguments
+  as
+  begin
+    uc_ai_memory.set_store(gc_shared);
+    -- the tool layer adds the run context to the arguments, which must not count
+    -- as the parent object of a provider that wraps the arguments
+    ut.expect(run_tool('{"input":{"command":"create","path":"/memories/w.txt","file_text":"x"}}'))
+      .to_equal('File created successfully at: /memories/w.txt');
+  end tool_layer_wrapped_arguments;
 
 end test_uc_ai_memory;
 /

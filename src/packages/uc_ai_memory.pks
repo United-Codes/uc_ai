@@ -40,6 +40,7 @@ as
   c_err_store_not_found constant pls_integer := -20423;
   c_err_config_invalid  constant pls_integer := -20424;
   c_err_file_not_found  constant pls_integer := -20425;
+  c_err_context_missing constant pls_integer := -20426;
 
   -- Default caps applied when no config row governs the resolved store
   -- (e.g. standalone usage through set_store)
@@ -52,8 +53,7 @@ as
   -- ==========================================================================
 
   /*
-   * Sole entry point of the MEMORY function tool
-   * (function_call = 'return uc_ai_memory.execute_command(:ARGUMENTS);').
+   * Entry point of the MEMORY function tool.
    *
    * Dispatches on p_arguments.command (view | create | str_replace | insert |
    * delete | rename), resolves the caller's store from the execution context
@@ -63,6 +63,18 @@ as
    * returned as instructive strings, never raised.
    */
   function execute_command(p_arguments in json_object_t) return clob;
+
+  /*
+   * The overload the registered tool runs
+   * (function_call = 'return uc_ai_memory.execute_command(:ARGUMENTS);').
+   *
+   * The tool layer binds the arguments of a tool call as one CLOB, so the tool
+   * needs an entry point that takes a CLOB. It parses the text and delegates to
+   * the json_object_t overload. Text that is not a JSON object gives an error
+   * string for the model, the same as every other failure: this overload also
+   * never raises.
+   */
+  function execute_command(p_arguments in clob) return clob;
 
 
   -- ==========================================================================
@@ -153,6 +165,30 @@ as
    * so it can also be pasted into a prompt profile template manually.
    */
   function get_memory_protocol return clob;
+
+
+  /*
+   * Raises when this run cannot resolve a memory store, so the run fails before
+   * it starts instead of part way through.
+   *
+   * A context-scoped agent needs its run-context key. Without it the tool can
+   * only report the failure as text, and a model reads that text the same way it
+   * reads "the store is empty": it tells the user there is nothing recorded. The
+   * content is there, the user is told it is not, and the run reports success.
+   * Forgetting the key is also the common mistake, so it is worth failing loudly
+   * at the one point where the developer, and not the end user, sees the error.
+   *
+   * Called by uc_ai_agents_api.execute_agent before the execution row exists.
+   * Silent for an agent without memory, for any other scope, and for a run that
+   * supplies the key. Raises c_err_context_missing otherwise.
+   *
+   * @param p_agent_code  Agent that is about to run
+   * @param p_run_context Run context of that run (JSON object as a CLOB)
+   */
+  procedure check_run_ready(
+    p_agent_code  in uc_ai_agents.code%type,
+    p_run_context in clob
+  );
 
 
   /*

@@ -5,7 +5,7 @@ sidebar:
   order: 78
 ---
 
-import { Steps } from "@astrojs/starlight/components";
+import { Aside, Steps } from "@astrojs/starlight/components";
 
 **Agent memory lets an agent store and read knowledge across conversations.** The agent gets a private virtual filesystem with the root `/memories`. CLOBs in Oracle tables hold this filesystem. A `memory` tool can `view`, `create`, `str_replace`, `insert`, `delete`, and `rename` the files in it. What the agent learns in one session is available in the next session: user preferences, decisions, and task progress.
 
@@ -43,11 +43,43 @@ Every memory file lives in a **store**, and one store is one virtual filesystem.
 | Scope     | One store per…            | Use for                                                    |
 | --------- | ------------------------- | ---------------------------------------------------------- |
 | `agent`   | agent code *(default)*    | agents that accumulate knowledge. All users share the memory |
-| `user`    | agent + user (created_by) | agents for end users. No information crosses users         |
+| `user`    | agent + `created_by`      | one memory per signed-in end user (read the note below)    |
 | `session` | conversation session      | scratch memory that must not outlive the conversation      |
 | `shared`  | explicitly named store    | several agents that work on one knowledge base             |
 | `global`  | whole installation        | one common memory for everything                           |
 | `context` | value of a run-context key | one memory per document, per case, or per tenant           |
+
+### Why a missing key fails the run
+
+A memory command reports an error as text, because the model must be able to read
+it. That is correct for "the path does not exist": the model reads it as an empty
+memory and continues.
+
+A store that cannot be resolved is different. It is a failure to reach the data,
+but it arrives on the same channel, and a model reads it the same way. It then
+tells the user that nothing is recorded, while the content is in the store and the
+run reports success. The user gets a confident, wrong answer, and the trace looks
+healthy unless you read `tool_output`.
+
+UC AI therefore fails such a run at the start, before the model sees anything. The
+developer gets the error, the end user does not get the wrong answer. For a
+failure that can only appear during a run, such as a store deleted mid-run, the
+MEMORY PROTOCOL tells the model to report that the memory could not be read
+instead of describing what it remembers.
+
+### What `user` scope separates
+
+<Aside type="caution">
+The `user` scope keys the store on `created_by`, which UC AI reads as
+`coalesce(APEX$SESSION.APP_USER, the database user)`. It gives each person a
+private memory only when each person has an own authenticated APEX session.
+
+In a public (anonymous) APEX application every visitor is the same APEX user, and
+through a plain ORDS endpoint or a scheduler job there is no APEX session at all,
+so every caller is the same database user. In both cases all callers share **one**
+store. To key a memory on something else, use the `context` scope and put your own
+identifier in the run context.
+</Aside>
 
 ```sql
 -- per-user memory
@@ -90,10 +122,23 @@ uc_ai_memory.enable_for_agent('DOC_SUMMARY', p_scope => 'context',
 
 Both agents then resolve to `context:DOCS:document_id:7`.
 
+The key of a context store always has this shape:
+
+```
+context:<store_code or agent_code>:<context_key>:<context_value>
+```
+
+`uc_ai_memory_stores.store_key` holds it, so you can read or delete the memory of
+one document directly. `uc_ai_memory.resolve_store_id` builds the same key from
+its parameters.
+
 Two rules apply to the value:
 
-- If the run does not supply the key, the tool returns an instructive text and
-  reads no files. The memory is unavailable, not open.
+- **The run must supply the key.** UC AI checks this before the run starts and
+  raises `-20426` when the key is missing. The run does not start, and the error
+  names the key. Forgetting `p_run_context` is the common mistake, and this is
+  what keeps it from becoming a silent one — read [Why a missing key fails the
+  run](#why-a-missing-key-fails-the-run).
 - The value must be at most 200 characters from `A-Z`, `a-z`, `0-9`, underscore,
   dot, and hyphen. UC AI refuses any other value, because the store key is built
   by concatenation.
@@ -113,6 +158,32 @@ end;
 ```
 
 The `uc_ai_v_memory_files` view shows what a store holds. You can also manage the files directly with `uc_ai_memory.list_files`, `get_file`, `put_file`, `delete_file`, and `clear_store_files`. Use these procedures to fill the memory of an agent with reference notes.
+
+These procedures take a store id, which `uc_ai_memory.resolve_store_id` gives you.
+UC AI creates a store at its first use, so the store of an agent that has not run
+yet does not exist and `resolve_store_id` raises `-20423`. A setup script that
+clears the memory before the first run must accept that error:
+
+```sql
+declare
+  e_no_store exception;
+  pragma exception_init(e_no_store, -20423);
+  l_store_id number;
+begin
+  l_store_id := uc_ai_memory.resolve_store_id(
+    p_scope         => 'context',
+    p_agent_code    => 'DOC_AGENT',
+    p_context_key   => 'document_id',
+    p_context_value => '7'
+  );
+  uc_ai_memory.clear_store_files(l_store_id);
+  commit;
+exception
+  when e_no_store then
+    null;  -- nothing has been written yet
+end;
+/
+```
 
 ## Using memory outside agents
 

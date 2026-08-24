@@ -86,8 +86,17 @@ create or replace package test_uc_ai_memory as
   --%test(view_range end -1 reads to end of file)
   procedure view_range_minus_one_to_eof;
 
-  --%test(view_range on a directory errors)
-  procedure view_range_on_directory_errors;
+  --%test(a directory listing ignores view_range, whatever a strict-mode provider invented)
+  procedure view_directory_ignores_any_range;
+
+  --%test(the whole-file view_range a strict-mode provider always sends still lists a directory)
+  procedure view_directory_with_default_range;
+
+  --%test(a null or empty view_range does not stop a directory listing)
+  procedure view_directory_with_empty_range;
+
+  --%test(the full strict-mode argument set still lists the root)
+  procedure view_root_with_strict_mode_arguments;
 
   --%test(views longer than 16k chars are truncated with a hint)
   procedure view_truncates_over_16k;
@@ -243,6 +252,23 @@ create or replace package test_uc_ai_memory as
   --%test(expire_files and clear_store_files work on one context store only)
   procedure context_scope_housekeeping;
 
+  -- ---- run readiness ---------------------------------------------------------
+
+  --%test(check_run_ready raises when a context-scoped agent has no run-context key)
+  procedure run_ready_raises_without_key;
+
+  --%test(check_run_ready raises for a value that cannot identify a store)
+  procedure run_ready_raises_on_bad_value;
+
+  --%test(check_run_ready is silent for a supplied key, another scope and no memory)
+  procedure run_ready_silent_when_fine;
+
+  --%test(executing a context-scoped agent without its key fails instead of reporting an empty memory)
+  procedure run_without_key_fails_the_run;
+
+  --%test(the MEMORY PROTOCOL tells the model not to read a store failure as an empty memory)
+  procedure protocol_separates_failure_from_empty;
+
   -- ---- prompt hook ----------------------------------------------------------
 
   --%test(augment_system_prompt appends the protocol for a memory-enabled agent)
@@ -250,6 +276,23 @@ create or replace package test_uc_ai_memory as
 
   --%test(augment_system_prompt is a no-op for other agents)
   procedure augment_noop_when_not_enabled;
+
+  -- ---- tool layer -----------------------------------------------------------
+
+  --%test(the registered MEMORY tool runs a view through uc_ai_tools_api)
+  procedure tool_layer_view_works;
+
+  --%test(the registered MEMORY tool writes and reads a file through uc_ai_tools_api)
+  procedure tool_layer_create_and_view_file;
+
+  --%test(arguments that are no JSON object give the model an error string)
+  procedure tool_layer_malformed_json_error;
+
+  --%test(empty arguments give the model an error string)
+  procedure tool_layer_empty_arguments_error;
+
+  --%test(the tool layer keeps the wrapped-arguments fallback usable)
+  procedure tool_layer_wrapped_arguments;
 
 end test_uc_ai_memory;
 /

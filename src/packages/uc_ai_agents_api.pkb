@@ -2543,6 +2543,15 @@ create or replace package body uc_ai_agents_api as
                      , p_top_level   => l_is_top_level
                      );
 
+    -- A memory-enabled agent that cannot resolve a store must not run. The tool
+    -- could only report that as text, and a model reads such text the same way
+    -- it reads an empty store: it tells the user nothing is recorded, while the
+    -- run reports success. Fail here instead, where the developer sees it.
+    uc_ai_memory.check_run_ready(
+      p_agent_code  => p_agent_code
+    , p_run_context => l_run_context
+    );
+
     -- Create execution record
     l_exec_id := create_execution(l_agent.id, l_session_id, l_parent_exec_id, p_input_parameters, l_run_context);
 

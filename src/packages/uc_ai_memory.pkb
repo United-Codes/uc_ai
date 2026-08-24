@@ -477,6 +477,56 @@ create or replace package body uc_ai_memory as
   -- Commands
   -- ==========================================================================
 
+  /*
+   * Reads the `view_range` argument of a file view.
+   *
+   * Presence says nothing about intent: a provider in strict mode (OpenAI)
+   * sends every property that the tool schema declares, so the argument arrives
+   * on every call with a value the model invented. An absent argument, a JSON
+   * null and an empty array therefore all mean "no range".
+   *
+   * po_range    the array when the argument holds one with entries, else null.
+   *             The caller validates the contents and reports a bad range.
+   * po_explicit true when the argument holds something that is not a usable
+   *             array, so the caller reports the expected shape instead of
+   *             silently showing the whole file.
+   */
+  procedure read_view_range(
+    p_arguments in  json_object_t,
+    po_range    out nocopy json_array_t,
+    po_explicit out boolean
+  )
+  as
+    l_el  json_element_t;
+    l_arr json_array_t;
+  begin
+    po_range    := null;
+    po_explicit := false;
+
+    if p_arguments is null or not p_arguments.has('view_range') then
+      return;
+    end if;
+
+    l_el := p_arguments.get('view_range');
+    if l_el is null or l_el.is_null then
+      return;
+    end if;
+
+    if l_el.is_array then
+      l_arr := treat(l_el as json_array_t);
+      if l_arr.get_size = 0 then
+        return;
+      end if;
+      po_range := l_arr;
+      return;
+    end if;
+
+    -- Present but not an array at all. Hand it to the caller, which reports the
+    -- expected shape, and treat it as a real request.
+    po_explicit := true;
+  end read_view_range;
+
+
   function cmd_view(
     p_store_id  in number,
     p_arguments in json_object_t
@@ -490,6 +540,7 @@ create or replace package body uc_ai_memory as
     l_from       pls_integer;
     l_to         pls_integer;
     l_range      json_array_t;
+    l_has_range  boolean;
     l_out        clob;
     l_total      number := 0;
     l_rem        varchar2(1000 char);
@@ -540,8 +591,8 @@ create or replace package body uc_ai_memory as
       l_from  := 1;
       l_to    := l_lines_arr.count;
 
-      if p_arguments.has('view_range') then
-        l_range := p_arguments.get_array('view_range');
+      read_view_range(p_arguments, l_range, l_has_range);
+      if l_range is not null or l_has_range then
         if l_range is null or l_range.get_size != 2 then
           return 'Error: Invalid `view_range` parameter: it must be an array of two integers [start_line, end_line].';
         end if;
@@ -599,9 +650,15 @@ create or replace package body uc_ai_memory as
       return not_found_msg(l_norm);
     end if;
 
-    if p_arguments.has('view_range') then
-      return 'Error: `view_range` is only supported for files, not directories.';
-    end if;
+    -- view_range is ignored for a directory, whatever it holds.
+    --
+    -- A listing has no lines, so no range can be a meaningful request against
+    -- one, and there is nothing a caller could pass that we should honour or
+    -- refuse. A provider in strict mode sends the argument on every call and
+    -- invents a value for it - [1,200], [0,0], [-1,-1] and [-1,0] have all been
+    -- observed from one model in one run - so refusing "a range that looks
+    -- deliberate" only makes the listing succeed or fail by luck. Ignoring it
+    -- removes the whole class.
 
     l_out := 'Here''re the files and directories up to 2 levels deep in ' || l_norm || ':'
       || chr(10) || format_size(l_total) || chr(9) || l_norm;
@@ -1060,19 +1117,33 @@ create or replace package body uc_ai_memory as
     l_store_id number;
     l_caps     t_caps;
     l_error    varchar2(4000 char);
+    l_wrap_key varchar2(4000 char);
+    l_wrap_cnt pls_integer := 0;
   begin
     if l_args is null then
       return param_required_msg('command', 'memory');
     end if;
 
-    -- some providers/schemas wrap the arguments in a single parent object
+    -- some providers/schemas wrap the arguments in a single parent object. The
+    -- tool layer always adds the run context under uc_ai.c_run_context_key, so
+    -- that key never counts as the wrapper.
     if not l_args.has('command') then
       l_keys := l_args.get_keys;
-      if l_keys is not null and l_keys.count = 1
-        and l_args.get(l_keys(1)) is not null
-        and l_args.get(l_keys(1)).is_object
+      if l_keys is not null then
+        <<key_loop>>
+        for i in 1 .. l_keys.count loop
+          if l_keys(i) != uc_ai.c_run_context_key then
+            l_wrap_cnt := l_wrap_cnt + 1;
+            l_wrap_key := l_keys(i);
+          end if;
+        end loop key_loop;
+      end if;
+
+      if l_wrap_cnt = 1
+        and l_args.get(l_wrap_key) is not null
+        and l_args.get(l_wrap_key).is_object
       then
-        l_args := treat(l_args.get(l_keys(1)) as json_object_t);
+        l_args := treat(l_args.get(l_wrap_key) as json_object_t);
       end if;
     end if;
 
@@ -1107,6 +1178,34 @@ create or replace package body uc_ai_memory as
       , p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
       );
       return 'Error: memory command failed unexpectedly: ' || sqlerrm;
+  end execute_command;
+
+
+  function execute_command(p_arguments in clob) return clob
+  as
+    l_scope uc_ai_logger.scope := gc_scope_prefix || 'execute_command(clob)';
+    l_args  json_object_t;
+  begin
+    -- The tool layer (uc_ai_tools_api.exec_function_call) binds the arguments of
+    -- a tool call as one CLOB, so the registered function_call comes in here.
+    if p_arguments is not null then
+      begin
+        l_args := json_object_t.parse(p_arguments);
+      exception
+        -- @dblinter ignore(g-5040): tool contract - a model can send anything, and
+        -- text that does not parse must reach the model as a result string
+        when others then
+          uc_ai_logger.log_error(
+            p_text  => 'memory tool arguments are no JSON object'
+          , p_scope => l_scope
+          , p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
+          );
+          return 'Error: the memory arguments are not a JSON object. Send an object like'
+            || ' {"command": "view", "path": "/memories"}.';
+      end;
+    end if;
+
+    return execute_command(p_arguments => l_args);
   end execute_command;
 
 
@@ -1431,8 +1530,51 @@ create or replace package body uc_ai_memory as
       || '1. ALWAYS check your memory first: view /memories before doing anything else, and read the files relevant to the task.' || chr(10)
       || '2. Record important context as you work - decisions, user preferences, learnings, task progress. Update memory continuously, not only at the end.' || chr(10)
       || '3. ASSUME INTERRUPTION: your context window may be reset at any moment; anything not recorded in memory is lost.' || chr(10)
-      || '4. Keep memory organized: small focused files; update or delete stale content instead of piling up new files.';
+      || '4. Keep memory organized: small focused files; update or delete stale content instead of piling up new files.' || chr(10)
+      || '5. A memory command can report that it could not determine your memory store, rather than that a file is missing. That is a failure to reach your memory, NOT an empty memory. After such a result, do not state what you do or do not remember: tell the user that the memory could not be read.';
   end get_memory_protocol;
+
+
+  procedure check_run_ready(
+    p_agent_code  in uc_ai_agents.code%type,
+    p_run_context in clob
+  )
+  as
+    l_cfg     uc_ai_memory_config%rowtype;
+    l_ctx_val varchar2(4000 char);
+  begin
+    begin
+      select *
+        into l_cfg
+        from uc_ai_memory_config
+       where agent_code = p_agent_code
+         and enabled = 'Y';
+    exception
+      when no_data_found then
+        -- no memory for this agent: nothing to be ready for
+        return;
+    end;
+
+    if l_cfg.scope != c_scope_context then
+      return;
+    end if;
+
+    l_ctx_val := uc_ai.run_context_value(p_run_context, l_cfg.context_key);
+
+    if l_ctx_val is null then
+      raise_application_error(c_err_context_missing,
+        'The memory of agent "' || p_agent_code || '" is scoped to the run-context key "'
+        || l_cfg.context_key || '", which this run does not supply. Pass it in p_run_context,'
+        || ' for example json_object_t(''{"' || l_cfg.context_key || '":"123"}'').');
+    end if;
+
+    if not valid_context_value(l_ctx_val) then
+      raise_application_error(c_err_context_missing,
+        'The run-context value of "' || l_cfg.context_key || '" cannot identify a memory store'
+        || ' for agent "' || p_agent_code || '". Use at most 200 characters from A-Z, a-z, 0-9,'
+        || ' underscore, dot and hyphen.');
+    end if;
+  end check_run_ready;
 
 
   procedure augment_system_prompt(
