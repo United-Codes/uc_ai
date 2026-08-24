@@ -1,0 +1,238 @@
+---
+/**
+ * A block of REAL output that a model produced.
+ *
+ * A fenced code block says "type this". Model output is the opposite: it is what
+ * came back, it will not be identical for the reader, and it must never be copied
+ * as if it were code. This block says so, and carries the two facts that make a
+ * recorded answer trustworthy: which model produced it, and when.
+ *
+ * Usage:
+ *   <AiOutput model="gpt-5.6-terra" date="2026-08-24" seconds={4.2}>
+ *   INV-1003 has $0 still available to credit.
+ *   </AiOutput>
+ *
+ *   <AiOutput model="gpt-5.6-terra" date="2026-08-24" wrong>
+ *   You can still credit up to 200 on INV-1003.
+ *   </AiOutput>
+ */
+interface Props {
+  /** Model that produced the output, for example "gpt-5.6-terra". */
+  model?: string;
+  /** Date of the run, as YYYY-MM-DD. */
+  date?: string;
+  /** How long the run took, in seconds. Optional. */
+  seconds?: number;
+  /** Label instead of "Recorded answer", for example "Tool result". */
+  label?: string;
+  /** Mark the output as WRONG. Use it where the lesson shows a bad answer. */
+  wrong?: boolean;
+  /** Leave out the closing note. Use it on the second of two blocks in a row. */
+  quiet?: boolean;
+}
+
+const { model, date, seconds, label, wrong = false, quiet = false } = Astro.props;
+
+const heading = label ?? (wrong ? "Recorded answer, and it is wrong" : "Recorded answer");
+---
+
+<figure class:list={["ai-output", { "ai-output--wrong": wrong }]}>
+  <figcaption class="ai-output-head">
+    <span class="ai-output-label">
+      <svg
+        aria-hidden="true"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        {
+          wrong ? (
+            <>
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </>
+          ) : (
+            <>
+              <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+              <circle cx="12" cy="12" r="4" />
+            </>
+          )
+        }
+      </svg>
+      {heading}
+    </span>
+
+    {
+      (model || date || seconds) && (
+        <span class="ai-output-meta">
+          {model && <code>{model}</code>}
+          {seconds && <span>{seconds}s</span>}
+          {date && <span>{date}</span>}
+        </span>
+      )
+    }
+  </figcaption>
+
+  <div class="ai-output-body">
+    <slot />
+  </div>
+
+  {!quiet && (
+  <p class="ai-output-note">
+    {
+      wrong
+        ? "Your wording will differ, and the model can also refuse instead. The lesson explains why this answer cannot be trusted."
+        : "Your wording will differ. What must match is the data, and the checks below."
+    }
+  </p>
+  )}
+</figure>
+
+<style>
+  /* No left rail. Starlight's asides are all `border-inline-start: .25rem`, so a
+     coloured left edge makes this read as one more aside. The identity of this
+     block is its LABELLED HEADER instead: a tinted band that names what the
+     content is, which no Starlight component has.
+
+     The body must also not share a surface with a code block, because the whole
+     point is that its content is not something to copy. So the body sits on the
+     page background and only the band is tinted. */
+  .ai-output {
+    margin: 1.5rem 0;
+    border: 1px solid var(--sl-color-gray-4);
+    border-radius: 0.5rem;
+    background: var(--sl-color-bg);
+    overflow: hidden;
+  }
+
+  /* The band carries the whole signal, so a wrong answer only needs its colour
+     changed. Same token pair as the "Lesson N of 9" pill, for consistency. */
+  .ai-output-head {
+    /* accent-low alone is only 1.14:1 against the dark page, so the fill is
+       invisible. Mixing in a step of gray lifts it without changing the hue. */
+    background: color-mix(in srgb, var(--sl-color-accent-low) 60%, var(--sl-color-gray-5));
+  }
+
+  :root[data-theme="light"] .ai-output-head {
+    background: var(--sl-color-accent-low);
+  }
+
+  .ai-output-label {
+    color: var(--sl-color-accent-high);
+  }
+
+  .ai-output--wrong .ai-output-head,
+  :root[data-theme="light"] .ai-output--wrong .ai-output-head {
+    background: var(--sl-color-red-low);
+  }
+
+  .ai-output--wrong .ai-output-label {
+    color: var(--sl-color-red-high);
+  }
+
+  .ai-output-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.9rem;
+    border-bottom: 1px solid var(--sl-color-gray-5);
+    font-size: var(--sl-text-xs);
+  }
+
+  .ai-output-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .ai-output-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--sl-color-gray-3);
+  }
+
+  /* Separate model, duration and date, so they do not read as one string. */
+  .ai-output-meta > *:not(:last-child)::after {
+    content: "·";
+    margin-left: 0.6rem;
+    color: var(--sl-color-gray-3);
+  }
+
+  .ai-output-meta code {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 1em;
+    color: var(--sl-color-gray-3);
+  }
+
+  /* The body holds prose the model wrote, so keep it readable rather than
+     monospaced, and let a long answer scroll instead of breaking the page. */
+  .ai-output-body {
+    /* Starlight's markdown spacing gives this a margin-top, which opened a gap
+       between the band and the first line and broke the containment. */
+    margin: 0;
+    padding: 0.9rem;
+    overflow-x: auto;
+  }
+
+  .ai-output-body :global(p) {
+    margin: 0 0 0.6rem;
+  }
+
+  .ai-output-body :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  /* Starlight styles no definition list, so give one a shape here. A field name
+     and its value read better as a two-column pair than as a run of paragraphs. */
+  .ai-output-body :global(dl) {
+    display: grid;
+    grid-template-columns: minmax(7rem, auto) 1fr;
+    gap: 0.4rem 1rem;
+    margin: 0;
+    align-items: baseline;
+  }
+
+  .ai-output-body :global(dt) {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  .ai-output-body :global(dd) {
+    margin: 0;
+    color: var(--sl-color-gray-1);
+  }
+
+  /* One column on a narrow screen: a 7rem name column starves the value. */
+  @media (max-width: 30rem) {
+    .ai-output-body :global(dl) {
+      grid-template-columns: 1fr;
+      gap: 0.15rem;
+    }
+
+    .ai-output-body :global(dd) {
+      margin-bottom: 0.5rem;
+    }
+  }
+
+  .ai-output-note {
+    margin: 0;
+    padding: 0.5rem 0.9rem;
+    border-top: 1px solid var(--sl-color-gray-5);
+    font-size: var(--sl-text-xs);
+    color: var(--sl-color-gray-2);
+  }
+</style>

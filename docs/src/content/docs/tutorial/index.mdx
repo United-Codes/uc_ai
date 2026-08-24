@@ -1,0 +1,62 @@
+---
+title: Tutorials
+description: Hands-on courses that build one working thing from an empty schema, in short lessons with real recorded output.
+sidebar:
+  order: 1
+---
+
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+**A tutorial builds one working thing, in order, from nothing.**
+
+The [guides](/products/uc-ai/docs/guides/quickstart/) explain one topic each, and
+you read them in any order. A tutorial is the other shape: every lesson adds one
+capability to the same artifact, and you finish with something that runs.
+
+Each lesson ends with output from a real recorded run, so you can compare what you
+get. Every SQL script is in the repository.
+
+## Available tutorials
+
+<CardGrid>
+
+<LinkCard
+  title="Build an Agent →"
+  description="9 lessons · 130 min · OpenAI. A service-contract desk that reads your tables, obeys rules your database owns, remembers each contract, and runs from a page without blocking it."
+  href="/products/uc-ai/docs/tutorial/service-contract-desk/01-the-scenario/"
+/>
+
+</CardGrid>
+
+### Build an Agent
+
+The one tutorial available today. You build an agent for a field-service company:
+a support engineer opens one service contract, and the desk answers about it and
+can raise a credit note against one of its invoices.
+
+It is the whole picture rather than one feature, so by the end you have met tools,
+the run context, prompt profiles, agents, the trace, memory, structured output,
+background execution, hooks and deployment — each where it was needed rather than
+in isolation.
+
+Four things it teaches that no guide covers:
+
+- **A tool the model cannot point at the wrong record.** The contract comes from
+  the run context, never from the model, and the lesson proves it with a forged
+  value instead of trusting the model to decline.
+- **A business rule the database owns.** Four conditions in PL/SQL decide whether
+  a credit note is allowed. The model asks; it cannot argue.
+- **How to find out what an agent actually did**, when the answer is wrong and the
+  prompt looks fine.
+- **How to ship an agent that is a row, not a file.**
+
+<Aside type="note" title="Start at lesson 1">
+Lesson 1 sets up the schema and checks your prerequisites, including the network
+step that needs a DBA. Later lessons build on the objects the earlier ones create.
+</Aside>
+
+<LinkCard
+  title="Start: The scenario, and your first answer"
+  description="Set up the demo schema, call a model from PL/SQL, and see where a prompt-only answer stops."
+  href="/products/uc-ai/docs/tutorial/service-contract-desk/01-the-scenario/"
+/>

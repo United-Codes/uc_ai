@@ -1,0 +1,177 @@
+---
+/**
+ * Header of one tutorial lesson.
+ *
+ * Every lesson starts with the same three things, in the same place, so a reader
+ * learns where to look:
+ *   the promise    what you can do at the end of this lesson
+ *   the position   which lesson this is, out of how many
+ *   the time       how long the lesson takes
+ *
+ * Usage:
+ *   <LessonHeader
+ *     lesson={3}
+ *     of={9}
+ *     minutes={20}
+ *     promise="the desk answers from your tables, and cannot read another contract."
+ *     scripts={["03_tools_read.sql"]}
+ *   />
+ */
+interface Props {
+  /** Number of this lesson. */
+  lesson: number;
+  /** How many lessons the course has. */
+  of: number;
+  /** Reading and doing time, in minutes. */
+  minutes: number;
+  /**
+   * What the reader can do at the end, as the end of "By the end of this
+   * lesson, ...". Rendered as HTML, so <code>...</code> works. Markdown does
+   * not: a prop is a plain string and no Markdown runs on it.
+   */
+  promise: string;
+  /** Scripts this lesson runs, in order. Optional. */
+  scripts?: string[];
+}
+
+const { lesson, of, minutes, promise, scripts = [] } = Astro.props;
+
+// Progress at the START of this lesson: nothing is done yet on lesson 1, and the
+// last lesson does not claim 100% before it is read.
+const percent = Math.round(((lesson - 1) / of) * 100);
+const repoBase =
+  "https://github.com/United-Codes/uc_ai/blob/main/examples/service-contract-desk/";
+---
+
+<div class="lesson-header" data-lesson={lesson}>
+  <p class="lesson-promise">
+    <strong>By the end of this lesson, <span set:html={promise} /></strong>
+  </p>
+
+  <div class="lesson-meta">
+    <span class="lesson-badge">Lesson {lesson} of {of}</span>
+    <span class="lesson-time" aria-label={`About ${minutes} minutes`}>
+      <svg
+        aria-hidden="true"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </svg>
+      ~{minutes} min
+    </span>
+
+    {
+      scripts.length > 0 && (
+        <span class="lesson-scripts">
+          Script:{" "}
+          {scripts.map((file, i) => (
+            <>{i > 0 ? <span>, </span> : null}<a href={`${repoBase}${file}`}>{file}</a></>
+          ))}
+        </span>
+      )
+    }
+  </div>
+
+  <div
+    class="lesson-progress"
+    role="img"
+    aria-label={`Lesson ${lesson} of ${of}, ${percent} percent of the course`}
+  >
+    <span class="lesson-progress-fill" style={`width: ${percent}%`}></span>
+  </div>
+</div>
+
+<style>
+  /* The progress bar is the divider. A rule under it as well reads as a
+     double rule, which looks like a mistake. */
+  .lesson-header {
+    margin: 0 0 2rem;
+  }
+
+  .lesson-promise {
+    margin: 0 0 0.75rem;
+    font-size: var(--sl-text-lg);
+    line-height: 1.5;
+    color: var(--sl-color-white);
+  }
+
+  .lesson-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.75rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+
+  .lesson-badge {
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    background: var(--sl-color-accent-low);
+    color: var(--sl-color-accent-high);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* A TRAILING separator, not a leading one. A ::before puts a lone dot at the
+     start of a wrapped line; a ::after leaves it at the end of the line before. */
+  .lesson-meta > *:not(:last-child)::after {
+    content: "·";
+    margin-left: 0.75rem;
+    color: var(--sl-color-gray-3);
+  }
+
+  /* The scripts item always wraps on a phone, so give it its own row and no
+     separator at all. */
+  @media (max-width: 30rem) {
+    .lesson-scripts {
+      flex-basis: 100%;
+    }
+
+    .lesson-meta > *:not(:last-child)::after {
+      content: none;
+      margin-left: 0;
+    }
+  }
+
+  .lesson-time,
+  .lesson-scripts {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+  }
+
+  .lesson-scripts {
+    white-space: normal;
+  }
+
+  .lesson-scripts a {
+    color: var(--sl-color-gray-2);
+    font-family: var(--sl-font-mono);
+    font-size: 0.9em;
+  }
+
+  .lesson-progress {
+    margin-top: 0.9rem;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--sl-color-gray-5);
+    overflow: hidden;
+  }
+
+  .lesson-progress-fill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--sl-color-accent);
+  }
+</style>
