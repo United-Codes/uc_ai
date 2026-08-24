@@ -31,6 +31,8 @@ Run context:
 
 Agents:
 
+- **[Remove an agent and its history](/products/uc-ai/docs/guides/multi-agent-systems/#removing-an-agent)**: `uc_ai_agents_api.purge_agent` deletes every version of an agent, its runs, the runs started from them, its sessions, the messages of both, and the memory that is only this agent's. Until now an agent that had run could not be deleted at all, because its history referenced it. A shared or global memory store, a session of another agent, and the prompt profile stay. To keep the history, archive the agent instead.
+- **`check_agent_not_referenced` sees two more references**: an orchestrator delegate and the first agent of a handoff are now found. Deleting or purging such an agent is refused, as it always was for a workflow step.
 - **[Agent as tool](/products/uc-ai/docs/guides/multi-agent-systems/agent-as-tool/)**: the new function `uc_ai_agents_api.run_agent_as_tool` is the whole handler of a tool that runs another agent. Register the tool with `p_function_call => 'return uc_ai_agents_api.run_agent_as_tool(''my_agent'', :parameters);'` and every agent, workflow step, and `generate_text` call can reach that agent as a normal tool. The function gives the tool arguments to the agent, hands it the run context of the caller, joins the session of the caller, and returns a failed run as text for the calling model.
 - **The orchestrator uses the same handler**: a delegate tool is now the same one-line handler, so both patterns behave alike.
 

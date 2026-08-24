@@ -241,6 +241,46 @@ as
 
 
   /*
+   * Deletes an agent and everything that belongs only to it.
+   *
+   * delete_agent removes the definition of one version and nothing else, so an
+   * agent that has ever run cannot be deleted: its history references it
+   * (ORA-02292). This procedure is the way out. It removes, for every version
+   * of the code:
+   *   - the run history: the executions of the agent and every run started from
+   *     them, the conversation sessions the agent opened, and the messages of
+   *     both,
+   *   - the memory that is only this agent's: its configuration row, its own
+   *     store (scope agent), its per-user stores, its per-context stores when
+   *     the agent did not share the namespace with other agents, and the stores
+   *     of the sessions that go with it. The files go with the store.
+   *   - every version of the agent itself.
+   *
+   * It keeps what other things also use: a shared or global memory store, a
+   * per-context store under a namespace that `store_code` shares with other
+   * agents, a session another agent opened, and the prompt profile - a profile
+   * lives without an agent and other agents can use it. It also keeps a tool
+   * that runs the agent: a tool names the agent in its PL/SQL text only, so
+   * delete such a tool yourself.
+   *
+   * To keep the history, do not purge: `change_status(p_code, p_version,
+   * c_status_archived)` hides an agent from resolution and keeps every row.
+   *
+   * Raises when another agent references this one (an orchestrator delegate, a
+   * workflow step), the same as delete_agent: purging it would leave that agent
+   * with a reference to nothing.
+   *
+   * Does not commit. Nothing is deleted until the caller commits, although the
+   * rows were written in autonomous transactions.
+   *
+   * @param p_code  Code of the agent. Every version of it is removed.
+   */
+  procedure purge_agent(
+    p_code in uc_ai_agents.code%type
+  );
+
+
+  /*
    * Changes the status of an agent by ID
    * 
    * @param p_id      ID of the agent

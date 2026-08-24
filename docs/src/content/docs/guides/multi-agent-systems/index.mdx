@@ -318,6 +318,58 @@ A workflow can then reference the structured fields, for example in an exit cond
 
 The [structured output guide](/products/uc-ai/docs/guides/structured_output/) has more information about response schemas.
 
+## Removing an agent
+
+An agent that has run cannot be deleted: its history points at it, and
+`delete_agent` therefore stops with `ORA-02292`. That is the default on purpose,
+because a deleted history cannot come back. You have three ways out.
+
+**Keep everything, hide the agent.** This is the usual one. The agent stops
+resolving, and every row stays:
+
+```sql
+BEGIN
+  uc_ai_agents_api.change_status('my_agent', 1, uc_ai_agents_api.c_status_archived);
+  COMMIT;
+END;
+/
+```
+
+**Delete a definition that never ran.** `delete_agent` removes one version and
+nothing else.
+
+**Delete the agent and everything that is only its.** `purge_agent` takes every
+version of the code, its runs, the runs started from them, its sessions, the
+messages of both, and its memory:
+
+```sql
+BEGIN
+  uc_ai_agents_api.purge_agent('my_agent');
+  COMMIT;
+END;
+/
+```
+
+<Aside type="caution">
+  A purge cannot be undone. The rows are gone when you commit, and the token
+  totals and the message log of those runs go with them. If you only want the
+  agent out of the way, archive it.
+</Aside>
+
+What a purge keeps, because other things also use it:
+
+| Kept                            | Why                                                    |
+| ------------------------------- | ------------------------------------------------------ |
+| The prompt profile              | A profile lives without an agent, and other agents can use it |
+| A `shared` or `global` memory store | More than one agent reads it                       |
+| A `context` memory store under a shared `store_code` | The namespace belongs to a group of agents |
+| A session another agent opened  | It is the conversation of that agent                   |
+| A tool that runs the agent      | A tool names the agent in its PL/SQL text only. Delete such a tool yourself |
+
+A purge stops when another agent references this one, as a delegate of an
+orchestrator, as a target of a handoff, or as a step of a workflow. Remove the
+reference first, or the other agent points at nothing.
+
 ## Session tracking and debugging
 
 UC AI records every agent run in the `uc_ai_agent_executions` table. Use the session ID to see the full trace:

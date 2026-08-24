@@ -1527,6 +1527,122 @@ create or replace package body uc_ai_agents_api as
 
 
   /*
+   * Deletes an agent and everything that belongs only to it.
+   */
+  procedure purge_agent(
+    p_code in uc_ai_agents.code%type
+  )
+  as
+    l_scope     uc_ai_logger.scope := gc_scope_prefix || 'purge_agent';
+    l_agents    pls_integer;
+    l_messages  pls_integer;
+    l_execs     pls_integer;
+    l_sessions  pls_integer;
+    l_stores    pls_integer;
+    l_config    pls_integer;
+    -- store keys are built from the agent code (see uc_ai_memory): compare by
+    -- prefix with substr, never with like - an agent code may hold an
+    -- underscore, which like would read as a wildcard
+    l_agent_key varchar2(4000 char) := 'agent:' || p_code;
+    l_user_key  varchar2(4000 char) := 'user:' || p_code || ':';
+    l_ctx_key   varchar2(4000 char) := 'context:' || p_code || ':';
+  begin
+    uc_ai_logger.log('Purging agent: ' || p_code, l_scope);
+
+    select count(*) into l_agents
+      from uc_ai_agents
+     where code = p_code;
+
+    if l_agents = 0 then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Agent'
+      , p1           => p_code
+      );
+    end if;
+
+    -- Purging an agent another one delegates to would leave that agent with a
+    -- reference to nothing. Same guard as delete_agent.
+    check_agent_not_referenced(p_code);
+
+    -- Messages hang off an execution and off a session, so both sides have to
+    -- go. The execution side walks the tree: a run started from inside a run of
+    -- this agent belongs to the history of this agent, whatever agent it ran.
+    delete from uc_ai_agent_messages
+     where execution_id in (
+             select e.id
+               from uc_ai_agent_executions e
+              start with e.agent_id in (select a.id from uc_ai_agents a where a.code = p_code)
+            connect by nocycle prior e.id = e.parent_execution_id
+           )
+        or session_id in (
+             select s.session_id
+               from uc_ai_agent_sessions s
+              where s.root_agent_id in (select a.id from uc_ai_agents a where a.code = p_code)
+           );
+    l_messages := sql%rowcount;
+
+    -- One statement for the whole hierarchy: the self-referencing
+    -- parent_execution_id is checked when the statement ends, so parents and
+    -- children may go together. Two statements would need the children first.
+    delete from uc_ai_agent_executions
+     where id in (
+             select e.id
+               from uc_ai_agent_executions e
+              start with e.agent_id in (select a.id from uc_ai_agents a where a.code = p_code)
+            connect by nocycle prior e.id = e.parent_execution_id
+           )
+        or session_id in (
+             select s.session_id
+               from uc_ai_agent_sessions s
+              where s.root_agent_id in (select a.id from uc_ai_agents a where a.code = p_code)
+           );
+    l_execs := sql%rowcount;
+
+    -- The memory of the agent. A shared store, a global store, and a context
+    -- store under a namespace of its own (store_code) stay: other agents read
+    -- them. The files go with the store through the foreign key.
+    delete from uc_ai_memory_stores s
+     where s.store_key = l_agent_key                                    -- scope agent
+        or substr(s.store_key, 1, length(l_user_key)) = l_user_key      -- scope user
+        or substr(s.store_key, 1, length(l_ctx_key)) = l_ctx_key        -- scope context, own namespace
+        or ( s.scope = 'session'
+             and s.session_id in (
+               select x.session_id
+                 from uc_ai_agent_sessions x
+                where x.root_agent_id in (select a.id from uc_ai_agents a where a.code = p_code)
+             )
+           );
+    l_stores := sql%rowcount;
+
+    delete from uc_ai_memory_config
+     where agent_code = p_code;
+    l_config := sql%rowcount;
+
+    delete from uc_ai_agent_sessions
+     where root_agent_id in (select a.id from uc_ai_agents a where a.code = p_code);
+    l_sessions := sql%rowcount;
+
+    delete from uc_ai_agents
+     where code = p_code;
+    l_agents := sql%rowcount;
+
+    uc_ai_logger.log(
+      'Purged agent ' || p_code
+      || ': ' || l_agents || ' versions, ' || l_execs || ' executions, '
+      || l_sessions || ' sessions, ' || l_messages || ' messages, '
+      || l_stores || ' memory stores, ' || l_config || ' memory config rows'
+    , l_scope
+    );
+  exception
+    when others then
+      uc_ai_logger.log_error('Error purging agent: ' || p_code, l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+      raise;
+  end purge_agent;
+
+
+  /*
    * Changes the status of an agent by ID
    */
   procedure change_status(
@@ -1835,15 +1951,26 @@ create or replace package body uc_ai_agents_api as
     l_ref_count   number;
     l_search_expr varchar2(4000 char);
   begin
-    -- Build search expression
+    -- Build search expression. Covers every place that names an agent under the
+    -- key "agent_code": a workflow step, a handoff_agents entry, and a
+    -- participant_agents entry.
     l_search_expr := '"agent_code"[[:space:]]*:[[:space:]]*"' || p_agent_code || '"';
-    
-    -- Search in workflow definitions and orchestration configs
+
+    -- Search in workflow definitions and orchestration configs. The two forms
+    -- that do NOT use that key need their own test: an orchestrator lists its
+    -- delegates as plain strings, and a handoff names its first agent under
+    -- "initial_agent_code". json_exists takes the code as a bind, so a code
+    -- with a regex character in it cannot change what is searched for.
+    -- @dblinter ignore(G-2180): the json_exists passing alias must be quoted; a JSON path variable name is case sensitive
     select count(*)
     into l_ref_count
     from uc_ai_agents
     where (workflow_definition is not null and regexp_like(workflow_definition, l_search_expr))
-       or (orchestration_config is not null and regexp_like(orchestration_config, l_search_expr));
+       or (orchestration_config is not null and regexp_like(orchestration_config, l_search_expr))
+       or (orchestration_config is not null
+           and json_exists(orchestration_config, '$.delegate_agents?(@ == $c)' passing p_agent_code as "c"))
+       or (orchestration_config is not null
+           and json_exists(orchestration_config, '$.initial_agent_code?(@ == $c)' passing p_agent_code as "c"));
     
     if l_ref_count > 0 then
       uc_ai_error.raise_error(
