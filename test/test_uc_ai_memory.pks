@@ -86,6 +86,15 @@ create or replace package test_uc_ai_memory as
   --%test(view_range end -1 reads to end of file)
   procedure view_range_minus_one_to_eof;
 
+  --%test(a view_range that is not an array of two integers is reported on a file)
+  procedure view_range_bad_shape_on_file;
+
+  --%test(a view_range outside the file is reported with the real line count)
+  procedure view_range_out_of_bounds_on_file;
+
+  --%test(an absent, null or empty view_range shows the whole file)
+  procedure view_range_empty_shows_whole_file;
+
   --%test(a directory listing ignores view_range, whatever a strict-mode provider invented)
   procedure view_directory_ignores_any_range;
 

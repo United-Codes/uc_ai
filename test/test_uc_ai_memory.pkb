@@ -492,6 +492,65 @@ create or replace package body test_uc_ai_memory as
   end view_range_minus_one_to_eof;
 
 
+  -- The file path still validates a range. read_view_range only decides whether
+  -- one was supplied; the shape and the bounds are the caller's to report.
+  procedure view_range_bad_shape_on_file
+  as
+  begin
+    uc_ai_memory.set_store(gc_shared);
+    ut.expect(run_txt('{"command":"create","path":"/memories/f.txt","file_text":"a\nb\nc"}'))
+      .to_be_like('File created%');
+
+    -- not an array at all: silently showing the whole file would hide the mistake
+    ut.expect(run_txt('{"command":"view","path":"/memories/f.txt","view_range":"1-5"}'))
+      .to_be_like('Error: Invalid `view_range` parameter: it must be an array of two integers%');
+
+    -- an array, but not of two entries
+    ut.expect(run_txt('{"command":"view","path":"/memories/f.txt","view_range":[1,2,3]}'))
+      .to_be_like('Error: Invalid `view_range` parameter: it must be an array of two integers%');
+    ut.expect(run_txt('{"command":"view","path":"/memories/f.txt","view_range":[2]}'))
+      .to_be_like('Error: Invalid `view_range` parameter: it must be an array of two integers%');
+  end view_range_bad_shape_on_file;
+
+
+  procedure view_range_out_of_bounds_on_file
+  as
+  begin
+    uc_ai_memory.set_store(gc_shared);
+    ut.expect(run_txt('{"command":"create","path":"/memories/f.txt","file_text":"a\nb\nc"}'))
+      .to_be_like('File created%');
+
+    ut.expect(run_txt('{"command":"view","path":"/memories/f.txt","view_range":[5,9]}'))
+      .to_be_like('%Lines must be within [1, 3]%');
+    -- end before start
+    ut.expect(run_txt('{"command":"view","path":"/memories/f.txt","view_range":[3,2]}'))
+      .to_be_like('%Lines must be within [1, 3]%');
+  end view_range_out_of_bounds_on_file;
+
+
+  procedure view_range_empty_shows_whole_file
+  as
+    l_res   varchar2(4000 char);
+    l_calls apex_t_varchar2 := apex_t_varchar2(
+      '{"command":"view","path":"/memories/f.txt"}'
+    , '{"command":"view","path":"/memories/f.txt","view_range":[]}'
+    , '{"command":"view","path":"/memories/f.txt","view_range":null}'
+    );
+  begin
+    uc_ai_memory.set_store(gc_shared);
+    ut.expect(run_txt('{"command":"create","path":"/memories/f.txt","file_text":"a\nb\nc"}'))
+      .to_be_like('File created%');
+
+    <<shape_loop>>
+    for i in 1 .. l_calls.count loop
+      l_res := run_txt(l_calls(i));
+      ut.expect(l_res).to_be_like('%a%');
+      ut.expect(l_res).to_be_like('%c%');
+      ut.expect(instr(l_res, 'Error') > 0).to_be_false();
+    end loop shape_loop;
+  end view_range_empty_shows_whole_file;
+
+
   -- A listing has no lines, so no range can mean anything against one. A model
   -- in strict mode has to send the argument and invents a value: [1,200],
   -- [0,0], [-1,-1] and [-1,0] were all seen from one model in one run. Refusing
@@ -1381,6 +1440,7 @@ create or replace package body test_uc_ai_memory as
       uc_ai_memory.check_run_ready(gc_agent_a, null);
       ut.fail('Expected -20426 for a run without the context key');
     exception
+      -- @dblinter ignore(g-5080): the assertion on sqlcode IS the report; a backtrace would add nothing to a test that exists to prove this error is raised
       when others then
         ut.expect(sqlcode).to_equal(uc_ai_memory.c_err_context_missing);
         ut.expect(sqlerrm).to_be_like('%document_id%');
@@ -1453,6 +1513,7 @@ create or replace package body test_uc_ai_memory as
       );
       ut.fail('Expected the run to fail, got status ' || l_res.get_string('status'));
     exception
+      -- @dblinter ignore(g-5080): the assertion on sqlerrm IS the report; a backtrace would add nothing to a test that exists to prove the run fails
       when others then
         ut.expect(sqlerrm).to_be_like('%document_id%');
     end;
