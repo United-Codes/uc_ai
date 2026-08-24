@@ -199,6 +199,14 @@ end if;
 `_ctx` is a reserved name. A tool that declares a parameter with this name is
 rejected at registration.
 
+**Read the arguments by name.** A handler that counts the keys, or that walks
+all of them, sees `_ctx` as one more key. Such a handler changed its meaning
+when the run context came, because the count went up by one for every tool. The
+signature stayed the same and the code kept compiling, so nothing showed the
+change. The built-in `MEMORY` tool had this defect: it treated "one key" as a
+wrapper object of a provider, and it stopped finding the wrapper. Read
+`l_args.get_string('city')`, not the shape of the object.
+
 The run context reaches a tool through the arguments. It does not reach a
 [PL/SQL workflow step](/products/uc-ai/docs/guides/multi-agent-systems/workflows/),
 because a step is not a tool.

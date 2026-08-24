@@ -30,6 +30,11 @@ One large prompt is not necessary. You break the problem into smaller steps, and
     href="/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/"
   />
   <LinkCard
+    title="Agent as Tool"
+    description="Register an agent as a normal tool that any caller can use"
+    href="/products/uc-ai/docs/guides/multi-agent-systems/agent-as-tool/"
+  />
+  <LinkCard
     title="Handoff"
     description="Agents transfer control of the conversation to the right specialist"
     href="/products/uc-ai/docs/guides/multi-agent-systems/handoff/"
@@ -49,6 +54,7 @@ One large prompt is not necessary. You break the problem into smaller steps, and
 | **Sequential workflow**      | Steps must run in a fixed order, each building on the previous    | Classify text, then summarize based on category                     |
 | **Loop workflow**            | You need iterative refinement until a quality threshold is met    | Generate a haiku, rate it, improve it, repeat                       |
 | **Orchestrator**             | A central AI must decide which agents to call, and in what order  | Travel planner delegating to calendar, flight, and hotel agents     |
+| **Agent as tool**            | A specialist must be one option among the normal tools of a caller | A support assistant asks a product research agent for catalog data  |
 | **Handoff**                  | One specialist must take over and answer the user directly        | Support triage routing to product, shipping, or account specialists |
 | **Round-robin conversation** | Multiple perspectives must take turns in a fixed order            | Brainstormer, critic, and synthesizer collaborate on a plan         |
 | **AI-driven conversation**   | A moderator must decide who speaks next                           | Panel discussion where the moderator picks the most relevant expert |
@@ -166,8 +172,9 @@ Three things then use these values:
   store per value.
 
 Every nested run inherits the context. A workflow step, an orchestrator delegate,
-and a handoff target all work on the same document, and none of them can drop the
-binding.
+a handoff target, and an [agent as
+tool](/products/uc-ai/docs/guides/multi-agent-systems/agent-as-tool/) all work on
+the same document, and none of them can drop the binding.
 
 The first turn binds the context to the session. A later turn of that session
 inherits it, so a follow-up turn does not have to pass it again. A later turn can
@@ -333,7 +340,8 @@ SELECT agent_id,
 
 Each run also records who started it, and from where. UC AI captures this
 context once, at the start of the top-level run. Every nested run shares it: a
-workflow step, an orchestrator sub-agent, and a handoff hop.
+workflow step, an orchestrator sub-agent, a handoff hop, and an agent that runs
+as a tool.
 
 | Column | Content |
 |--------|---------|

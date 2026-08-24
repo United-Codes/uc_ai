@@ -766,8 +766,19 @@ create or replace package body uc_ai_agents_api as
       return;
     end if;
 
+    -- A session that still has a run in flight stays "running", whatever this
+    -- caller finished. A nested run given a session of its own can be a run
+    -- inside a conversation another run is still working on; it must not
+    -- report that conversation as completed under it.
     update uc_ai_agent_sessions s
-       set s.status              = p_status,
+       set s.status              = case
+                                     when exists (select 1
+                                                    from uc_ai_agent_executions e
+                                                   where e.session_id = p_session_id
+                                                     and e.status = c_exec_running)
+                                     then c_exec_running
+                                     else p_status
+                                   end,
            s.last_activity_at    = systimestamp,
            s.turn_count          = (select count(*)
                                       from uc_ai_agent_executions e
@@ -2248,18 +2259,23 @@ create or replace package body uc_ai_agents_api as
     p_run_context       in json_object_t default null
   ) return json_object_t
   as
-    l_scope         uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
-    l_agent         uc_ai_agents%rowtype;
-    l_exec_id       uc_ai_agent_executions.id%type;
-    l_session_id    varchar2(255 char);
-    l_run_context   clob;
-    l_result        json_object_t;
-    l_usage         json_object_t;
-    l_input_tokens  number := 0;
-    l_output_tokens number := 0;
-    l_is_top_level  boolean;
-    l_prev_ctx      uc_ai.t_exec_context;
-    l_this_ctx      uc_ai.t_exec_context;
+    l_scope          uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
+    l_agent          uc_ai_agents%rowtype;
+    l_exec_id        uc_ai_agent_executions.id%type;
+    l_parent_exec_id uc_ai_agent_executions.id%type;
+    l_session_id     varchar2(255 char);
+    l_run_context    clob;
+    l_result         json_object_t;
+    l_usage          json_object_t;
+    l_input_tokens   number := 0;
+    l_output_tokens  number := 0;
+    l_tool_calls     number := 0;
+    l_iterations     number := 0;
+    l_is_top_level   boolean;
+    l_owns_session   boolean;
+    l_ctx_published  boolean := false;
+    l_prev_ctx       uc_ai.t_exec_context;
+    l_this_ctx       uc_ai.t_exec_context;
   begin
     uc_ai_logger.log('Executing agent: ' || p_agent_code, l_scope);
 
@@ -2338,8 +2354,38 @@ create or replace package body uc_ai_agents_api as
       );
     end if;
 
-    -- Generate session ID if not provided
-    l_session_id := coalesce(p_session_id, generate_session_id());
+    -- The context of the run this one starts from, if any. Read before the
+    -- session and the parent are resolved: both fall back to it.
+    l_prev_ctx := uc_ai.get_exec_context;
+
+    -- Session: the caller's explicit id wins. A nested run without one joins
+    -- the session it runs inside instead of opening one of its own - a tool
+    -- handler that delegates to another agent cannot know the session id.
+    -- Only a top-level turn falls through to a new session.
+    l_session_id := coalesce(
+                      p_session_id
+                    , case when not l_is_top_level then l_prev_ctx.session_id end
+                    , generate_session_id()
+                    );
+
+    -- Parent: the caller's explicit id wins. A nested run in the same session
+    -- links to the run it started from, so it is recorded as a child instead of
+    -- as a turn of its own. A nested run that deliberately opens another
+    -- session stays unlinked and keeps a session header of its own.
+    -- The ambient context is used for nested runs only: a context that a failed
+    -- run left behind must not attach a fresh top-level turn to a dead parent.
+    l_parent_exec_id := coalesce(
+                          p_parent_exec_id
+                        , case when not l_is_top_level
+                                and l_session_id = l_prev_ctx.session_id
+                               then l_prev_ctx.exec_id
+                          end
+                        );
+
+    -- A run without a parent owns its session header: create_execution creates
+    -- it, so this run also has to finish it. Without this a nested run that
+    -- opens a session of its own would leave the header in "running" forever.
+    l_owns_session := l_parent_exec_id is null;
 
     -- Fire the pre-execution hook (top-level only). A hook may veto by raising,
     -- aborting before any execution row is created or tokens are spent.
@@ -2356,14 +2402,13 @@ create or replace package body uc_ai_agents_api as
     -- Work out the run context before the execution row exists, so both the row
     -- and the session header record the binding this run actually ran under.
     --
-    -- Nesting is decided by the execution depth, not by p_parent_exec_id: a run
+    -- Nesting is decided by the execution depth, not by the parent id: a run
     -- started from inside a tool handler or a PL/SQL workflow step (and the
-    -- workflow summarizer agent) passes no parent id, yet it is nested and must
-    -- inherit the context it runs under - even when it opens a session of its
-    -- own. Reading the session binding is reserved for a genuine top-level turn,
-    -- where it also discards any execution context a previously failed run left
-    -- behind instead of letting it leak into this one.
-    l_prev_ctx    := uc_ai.get_exec_context;
+    -- workflow summarizer agent) is nested and must inherit the context it runs
+    -- under - even when it opens a session of its own and therefore takes no
+    -- parent above. Reading the session binding is reserved for a genuine
+    -- top-level turn, where it also discards any execution context a previously
+    -- failed run left behind instead of letting it leak into this one.
     l_run_context := resolve_run_context(
                        p_run_context => p_run_context
                      , p_inherited   => l_prev_ctx.run_context
@@ -2372,7 +2417,7 @@ create or replace package body uc_ai_agents_api as
                      );
 
     -- Create execution record
-    l_exec_id := create_execution(l_agent.id, l_session_id, p_parent_exec_id, p_input_parameters, l_run_context);
+    l_exec_id := create_execution(l_agent.id, l_session_id, l_parent_exec_id, p_input_parameters, l_run_context);
 
     -- Publish this agent's context so the per-tool-call hook (fired deep inside
     -- generate_text) can attribute a tool call to its agent and caller. Set per
@@ -2383,8 +2428,10 @@ create or replace package body uc_ai_agents_api as
     l_this_ctx.created_by  := g_exec_env.created_by;
     l_this_ctx.session_id  := l_session_id;
     l_this_ctx.apex_app_id := g_exec_env.apex_app_id;
+    l_this_ctx.exec_id     := l_exec_id;
     l_this_ctx.run_context := l_run_context;
     uc_ai.set_exec_context(l_this_ctx);
+    l_ctx_published := true;
 
     begin
       -- Execute based on agent type (delegating to sub-package)
@@ -2433,21 +2480,37 @@ create or replace package body uc_ai_agents_api as
         l_output_tokens := nvl(l_usage.get_number('completion_tokens'), 0);
       end if;
 
+      -- The counters the run reports about itself: the provider counts the tool
+      -- calls of a profile or orchestrator turn (a delegation is one of them),
+      -- and a workflow counts the steps it ran. Both stay 0 for a run that
+      -- reports neither. Without this, complete_execution writes its own
+      -- defaults and both columns read 0 for every run.
+      l_tool_calls := nvl(l_result.get_number('tool_calls_count'), 0);
+      l_iterations := nvl(l_result.get_number('_workflow_iterations'), 0);
+
       -- Update execution as completed
       complete_execution(
-        p_exec_id        => l_exec_id,
-        p_status         => c_exec_completed,
-        p_output_result  => l_result,
-        p_input_tokens   => l_input_tokens,
-        p_output_tokens  => l_output_tokens
+        p_exec_id          => l_exec_id,
+        p_status           => c_exec_completed,
+        p_output_result    => l_result,
+        p_iteration_count  => l_iterations,
+        p_tool_calls_count => l_tool_calls,
+        p_input_tokens     => l_input_tokens,
+        p_output_tokens    => l_output_tokens
       );
 
-      -- Persist this turn's messages and refresh the conversation header
-      -- (top-level only; nested sub-agent runs are captured via their parent
-      -- turn's result). Message persistence runs before maintain_session so the
-      -- header's message_count includes the messages just written.
+      -- Persist this turn's messages (top-level only; nested sub-agent runs are
+      -- captured via their parent turn's result). Message persistence runs
+      -- before maintain_session so the header's message_count includes the
+      -- messages just written.
       if l_is_top_level then
         persist_turn_messages(l_exec_id, l_session_id, l_result);
+      end if;
+
+      -- Refresh the conversation header of the session this run owns. A nested
+      -- run that joined the session of its caller leaves the header to that
+      -- caller's turn.
+      if l_is_top_level or l_owns_session then
         maintain_session(l_session_id, c_exec_completed);
       end if;
 
@@ -2465,9 +2528,10 @@ create or replace package body uc_ai_agents_api as
           p_error_message => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
         );
 
-        -- Refresh the conversation header to reflect the failed turn (top-level
-        -- only). No messages are persisted: the turn produced no usable result.
-        if l_is_top_level then
+        -- Refresh the conversation header of the session this run owns, to
+        -- reflect the failed turn. No messages are persisted: the turn produced
+        -- no usable result.
+        if l_is_top_level or l_owns_session then
           maintain_session(l_session_id, c_exec_failed);
         end if;
 
@@ -2488,6 +2552,18 @@ create or replace package body uc_ai_agents_api as
   exception
     when others then
       g_exec_depth := greatest(g_exec_depth - 1, 0);
+
+      -- The inner handler restores the caller's context as its last statement,
+      -- so an error raised inside that handler (complete_execution re-raises)
+      -- would leave the context of this failed run published. The next run
+      -- started by the caller would then take a dead execution as its parent
+      -- and inherit the run context of a run that never finished.
+      -- Only restore what was saved: before the context was published,
+      -- l_prev_ctx is still empty and restoring it would clear the caller's.
+      if l_ctx_published then
+        uc_ai.set_exec_context(l_prev_ctx);
+      end if;
+
       uc_ai_logger.log_error('Error executing agent: ' || p_agent_code, l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end execute_agent;
@@ -2530,6 +2606,96 @@ create or replace package body uc_ai_agents_api as
       uc_ai_logger.log_error('Error executing agent by ID', l_scope);
       raise;
   end execute_agent;
+
+
+  /*
+   * Runs an agent as a tool - the whole handler of a delegating tool.
+   */
+  function run_agent_as_tool(
+    p_agent_code    in uc_ai_agents.code%type,
+    p_arguments     in clob,
+    p_agent_version in uc_ai_agents.version%type default null,
+    p_session_id    in varchar2 default null
+  ) return clob
+  as
+    l_scope      uc_ai_logger.scope := gc_scope_prefix || 'run_agent_as_tool';
+    l_input      json_object_t;
+    l_context    json_object_t;
+    l_session_id varchar2(255 char);
+    l_result     json_object_t;
+    l_answer     clob;
+  begin
+    uc_ai_logger.log('Running agent as tool: ' || p_agent_code, l_scope, p_arguments);
+
+    -- A tool without parameters is called with no arguments at all
+    if p_arguments is null or sys.dbms_lob.getlength(p_arguments) = 0 then
+      l_input := json_object_t();
+    else
+      l_input := json_object_t(p_arguments);
+    end if;
+
+    -- The tool layer adds the run context under the reserved key. Take a copy
+    -- of it: it belongs to the run, not to the prompt. The copy also keeps the
+    -- reads below off a node that is about to lose its parent.
+    l_context := l_input.get_object(uc_ai.c_run_context_key);
+    if l_context is not null then
+      l_context := json_object_t(l_context.to_clob);
+    end if;
+    l_input.remove(uc_ai.c_run_context_key);
+
+    -- Session: the caller of the handler decides first. Inside an agent run the
+    -- session comes from the run itself, which execute_agent inherits. Outside
+    -- one - a tool of a plain generate_text call - the caller can group the runs
+    -- with the reserved "session_id" key of the run context.
+    -- g_exec_depth, not the published context, answers "am I inside a run": a
+    -- context that a failed run left behind must not hide the fallback.
+    l_session_id := p_session_id;
+
+    if l_context is not null and l_context.has('session_id') then
+      if l_session_id is null and g_exec_depth = 0 then
+        l_session_id := l_context.get_string('session_id');
+      end if;
+
+      -- It names the session; it is not a value of the run. Binding it to the
+      -- session would fill prompt placeholders with it and would collide with
+      -- a later turn (ORA-20507).
+      l_context.remove('session_id');
+    end if;
+
+    -- The key is always there, holding an empty object when the run carries no
+    -- context. Keep the execution row and the session header clean of it.
+    if l_context is not null and l_context.get_size = 0 then
+      l_context := null;
+    end if;
+
+    l_result := execute_agent(
+      p_agent_code       => p_agent_code
+    , p_agent_version    => p_agent_version
+    , p_input_parameters => l_input
+    , p_session_id       => l_session_id
+    , p_run_context      => l_context
+    );
+
+    -- get() reads text and the JSON object of a response schema alike;
+    -- get_clob returns null for the object. A JSON null is not an answer: it
+    -- has the key, and to_clob would give the model the 4 letters "null".
+    if l_result is not null
+       and l_result.has('final_message')
+       and not l_result.get('final_message').is_null
+    then
+      l_answer := l_result.get('final_message').to_clob;
+    end if;
+
+    -- A null result is an error for the tool layer, so always answer something
+    return coalesce(l_answer, 'The agent ' || p_agent_code || ' gave no answer.');
+  exception
+    -- @dblinter ignore(g-5040): a tool handler must answer the model in every case; a raised error would end the run of the caller
+    when others then
+      -- Deliberately no re-raise: the calling model reads this text as the tool
+      -- result and can react to the failure or ask something else.
+      uc_ai_logger.log_error('Error running agent as tool: ' || p_agent_code, l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+      return 'Error executing agent: ' || sqlerrm;
+  end run_agent_as_tool;
 
 
   /*

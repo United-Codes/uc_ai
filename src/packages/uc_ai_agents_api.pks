@@ -599,6 +599,49 @@ as
 
 
   /*
+   * Runs an agent as a tool: the whole handler of a tool that delegates to
+   * another agent. Register a tool with
+   *
+   *   p_function_call => 'return uc_ai_agents_api.run_agent_as_tool(''my_agent'', :parameters);'
+   *
+   * and the model can call that agent like any other tool. The function
+   *   - takes the tool arguments as the input parameters of the agent,
+   *   - hands the run context of the caller to the agent, without the reserved
+   *     uc_ai.c_run_context_key entry the tool layer added,
+   *   - joins the session of the caller and records the run as its child,
+   *   - returns the final message as text, also when a response schema made it
+   *     a JSON object,
+   *   - returns a failed run as text instead of raising, so the calling model
+   *     reads the error and can react to it.
+   *
+   * Outside an agent run - a tool of a plain generate_text call - there is no
+   * session to join. "session_id" in the run context is then read as the
+   * session to group the run with, so it is a reserved run-context key for a
+   * handler that uses this function. p_session_id overrides both.
+   *
+   * A conversation-type agent returns no final_message, so it cannot be run
+   * this way. Use a profile, workflow, orchestrator, or handoff agent.
+   *
+   * The agent code is baked into the one-line handler, and the tool layer reads
+   * a colon there as a second bind variable. An agent reached this way must
+   * therefore have a code without a colon.
+   *
+   * @param p_agent_code    Code of the agent to run
+   * @param p_arguments     The tool arguments as JSON text (the tool's single bind)
+   * @param p_agent_version Version number (null = latest active)
+   * @param p_session_id    Session to group the run with (null = the session of
+   *                        the caller, see above)
+   * @return                The final message of the run, or the error as text
+   */
+  function run_agent_as_tool(
+    p_agent_code    in uc_ai_agents.code%type,
+    p_arguments     in clob,
+    p_agent_version in uc_ai_agents.version%type default null,
+    p_session_id    in varchar2 default null
+  ) return clob;
+
+
+  /*
    * Persists a mid-run state checkpoint for a running execution into
    * uc_ai_agent_executions.current_state.
    *

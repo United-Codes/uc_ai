@@ -180,18 +180,18 @@ as
   -- ============================================================================
 
   /*
-   * Registers a child agent as a temporary tool for orchestration
+   * Registers a child agent as a temporary tool for orchestration.
+   *
+   * The tool handler is uc_ai_agents_api.run_agent_as_tool, which takes the
+   * session and the parent execution from the context of the orchestrator run.
    *
    * @param p_agent_code       Code of the agent to register
-   * @param p_exec_id          Execution ID for cleanup tracking
    * @param p_tool_tag         Tag to assign to the tool for identification
    * @return Tool ID of the created tool
    */
   function register_agent_as_tool(
     p_agent_code       in varchar2,
-    p_exec_id          in uc_ai_agent_executions.id%type,
-    p_tool_tag         in varchar2,
-    p_session_id       in varchar2
+    p_tool_tag         in varchar2
   ) return uc_ai_tools.id%type;
 
 

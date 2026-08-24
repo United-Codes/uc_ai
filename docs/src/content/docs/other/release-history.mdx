@@ -13,6 +13,9 @@ For new installations follow [this guide](https://www.united-codes.com/products/
 
 **Behavior note**:
 
+- **An agent that another agent starts is now a child run.** A run started from inside a tool handler, or from a PL/SQL workflow step, joins the session of the run it started from and records that run in `uc_ai_agent_executions.parent_execution_id`. It is no longer counted as a turn of the conversation: `turn_index` stays empty and `turn_count` on the session header counts the turns of the caller only. A report that read such a run as a turn shows one turn less for each delegation. An explicit `p_session_id` or `p_parent_exec_id` still wins.
+- **`uc_ai_agent_exec_api.register_agent_as_tool` lost two parameters.** The signature is now `register_agent_as_tool(p_agent_code, p_tool_tag)`. The session and the parent execution come from the context of the orchestrator run. Code that calls this internal registration function must drop `p_exec_id` and `p_session_id`.
+- **`iteration_count` and `tool_calls_count` hold their real values.** Both columns of `uc_ai_agent_executions` were always 0. A profile or orchestrator run now records the number of tool calls it made, and a workflow run records the number of steps it ran.
 - **Every tool call now carries one more argument.** UC AI adds the run context to the arguments JSON of every tool, under the reserved key `_ctx`. It holds an empty object when the run carries no context. A handler that reads named keys is not affected. A handler that walks all keys, or that refuses an unknown key, sees the new one. A tool can no longer declare a parameter with the name `_ctx`.
 
 **Features**:
@@ -25,6 +28,11 @@ Run context:
 - **A session keeps its binding**: the first turn binds the context to the session, so a follow-up turn does not have to pass it again. A later turn can add a key but cannot change one. A change raises the new error `-20507`.
 - **New columns**: `uc_ai_agent_executions.run_context` and `uc_ai_agent_sessions.run_context` record the effective context.
 - **Config-driven calls keep their execution context**: `uc_ai_settings.build_from_config` now snapshots the execution context, as `build_from_globals` does. A `generate_text` call with `p_config` inside an agent run therefore keeps its hook attribution and its run context.
+
+Agents:
+
+- **[Agent as tool](/products/uc-ai/docs/guides/multi-agent-systems/agent-as-tool/)**: the new function `uc_ai_agents_api.run_agent_as_tool` is the whole handler of a tool that runs another agent. Register the tool with `p_function_call => 'return uc_ai_agents_api.run_agent_as_tool(''my_agent'', :parameters);'` and every agent, workflow step, and `generate_text` call can reach that agent as a normal tool. The function gives the tool arguments to the agent, hands it the run context of the caller, joins the session of the caller, and returns a failed run as text for the calling model.
+- **The orchestrator uses the same handler**: a delegate tool is now the same one-line handler, so both patterns behave alike.
 
 Agent memory:
 

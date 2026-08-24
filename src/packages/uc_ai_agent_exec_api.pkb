@@ -874,19 +874,16 @@ create or replace package body uc_ai_agent_exec_api as
    */
   function register_agent_as_tool(
     p_agent_code       in varchar2,
-    p_exec_id          in uc_ai_agent_executions.id%type,
-    p_tool_tag         in varchar2,
-    p_session_id       in varchar2
+    p_tool_tag         in varchar2
   ) return uc_ai_tools.id%type
   as
     l_scope           uc_ai_logger.scope := gc_scope_prefix || 'register_agent_as_tool';
     l_tool_id         uc_ai_tools.id%type;
     l_function_call   clob;
     l_agent           uc_ai_agents%rowtype;
-    -- values are baked into the generated PL/SQL body as single-quoted literals;
-    -- double any embedded quote so they cannot break out of the literal
+    -- the code is baked into the generated PL/SQL body as a single-quoted
+    -- literal; double any embedded quote so it cannot break out of the literal
     l_safe_agent_code varchar2(4000 char) := replace(p_agent_code, '''', '''''');
-    l_safe_session_id varchar2(4000 char) := replace(p_session_id, '''', '''''');
   begin
     uc_ai_logger.log('Registering agent as tool: ' || p_agent_code, l_scope);
     
@@ -903,28 +900,10 @@ create or replace package body uc_ai_agent_exec_api as
         );
     end;
     
-    -- Create function call that executes the agent
-    l_function_call := q'!
-declare
-  l_input_clob clob;
-  l_input json_object_t;
-  l_result json_object_t;
-begin
-  l_input_clob := :arguments;
-  l_input := json_object_t(l_input_clob);
-
-  l_result := uc_ai_agents_api.execute_agent(
-    p_agent_code       => '!' || l_safe_agent_code || q'!',
-    p_input_parameters => l_input,
-    p_session_id       => '!' || l_safe_session_id || q'!',
-    p_parent_exec_id   => !' || p_exec_id || q'!
-  );
-
-  return l_result.get_string('final_message');
-exception
-  when others then
-    return 'Error executing agent: ' || sqlerrm;
-end;!';
+    -- The handler is the shared one: it strips the run context key, joins the
+    -- session of this orchestrator run, records the delegation as a child
+    -- execution, and returns a failure as text for the orchestrator model.
+    l_function_call := 'return uc_ai_agents_api.run_agent_as_tool(''' || l_safe_agent_code || ''', :parameters);';
 
     uc_ai_logger.log('Creating tool for agent: ' || p_agent_code, l_scope, l_function_call);
 
@@ -933,7 +912,9 @@ end;!';
       p_tool_code    => p_agent_code || '_TOOL_' || sys_guid(),
       p_description  => l_agent.description,
       p_function_call => l_function_call,
-      p_json_schema  => json_object_t(l_agent.input_schema),
+      -- An agent without an input schema takes no parameters: json_object_t of
+      -- a null CLOB raises ORA-40834, so give the tool an empty object schema.
+      p_json_schema  => json_object_t(coalesce(l_agent.input_schema, '{"type":"object","properties":{}}')),
       p_active       => 1,
       p_tags         => apex_t_varchar2(p_tool_tag),
       p_created_by   => 'UC_AI_AGENT_EXEC_API',
@@ -1106,9 +1087,7 @@ end;!';
 
         l_tool_id := register_agent_as_tool(
           p_agent_code       => l_delegate,
-          p_exec_id          => p_exec_id,
-          p_tool_tag         => l_tool_tag,
-          p_session_id       => p_session_id
+          p_tool_tag         => l_tool_tag
         );
 
         l_tool_ids.extend;

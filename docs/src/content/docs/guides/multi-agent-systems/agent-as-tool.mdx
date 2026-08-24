@@ -1,0 +1,379 @@
+---
+title: Agent as Tool
+description: Register an agent as a normal tool so any agent or generate_text call can run it
+sidebar:
+  order: 32
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**An agent as tool is a normal [tool](/products/uc-ai/docs/guides/tools/) whose PL/SQL handler runs another agent.** `uc_ai_agents_api.run_agent_as_tool` is that handler, so the tool takes one line.
+
+<Aside type="tip" title="When to use this">
+Choose an agent as tool when a specialist is one option among normal tools. Choose it also when more than one caller needs the same specialist. Choose the [orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/) when one central AI must coordinate a fixed group of delegates.
+</Aside>
+
+The orchestrator does this work for you. It registers each delegate agent as a temporary tool, and it deletes these tools after the run. The pattern on this page does the same with a permanent tool that you register one time. The tool is then available to every profile agent, to every workflow step, and to a direct `uc_ai.generate_text` call.
+
+This pattern is not an agent type. You do not set `p_agent_type` to a new value, and you do not write an `orchestration_config`. You register a tool, and you give this tool to a caller.
+
+## How it works
+
+1. You register the specialist as a normal agent
+2. You register a tool whose handler is `uc_ai_agents_api.run_agent_as_tool`
+3. You give the tool a tag. You then give this tag to the caller
+4. The caller model requests the tool, and UC AI runs the handler
+5. The handler runs the agent and returns the `final_message` of that run
+6. The caller model reads this text as the tool result
+
+### Orchestrator vs. agent as tool
+
+| Topic            | Orchestrator                             | Agent as tool                                     |
+| ---------------- | ---------------------------------------- | ------------------------------------------------- |
+| Registration     | UC AI registers the tools per run        | You register the tool one time                    |
+| Caller           | The orchestrator agent only              | Any agent, workflow step, or `generate_text` call |
+| Combination      | Delegate agents only                     | Agents and normal tools together                  |
+| Tool description | The description of the delegate agent    | Free text on the tool                             |
+| Parameters       | The `input_schema` of the delegate agent | The JSON schema of the tool                       |
+| Configuration    | `orchestration_config`                   | Tool tags                                         |
+
+## Example: a research specialist
+
+A support assistant answers customer questions. A second agent knows the product catalog. The assistant asks this specialist when it needs catalog data.
+
+### Step 1: Create the prompt profiles
+
+```sql
+DECLARE
+  l_profile_id NUMBER;
+BEGIN
+  -- The specialist: narrow task, cheap model
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                   => 'PRODUCT_RESEARCH_PROFILE',
+    p_description            => 'Answers questions about the product catalog',
+    p_system_prompt_template => 'You are a product catalog expert. '
+                             || 'Answer short and precise. Give prices in EUR.',
+    p_user_prompt_template   => 'Catalog question: {prompt}',
+    p_provider               => uc_ai.c_provider_anthropic,
+    p_model                  => uc_ai_anthropic.c_model_claude_4_5_haiku,
+    p_status                 => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  -- The caller: it gets the tool through the tag "research"
+  l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                   => 'SUPPORT_ASSISTANT_PROFILE',
+    p_description            => 'Support assistant with a research specialist',
+    p_system_prompt_template => 'You answer support questions. '
+                             || 'Ask the product research specialist for catalog data.',
+    p_user_prompt_template   => '{prompt}',
+    p_provider               => uc_ai.c_provider_anthropic,
+    p_model                  => uc_ai_anthropic.c_model_claude_5_sonnet,
+    p_model_config_json      => '{"g_enable_tools": true, "g_tool_tags": ["research"], "g_max_tool_calls": 6}',
+    p_status                 => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+### Step 2: Create the specialist agent
+
+The specialist is a normal [profile agent](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/). It can have its own model, its own tools, and its own [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/).
+
+```sql
+DECLARE
+  l_agent_id NUMBER;
+BEGIN
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'product_research_agent',
+    p_description         => 'Answers questions about the product catalog',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'PRODUCT_RESEARCH_PROFILE',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+
+  COMMIT; -- agents must be committed before they can be executed
+END;
+/
+```
+
+### Step 3: Register the agent as a tool
+
+`run_agent_as_tool` is the whole handler. Give it the agent code and the bind
+with the tool arguments:
+
+```sql
+DECLARE
+  l_tool_id NUMBER;
+BEGIN
+  l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+    p_tool_code        => 'ASK_PRODUCT_RESEARCH',
+    p_description      => 'Asks the product research specialist about the catalog. '
+                       || 'Use it for questions about product data, prices, and availability.',
+    p_function_call    => 'return uc_ai_agents_api.run_agent_as_tool(''product_research_agent'', :parameters);',
+    p_json_schema      => json_object_t('{
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "description": "The question for the product research specialist"
+        }
+      },
+      "required": ["prompt"]
+    }'),
+    p_tags             => apex_t_varchar2('research'),
+    p_code_mode_access => 'direct'
+  );
+
+  COMMIT;
+END;
+/
+```
+
+The function does this work for you:
+
+- It gives the tool arguments to the agent as its input parameters.
+- It deletes the reserved `_ctx` key first, so the run context is not one of the
+  input parameters of the agent.
+- It hands the run context of the caller to the agent.
+- It joins the session of the caller, and it records the run as a child of it.
+- It reads the final message as text, also when a [response
+  schema](/products/uc-ai/docs/guides/structured_output/) made it a JSON object.
+- It returns a failed run as text, so the calling model reads the error.
+
+A third parameter pins the version of the agent, and a fourth sets the session:
+
+```sql
+p_function_call => 'return uc_ai_agents_api.run_agent_as_tool(''product_research_agent'', :parameters, 3);'
+```
+
+<Aside type="note">
+  The model reads `p_description` and the JSON schema. These two texts control
+  how well the caller uses the specialist. Write them for the model, not for a
+  human reader.
+</Aside>
+
+### Step 4: Create the caller agent
+
+The caller is a profile agent again. Its prompt profile carries the tag `research`, so the model sees the tool.
+
+```sql
+DECLARE
+  l_agent_id NUMBER;
+BEGIN
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code                => 'support_assistant',
+    p_description         => 'Answers support questions with the aid of specialists',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'SUPPORT_ASSISTANT_PROFILE',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+### Step 5: Run the caller
+
+The caller passes nothing to the tool. The run of the specialist joins this session by itself.
+
+```sql
+DECLARE
+  l_result     json_object_t;
+  l_session_id VARCHAR2(100);
+BEGIN
+  l_session_id := uc_ai_agents_api.generate_session_id;
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'support_assistant',
+    p_input_parameters => json_object_t('{"prompt": "Which laptops are in stock under 1000 EUR?"}'),
+    p_session_id       => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+  DBMS_OUTPUT.PUT_LINE('Tool calls: ' || l_result.get_number('tool_calls_count'));
+END;
+/
+```
+
+A direct call uses the same tag:
+
+```sql
+DECLARE
+  l_result json_object_t;
+BEGIN
+  uc_ai.g_enable_tools := TRUE;
+  uc_ai.g_tool_tags    := apex_t_varchar2('research');
+
+  l_result := uc_ai.generate_text(
+    p_user_prompt => 'Which laptops are in stock under 1000 EUR?',
+    p_provider    => uc_ai.c_provider_anthropic,
+    p_model       => uc_ai_anthropic.c_model_claude_5_sonnet
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+
+  uc_ai.reset_globals; -- the tool tags must not leak into the next call
+END;
+/
+```
+
+## Write your own handler
+
+`run_agent_as_tool` covers the normal case. Write the handler yourself when you
+must map the arguments to other input parameter names, validate them first, or
+give the agent a file or a follow-up message. These rules apply then:
+
+- **One bind variable**: the handler gets all arguments as JSON in one bind. You
+  can choose the name of the bind. The examples use `:parameters`.
+- **Delete the run context key**: the arguments hold the run context under
+  `uc_ai.c_run_context_key` (`_ctx`). Delete this key before you pass the
+  arguments as input parameters.
+- **Return the text of the run**: `execute_agent` returns a JSON object. The
+  caller model needs the `final_message` of this object. Read it with
+  `get('final_message').to_clob`: with a [response
+  schema](/products/uc-ai/docs/guides/structured_output/) `final_message` holds
+  a JSON object, and `get_clob` returns null for it.
+- **Return a failure as text**: an `exception` block that returns a sentence
+  lets the caller model react to the failure. If an error leaves the handler,
+  the run of the caller stops.
+- **Never commit in the handler**: the handler runs in the transaction of the
+  caller. UC AI writes its execution rows in autonomous transactions, so these
+  rows survive without a commit of yours.
+
+```sql
+p_function_call => q'~
+declare
+  l_args    json_object_t := json_object_t(:parameters);
+  l_context json_object_t;
+  l_input   json_object_t := json_object_t();
+  l_result  json_object_t;
+begin
+  l_context := l_args.get_object(uc_ai.c_run_context_key);
+  l_args.remove(uc_ai.c_run_context_key);
+
+  -- your own mapping
+  l_input.put('question', l_args.get_string('prompt'));
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'product_research_agent',
+    p_input_parameters => l_input,
+    p_run_context      => l_context
+  );
+
+  -- a run can finish with no answer: final_message is then JSON null, and
+  -- to_clob of a JSON null gives the four letters "null"
+  if l_result.has('final_message') and not l_result.get('final_message').is_null then
+    return l_result.get('final_message').to_clob;
+  end if;
+
+  return 'The product research agent gave no answer.';
+exception
+  when others then
+    return 'The product research agent could not answer: ' || sqlerrm;
+end;~'
+```
+
+A conversation-type agent returns no `final_message`, so `run_agent_as_tool`
+cannot run it. Use a profile, workflow, orchestrator, or handoff agent as the
+specialist.
+
+Each tool call starts a new run of the specialist. The specialist does not
+remember the previous call, because the handler sends input parameters and no
+follow-up message. For state across calls, give the specialist [agent
+memory](/products/uc-ai/docs/guides/agent-memory/).
+
+## Session tracking
+
+A run of the specialist is a run of its own. It gets a row in `uc_ai_agent_executions`, with its own status, tokens, and duration.
+
+Inside a run of the caller, the specialist joins the session of that run, and `parent_execution_id` of its row names the execution of the caller. The run is a child, not a turn: `turn_index` stays empty, and the `turn_count` of the session counts the turns of the caller only. An orchestrator delegation is recorded the same way.
+
+Outside an agent run - a tool of a plain `uc_ai.generate_text` call - there is no run to join. The specialist run is then a top-level turn with a session of its own. `session_id` in the run context is the one reserved key of the pattern: give it the session you want, and the run joins that session. The fourth parameter of `run_agent_as_tool` does the same, and it wins over the key.
+
+One session ID groups all runs of the conversation:
+
+```sql
+SELECT a.code, e.status, e.total_input_tokens, e.total_output_tokens
+  FROM uc_ai_agent_executions e
+  JOIN uc_ai_agents a ON a.id = e.agent_id
+ WHERE e.session_id = :session_id
+ ORDER BY e.id;
+```
+
+Each execution row holds only the tokens of the model calls that this run made. The session totals therefore count the caller and the specialist one time each.
+
+The `before_execution` and `after_execution` [hooks](/products/uc-ai/docs/guides/execution-hooks/) run for the top-level run only. They do not see a delegation. The `before_tool_call` hook does see it, and it can stop the delegation with an error.
+
+## Message log at a glance
+
+The caller makes the model calls itself, and it reaches the specialist through a **tool call**. The [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript records one `tool_call` and `tool_result` pair, with the tool code in `tool_name`. The answer of the specialist is the `tool_output` of the `tool_result` row.
+
+```sql
+SELECT seq, role, agent_code, tool_name, SUBSTR(content, 1, 50) AS content
+  FROM uc_ai_agent_messages
+ WHERE session_id = :session_id
+ ORDER BY seq;
+```
+
+| seq | role          | agent_code          | tool_name              | content                          |
+| --- | ------------- | ------------------- | ---------------------- | -------------------------------- |
+| 1   | `user`        | *(null)*            |                        | `Which laptops are in stock ...` |
+| 2   | `tool_call`   | `support_assistant` | `ASK_PRODUCT_RESEARCH` |                                  |
+| 3   | `tool_result` | `support_assistant` | `ASK_PRODUCT_RESEARCH` | `Two models are in stock: ...`   |
+| 4   | `assistant`   | `support_assistant` |                        | `We have two laptops under ...`  |
+
+UC AI writes message rows for the top-level turn only. The turns inside the specialist are therefore not in the log. You see the question and the answer of the specialist, and not its own tool calls or reasoning. The execution row of the specialist holds its status and its tokens.
+
+## The run context
+
+A specialist that starts inside an agent run inherits the [run context](/products/uc-ai/docs/guides/tools/#the-run-context) of that run. A key such as `document_id` or `tenant_id` therefore also reaches every tool of the specialist.
+
+When the caller is a direct `uc_ai.generate_text` call, there is no agent run to inherit from. The run of the specialist is then a top-level run, and it starts with the bag the tool received. `run_agent_as_tool` covers both cases.
+
+The handler can add keys. It cannot change a key that the caller run already holds. UC AI raises `ORA-20507` for a conflict. The same key with the same value is not a conflict. Read more in [Binding a run to a value](/products/uc-ai/docs/guides/multi-agent-systems/#binding-a-run-to-a-value).
+
+A tool handler gets JSON only. Files that the caller sent with `p_files` therefore do not reach the specialist. Give the specialist a run-context key with the ID of the document, and let it read the document with a tool of its own.
+
+## Circular references
+
+An agent that reaches itself through its own tool starts a new run on each level. UC AI stops this recursion at 25 levels with `ORA-20405`. A chain through tools can reach the Oracle limit for recursive SQL first, because each level runs the handler with dynamic SQL. Both limits stop the recursion. The exception block of the handler then returns the error as text.
+
+<Aside type="caution">
+  Do not give the tag of the tool to the specialist that the tool runs. The
+  specialist then sees the tool that starts itself. The recursion stops, but
+  each level costs a full agent run first.
+</Aside>
+
+## Test the handler
+
+`uc_ai_tools_api.execute_tool` runs the tool directly. You see the answer of the specialist, and the caller model is not necessary:
+
+```sql
+DECLARE
+  l_result CLOB;
+BEGIN
+  l_result := uc_ai_tools_api.execute_tool(
+    p_tool_code   => 'ASK_PRODUCT_RESEARCH',
+    p_arguments   => json_object_t('{"prompt": "Which laptops are in stock?"}'),
+    p_run_context => '{"session_id": "TEST_SESSION_1"}'
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result);
+END;
+/
+```
+
+There is no agent run around this call, so the `session_id` key groups the run
+of the specialist. Inside a run of a caller the key is not necessary.
+
+## Tips
+
+- **Set `p_code_mode_access` to `direct`**: the default is `both`. A delegation costs model calls. With `direct`, only the model can request the tool. A [code-mode](/products/uc-ai/docs/guides/programmatic-tool-calling/) program cannot call it in a loop.
+- **One tool for each specialist**: a tool with an `agent_code` parameter lets the model run any agent. A separate tool for each specialist keeps the description precise, and you keep control of the choice.
+- **Limit the tool calls**: set `g_max_tool_calls` on the caller. Each delegation is one tool call, and each one is a full agent run.
+- **If the caller only routes, use a small model**: the specialist does the work. The caller reads the descriptions and picks.
+- **Pin the version for a stable result**: the handler runs the latest active version of the agent. Give the third parameter of `run_agent_as_tool` a version number when a new version must not change the behavior of the caller.

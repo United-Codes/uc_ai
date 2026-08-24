@@ -1004,17 +1004,22 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
        and output_result is null;
     ut.expect(l_count, p_test_name || ': every turn stored an output_result').to_equal(0);
 
-    -- Every child's parent is a top-level execution of the SAME session.
+    -- Every child hangs, over any number of levels, under a top-level execution
+    -- of the SAME session. A chain can be deeper than one level: an agent
+    -- reached as a tool starts a run under the run that called the tool, and
+    -- that run can itself be a delegate of an orchestrator.
     select count(*) into l_count
       from uc_ai_agent_executions c
      where c.session_id = p_session_id
        and c.parent_execution_id is not null
        and not exists (
-             select 1 from uc_ai_agent_executions p
-              where p.id = c.parent_execution_id
+             select 1
+               from uc_ai_agent_executions p
+              where p.parent_execution_id is null
                 and p.session_id = c.session_id
-                and p.parent_execution_id is null);
-    ut.expect(l_count, p_test_name || ': every child points at a top-level parent in the session').to_equal(0);
+             start with p.id = c.parent_execution_id
+            connect by nocycle prior p.parent_execution_id = p.id);
+    ut.expect(l_count, p_test_name || ': every child hangs under a top-level parent in the session').to_equal(0);
 
     -- The handoff wrapper delegates all LLM work: its own token totals stay 0.
     select count(*) into l_count

@@ -123,6 +123,11 @@ as
   , created_by  varchar2(255 char)
   , session_id  varchar2(255 char)
   , apex_app_id number
+    -- Execution row of the run that is active. Published per execution (not
+    -- just per top-level turn) so a run started from inside this one - a tool
+    -- handler that delegates to another agent, a PL/SQL workflow step - can be
+    -- recorded as its child instead of as a turn of its own.
+  , exec_id     number
     -- Run context: name/value pairs bound to this run (document_id, tenant_id,
     -- ...), serialized as a JSON object. Never sent to a model. Handed to every
     -- tool under c_run_context_key, used to fill prompt placeholders, and used
