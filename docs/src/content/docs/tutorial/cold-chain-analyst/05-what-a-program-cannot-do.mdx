@@ -1,0 +1,281 @@
+---
+title: What a program cannot do
+description: Prove the sandbox with five checks. None of them calls a model, so none of them costs anything.
+sidebar:
+  order: 5
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+
+<LessonHeader
+  lesson={5}
+  of={6}
+  minutes={20}
+  promise="you have proved that the generated code cannot write, cannot reach the database, and cannot get past your hook."
+  scripts={["cc_hook_pkg.sql", "05_limits.sql"]}
+  course="cold-chain-analyst"
+/>
+
+## The problem
+
+The model writes the code. You did not read it before it ran, and on the next run
+it will be different code.
+
+[Build an
+Agent](/products/uc-ai/docs/tutorial/service-contract-desk/03-tools-that-read/)
+answered this question for one record: bind the tool, then prove the binding with a
+forged value. Code mode needs the same treatment, and the proofs are different
+because the thing you do not trust is different.
+
+This whole lesson calls no model. All five checks cost nothing, and you can run
+them as often as you like.
+
+## Add a tool that writes
+
+`CC_FILE_CLAIM` is registered as `direct`:
+
+```sql
+l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+  p_tool_code        => 'CC_FILE_CLAIM'
+, p_description      => 'File one claim against one shipment that broke the cold chain. ...'
+, p_function_call    => 'return cc_analyst_pkg.file_claim(:ARGUMENTS);'
+, p_json_schema      => json_object_t('{ ... }')
+, p_tags             => apex_t_varchar2('coldchain')
+, p_code_mode_access => 'direct'
+);
+```
+
+This is the split code mode wants:
+
+- the **program** computes over large data
+- the **model** decides what to do with the small result
+- the **database** decides whether the decision is allowed
+
+Lesson 6 runs that split end to end. This lesson proves the first half of it: that
+a program cannot reach the write tool at all.
+
+## Check 1: a program cannot call it
+
+The program below names the tool exactly, with the right arguments. Shipment 7 is
+`SHP-2047`, and 150 minutes at 720 EUR is the claim the database agrees with:
+
+```js
+const result = await callTool("CC_FILE_CLAIM",
+  { shipment_id: 7, minutes_over: 150, amount_eur: 720 });
+```
+
+```
+{"error":"code execution failed: ORA-20504: Tool not found: CC_FILE_CLAIM",
+ "hint":"Fix the program and call the code tool again. ..."}
+```
+
+"Tool not found" is the honest answer from inside the program: for a program, this
+tool does not exist. The allow-list of the run answers before any of your code
+runs.
+
+<Aside type="tip" title="The run context still reaches your tools">
+A **run context** is a set of values you pass to a run, and UC AI adds them to the
+arguments of every tool of that run under the key `_ctx`. Code mode does not change
+it. UC AI adds the context on the PL/SQL side of the gateway, after the allow-list
+check, so the program never sees it and cannot change it. A `_ctx` key that a
+program puts in the arguments is overwritten. [Build an Agent, lesson
+3](/products/uc-ai/docs/tutorial/service-contract-desk/03-tools-that-read/) covers
+the run context in full.
+</Aside>
+
+## Check 2: the program cannot reach the database
+
+The program runs in an Oracle Multilingual Engine (MLE) context of type `PURE`. A
+`PURE` context has no access to SQL at all, and it removes every JavaScript API that
+reaches the database. The script writes an uncommitted row first, then
+runs this probe:
+
+```js
+const probe = {};
+try { probe.require = typeof require("mle-js-oracledb"); } catch (e) { probe.require = "blocked"; }
+try { await import("mle-js-oracledb"); probe.import = "reached"; } catch (e) { probe.import = "blocked"; }
+probe.globals = [typeof oracledb, typeof session, typeof soda, typeof plsffi].join(",");
+const result = probe;
+```
+
+```
+{"require":"blocked","import":"blocked","globals":"undefined,undefined,undefined,undefined"}
+   the uncommitted row of the caller is still pending: yes
+```
+
+The second line is the one that matters most, and it is easy to miss why.
+
+**`COMMIT` and `ROLLBACK` need no privilege.** A sandbox built only on privileges
+still lets generated code throw away the pending work of the caller. Removal of all
+SQL is what stops that, and it is why `PURE` is the context to use.
+
+<Aside type="caution" title="Your tools are not sandboxed">
+The program has no privilege. Your **tools** have all of them, and they run in the
+transaction of the caller, exactly as they do for a direct tool call. A tool that
+deletes rows deletes rows when a program calls it. Give a code-mode run
+read-oriented tools, and use tags to keep the others out.
+</Aside>
+
+## Check 3: the hook fires on every inner call
+
+A hook is a package you write. UC AI finds `before_tool_call` in it by name, and you
+attach the package to the session with one call:
+
+```sql
+uc_ai_agents_api.set_execution_hook('CC_HOOK_PKG');
+```
+
+<Aside type="caution" title="set_execution_hook applies to everything in the session">
+From that line until you clear it, every UC AI call in this session goes through
+`cc_hook_pkg`. Check 4 below arms the hook to refuse a tool, so a script that stops
+between the two would leave your session refusing `CC_GET_READINGS`.
+`05_limits.sql` clears it with `set_execution_hook(null)` as soon as check 4 is
+done, and `00_teardown.sql` clears it again.
+</Aside>
+
+`cc_hook_pkg` counts calls to `before_tool_call`:
+
+```sql
+procedure before_tool_call( ... )
+as
+begin
+  g_calls := g_calls + 1;
+
+  if p_tool_code = g_block_tool then
+    raise_application_error(-20999, 'Policy: ' || p_tool_code || ' is not allowed now.');
+  end if;
+end before_tool_call;
+```
+
+Then one program reads every shipment:
+
+```
+3. A program reads every shipment in one call:
+   {"shipments":24,"readings":1176}
+   before_tool_call fired 25 times.
+```
+
+Twenty-five. One for `CC_LIST_SHIPMENTS` and one for each of the 24
+`CC_GET_READINGS` calls. UC AI does not call the hook one time for the program. It
+calls the hook for every `callTool` inside it.
+
+So authorization and auditing through this hook keep working in code mode, which
+is the point. It also means that a hook which writes an audit row must be cheap.
+One tool call from the model can produce a hundred rows.
+
+<Aside type="note" title="Why 25 and not 26">
+This block calls the sandbox directly with `execute_agent_tool`, so nothing fires
+the hook for `uc_ai__run_code` itself. In a real model run the provider fires it
+for the meta-tool as well, and the number is 26.
+</Aside>
+
+## Check 4: a veto cannot be caught
+
+Now the hook refuses one tool, and the program catches the error and continues:
+
+```js
+let caught = "no";
+try {
+  await callTool("CC_GET_READINGS", { shipment_id: 7 });
+} catch (e) {
+  caught = "yes";
+}
+const result = { the_program_carried_on: caught };
+```
+
+The program finished. The request did not:
+
+```
+ORA-20503: Invalid code mode tool call: vetoed by the before_tool_call hook:
+ORA-20999: Policy: CC_GET_READINGS is not allowed now.
+```
+
+This is the one code-mode failure that is **not** handed to the model as data. UC
+AI records the veto and raises it after the sandbox returns. A program can catch
+the rejected promise, and it cannot catch its way past the decision.
+
+## Check 5: the call budget
+
+One program can make 100 tool calls. The number is a constant, not a setting:
+
+```js
+let ok = 0, stoppedAt = null;
+for (let i = 0; i < 150; i++) {
+  try { await callTool("CC_GET_LIMITS", {}); ok++; }
+  catch (e) { stoppedAt = i; break; }
+}
+const result = { calls_that_worked: ok, stopped_at_call: stoppedAt };
+```
+
+```
+{"calls_that_worked":100,"stopped_at_call":100}
+```
+
+A program can catch that error and keep calling. So UC AI stops a program for good
+after 1000 calls, whatever it catches.
+
+<Aside type="caution" title="The budget counts tool calls, not time">
+A program that loops forever without calling a tool never reaches the budget. Only a
+CPU limit stops it, and UC AI does not set one.
+</Aside>
+
+## Verification
+
+Every check above ran in the sandbox. No model was called, and nothing was written.
+
+```sql
+select count(*) as claims_filed from cc_claims;
+```
+
+```
+CLAIMS_FILED
+           0
+```
+
+```sql
+select code, code_mode_access
+  from uc_ai_tools
+ where code like 'CC\_%' escape '\'
+ order by code;
+```
+
+```
+CODE                 CODE_MODE_ACCESS
+CC_FILE_CLAIM        direct
+CC_GET_LIMITS        both
+CC_GET_READINGS      code
+CC_LIST_SHIPMENTS    code
+```
+
+All five checks must hold:
+
+- Check 1 returns `Tool not found: CC_FILE_CLAIM`.
+- Check 2 returns `blocked`, `blocked`, and four times `undefined`, and the
+  uncommitted row is still pending.
+- Check 3 prints 25.
+- Check 4 raises `ORA-20503` and names the hook in the message.
+- Check 5 stops at 100.
+
+Lesson 6 gives `CC_FILE_CLAIM` to an agent, and the claims arrive there.
+
+## Key takeaways
+
+- `code_mode_access` of `direct` keeps a tool out of every program, whatever the
+  program writes.
+- A `PURE` context removes all SQL, so generated code cannot read data and cannot
+  commit or roll back your transaction.
+- Your tools keep every privilege and run in the transaction of the caller. The
+  sandbox constrains the JavaScript, never the tools.
+- `before_tool_call` fires for each `callTool` inside a program. Keep it cheap.
+- A hook veto stops the request and cannot be caught by the program.
+- The budget is 100 tool calls for one program, and it is not configurable.
+
+**Full reference:** [The security
+model](/products/uc-ai/docs/guides/programmatic-tool-calling/#the-security-model).
+
+<LinkCard
+  title="Next lesson: Move code mode onto the agent, and measure it"
+  description="Move the flag onto a prompt profile, run the agent, read the program out of the message log, and see the whole comparison."
+  href="/products/uc-ai/docs/tutorial/cold-chain-analyst/06-ship-it-and-measure/"
+/>

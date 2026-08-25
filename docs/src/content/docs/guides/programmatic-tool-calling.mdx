@@ -20,6 +20,13 @@ Data-heavy work needs many of these round-trips. An example is "fetch every empl
 
 Code mode makes this **one** call. The model writes a short JavaScript program. UC AI runs the program in the database with the Oracle Multilingual Engine (MLE). The program calls your tools in a loop, filters the data, and aggregates it locally. It returns **only its final result** to the model. The intermediate tool output never reaches the context of the model.
 
+<Aside type="tip" title="Prefer to build it?">
+This page explains the feature. [Analyze Data at
+Scale](/products/uc-ai/docs/tutorial/cold-chain-analyst/01-twenty-six-tool-calls/)
+builds one working thing with it in six lessons, and it measures each shape: 26 tool
+calls and 34 413 input tokens become 1 tool call and 3 981.
+</Aside>
+
 <Aside type="tip" title="When code mode helps">
 Code mode helps most when a task needs **many tool calls**, **loops over lists**, or **large intermediate data** for one aggregate. For a single tool call, it adds nothing. The model can call that tool directly, and both options stay available.
 </Aside>
@@ -174,6 +181,8 @@ const result = { approved_travel_total: total };
 This is one `uc_ai__run_code` call. Only `{ approved_travel_total: ... }` goes back to the model. The expense rows of each employee stay in the database.
 
 The program can throw an error, call an unknown or forbidden tool, or pass the call budget. In each case, UC AI returns the error to the model **as data** and does not abort the request. The model can then correct the program on its next turn.
+
+There is one exception. A veto from the `before_tool_call` hook is **not** returned as data. UC AI records it and raises it after the sandbox returns, so a program that catches the rejected `callTool` still cannot continue the request.
 
 ## Limitations
 

@@ -1,0 +1,339 @@
+---
+title: The question that needs twenty-six tool calls
+description: Set up the demo schema, ask one batch question with normal tool calling, and write down the tokens it uses.
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={1}
+  of={6}
+  minutes={15}
+  promise="you have a token count for one batch question — and you have seen the same question fail on the tool-call limit a new installation gives you."
+  scripts={["00_setup.sql", "00_precheck.sql", "01_tools_classic.sql"]}
+  course="cold-chain-analyst"
+/>
+
+## What you build in this course
+
+You build the **cold-chain analyst**: an agent that reads the temperature logger
+of every shipment, finds the shipments that broke the cold chain, and files a
+claim for each one.
+
+The answer is three shipment numbers and one amount. To get there, something has
+to read 1176 temperature readings.
+
+Two words from this domain, because the lessons use them:
+
+- The **cold chain** is the unbroken cold transport of goods. A shipment breaks
+  it when it stays too warm for too long.
+- An **excursion** is a period above the temperature limit. A short excursion is
+  allowed. A long one is not.
+
+<Aside type="note" title="This course is about tokens, not correctness">
+A good model answers this question correctly with normal tool calling. The recorded
+run below does. What it cannot do is answer it in few tokens, and lesson 2 shows the
+difference.
+</Aside>
+
+## Before you start
+
+You need a UC AI installation that can reach a provider. If a call fails with
+`ORA-24247` or `ORA-29024`, the [network setup
+guide](/products/uc-ai/docs/guides/network-setup/) has the grants.
+
+<Aside type="caution" title="This course needs Oracle 23ai and one DBA step">
+Code mode runs the JavaScript of the model in a separate, locked-down schema, and
+there is no fallback without it. A DBA installs that schema one time with
+`scripts/install_ptc_sandbox.sql`. It takes a few minutes, and only this feature
+needs it. `00_precheck.sql` tells you whether it is there.
+</Aside>
+
+Three more facts before you run anything:
+
+- **Your data leaves the database.** Every lesson sends part of your prompt to a
+  provider over HTTPS. If that is not allowed, use
+  [Ollama](/products/uc-ai/docs/providers/ollama/) on a host you own, and change the
+  provider constant and the model constant.
+- **One run in this lesson is the expensive one.** Run B below used 34 413 input
+  tokens and 3 723 output tokens. Every other run of the whole course is smaller,
+  and the cheapest is 3 981 input tokens. If you do not want to pay for run B, run
+  only the section `The three tools` in `01_tools_classic.sql` and stop there. The
+  section after it is Run A. Then read the recorded numbers here and go to lesson 2.
+- **The recorded output comes from `claude-sonnet-4-6`.** Lesson 2 has a measured
+  table of four other providers that ran the same question, and one that got it
+  wrong.
+
+<Aside type="tip" title="Never registered a tool?">
+The [Quickstart](/products/uc-ai/docs/guides/quickstart/) registers a small one in
+five minutes. This course explains only as much as it needs.
+</Aside>
+
+## Set up the demo schema
+
+<Steps>
+
+1. Run `00_setup.sql`. It creates four tables and fills them with 24 shipments and
+   1176 readings. You can run it more than one time, because it drops the tables of
+   an earlier run first.
+
+2. Run `00_precheck.sql`. It checks the six things every lesson needs, and it
+   names the fix for each failure.
+
+3. Compile `cc_analyst_pkg.pks` and `cc_analyst_pkg.pkb`. These are the tool
+   handlers and the measuring helpers.
+
+</Steps>
+
+The precheck prints this when your database is ready:
+
+```
+1. UC AI is installed. Version 26.3.
+2. The database is version 23. Code mode is possible.
+3. The sandbox is installed. UC_AI.UC_AI_PTC_RUNNER points at UC_AI_MLE_SBX.UC_AI_PTC_RUNNER.
+4. A program ran in the sandbox and returned: {"sandbox":"ready","two_plus_two":4}
+5. The provider answered: READY
+   Tokens used: 18.
+6. The demo schema is in place (4 tables, 1176 readings).
+```
+
+Check 4 is the one that matters most. It hands three lines of JavaScript to the
+sandbox and reads the answer back, so it proves the whole path in one step. It calls
+no tool and no model.
+
+<Aside type="caution" title="If check 3 and check 4 disagree, believe check 4">
+Check 3 looks for the sandbox. Check 4 uses it. If check 3 fails and check 4
+succeeds, the sandbox is there and your schema simply cannot see how it is wired.
+</Aside>
+
+## The rule the analyst has to apply
+
+A shipment has a product class. Each class has a limit:
+
+```
+PRODUCT_CLASS   MAX_TEMP_C   SAMPLE_MINUTES   MAX_MINUTES_ABOVE   CLAIM_PER_HOUR_EUR
+FROZEN               -15.0               30                  60                  240
+CHILLED                8.0               30                  60                  120
+```
+
+One reading stands for 30 minutes. A **series** is readings above `max_temp_c` that
+follow each other with no gap.
+
+- A series that lasts **longer than** `max_minutes_above` is a break.
+- A series that is short enough is not a break, and it is worth nothing.
+- Add the minutes of every series that is a break. Ignore the others.
+- The claim is `ceil(those minutes / 60) * claim_per_hour_eur`.
+
+One shipment can have more than one break, and then you add them.
+
+Two of the 24 shipments are traps, and the setup script puts them there:
+
+- **`SHP-2044`** has two readings in a row above the limit. That is 60 minutes,
+  and 60 minutes is not longer than 60 minutes. No claim.
+- **`SHP-2058`** has three **single** readings above the limit, far apart. The
+  total is 90 minutes, which is more than the limit allows. The longest run is 30
+  minutes. No claim.
+
+`SHP-2058` is the interesting one. It punishes an analyst who adds up every
+minute above the limit, and it punishes an analyst who reads the numbers and
+forms an impression. Only the run-length rule gives the right answer.
+
+## Three tools, and why the question needs 26 calls
+
+`01_tools_classic.sql` registers three ordinary tools. A tool is a PL/SQL function
+that the model can call. You register it one time, and UC AI then offers it to the
+model on every run.
+
+Each tool needs a **JSON schema**. That schema is how you tell the model which
+arguments the tool takes. `"type": "object"` says the arguments arrive as a set of
+named values. `"properties"` names each one and gives it a type. `"required"` lists
+the ones the model must supply. The model reads the `description` of each property
+to decide what to put there.
+
+```sql
+l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+  p_tool_code     => 'CC_GET_READINGS'
+, p_description   => 'Return the temperature readings of ONE shipment, in time order.'
+, p_function_call => 'return cc_analyst_pkg.get_readings(:ARGUMENTS);'
+, p_json_schema   => json_object_t('{
+    "type": "object",
+    "properties": {
+      "shipment_id": { "type": "integer", "description": "The numeric shipment_id from CC_LIST_SHIPMENTS. This is not the shipment number." }
+    },
+    "required": ["shipment_id"]
+  }')
+, p_tags          => apex_t_varchar2('coldchain')
+, p_code_mode_access => 'both'
+);
+```
+
+The [tools guide](/products/uc-ai/docs/guides/tools/) covers the schema in full.
+This course changes only one thing about it, in lesson 4.
+
+The question the whole course asks is this one:
+
+> Which shipments broke the cold chain, and what is the total claim in EUR?
+
+Count what it needs:
+
+- one call to `CC_LIST_SHIPMENTS`
+- one call to `CC_GET_LIMITS`
+- **24 calls** to `CC_GET_READINGS`, one for each shipment
+
+That is 26 tool calls. There is no smaller shape, because the readings of one
+shipment are one tool result.
+
+<Aside type="caution" title="Write your tags in lower case">
+UC AI stores a tag in lower case, and the filter that reads it is case sensitive.
+So `apex_t_varchar2('ColdChain')` matches no tool, the model gets no tools at all,
+and nothing raises an error. Always write the tag in lower case.
+</Aside>
+
+## Run A: the tool-call limit a new installation gives you
+
+Nothing in this call sets a tool-call limit:
+
+```sql
+l_result := uc_ai.generate_text(
+  p_user_prompt   => c_question
+, p_system_prompt => c_system
+, p_provider      => uc_ai.c_provider_anthropic
+, p_model         => uc_ai_anthropic.c_model_claude_4_6_sonnet
+);
+```
+
+So UC AI uses its default, which is **10**. The question needs 26:
+
+```
+Run A, default budget, after 12.8 seconds:
+  ORA-20301: Maximum tool calls exceeded (limit: 10)
+
+  There is no answer, no token count and no result object.
+  The run raised, so everything it already paid for is gone.
+```
+
+Read that carefully, because it is better news than it looks. The run does not
+give you a shorter answer, and it does not warn you. It raises. You cannot mistake
+it for a result.
+
+<Aside type="note" title="The limit is checked between rounds">
+UC AI tests the limit before each new round of tool calls, and one round can hold
+several calls. So the number of calls that really run can pass the configured
+number by the size of the last round. So set the value by rounds, not by calls.
+</Aside>
+
+## Run B: give it a budget of 40
+
+```sql
+l_result := uc_ai.generate_text(
+  p_user_prompt    => c_question
+, p_system_prompt  => c_system
+, p_provider       => uc_ai.c_provider_anthropic
+, p_model          => uc_ai_anthropic.c_model_claude_4_6_sonnet
+, p_max_tool_calls => 40
+);
+```
+
+Now it finishes, and the answer is right:
+
+<AiOutput model="claude-sonnet-4-6" date="2026-08-25" seconds={46.6}>
+| Shipment | Class | Break details | Claimable min | Claim (€) |
+|---|---|---|---|---|
+| **SHP-2047** | FROZEN | 1 run × 5 readings = 150 min | 150 | **720** |
+| **SHP-2052** | CHILLED | 1 run × 3 readings = 90 min | 90 | **240** |
+| **SHP-2061** | FROZEN | Run 1: 120 min + Run 2: 90 min = 210 min | 210 | **960** |
+
+RESULT: SHP-2047, SHP-2052, SHP-2061 | 1920
+</AiOutput>
+
+It also found both traps and said why:
+
+> **SHP-2044**: 2 consecutive readings above 8 °C = exactly 60 min → **not** longer
+> than 60, no claim.
+> **SHP-2058**: Three isolated single readings above 8 °C, each only 30 min → no
+> claim.
+
+This is the number to remember:
+
+```
+run                   program   calls       in     out  trips   secs  finish_reason
+------------------------------------------------------------------------------------
+classic, 40 calls     no           26    34413    3723      3   46.6  stop
+```
+
+`cc_analyst_pkg` writes that line, and three of its functions produce the columns:
+
+- **`calls`** is `tool_calls_count`, from the result of `generate_text`.
+- **`program`** is `used_program`, which looks for a tool call named
+  `uc_ai__run_code` in the result.
+- **`trips`** is `round_trips`, which counts the assistant messages. One assistant
+  message is one HTTPS request to the provider, and each request re-sends the whole
+  conversation.
+
+`print_header` writes the two heading lines and `print_metrics` writes the row.
+Every lesson prints one, so the table at the end of the course is built from real
+runs.
+
+## Where the 34 413 input tokens go
+
+The 26 tool results are about 52 KB of JSON together, which is roughly 13 000
+tokens. The run paid **34 413**, about 2.6 times that.
+
+The reason is in the `trips` column. Each round of tool calling sends the **whole**
+conversation again: the system prompt, the question, and every tool result so far.
+So the readings of shipment 1 are in the request of round 2 and again in the request
+of round 3.
+
+Add a shipment and you pay for its readings in every later round, not one time. And
+the conclusion is still one line: three shipment numbers and one amount.
+
+## Verification
+
+Run this to see what the database says. The window functions are the run-length
+rule, in SQL:
+
+```sql
+select s.shipment_no
+     , cc_analyst_pkg.minutes_over(s.id) as minutes_over
+     , ceil(cc_analyst_pkg.minutes_over(s.id) / 60) * l.claim_per_hour_eur as claim_eur
+  from cc_shipments s
+  join cc_limits l on l.product_class = s.product_class
+ where cc_analyst_pkg.minutes_over(s.id) > 0
+ order by s.shipment_no;
+```
+
+Your output must match this, because the setup script fixes every value:
+
+```
+SHIPMENT_NO   MINUTES_OVER   CLAIM_EUR
+SHP-2047               150         720
+SHP-2052                90         240
+SHP-2061               210         960
+```
+
+Three shipments, 1920 EUR. Every later lesson prints this table again, so you never
+have to remember it.
+
+## Key takeaways
+
+- A question that loops over a list is N+1 tool calls, and the default tool-call
+  budget of 10 stops most of them.
+- Passing the budget raises `ORA-20301`. There is no partial answer and no result
+  object, so a failed run records no tokens either.
+- Normal tool calling re-sends every tool result on every later round. The cost of
+  a batch question grows faster than the data it reads.
+- The measurement to keep is one line: tool calls, input tokens, output tokens,
+  round trips, seconds.
+
+**Full reference:** [generate_text](/products/uc-ai/docs/api/generate_text/) has
+every parameter and the whole result structure.
+
+<LinkCard
+  title="Next lesson: One program instead of twenty-six calls"
+  description="Add one line, and let the model write a program that runs the loop inside the database."
+  href="/products/uc-ai/docs/tutorial/cold-chain-analyst/02-one-program-instead/"
+/>

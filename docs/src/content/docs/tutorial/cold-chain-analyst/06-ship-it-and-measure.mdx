@@ -1,0 +1,371 @@
+---
+title: Move code mode onto the agent, and measure it
+description: Move code mode onto a prompt profile, read the generated program out of the message log, and see the whole comparison.
+sidebar:
+  order: 6
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={6}
+  of={6}
+  minutes={20}
+  promise="one agent computes over 1176 readings and files three claims, and its whole trail is in two tables."
+  scripts={["06_agent_measure.sql"]}
+  course="cold-chain-analyst"
+/>
+
+## The problem
+
+Every lesson so far set a package global in the script that made the call. That is
+right for learning and wrong for production. The flag belongs with the agent, not
+with the code that calls the agent.
+
+**With the flag in your PL/SQL,** turning code mode off is a deployment. **With
+the flag on the prompt profile,** it is an update to one row.
+
+## Move the flag onto the prompt profile
+
+An agent has no model configuration of its own. It points at a prompt profile, and
+the profile carries `model_config_json`:
+
+```sql
+c_config constant clob := '{
+  "g_enable_tools": true,
+  "g_enable_programmatic_tools": true,
+  "g_tool_tags": ["coldchain"],
+  "g_max_tool_calls": 8
+}';
+```
+
+This object says four things.
+
+- **`g_enable_programmatic_tools`** is the same name as the package global. Every
+  configuration key is.
+- **`g_tool_tags` is lower case.** Tags are stored in lower case and the filter is
+  case sensitive. `"ColdChain"` here matches no tool, the model gets nothing, and
+  no error says so.
+- **`g_max_tool_calls` is 8**, not 40. Lesson 4 brought the run to one tool call,
+  so a budget less than the default is now the safe value rather than a risky one.
+- **`g_enable_tools` is still needed.** Code mode builds on tool calling.
+
+<Aside type="caution" title="Activate the profile and the agent">
+Both are created as drafts, and a draft does not resolve for a call that names no
+version. Miss either `change_status` line and the next run fails with "no data
+found" and nothing says why.
+</Aside>
+
+## Run the agent
+
+Nothing in this block mentions code mode. The row does.
+
+```sql
+-- Prove that the globals are not what turns code mode on here.
+uc_ai.reset_globals;
+
+l_params.put('analyst_name', 'Ines');
+l_params.put('today', to_char(sysdate, 'yyyy-mm-dd'));
+l_params.put('question', 'Audit every shipment. File a claim for each one that broke '
+  || 'the cold chain, then tell me what you filed and what the database refused.');
+
+l_result := uc_ai_agents_api.execute_agent(
+  p_agent_code       => 'CC_ANALYST'
+, p_input_parameters => l_params
+);
+```
+
+Two things there are deliberate. `reset_globals` clears every global, including the
+one lesson 2 set, so nothing in this block can be the reason code mode runs. And
+`today` comes from `sysdate`, because `00_setup.sql` makes every date relative to
+`sysdate`, and a literal date would age.
+
+This is the whole job the course promised: compute over 1176 readings, then write.
+
+```
+run                   program   calls       in     out  trips   secs  finish_reason
+------------------------------------------------------------------------------------
+agent run             yes           5    12964    2524      4   35.7  stop
+```
+
+<AiOutput model="claude-sonnet-4-6" date="2026-08-25" seconds={35.7}>
+All three claims were accepted. Here is the full audit report for Ines.
+
+| Shipment | Class | Minutes over | Claim | Status |
+|---|---|---|---|---|
+| SHP-2047 | FROZEN | 150 | €720 | filed |
+| SHP-2052 | CHILLED | 90 | €240 | filed |
+| SHP-2061 | FROZEN | 210 | €960 | filed |
+
+**Total filed: €1,920**
+</AiOutput>
+
+## The program is in the message log
+
+An agent run records every message. The program is the `tool_input` of the
+`uc_ai__run_code` call, and `tool_input` is a CLOB, so the whole program is there:
+
+```sql
+select m.seq
+     , m.role
+     , m.tool_name
+     , length(coalesce(m.tool_input, m.tool_output, m.content)) as detail_chars
+  from uc_ai_agent_messages m
+ where m.session_id = :session_id
+ order by m.seq;
+```
+
+```
+SEQ  ROLE          TOOL_NAME         DETAIL_CHARS
+  1  user                                     133
+  2  tool_call     uc_ai__run_code           2598
+  3  tool_result   uc_ai__run_code            239
+  4  tool_call     uc_ai__run_code           1864
+  5  tool_result   uc_ai__run_code            809
+  6  assistant                                 46
+  7  tool_call     CC_FILE_CLAIM              178
+  8  tool_call     CC_FILE_CLAIM              175
+  9  tool_call     CC_FILE_CLAIM              179
+ 10  tool_result   CC_FILE_CLAIM               79
+ 11  tool_result   CC_FILE_CLAIM               78
+ 12  tool_result   CC_FILE_CLAIM               79
+ 13  assistant                                1294
+```
+
+Read that list from the top. It is the whole run in thirteen rows.
+
+- Row 2 is 2598 characters of JavaScript. Row 3 is 239 characters, which is short
+  for a result and about right for an error — and it was one. The model wrote a
+  second program at row 4, and row 5 is the answer. Lesson 2 met this same retry.
+- Rows 7 to 9 are the three write calls, all in one round. The model computed one
+  time, then decided three times.
+- Rows 10 to 12 are what the database answered.
+
+Rows 2 and 4 are the audit trail. When somebody asks what the agent did to reach
+1920, the answer is the program your schema ran, and UC AI keeps it as a CLOB.
+
+Read it back like this:
+
+```sql
+select json_object_t.parse(m.tool_input).get_clob('code')
+  from uc_ai_agent_messages m
+ where m.session_id = :session_id
+   and m.role = 'tool_call'
+   and m.tool_name = uc_ai_tools_api.c_code_mode_tool_code;
+```
+
+The numbers are on the execution row:
+
+```sql
+select e.status
+     , e.tool_calls_count
+     , e.total_input_tokens
+     , e.total_output_tokens
+     , e.completed_at - e.started_at as duration
+  from uc_ai_agent_executions e
+ where e.agent_id = ( select a.id from uc_ai_agents a where a.code = 'CC_ANALYST' )
+ order by e.started_at desc
+ fetch first 5 rows only;
+```
+
+```
+STATUS      TOOL_CALLS_COUNT   TOTAL_INPUT_TOKENS   TOTAL_OUTPUT_TOKENS   DURATION
+completed                  5                12964                  2524   +00 00:00:35.6
+```
+
+This says 35.6 seconds and the metric line above says 35.7. Both are right, and they
+are two clocks: this one is `completed_at - started_at`, which the framework writes,
+and the metric line is `dbms_utility.get_time` around the whole call in your own
+script.
+
+<Aside type="caution" title="Trust the program, not the prose">
+In this recorded run the program was right and the summary was not. The model
+wrote "FROZEN: ⌈minutes / 60⌉ × €288/hr" in its explanation, and the real rate is
+240. Every number in the table above is correct, because the program computed
+them. The rate in the prose was invented afterwards. Read row 3 when the numbers
+matter, and never grade a run on its explanation.
+</Aside>
+
+## The whole comparison, on real numbers
+
+Five runs, one fixture, one question. The first four ask only for the answer. The
+last one also files the claims, so it does more work than the rows above it:
+
+| Run | Program | Tool calls | Input tokens | Output | Round trips | Seconds |
+| --- | --- | --- | --- | --- | --- | --- |
+| classic, default limit | – | – | – | – | – | `ORA-20301` at 12.8 |
+| classic, 40 calls | no | 26 | 34 413 | 3 723 | 3 | 46.6 |
+| code mode | yes | 5 | 20 280 | 3 380 | 5 | 48.0 |
+| code mode, big tools hidden | yes | 1 | 3 981 | 991 | 2 | 15.4 |
+| the agent, and it files | yes | 5 | 12 964 | 2 524 | 4 | 35.7 |
+
+Read the table in this order:
+
+- **Row 1 to row 2** is the cost of making the classic shape work at all: a raised
+  limit, 26 tool calls and 34 413 input tokens.
+- **Row 2 to row 3** is the flag. It saves 41 percent of the input tokens, and it
+  brings the run inside the default limit.
+- **Row 3 to row 4** is lesson 4, and it is the larger half. Hiding the two big
+  tools took the input from 20 280 to 3 981, because their results stopped reaching
+  the context window.
+- **Row 5 is not comparable to row 4.** It writes three claims, and this recording
+  also needed a second program after the first one failed. Compare it with row 2,
+  which does less: **5 tool calls instead of 26, and 2.7 times fewer input
+  tokens.**
+
+<Aside type="tip" title="Measure your own numbers">
+These are the numbers of this fixture, this model and this day. The shape of the
+win is the part that carries over. It grows with how much data crosses the wire,
+and with how many calls the question needs. Print `cc_analyst_pkg.print_metrics` on
+your own question before you decide.
+</Aside>
+
+## Turn it off without a deployment
+
+Nothing that calls the agent knows about code mode, so switching it is an update.
+`update_prompt_profile` replaces the whole row, so read the row first and pass every
+other column back unchanged. One line is the change:
+
+```sql
+declare
+  l_profile uc_ai_prompt_profiles%rowtype;
+  c_off constant clob := '{
+    "g_enable_tools": true,
+    "g_enable_programmatic_tools": false,
+    "g_tool_tags": ["coldchain"],
+    "g_max_tool_calls": 40
+  }';
+begin
+  l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('CC_ANALYST_PROFILE', 1);
+
+  uc_ai_prompt_profiles_api.update_prompt_profile(
+    p_code                   => l_profile.code
+  , p_version                => l_profile.version
+  , p_description            => l_profile.description
+  , p_system_prompt_template => l_profile.system_prompt_template
+  , p_user_prompt_template   => l_profile.user_prompt_template
+  , p_provider               => l_profile.provider
+  , p_model                  => l_profile.model
+  , p_model_config_json      => c_off
+  , p_parameters_schema      => l_profile.parameters_schema
+  );
+  commit;
+end;
+/
+```
+
+`g_max_tool_calls` moves to 40 in the same update, because this question needs 26
+tool calls without a program. The script sets it back to code mode afterwards, so
+your schema is left as the lessons describe it.
+
+## When not to use code mode
+
+Code mode is not free. It adds a large tool description to every request, and it
+asks the model to write correct JavaScript. It earns nothing in four cases:
+
+- **One tool call.** There is no loop to move. The model calls the tool.
+- **A question you already know.** If the question never varies, the right answer
+  is a view or a PL/SQL function, and one tool that returns it.
+- **A tool that writes.** Keep it `direct` and let the model call it deliberately.
+- **Delegation to another agent.** UC AI keeps that `direct` for the same reason.
+
+Code mode earns most in the case this course built. The **question** varies at run
+time. The tools already exist. The answer needs a loop over a list, and the answer
+is small.
+
+## Who filed the claim
+
+The claims are in the table, and one column is worth reading closely:
+
+```sql
+select s.shipment_no, c.minutes_over, c.amount_eur, c.filed_by
+  from cc_claims c
+  join cc_shipments s on s.id = c.shipment_id
+ order by s.shipment_no;
+```
+
+```
+SHIPMENT_NO   MINUTES_OVER   AMOUNT_EUR   FILED_BY
+SHP-2047               150          720   UC_AI
+SHP-2052                90          240   UC_AI
+SHP-2061               210          960   UC_AI
+```
+
+`filed_by` says `UC_AI`, the schema, and getting that right took one extra step in
+the handler.
+
+The obvious way to write an audit column is
+`coalesce(sys_context('APEX$SESSION','app_user'), sys_context('userenv','session_user'))`.
+Inside an agent run that returns **`UC_AI_AGENT_EXEC`**. UC AI needs an APEX
+session to make an HTTPS call, so it creates one and gives it that name. The name
+is not a person and not a schema, and an audit column that records it tells you
+nothing.
+
+So `cc_analyst_pkg` drops that name before it uses the value:
+
+```sql
+function filing_user return varchar2
+as
+  l_apex_user varchar2(255 char) := sys_context('APEX$SESSION', 'app_user');
+begin
+  if l_apex_user = uc_ai_agent_exec_api.c_synthetic_apex_user then
+    l_apex_user := null;
+  end if;
+
+  return coalesce(l_apex_user, sys_context('userenv', 'session_user'));
+end filing_user;
+```
+
+UC AI does the same thing for its own record. `uc_ai_agent_executions` for this run
+holds `created_by = UC_AI`, `apex_user` empty and `audience = db`, because the
+framework also refuses to treat its own synthetic session as a caller.
+
+<Aside type="caution" title="Read the caller from the execution row">
+For a real end user, prefer `uc_ai_agent_executions.created_by` and its
+`apex_user`, `db_user` and `audience` columns. They are captured one time, at the
+start of the run, before any synthetic session exists. A tool handler that asks
+`sys_context` sees whatever the framework needed at that moment.
+</Aside>
+
+## Verification
+
+Run `06_agent_measure.sql`. Then make sure that five things are true:
+
+- the metric line says `program = yes`
+- `uc_ai_agent_messages` holds a `uc_ai__run_code` tool call **and** three
+  `CC_FILE_CLAIM` tool calls
+- the execution row says `completed`
+- `cc_claims` holds exactly three rows, for 720, 240 and 960
+- `filed_by` is your schema name, not `UC_AI_AGENT_EXEC`
+
+Then run `00_teardown.sql`. It drops the four tables and the two packages, and it
+deletes the tool rows, the profile and the agent. It ends with a row of zeros. It
+**leaves the sandbox schema alone**, because that belongs to the DBA and to every
+other code-mode user of the database.
+
+## Key takeaways
+
+- Code mode is a key in `model_config_json` on the prompt profile:
+  `"g_enable_programmatic_tools": true`. The calling code never mentions it.
+- Write `g_tool_tags` in lower case. A wrong case matches no tool and raises no
+  error.
+- UC AI keeps the generated program in `uc_ai_agent_messages.tool_input`, as a
+  CLOB. That is the audit trail, and it is better evidence than the answer.
+- The saving comes from data that stops crossing the wire. Most of it came from
+  `code_mode_access`, not from the flag.
+- Measure before you decide. One tool call gains nothing from a program.
+- Inside an agent run, `sys_context('APEX$SESSION','app_user')` is
+  `UC_AI_AGENT_EXEC`, a session UC AI made for itself. Read the caller from
+  `uc_ai_agent_executions`, not from a tool handler.
+
+**Full reference:** [Programmatic tool
+calling](/products/uc-ai/docs/guides/programmatic-tool-calling/) and
+[Prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/).
+
+<LinkCard
+  title="Build an Agent"
+  description="The other course: one service contract, tools bound to it, a business rule the database owns, memory, structured output and an APEX page."
+  href="/products/uc-ai/docs/tutorial/service-contract-desk/01-the-scenario/"
+/>
