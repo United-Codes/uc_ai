@@ -1,0 +1,371 @@
+---
+title: Limit the damage of a run you already lost
+description: Assume a bad decision got through. Veto a tool call from outside the model, keep the kill switch in a row, roll the run back, and never hand an ORA error to a model.
+sidebar:
+  order: 6
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={6}
+  of={7}
+  minutes={20}
+  promise="every run has a veto you own, a kill switch that is a row, and a rollback — and you know what each one cannot see."
+  scripts={["06_blast_radius.sql"]}
+  course="payables-desk"
+/>
+
+## The problem
+
+Every lesson so far tries to stop a bad decision. This one assumes that one got
+through. The model does what the email said. The earlier controls did not catch
+it.
+
+**Without a bound on the run,** a wrong decision runs as often as the model likes
+and commits itself. **With one,** it stops, somebody can veto it, and somebody can
+take it back.
+
+The **blast radius** of a run is how much one bad run can cost you. Everything on
+this page makes that number smaller. None of it makes the run correct.
+
+## Stop a tool call with a hook
+
+An **execution hook** is a package you write. UC AI calls `before_tool_call`
+before every tool call, in every run, including a plain `uc_ai.generate_text`
+call. So it sees everything in the schema, and narrowing it to what you meant is
+your job.
+
+`ap_desk_hook` carries three rules, and they are deliberately of three different
+kinds:
+
+```sql
+procedure before_execution(
+  p_agent_id    in number
+, p_agent_code  in varchar2
+, p_created_by  in varchar2
+, p_apex_app_id in number
+, p_session_id  in varchar2
+)
+as
+begin
+  -- Rule 3 below counts, and this is where the count goes back to zero.
+  g_approve_attempts := 0;
+end before_execution;
+
+
+procedure before_tool_call(
+  p_agent_id    in number
+, p_agent_code  in varchar2
+, p_tool_code   in varchar2
+, p_created_by  in varchar2
+, p_session_id  in varchar2
+, p_apex_app_id in number
+)
+as
+  l_ctx     uc_ai.t_exec_context;
+  l_clerk   varchar2(255 char);
+  l_enabled pls_integer;
+begin
+  -- Narrow the control to the agent it is for. This hook fires for every agent
+  -- and every plain generate_text call in the schema, so a hook that reads only
+  -- p_tool_code vetoes that tool for everybody.
+  if p_agent_code != 'AP_DESK' or p_tool_code != 'AP_APPROVE_INVOICE' then
+    return;
+  end if;
+
+  -- Rule 1, standing state. The kill switch is a row.
+  select count(*) into l_enabled
+    from ap_controls c
+   where c.control_code = 'AGENT_APPROVALS_ENABLED'
+     and c.control_value = 'Y'
+     and rownum = 1;
+
+  if l_enabled = 0 then
+    raise_application_error(-20993, 'Agent approvals are switched off.');
+  end if;
+
+  -- Rule 2, identity. The run context reaches the hook.
+  l_ctx   := uc_ai.get_exec_context;
+  l_clerk := uc_ai.run_context_value(l_ctx.run_context, 'clerk');
+
+  if l_clerk is null then
+    raise_application_error(-20991
+      , 'An approval needs a named clerk in the run context.');
+  end if;
+
+  -- Rule 3, frequency. However many times the model asks, it asks once.
+  g_approve_attempts := g_approve_attempts + 1;
+
+  if g_approve_attempts > 1 then
+    raise_application_error(-20992, 'One approval attempt for each run.');
+  end if;
+end before_tool_call;
+```
+
+An exception here ends the run. It is not a refusal the model reads and explains
+away. That is what makes it a control rather than a suggestion.
+
+<Aside type="caution" title="Your counter resets in the wrong place">
+`before_execution` fires only for `execute_agent`. `before_tool_call` fires for a
+plain `uc_ai.generate_text` call as well, and on that path nothing resets the
+counter. So rule 3 bounds the **session** there, and the second call of the
+session dies with `ORA-20992`.
+
+A counter in a package global is per session. Reset it where the unit you mean to
+bound begins, and know which calls reach the hook.
+</Aside>
+
+<Aside type="caution" title="A hook cannot see the arguments">
+`before_tool_call` receives the tool code, the caller, the session and the
+application. It does **not** receive the arguments, and it cannot change them.
+
+So a hook enforces **capability** rules: who can call this tool, how often, and
+whether it is switched on at all. It cannot enforce **value** rules. An amount
+rule belongs in the handler, where the amount is.
+
+UC AI publishes the run context to the hook through `uc_ai.get_exec_context`, so
+identity rules work. Nothing publishes the arguments, so value rules do not.
+`get_exec_context` is filled by the time `before_tool_call` runs. It is **not**
+filled in `before_execution`.
+</Aside>
+
+Register it for your session while you experiment:
+
+```sql
+begin
+  uc_ai_agents_api.set_execution_hook('AP_DESK_HOOK');
+end;
+/
+```
+
+<Aside type="caution" title="A package named UC_AI_HOOK activates itself">
+A valid package with that name in the schema is picked up with no registration
+call, for **every agent and every session**. Compile one and you have changed the
+behavior of every agent in the schema, including other people's.
+
+Use `set_execution_hook` while you are learning, and clear it afterwards.
+[Lesson 7](/products/uc-ai/docs/tutorial/payables-desk/07-review/) has the query
+that tells you whether somebody already did this to your schema.
+</Aside>
+
+## The veto in a real run
+
+With the hook registered, ask the desk to approve an invoice and bind no clerk:
+
+```sql
+l_result := uc_ai_agents_api.execute_agent(
+  p_agent_code       => 'AP_DESK'
+, p_input_parameters => json_object_t('{"entity":"Ferrolux Deutschland GmbH"
+    ,"clerk_name":"Petra","today":"2026-08-25"
+    ,"question":"INV-88001 is in order. Approve it."}')
+, p_session_id       => uc_ai_agents_api.generate_session_id
+  -- An invoice and a vendor, and deliberately no clerk.
+, p_run_context      => json_object_t('{"invoice_id":"7001","vendor_no":"V-1001"}')
+);
+```
+
+```
+the veto ended the run: ORA-20991: An approval needs a named clerk in the run context.
+```
+
+Read that carefully, because it is the point of the lesson. The error came **out
+of `execute_agent`**. It is not a tool result the model gets to reason about and
+explain to the clerk. The run is over.
+
+The execution row records it, and records almost nothing else:
+
+```
+STATUS   TOOL_CALLS_COUNT   TOTAL_INPUT_TOKENS   TOTAL_OUTPUT_TOKENS   ERROR_MESSAGE
+failed                  0                    0                     0   ORA-20991: An approval needs a named clerk...
+```
+
+<Aside type="note" title="A failed run records no tokens and no messages">
+All three counters are `0`, and the run certainly called tools before the veto.
+UC AI has no result object to read them from when a run raises, so
+`tool_calls_count = 0` on a failed row does **not** mean no tool ran. Count the
+`tool_call` rows in `uc_ai_agent_messages` when you need the truth. This is the
+same point as [lesson 4 of the first
+course](/products/uc-ai/docs/tutorial/service-contract-desk/04-see-what-it-did/).
+</Aside>
+
+<Aside type="caution" title="Why this run needed a vendor_no">
+`p_run_context` above carries `vendor_no`, which has nothing to do with the hook.
+Lesson 5 scoped the memory of `AP_DESK` on `vendor_no`. A run that omits that key
+now stops with `ORA-20426`. The stop comes before the execution row exists, and
+before the hook runs.
+
+Enabling memory changed the calling contract of an agent you already had. That is
+worth knowing before a queued job starts failing on a key nobody remembers adding.
+</Aside>
+
+## Verification, part 1: the hook, with no run at all
+
+A hook is a PL/SQL procedure. Call it with the arguments UC AI passes, and
+assert on the exception. No provider, no tokens, and the same answer every time:
+
+```sql
+declare
+  procedure expect_veto(p_label in varchar2, p_tool in varchar2)
+  as
+  begin
+    ap_desk_hook.before_tool_call(
+      p_agent_id    => null
+    , p_agent_code  => 'AP_DESK'
+    , p_tool_code   => p_tool
+    , p_created_by  => 'petra.k'
+    , p_session_id  => 'no-run'
+    , p_apex_app_id => null
+    );
+    sys.dbms_output.put_line(rpad(p_label, 44) || ' -> NOT VETOED');
+  exception
+    when others then
+      sys.dbms_output.put_line(rpad(p_label, 44) || ' -> ' || sqlerrm);
+  end expect_veto;
+begin
+  expect_veto('a read tool, outside a run', 'AP_GET_INVOICE');
+  expect_veto('the write tool, with no clerk bound', 'AP_APPROVE_INVOICE');
+
+  update ap_controls set control_value = 'N'
+   where control_code = 'AGENT_APPROVALS_ENABLED';
+
+  expect_veto('the write tool, approvals switched off', 'AP_APPROVE_INVOICE');
+
+  -- Put it back. A block that leaves this at 'N' switches the desk off for every
+  -- later lesson, and nothing says why.
+  update ap_controls set control_value = 'Y'
+   where control_code = 'AGENT_APPROVALS_ENABLED';
+  commit;
+end;
+/
+```
+
+```
+a read tool, outside a run                   -> NOT VETOED
+the write tool, with no clerk bound          -> ORA-20991: An approval needs a named clerk in the run context.
+the write tool, approvals switched off       -> ORA-20993: Agent approvals are switched off.
+```
+
+The kill switch is an `update`. It needs no deployment, no compile and no release,
+and somebody who is not you can set it.
+
+## Verification, part 2: roll the run back
+
+The handler does not commit. The approval is written in the transaction of the
+**caller**, so the caller decides:
+
+```sql
+begin
+  l_result := uc_ai_agents_api.execute_agent( ... );
+  commit;
+exception
+  when others then
+    rollback;
+    raise;
+end;
+```
+
+That matters most when a run fails **after** a write. The approval is still in
+your transaction. Roll back, or you keep an approval that the clerk never saw and
+the model never confirmed.
+
+```
+{"status":"approved","approval_no":"AP-5007","invoice_no":"INV-88001","amount":5712,"approved_by":"petra.k"}
+approvals before 1, after the rollback 1
+approval numbers went 5006 -> 5008, so 1 number(s) are gone
+```
+
+The row went, and the approval number did not come back with it.
+
+## Verification, part 3: what the model is told when your code breaks
+
+A handler that ends with `when others then return sqlerrm;` puts your table
+names, your column names and your line numbers into the tool result. The model
+repeats them to the clerk, and the clerk forwards the mail to the supplier.
+
+The block below shows the two **shapes** side by side. It is not a recorded tool
+call: it takes one database error and prints the string each style of handler
+returns.
+
+```
+a handler that returns sqlerrm hands the model:
+   Error executing tool: ORA-06502: PL/SQL: value or conversion error: character to number conversion error
+ap_desk_pkg hands the model:
+   The approval could not be completed. Quote reference ERR-20260825005959444 to support.
+```
+
+The real error and its backtrace go to `ap_desk_errors`, in a transaction of
+their own, so the reference survives a rollback of the run that produced it:
+
+```
+ERROR_REF                MESSAGE
+ERR-20260825005959444    ORA-06502: PL/SQL: value or conversion error: character to n...
+```
+
+<Aside type="caution" title="Providers do not agree on what a failing tool does">
+When a handler raises, UC AI 26.3 does two different things depending on the
+provider:
+
+- **Google and OCI** turn the exception into a tool result of the form
+  `Error executing tool: <sqlerrm>`. The model reads it and can repeat it.
+- **OpenAI, Anthropic, Ollama and the Responses API** let the exception out of
+  `generate_text`. The run fails.
+
+Two consequences. Sanitize your own errors, because on some providers the text
+reaches the model. And do not use a raise from a handler as a stop, because on
+other providers it ends the whole run instead. Return a refusal for a business
+decision. Raise in the hook for a hard stop.
+</Aside>
+
+## Cap how many tools one run may call
+
+`g_max_tool_calls` bounds the tool loop. The default is 10. What happens at the
+bound is not the same everywhere either:
+
+- On most providers UC AI raises `ORA-20301`, *Maximum tool calls exceeded*.
+- On the OpenAI **Responses API**, which is the default OpenAI path, the loop
+  exits quietly and the run finishes.
+
+One round can hold several calls, and UC AI checks the limit between rounds. So
+the number of calls that run can pass the number you set, by the size of the last
+round. Read the trace when you need the true count.
+
+## Core has no spend limit
+
+Core UC AI has no spend cap and no rate limit. It counts tokens. It does not know
+what your provider charges, and there is no price column in the schema.
+
+Budgets, per-model pricing and rate limiting are
+[Guardrails](/products/uc-ai/docs/guides/guardrails/), which is part of UC AI Pro.
+What core gives you is the tool-call cap above, and the hook above that.
+
+## Clear the hook
+
+```sql
+begin
+  uc_ai_agents_api.set_execution_hook(null);
+end;
+/
+```
+
+## Key takeaways
+
+- Bound every run before you trust any of it: a call limit, a veto you own, and a
+  caller that decides when to commit.
+- A hook enforces capability rules, because it sees the tool and the caller. It
+  cannot enforce value rules, because it never sees the arguments.
+- `raise_application_error(-20993, 'Agent approvals are switched off.')` in
+  `before_tool_call` is a kill switch that needs no deployment and no prompt
+  change.
+
+**Full reference:** [Execution
+hooks](/products/uc-ai/docs/guides/execution-hooks/) has the whole contract and
+the four hook points.
+
+<LinkCard
+  title="Next lesson: Read your own configuration"
+  description="Four queries that answer what this agent can do, what it tried, and how to switch it off."
+  href="/products/uc-ai/docs/tutorial/payables-desk/07-review/"
+/>

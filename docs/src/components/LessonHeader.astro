@@ -15,6 +15,7 @@
  *     minutes={20}
  *     promise="the desk answers from your tables, and cannot read another contract."
  *     scripts={["03_tools_read.sql"]}
+ *     course="service-contract-desk"
  *   />
  */
 interface Props {
@@ -32,15 +33,27 @@ interface Props {
   promise: string;
   /** Scripts this lesson runs, in order. Optional. */
   scripts?: string[];
+  /**
+   * Directory of this course under examples/ in the repository. The script
+   * links point there. Defaults to the first course, so its lessons need no
+   * change.
+   */
+  course?: string;
 }
 
-const { lesson, of, minutes, promise, scripts = [] } = Astro.props;
+const {
+  lesson,
+  of,
+  minutes,
+  promise,
+  scripts = [],
+  course = "service-contract-desk",
+} = Astro.props;
 
 // Progress at the START of this lesson: nothing is done yet on lesson 1, and the
 // last lesson does not claim 100% before it is read.
 const percent = Math.round(((lesson - 1) / of) * 100);
-const repoBase =
-  "https://github.com/United-Codes/uc_ai/blob/main/examples/service-contract-desk/";
+const repoBase = `https://github.com/United-Codes/uc_ai/blob/main/examples/${course}/`;
 ---
 
 <div class="lesson-header" data-lesson={lesson}>

@@ -211,6 +211,12 @@ free to call `SC_RAISE_CREDIT_NOTE` with any arguments it likes. The handler sti
 reads the contract from `_ctx`, still checks the coverage window, and still returns
 `OUT_OF_WINDOW`. The boundary is in the PL/SQL, so no wording moves it.
 
+The harder case is text the engineer did **not** write: a supplier email, an
+uploaded document, a ticket body that reaches the model through a tool result.
+[Secure an
+Agent](/products/uc-ai/docs/tutorial/payables-desk/01-the-attack-surface/) is about
+that case, and it starts with a recorded run where one email redirects a payment.
+
 <Aside type="caution" title="What the run context does not protect">
 The run context binds the arguments of a tool. It does not choose which tools the
 agent has. A carefully written `SC_RAISE_CREDIT_NOTE` is no protection when the same
