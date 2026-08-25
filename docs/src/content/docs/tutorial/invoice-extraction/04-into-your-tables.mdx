@@ -1,0 +1,253 @@
+---
+title: From the answer into your tables
+description: Walk the JSON into an invoice header and its lines, read money out of JSON without getting it wrong, and see what is left for a person to look at.
+sidebar:
+  order: 4
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+
+<LessonHeader
+  lesson={4}
+  of={5}
+  minutes={15}
+  promise="one document becomes an invoice header and its lines, and a single query tells you which invoices a person still has to look at."
+  scripts={["04_post.sql"]}
+  course="invoice-extraction"
+/>
+
+## The problem
+
+You have a checked JSON answer and five empty tables. What is left is ordinary
+PL/SQL, and there is one place in it where it is easy to be wrong by a factor of a
+hundred with no error at all.
+
+No block in this lesson calls a model. Every one works from an answer that is
+already stored, so the whole script is free to run as often as you like.
+
+## Store the raw answer before you parse it
+
+`extract_document` writes the answer into `inv_extractions.raw_json` before
+anything looks at it. Two reasons, and you use both in this lesson:
+
+- Writing the rows a second time costs nothing, because it reads the stored answer
+  and not a new run.
+- When your code meets a value you did not plan for, the evidence is still there.
+
+The same row keeps the token counts and how long the run took. Lesson 5 builds a
+cost report from them.
+
+## Walk the JSON into rows
+
+The header is a list of assignments. The lines are one loop:
+
+```sql
+l_lines := l_inv.get_array('line_items');
+
+<<line_loop>>
+for i in 0 .. l_lines.get_size - 1 loop
+  l_line := treat(l_lines.get(i) as json_object_t);
+
+  l_description := substr(
+    regexp_replace(l_line.get_string('description'), '\s+', ' '), 1, 400);
+  l_position    := l_line.get_number('position');
+  l_kind        := l_line.get_string('kind');
+  l_quantity    := l_line.get_number('quantity');
+  l_unit_price  := l_line.get_number('unit_price');
+  l_line_total  := l_line.get_number('line_total');
+
+  insert into inv_invoice_lines (
+    invoice_id, seq, position, description, kind, quantity, unit_price, line_total
+  ) values (
+    l_invoice_id, i + 1, l_position, l_description, l_kind, l_quantity
+  , l_unit_price, l_line_total
+  );
+end loop line_loop;
+```
+
+Three details are not decoration:
+
+- **Read each value into a variable first.** A `json_object_t` lives in PL/SQL and
+  cannot be used inside a `select`, `insert`, `update` or `delete`.
+- **`substr` on every string.** Your schema puts no maximum length on a text field,
+  so nothing stops a value from being longer than your column.
+- **`seq` is `i + 1`, not `position`.** `seq` is the order the lines arrived in.
+  `position` is the number **printed** on the page, which is `10, 20, 30` on the
+  German invoice and missing altogether on a charge printed under the table.
+
+Six rows come out:
+
+```
+SEQ  POSITION  KIND      QUANTITY  UNIT_PRICE  LINE_TOTAL  DESCRIPTION
+  1         1  GOODS            2         412         824  Servo gearbox SG-40, ratio 1:25 Part no. FT-SG40-25
+  2         2  GOODS           12        28.5         342  Sealed bearing unit, 40 mm bore Part no. FT-BU40-S
+  3         3  GOODS            6       64.75       388.5  Hydraulic hose assembly, 1.8 m Part no. FT-HH18
+  4         4  GOODS           10        19.3         193  Drive belt, toothed, 1250 mm Part no. FT-DB1250
+  5         5  SERVICE          4          86         344  On-site support, senior engineer Service, 4 hours on site
+  6         6  FREIGHT          0           0          45  Delivery
+```
+
+Look at line 6. The delivery charge has a quantity of 0 and a unit price of 0,
+because the page prints neither. That is why `inv_invoice_lines` has no check
+constraint on `quantity`, and why `line_total` has no positive check either: a
+discount line is negative.
+
+## Read money as a number, not as text
+
+This is the part that costs people real money.
+
+A JSON number always uses a dot: `7676.51`, never `7676,51`. Much of the world
+writes it the other way, and Oracle follows whatever session it runs in. So the
+same code gives a different answer for a colleague in Berlin.
+
+The script reads the same total four ways. One of the answers is wrong by a factor
+of a hundred:
+
+```
+the value as text:  7676.51
+get_number:         7676.51
+to_number, told:    7676.51
+to_number, wrong:   767651
+validate, told:     1
+validate, wrong:    1
+```
+
+Read the fourth line again. It is not an error. `7676.51` came back as **767651**,
+a hundred times too big, in a column that holds money. Nothing raised, and nothing
+was logged.
+
+Now look at the last line. `validate_conversion` answers `1`, meaning "yes, this
+converts", and it is right. **Both conversions are valid.** One of them is valid
+and wrong, and no validator can tell you which one you meant.
+
+So there is one rule, and it is short:
+
+```sql
+-- right: reads the JSON number itself, and never looks at your session
+l_total := l_inv.get_number('total_amount');
+```
+
+`get_number` takes the number out of the JSON document. No text and no session
+setting sit in between, so there is nothing to get wrong.
+
+<Aside type="tip" title="When you really do have text to parse">
+Sometimes the value is text and you have no choice. Then tell the call which
+separators the **text** uses, rather than hoping the session agrees:
+
+```sql
+l_total := to_number(l_text, '99999999D99', 'NLS_NUMERIC_CHARACTERS=''.,''');
+```
+
+`D` in the format model means "the decimal separator", and the third argument says
+which character that is. The answer then does not depend on who runs the code.
+
+Two more to know about:
+
+- `to_number(l_text default null on conversion error)` gives you a null instead of
+  an error when the text is not a number at all.
+- `validate_conversion(l_text as number)` returns `1` or `0` and never raises, so
+  you can ask before you rely on an answer.
+
+Neither of them saves you from the wrong-separator case above. Only naming the
+separators does, and `get_number` avoids the question entirely.
+</Aside>
+
+## Write the header and the lines in one go
+
+An invoice header with no lines is not half an invoice. It is a wrong invoice. So
+the header, its lines and the status of the document are one unit of work.
+
+`post_extraction` never commits. The caller owns the transaction, which is what
+lets lesson 5 commit once for each document and carry on after a failure.
+
+Two documents never become a row at all:
+
+```sql
+if instr(l_reasons, 'NOT_AN_INVOICE') > 0 or l_invoice_no is null then
+  update inv_documents set status = 'REVIEW' where id = l_extraction.document_id;
+  return null;
+end if;
+```
+
+The first is the delivery note from lesson 3. The second is the empty-string
+convention coming back around: the schema returns `""` for a document with no
+number, an empty string arrives in PL/SQL as NULL, and `inv_invoices.invoice_no`
+cannot be null.
+
+Everything else **is** written, with `needs_review` set to `Y` and the reasons next
+to it. An invoice that is over its purchase order is still an invoice, and hiding
+it helps nobody.
+
+## What is left for a person
+
+The last block writes all four documents and then asks the only question that
+matters:
+
+```sql
+select d.filename
+     , i.invoice_no
+     , i.needs_review as rev
+     , i.review_reasons as reasons
+     , i.total_amount
+  from inv_documents d
+  left join inv_invoices i on i.document_id = d.id
+ order by d.id;
+```
+
+```
+FILENAME                      INVOICE_NO       REV   REASONS                        TOTAL_AMOUNT
+ferrotek.pdf                  FT-2026-04417    N                                          2563.8
+nordwind.pdf                  NW-2026-1188     Y     OVER_PO                             7676.51
+halvorsen.pdf                 HB-88214         Y     DATE_AMBIGUOUS, PO_NOT_FOUND         4725.3
+ferrotek-delivery-note.pdf
+```
+
+That is the whole course in four rows. One invoice needs nobody. Two need a person,
+and the row says why. One never became an invoice at all.
+
+## Verification
+
+Prove the arithmetic of lesson 3 in SQL, over the rows you just wrote:
+
+```sql
+select i.invoice_no
+     , sum(l.line_total) as line_sum
+     , i.net_amount
+     , i.net_amount + i.tax_amount as net_plus_tax
+     , i.total_amount
+  from inv_invoices i
+  join inv_invoice_lines l on l.invoice_id = i.id
+ group by i.invoice_no, i.net_amount, i.tax_amount, i.total_amount
+ order by i.invoice_no;
+```
+
+`line_sum` must equal `net_amount`, and `net_plus_tax` must equal `total_amount`,
+on every row:
+
+```
+INVOICE_NO       LINE_SUM   NET_AMOUNT   NET_PLUS_TAX   TOTAL_AMOUNT
+FT-2026-04417      2136.5       2136.5         2563.8         2563.8
+HB-88214          4375.28      4375.28         4725.3         4725.3
+NW-2026-1188      6450.85      6450.85        7676.51        7676.51
+```
+
+Three invoices, not four. The delivery note has a document row and an extraction
+row, and no invoice row.
+
+## Key takeaways
+
+- Read every value out of the JSON into a variable before you use it in SQL. A
+  `json_object_t` cannot cross into a SQL statement.
+- Read money with `get_number`. `to_number` on text follows whoever runs the code,
+  and getting that wrong gives you a wrong number instead of an error.
+- `l_total := l_inv.get_number('total_amount');`
+
+**Full reference:** [generate_text](/products/uc-ai/docs/api/generate_text/)
+describes the whole result object.
+
+<LinkCard
+  title="Next lesson: Make it an agent"
+  description="Put the prompt and the schema on a profile, run it as an agent, and let UC AI keep the trace and the cost of every run for you."
+  href="/products/uc-ai/docs/tutorial/invoice-extraction/05-make-it-an-agent/"
+/>

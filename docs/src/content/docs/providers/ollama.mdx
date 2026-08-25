@@ -10,7 +10,7 @@ The UC AI Ollama package provides integration with locally-running Ollama instan
 - Support for popular open-source models (OpenAI GPT-OSS, Facebook Llama, Mistral, Alibaba Qwen, DeepSeek, Google Gemma, Microsoft Phi, CodeLlama)
 - Full function calling (tools) support
 - Reasoning capabilities with models that support it
-- Multi-modal support (text, images, PDFs) with models that support it
+- Multi-modal support (text and images) with models that support it. **Ollama cannot read a PDF**: it answers `HTTP 400: file inputs are not currently supported`. Convert each page to a PNG file and send one image for each page.
 - No API keys required (runs locally)
 
 ## Responses API

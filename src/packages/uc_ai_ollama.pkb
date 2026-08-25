@@ -549,8 +549,8 @@ create or replace package body uc_ai_ollama as
    * 
    * Returns comprehensive result object with:
    * - messages: full conversation history
-   * - final_message: last message content for simple usage
-   * - structured_output: parsed JSON object (when schema provided)
+   * - final_message: last message content for simple usage. With a response
+   *   schema this holds the JSON as TEXT; nothing parses it here
    * - finish_reason: completion reason (stop, tool_calls, length, etc.)
    * - usage: token usage statistics (if provided by Ollama)
    * - tool_calls_count: total number of tool calls executed

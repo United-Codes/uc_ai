@@ -5,6 +5,8 @@ sidebar:
   order: 40
 ---
 
+import { LinkCard } from "@astrojs/starlight/components";
+
 UC AI is multimodal. With it, you can analyze a PDF, an image, or another document directly in your Oracle database. An AI model then extracts information from the file, answers a question about it, or analyzes its content.
 
 UC AI converts each file to base64 content, and sends it in your message array to the AI provider. You can combine the file content with a text prompt.
@@ -146,3 +148,15 @@ l_content.append(uc_ai_message_api.create_file_content(
   p_provider_options => json_object_t('{"detail":"HIGH"}')
 ));
 ```
+
+## Turn a document into rows
+
+This guide sends a file and gets an answer. The next job is different: a response
+schema, checks that decide what you can post unattended, and an inbox loop turn
+that answer into rows.
+
+<LinkCard
+  title="Tutorial: Extract structured data from a PDF"
+  description="5 lessons. Four supplier invoices become invoice headers and lines, with recorded output from every run."
+  href="/products/uc-ai/docs/tutorial/invoice-extraction/01-the-pdf-in-the-inbox/"
+/>

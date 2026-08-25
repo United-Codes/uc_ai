@@ -5,6 +5,8 @@ sidebar:
   order: 10
 ---
 
+import { Aside } from "@astrojs/starlight/components";
+
 ## Parameters
 
 The `uc_ai.generate_text()` function has four overloaded signatures. Two of them
@@ -557,7 +559,6 @@ The return object contains the following properties:
 {
   "final_message": "The AI's final response text",
   "messages": [...],           -- Complete conversation history (JSON_ARRAY_T)
-  "structured_output": {...},  -- Parsed JSON object (only when p_response_json_schema provided)
   "finish_reason": "stop",     -- How the conversation ended (VARCHAR2)
   "usage": {                   -- Token usage statistics (JSON_OBJECT_T)
     "prompt_tokens": 45,       -- input tokens used (NUMBER)
@@ -571,13 +572,25 @@ The return object contains the following properties:
 }
 ```
 
+<Aside type="caution" title="A response schema does not change the type of final_message">
+With `p_response_json_schema`, `final_message` is still a `CLOB`. The CLOB holds
+the JSON, and nothing parses it for you:
+
+```sql
+l_output := json_object_t(l_result.get_clob('final_message'));
+```
+
+`get_object('final_message')` returns null here and raises no error. Only
+`uc_ai_agents_api.execute_agent` parses the answer into an object for you.
+`uc_ai_prompt_profiles_api.execute_profile` does not.
+</Aside>
+
 ### Properties Reference
 
 | Property            | Type            | Description                                                                                          |
 | ------------------- | --------------- | ---------------------------------------------------------------------------------------------------- |
-| `final_message`     | `CLOB`          | The final assistant message from the conversation                                                    |
+| `final_message`     | `CLOB`          | The final assistant message from the conversation. With `p_response_json_schema` it holds the JSON as **text** |
 | `messages`          | `JSON_ARRAY_T`  | Complete conversation history including user, system, assistant, and tool messages                   |
-| `structured_output` | `JSON_OBJECT_T` | Parsed JSON object that conforms to the schema (only present when `p_response_json_schema` provided) |
 | `finish_reason`     | `VARCHAR2`      | Completion reason: `stop`, `tool_calls`, `length`, `content_filter`, `max_tool_calls_exceeded`       |
 | `usage`             | `JSON_OBJECT_T` | Token usage statistics with `prompt_tokens`, `completion_tokens`, and `total_tokens`                 |
 | `tool_calls_count`  | `NUMBER`        | Total number of tool calls executed during the conversation                                          |
