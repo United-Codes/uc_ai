@@ -143,6 +143,56 @@ Two rules apply to the value:
   dot, and hyphen. UC AI refuses any other value, because the store key is built
   by concatenation.
 
+## What the agent records
+
+The MEMORY PROTOCOL names the kinds of things that belong in a memory: decisions,
+preferences, learnings, and progress. It also tells the model to keep the files
+small and current. It cannot know what matters in your domain, so that part is
+your work.
+
+Put this guidance in the system prompt template of the prompt profile. Describe
+the information that is worth a memory, and the information that must never
+become one:
+
+```text
+MEMORY
+Record what the next reader cannot get from the tables: why a machine behaves
+the way it does, what we already tried, and what the customer prefers.
+Keep the current state apart from the long history.
+Start every line with the date as YYYY-MM-DD.
+When a line stops being true, replace it. Never append a correction below it.
+Never record a phone number, a home address, or any other personal data.
+```
+
+The agent picks its own file names from this guidance, and that is enough for a
+file that only the agent writes and reads. The memory tool has a `view` command,
+so the agent reads its own layout at the start of each run.
+
+Name an exact path only for a file that somebody other than the agent touches:
+
+- a person who seeds a reference note with `uc_ai_memory.put_file`
+- a second agent that shares the store
+- a query, a report, or an APEX page that reads one file
+
+The path is then an interface, like the name of a table. Name the files also when
+the model invents a new name for the same subject on each run. A model with no
+training on this command set needs more structure than a Claude model does.
+
+<Aside type="caution" title="Put the whole profile row back, not one field">
+`uc_ai_prompt_profiles_api.update_prompt_profile` takes every field, and
+`p_model_config_json` defaults to null. A call that passes only the new system
+prompt deletes the memory tool tag that `enable_for_agent` added. The agent then
+loses the memory tool, and no error tells you.
+
+Read the row with `get_prompt_profile` first, and pass the other fields back
+unchanged.
+</Aside>
+
+New rules take effect on the next new session, because an open conversation keeps
+the system prompt that it started with. Lesson 3 of the shift handover course
+works through a store that needs a fixed layout: [Decide what the desk writes
+down](/products/uc-ai/docs/tutorial/shift-handover/03-decide-what-it-writes/).
+
 ## Size caps and housekeeping
 
 `uc_ai_memory_config` caps how much an agent can store: `max_file_chars` (default 100,000), `max_files` (default 1,000), and an optional `max_store_chars`. When a write passes a cap, the model gets an error text. This text asks the model to merge or delete old files.
