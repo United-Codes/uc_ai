@@ -1,0 +1,119 @@
+---
+title: Keep one user's conversation private
+description: A conversation belongs to the user who started it. See how the plug-in enforces that, and why the column that records the owner is not the one you expect.
+sidebar:
+  order: 4
+---
+
+import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+
+<LessonHeader
+  lesson={4}
+  of={6}
+  minutes={20}
+  promise="a second user cannot read or continue someone else's chat, and you can prove it without asking the model."
+  scripts={["00_setup.sql"]}
+  course="apex-chat"
+/>
+
+## The problem
+
+In the first course there was one user: you, in SQLcl. A page has many.
+
+Two engineers open the same page. Each has a conversation. The conversation id is
+a value in a page item, and a page item is not a secret. What stops the second
+engineer from reading the first one's chat?
+
+## What the plug-in does
+
+Every request that touches a conversation is checked. The rule is small:
+
+- A conversation with **no rows** is open. The first message decides who owns it.
+- Once it has rows, only the user who wrote them can read it or add to it.
+
+That covers both directions. Reading is checked, and so is sending. A forged
+conversation id gets nothing back and cannot be written to.
+
+You do not configure this. It is on.
+
+## The column that records the owner
+
+Here is the part that catches people. Run this for one conversation:
+
+```sql
+select m.session_id,
+       max(m.created_by) as chat_created_by,
+       max(s.created_by) as core_created_by,
+       max(s.audience)   as audience
+  from uc_ai_chat_messages m
+  join uc_ai_agent_sessions s on s.session_id = m.session_id
+ group by m.session_id
+ order by max(m.id) desc
+ fetch first 1 rows only;
+```
+
+```
+SESSION_ID                        CHAT_CREATED_BY  CORE_CREATED_BY   AUDIENCE
+59DC51FBE17F6D27E0630201590AAD64  ADMIN            APEX_PUBLIC_USER  db
+```
+
+One conversation, two `created_by` columns, two different values.
+
+- `uc_ai_chat_messages.created_by` is **ADMIN**. That row is written while the
+  browser request is running, so APEX knows who the user is.
+- `uc_ai_agent_sessions.created_by` is **APEX_PUBLIC_USER**. That row is written
+  by the background job, which has no APEX session, so UC AI records the database
+  user.
+
+The owner of a conversation is the first column. The second one is the job.
+
+<Aside type="caution" title="Do not pass APP_USER to the session writers">
+`set_session_title` and `set_session_feedback` take an optional owner guard. It
+looks like a good idea to pass `APP_USER` to it.
+
+Do not. That guard is compared against `uc_ai_agent_sessions.created_by`, which is
+the **job's** database user. `APP_USER` matches nothing, so the write updates zero
+rows. No error is raised — it is recorded as a warning in the UC AI log, which
+nobody reads — and the title or the rating simply never appears.
+
+The plug-in passes null there for this reason, and does its own check against
+`uc_ai_chat_messages.created_by` instead.
+</Aside>
+
+## Prove it
+
+Do not ask the model. Query the way a second user would, and count the rows:
+
+```sql
+select count(*) as rows_user_b_can_see
+  from uc_ai_chat_messages
+ where session_id = 'a conversation started by user A'
+   and created_by = 'USER_B';
+```
+
+```
+ROWS_USER_B_CAN_SEE
+                  0
+```
+
+The plug-in adds exactly this condition to the fetch. A conversation id alone is
+not enough.
+
+## Key takeaways
+
+- A conversation belongs to the user who sent its first message. Reading and
+  sending are both checked.
+- `uc_ai_chat_messages.created_by` is the real user.
+  `uc_ai_agent_sessions.created_by` is the background job.
+- Never pass `APP_USER` as the owner guard to the session writers. The write is
+  discarded in silence.
+
+**Full reference:** the [Security](/products/uc-ai/docs/guides/apex-chat-plugin/#security)
+section of the plug-in guide.
+
+<LinkCard
+  title="Next lesson: Decide what happens when the page changes record"
+  description="The chat is bound to one contract. The user navigates to another. Choose what the region does."
+  href="/products/uc-ai/docs/tutorial/apex-chat/05-page-changes-record/"
+/>

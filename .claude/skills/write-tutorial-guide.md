@@ -60,6 +60,109 @@ The tutorial's unique value is:
 So: teach the mechanic in the smallest form that serves the thread, then link
 out with "Full reference: [guide]". Spend the reclaimed space on the four gaps.
 
+## Voice: unexcited, frictionless, no narrator
+
+The owner's review of Claude-written lessons, condensed: the prose is fancy, not
+to the point. The reader wants a **neutral, unexcited page they can scan**. They
+do not want a documentary.
+
+**Write like a well-edited Oracle manual.** Not like Anthropic Academy, not like
+a launch post, not like a teacher performing enthusiasm. STE (the `simple-english`
+skill) already bans most of this register. Do not override it with “framing that
+wins attention”.
+
+Motivation is a **recorded failure**, not a paragraph that tells the reader to
+feel the pain. Keep “Without X … With X” as a two-line contrast. Do not wrap it
+in an essay about why it matters.
+
+### Headings structure the page
+
+Headings become the right-hand **On this page** list. That list is navigation. A
+heading that comments, teases, or only makes sense after you have read the
+section fails at its one job: helping the reader jump.
+
+The test is not “is this heading true?” It is: **cover the body. From the heading
+list alone, can you find the block you need?**
+
+Real headings that failed this test:
+
+| Rejected | Why it fails as structure | Write instead |
+| --- | --- | --- |
+| `Where this approach stops` | a verdict; the TOC cannot tell you this is “ask about remaining credit” | `A question the pasted rows cannot answer` |
+| `Two things that will surprise you` | tease; “surprise” is the writer’s feeling | `Memory tags stay on the old profile version` |
+| `Why your code cannot use this answer` | essay title | `The same PDF returns different wording` |
+| `The next shift starts from nothing` | literary | `Two conversations, a week apart` |
+| `An agent that reads its attacker's mail` | a headline | `A supplier email changes a bank account` |
+| `The question that needs twenty-six tool calls` | punchy, not a topic | `One question, twenty-six tool calls` |
+
+Do **not** write headings that:
+
+- judge (`stops`, `fails`, `matters`, `the honest…`)
+- tease (`will surprise you`, `the one that…`, `nothing strange`)
+- need the next sentence to be understood
+
+Do write headings that name the **object or the action**: `Set up the demo
+schema`, `Create the prompt profile`, `Ask about remaining credit`,
+`Verification`. Lesson titles and `Aside` titles follow the same rule. Vivid is
+not a goal. Neutral is.
+
+### Body: state the fact, then the next step
+
+Do not comment on the fact. Do not defend the model. Do not tell the reader how
+to feel. Do not recap what the section was “really about”.
+
+From lesson 1 of Build an Agent, the paragraph the owner pointed at:
+
+**Rejected:**
+
+> The model did nothing strange. It saw a total of 200, it saw no credit
+> information, and it assumed the total was available. The reasoning is good.
+> The data was incomplete, and nothing in the prompt said so.
+>
+> This is the failure that matters, because it is quiet:
+
+**Write instead:**
+
+> The prompt sent a total of 200 and no credit data. The model answered 200. The
+> remaining credit on INV-1003 is 0.
+>
+> This approach has three limits:
+
+Same facts. No narrator. The heading above that block names the question, not
+the writer’s verdict on the approach.
+
+### Phrases that mean you have slipped into essay voice
+
+If a draft contains any of these, delete the sentence or rewrite it as a fact:
+
+- “the model did nothing strange / is not wrong / the reasoning is good”
+- “this is the failure that matters” / “the one that matters most”
+- “that is what the rest of the course builds”
+- “that is the point of this lesson” / “read that carefully”
+- “now the honest part”
+- “two things that will surprise you”
+- “nothing was invented”
+- “quietly” used for drama, not for a technical meaning
+- “now imagine writing the PL/SQL that…”
+- a promise line that sells the lesson (`and you can see exactly where that
+  approach stops`) instead of naming the outcome
+
+A promise line names what the reader can do, in one clause, with no trailer:
+
+- Bad: `a model answers a question about your own data — and you can see exactly
+  where that approach stops.`
+- Good: `call generate_text with contract rows in the prompt, then ask a
+  question those rows cannot answer.`
+
+### Self-check before you ship a page
+
+1. Read only the headings, in order, as they appear in **On this page**. Each
+   one must name a topic you could jump to. Rename any that comment.
+2. Search the body for: `matters`, `strange`, `honest`, `surprise`,
+   `the point of`, `quietly`, `imagine`, `the rest of the course`.
+3. Delete any sentence whose only job is to tell the reader that the previous
+   sentence was important.
+
 ## Steps
 
 ### 1. Ground yourself in the real API before proposing anything
@@ -319,9 +422,10 @@ doing it reads as one model being sloppy.
 
 ### 6. Write each lesson to one fixed skeleton
 
-Style: Anthropic Academy framing, reference-grade code density. The framing wins
-attention; the density is what an Oracle developer actually uses at work with
-SQL Developer on the second monitor.
+Style: unexcited, reference-grade. Write like a well-edited Oracle manual, not
+like a course trailer. The reader has SQL Developer on the second monitor and is
+trying to finish the page. Do not win their attention; do not waste it. See
+**Voice** above. The density is what they actually use.
 
 Per lesson, in this order every time — predictable beats elegant, because the
 reader learns where to skip to:
@@ -357,12 +461,14 @@ Starlight components available in this repo: `Aside`, `Steps`, `Card`,
 `docs/src/content/docs/`). There is no reading-time or progress component —
 write the `Lesson N of M · ~20 min` line as plain text.
 
-**Every heading says what the section is about. No clever headings.** This is the
-single most-repeated review comment on this repo's tutorials. A heading is
-navigation, not a riddle: the reader scans it to decide whether to read on, and a
-heading that only makes sense *after* the section fails at its one job.
+**Every heading says what the section is about. No clever headings, and no
+editorial headings.** This is the single most-repeated review comment on this
+repo's tutorials. A heading is navigation, not a riddle and not a verdict: it
+appears in **On this page**, and the reader uses that list to jump. A heading
+that only makes sense *after* the section, or that comments on the section
+(`Where this approach stops`), fails at its one job.
 
-Real headings the owner rejected, all from one course:
+Real headings the owner rejected:
 
 | Rejected | Why | Write instead |
 | --- | --- | --- |
@@ -372,9 +478,12 @@ Real headings the owner rejected, all from one course:
 | "What OpenAI receives" | no point visible | "What is sent to the model" |
 | "A date that means two things" | a puzzle | "How the date is read" |
 | "One transaction, or none" | a puzzle | "When the row is written" |
+| "Where this approach stops" | a verdict, not a topic | "A question the pasted rows cannot answer" |
+| "Two things that will surprise you" | tease | name the two facts |
 
-The test: read the heading alone. If you cannot say what you will learn, rename
-it.
+The test: read the heading alone, as a TOC entry. If you cannot say what is in
+the section, or you only know the writer's opinion of it, rename it. See
+**Voice** above.
 
 ### Layout for more than one course
 
@@ -606,6 +715,9 @@ Two habits that prevent all three:
 - Invoke the `simple-english` skill before writing or editing any page under
   `docs/src/content/docs/`. Keep CLAUDE.md's fixed terminology ("make sure
   that", "configuration", "call", "run", "delete", "error", "failure").
+- Run the **Voice** self-check on every page before you call it done: headings
+  as a TOC, then the banned-phrase search. Fancy-pants prose is a ship blocker,
+  same as a broken link.
 - Never change an existing heading: `starlightLinksValidator` fails the build on
   anchors other pages link to.
 - **Only Markdown headings (`##`, `###`) produce anchors.** Asides, tables,
@@ -668,9 +780,13 @@ able to tell what the section explains without reading it. These were all reject
 | `The last line is a constraint` | coy | `A database constraint is the last check` |
 | `Neither tool is the bug` | coy | `One tool is safe, and two are not` |
 
-Vivid is fine — `Take the tool away`, `An agent that reads its attacker's mail`
-and `Two safe tools that leak together` all survived review. The test is not
-"is it plain", it is **"can the reader tell what is inside?"**
+Vivid is **not** the goal. Neutral is. Those three titles name an action or a
+mechanism, which is why they survived as *content* — they still fail as
+navigation if a quieter label would let the reader jump faster
+(`Remove the bank-account tool`, `A supplier email changes a bank account`,
+`A read tool and a send tool leak together`). Prefer the quieter label. The
+test is **"can the reader tell what is inside from the TOC, without a
+performance?"** See **Voice** above.
 
 **Apply the same test to every `Aside` title.** They are the ones that slip
 through, because a title on a coloured box feels like decoration rather than
@@ -1087,6 +1203,12 @@ reader cannot get a DBA to approve a schema they cannot show how to remove.
 
 Each of these was caught in review of a real plan:
 
+- **Essay voice.** "The model did nothing strange." "This is the failure that
+  matters." "That is what the rest of the course builds." The reader did not ask
+  for a commentary track. State the fact, then the next step. See **Voice**.
+- **A heading that comments instead of labelling.** "Where this approach stops"
+  and "Two things that will surprise you" do not help the **On this page** list.
+  Name the object or the action.
 - **A vendor goal in the plan.** "Show how much the product can do" inflates the
   page count and produces a feature tour. Let the scenario decide the lessons.
 - **"Production-shaped"** with no error handling, retry, rate limiting, PII

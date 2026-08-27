@@ -282,6 +282,10 @@ enforcer. The notices give no figure, no percentage, and no name of a limit.
 
 ## Security
 
+- **The region decides which agent runs.** The plug-in compares the agent code in
+  the request against the region's own attribute and refuses a request that names
+  a different agent. Without this check, a user of the application can make the
+  region run any agent in the schema.
 - **One user owns one conversation.** After the first message, only the user who
   sent it can read the conversation or add to it.
 - **The answer is sanitized.** The plug-in shows the answer as Markdown. It

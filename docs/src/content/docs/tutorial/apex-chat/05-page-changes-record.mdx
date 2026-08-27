@@ -1,0 +1,132 @@
+---
+title: Decide what happens when the page changes record
+description: The chat is bound to one contract. The user navigates to another. Choose what the region does before your users find out for you.
+sidebar:
+  order: 5
+---
+
+import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+
+<LessonHeader
+  lesson={5}
+  of={6}
+  minutes={20}
+  promise="you choose what happens when the engineer moves to another contract mid-conversation."
+  scripts={["00_setup.sql"]}
+  course="apex-chat"
+/>
+
+## The problem
+
+Lesson 2 bound the conversation to `&P10_CONTRACT_ID.`. Lesson 2 also added a
+session item, so the conversation survives a page load.
+
+Put those together. The engineer is on contract 88, asks two questions, then
+navigates to contract 99. Same page, same conversation, different record.
+
+What should the chat do?
+
+## UC AI refuses to re-bind a conversation
+
+UC AI binds the run context to the conversation on the **first** turn. A later
+turn can add a new key. It cannot change one that is already set.
+
+Try it, and read the error:
+
+```sql
+declare
+  l_sess varchar2(255 char) := 'DRIFT_DEMO';
+  l_r    json_object_t;
+begin
+  l_r := uc_ai_agents_api.execute_agent(
+           p_agent_code       => 'SC_DESK'
+         , p_input_parameters => json_object_t('{"engineer_name":"ADMIN","today":"2026-08-25","question":"How many invoices are on this contract?"}')
+         , p_session_id       => l_sess
+         , p_run_context      => json_object_t('{"contract_id":"88"}'));
+  sys.dbms_output.put_line('turn 1 (contract 88): ok');
+
+  l_r := uc_ai_agents_api.execute_agent(
+           p_agent_code        => 'SC_DESK'
+         , p_follow_up_message => 'And now for the other contract?'
+         , p_session_id        => l_sess
+         , p_run_context       => json_object_t('{"contract_id":"99"}'));
+  sys.dbms_output.put_line('turn 2 (contract 99): ok');
+exception
+  when others then
+    sys.dbms_output.put_line('turn 2 (contract 99): ' || sqlerrm);
+end;
+/
+```
+
+```
+turn 1 (contract 88): ok
+turn 2 (contract 99): ORA-20507: Run context key "contract_id" is already bound
+                      to "88" and cannot be changed to "99"
+```
+
+This is deliberate. The conversation already holds messages about contract 88, and
+memory files may be stored under that binding. Moving the conversation to another
+contract would show one customer's conversation under another customer's record.
+
+## The three settings, and when to use each
+
+The region attribute **Run Context Drift**, in the **Run Context** group, decides
+what the plug-in does before it sends anything:
+
+| Value | What happens |
+| --- | --- |
+| `error` | The turn is refused. A notice tells the user to start a new chat. Nothing is sent and no tokens are spent. |
+| `new_session` | The plug-in starts a new conversation bound to the new contract, and sends the message there. The old conversation is still in the database, but it is no longer on screen. |
+| `ignore` | The change is ignored. The conversation keeps answering about contract 88. |
+
+Which one is right depends on your page:
+
+- A page **about one record**, where the user moves between records all day, wants
+  `new_session`. Moving to contract 99 and getting a chat about 99 is what the
+  user means.
+- A page where the record should not change under an open conversation wants
+  `error`, so the user is told rather than surprised.
+- `ignore` suits a chat that is about something else and only reads a record in
+  passing.
+
+<Aside type="caution" title="Set this attribute explicitly">
+Leave it empty and you get one of two behaviours, depending on when the region was
+made. A region created with a current plug-in stores `ignore`. A region made before
+this attribute existed has no value at all, and the plug-in falls back to `error`.
+
+Two regions, the same empty box, different behaviour. Choose a value and set it.
+</Aside>
+
+## Check it yourself
+
+Set **Run Context Drift** to `error`, send a message on contract 88, then change
+`P10_CONTRACT_ID` to 99 and send another. The second message is refused, and the
+database shows why: no new `user` row was written at all.
+
+```sql
+select count(*) as turns
+  from uc_ai_chat_messages
+ where session_id = :your_session
+   and role = 'user';
+```
+
+The count does not go up. The plug-in checks before it writes, so a refused turn
+costs nothing.
+
+## Key takeaways
+
+- UC AI binds the run context on the first turn. A later turn may add a key, never
+  change one: `ORA-20507`.
+- **Run Context Drift** decides what the region does about it: `error`,
+  `new_session`, or `ignore`.
+- Set it explicitly. An empty box does not mean the same thing in every region.
+
+**Full reference:** [Run context](/products/uc-ai/docs/guides/apex-chat-plugin/#run-context)
+in the plug-in guide.
+
+<LinkCard
+  title="Next lesson: Get it ready for real users"
+  description="Hide the developer detail, record who really ran each turn, and collect a verdict you can report on."
+  href="/products/uc-ai/docs/tutorial/apex-chat/06-ready-for-users/"
+/>

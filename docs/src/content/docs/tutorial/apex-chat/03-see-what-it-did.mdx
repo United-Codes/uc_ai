@@ -1,0 +1,232 @@
+---
+title: See what the chat did
+description: Every turn leaves rows in two places. Read them to tell a slow turn from a failed one, and to find the answer that never reached the screen.
+sidebar:
+  order: 3
+---
+
+import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={3}
+  of={6}
+  minutes={25}
+  promise="you can tell a stuck turn from a failed one from an empty one, with one query."
+  scripts={["00_setup.sql", "03_faults.sql"]}
+  course="apex-chat"
+/>
+
+## The problem
+
+A user says "the chat is broken". The page shows nothing useful. There is no
+stack trace, because nothing raised an error where you can see it: the agent runs
+in a background job.
+
+You need to answer three questions from the database:
+
+1. Is the turn still running, or did it stop?
+2. If it stopped, why?
+3. Did the model answer at all?
+
+## Where a turn is recorded
+
+The plug-in writes to `uc_ai_chat_messages`. UC AI writes its own trace to
+`uc_ai_agent_executions` and `uc_ai_agent_messages`. The first is what the page
+shows. The second is what really happened.
+
+Start with the plug-in table:
+
+```sql
+select role, turn_status, tool_name, input_tokens, output_tokens, error_detail
+  from uc_ai_chat_messages
+ where session_id = :session_id
+ order by id;
+```
+
+One turn is several rows: the `user` row, one `tool_call` and one `tool_result`
+for each tool, and the `assistant` row with the answer.
+
+**Only the `user` row carries `turn_status`**, and it is the state of the whole
+turn:
+
+| `turn_status` | What it means |
+| --- | --- |
+| `pending` | The row is written. The background job has not started. |
+| `processing` | The job is running the agent now. |
+| `done` | The turn finished. |
+| `error` | The turn stopped. `error_detail` says why. |
+| `cancelled` | The user pressed Stop. |
+
+## Fault 1: the turn fails
+
+A tool is registered against a package that is not installed. Registering a tool
+does not check that its handler exists, so this passes without a word and fails
+on the first run.
+
+```
+ROLE        TURN_STATUS   CONTENT
+user        error         Which invoices still have an uncredited amount?
+assistant                 An error occurred while processing your request.
+```
+
+The user gets one general sentence. The real reason is on the `user` row:
+
+```sql
+select error_detail from uc_ai_chat_messages
+ where role = 'user' order by id desc fetch first 1 rows only;
+```
+
+```
+ORA-06550: line 1, column 48:
+PLS-00201: identifier 'SC_DESK_PKG.LIST_INVOICES' must be declared
+```
+
+That is a real one from writing this course: the tools were registered, but the
+package they call was not installed.
+
+The plug-in keeps that text out of the browser on purpose. `show_errors` in
+**Debug Config** puts it back — for developers only, never for everyone:
+
+```sql
+if apex_authorization.is_authorized('ADMIN_AUTH') then
+  return '{ "show_tools": true, "show_errors": true }';
+else
+  return '{}';
+end if;
+```
+
+<Aside type="caution" title="show_errors is for developers, not for users">
+The error text is raw `sqlerrm`. The example above publishes a package name and a
+schema shape to anyone who reads it. Wrap it in an authorization check from the
+start. Lesson 6 uses the same function for the rest of the flags.
+
+Note also that **Debug Config** has five flags, not the four its help text lists.
+`show_errors` is the fifth.
+</Aside>
+
+## Fault 2: the turn never finishes, and nothing says so
+
+A background job can die. The database is restarted, the job slot runs out, the
+session is killed. The `user` row is then left at `pending` or `processing` for
+ever, and the page polls a turn that will never end.
+
+The plug-in sweeps these. On the next fetch, a turn with no job in
+`user_scheduler_jobs` that is older than its grace window is set to `error`. The
+window is **2 minutes** for `pending` and **1 minute** for `processing`.
+
+You do not have to do anything. You do need to know it happens, or the status
+changes under you while you look at it.
+
+## Fault 3: the answer is empty
+
+This one is worth the lesson.
+
+Run `03_faults.sql`. It puts a **response schema** on the prompt profile, sends
+one message, prints what was stored, and takes the schema off again.
+
+A response schema tells the model to answer with named JSON fields instead of
+prose — `answer`, `confidence`, and so on — so the application can read the parts
+separately. It is the right thing for a page process. Here is what it does to a
+chat region:
+
+```
+ROLE        TURN_STATUS   TOKENS      CONTENT
+user        done
+assistant                 210 / 89    <<NULL>>
+```
+
+The turn says `done`. Tokens were spent. There is no error anywhere. And the chat
+bubble on the page is **empty**.
+
+The answer is not lost. It is in the UC AI trace:
+
+```sql
+select m.seq, m.role, substr(to_char(m.content), 1, 60) as preview
+  from uc_ai_agent_messages m
+ where m.execution_id = (select max(id) from uc_ai_agent_executions)
+ order by m.seq;
+```
+
+```
+SEQ  ROLE        PREVIEW
+1    user        Which invoices still have an uncredited am
+2    reasoning
+3    assistant   {"answer":"I can’t retrieve the invoice ba
+```
+
+The model answered. The answer is a JSON **object**, because the schema asked for
+one. The plug-in reads the answer as text, an object is not text, so it stores an
+assistant row **with no content** — which is the empty bubble on the page.
+
+**So: a chat region and a response schema do not go together.** The chat shows
+prose. If you need the fields, run that agent from a page process, not from the
+chat region.
+
+<Aside type="caution" title="Run the whole script, not parts of it">
+The prompt profile is shared with every other lesson. `03_faults.sql` removes the
+response schema at the end. If you stop it half way, every later lesson answers
+with an empty bubble.
+</Aside>
+
+## Who ran it, and what it cost
+
+`uc_ai_agent_executions` has one row for each run, with what it cost and who ran
+it:
+
+```sql
+select e.id, e.status, e.audience, e.created_by, e.apex_user,
+       e.apex_app_id, e.apex_page_id, e.tool_calls_count
+  from uc_ai_agent_executions e
+  join uc_ai_agents a on a.id = e.agent_id
+ where a.code = 'SC_DESK'
+ order by e.id desc
+ fetch first 2 rows only;
+```
+
+```
+ID    STATUS     AUDIENCE  CREATED_BY        APEX_USER  APP  PAGE  TOOLS
+5334  completed  db        APEX_PUBLIC_USER                            1
+5294  completed  db        APEX_PUBLIC_USER                            1
+```
+
+Two columns are worth a look now, because lesson 6 changes them:
+
+- `created_by` is `APEX_PUBLIC_USER`, not the person who typed the question.
+- `audience` is `db`.
+
+The agent runs in a background job, and a background job has no APEX session. UC
+AI records the database user, honestly. Lesson 6 shows how to give the run the
+real user.
+
+## Check it yourself
+
+Send one message, then run this with your own conversation id. It returns one row
+for each part of the turn, and `done` on the `user` row:
+
+```sql
+select role, turn_status, tool_name
+  from uc_ai_chat_messages
+ where session_id = :your_session_id
+ order by id;
+```
+
+## Key takeaways
+
+- Only the `user` row has `turn_status`. It is the state of the whole turn.
+- The real error text is in `error_detail`, and reaches the browser only when
+  `show_errors` is on.
+- An empty bubble with `done` and tokens spent means a **response schema on the
+  profile**: `select content from uc_ai_agent_messages where role = 'assistant'`
+  still has the answer.
+
+**Full reference:** the [APEX Chat
+plug-in](/products/uc-ai/docs/guides/apex-chat-plugin/#region-attributes) guide
+documents every Debug Config flag.
+
+<LinkCard
+  title="Next lesson: Keep one user's conversation private"
+  description="Who owns a conversation, and the trap in the column that says so."
+  href="/products/uc-ai/docs/tutorial/apex-chat/04-private-conversations/"
+/>
