@@ -20,12 +20,10 @@ import AiOutput from "../../../../components/AiOutput.astro";
 
 ## The problem
 
-Every answer in lesson 2 was complete, well formed and correct.
-
-That is the problem. A strict schema returns a complete answer for a document it
-read badly, and for a document that is not an invoice at all. The answer looks the
-same either way, and `needs_review` has to come from somewhere other than the
-model.
+Every answer in lesson 2 was complete, well formed and correct. A strict schema
+returns a complete answer for a document it read badly, and for a document that
+is not an invoice at all. The answer looks the same either way, and `needs_review`
+has to come from somewhere other than the model.
 
 This lesson builds the five checks that decide it. None of them calls a model.
 
@@ -54,15 +52,15 @@ back:
 </dl>
 </AiOutput>
 
-The model did well. It invented nothing, it left the invoice number empty, and it
-told you exactly what the document is.
+The invoice number is empty, and `extraction_note` names the document as a
+delivery note.
 
-Now look at what that leaves in your hands. A supplier name. A real purchase order
-number. A total of zero. **Not one field says this must not be paid.** The only
-thing that says it is an English sentence in `extraction_note`, and no `case`
-statement can read an English sentence.
+The fields in your hands are a supplier name, a real purchase order number, and a
+total of zero. Not one field says this must not be paid. The only text that says
+it is an English sentence in `extraction_note`, and no `case` statement can read
+an English sentence.
 
-The defense is not a better prompt. It is a typed field:
+A typed field can hold the document type:
 
 ```json
 "document_type": { "type": "string",
@@ -78,20 +76,17 @@ total_amount:  0
 checks:       [NOT_AN_INVOICE]
 ```
 
-Two things to see here. `document_type` is now a value your PL/SQL can branch on.
-And `invoice_number` is no longer empty: it holds `DN-77118`, the delivery-note
-number, because the field asked for a number and the page has one.
+`document_type` is now a value your PL/SQL can branch on. `invoice_number` is no
+longer empty: it holds `DN-77118`, the delivery-note number, because the field
+asked for a number and the page has one.
 
 Without the `document_type` check, that row posts as invoice `DN-77118` for 0.00,
 against a real purchase order. Nothing in your database is then wrong enough to
 notice.
 
-<Aside type="note" title="The schema lost the information, not the model">
-This lesson is not about a hallucination. The model behaved better than the schema
-asked it to.
-
-The information was lost between the model and your tables, because the schema had
-nowhere to put it. That is a design error, and it is yours.
+<Aside type="note" title="Missing document_type loses the information">
+The schema had no field for the document type. The information did not reach your
+tables.
 </Aside>
 
 ## Check that the invoice adds up
@@ -126,17 +121,17 @@ The first version of the schema allowed `TAX` as a line kind. In three runs over
 `halvorsen.pdf` the line count came back two ways: two runs added a tax line and one
 did not. The sum check then compared a different thing each time.
 
-Three runs is not a measurement of how often that happens. It is enough to show
-that the schema, and not the model, made the check unreliable. Lesson 5 has the
-published version of this behaviour, which is worse than it sounds.
+Three runs is not a measurement of how often that happens. It shows that the
+schema made the check unreliable. Lesson 5 has the published version of this
+behaviour.
 
 The second version defined `net_amount` as "the net amount as printed". On
 `ferrotek.pdf` that is the subtotal of 2,091.50, which leaves out the 45.00
 delivery charge. So `net + tax` did not equal `total` on a good invoice.
 
 The system prompt fixes both, and the schema does not. Tax is not a line kind, and
-`net_amount` is defined as `total_amount` minus `tax_amount`. **An ambiguous field
-definition looks exactly like a model error.**
+`net_amount` is defined as `total_amount` minus `tax_amount`. An ambiguous field
+definition looks exactly like a model error.
 </Aside>
 
 Compare amounts with a tolerance, not with `=`:
@@ -198,14 +193,14 @@ if regexp_like(l_date_raw, '^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$') then
 end if;
 ```
 
-Be honest about what this check does. It does not find the right day. **The right
-day is not on the document.** The check finds the documents where a person has to
-decide, and it can only do that because `invoice_date_raw` is stored.
+The check does not find the right day. The right day is not on the document. The
+check finds the documents where a person has to decide. It can do that because
+`invoice_date_raw` is stored.
 
 `25/11/2026` does not raise the flag. Only one of those two numbers can be a
 month.
 
-<Aside type="caution" title="A date type in the schema makes this worse, not better">
+<Aside type="caution" title="A date type in the schema">
 The obvious idea is to stop treating the date as a string and let the schema do the
 work:
 
@@ -273,17 +268,16 @@ halvorsen.pdf                 [DATE_AMBIGUOUS, PO_NOT_FOUND]
 ferrotek-delivery-note.pdf    [NOT_AN_INVOICE]
 ```
 
-One document is clean. Three are not, for three different reasons, and every reason
-came from your database or from the arithmetic of the page. Not one of them came from a
-question to the model about its confidence.
+One document is clean. Three are not, for three different reasons. Every reason
+came from your database or from the arithmetic of the page. None of them came from
+a question to the model about its confidence.
 
-`SUM_MISMATCH` did not fire. That is correct, and it is the point: it is the check
-you keep for the day a model misses page 2.
+`SUM_MISMATCH` did not fire. Keep that check for the day a model misses page 2.
 
 ## Verification
 
-One block in `03_validate.sql` is the one to keep. It proves every branch from
-hand-written JSON, in under a second, and for no tokens:
+One block in `03_validate.sql` proves every branch from hand-written JSON, in
+under a second, and for no tokens:
 
 ```sql
 sys.dbms_output.put_line('page 1 only -> [' || check_json('{

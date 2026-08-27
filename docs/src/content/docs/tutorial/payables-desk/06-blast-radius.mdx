@@ -1,5 +1,5 @@
 ---
-title: Limit the damage of a run you already lost
+title: Limit what a compromised run can do
 description: Assume a bad decision got through. Veto a tool call from outside the model, keep the kill switch in a row, roll the run back, and never hand an ORA error to a model.
 sidebar:
   order: 6
@@ -171,9 +171,8 @@ l_result := uc_ai_agents_api.execute_agent(
 the veto ended the run: ORA-20991: An approval needs a named clerk in the run context.
 ```
 
-Read that carefully, because it is the point of the lesson. The error came **out
-of `execute_agent`**. It is not a tool result the model gets to reason about and
-explain to the clerk. The run is over.
+The error came **out of `execute_agent`**. It is not a tool result the model gets
+to reason about and explain to the clerk. The run is over.
 
 The execution row records it, and records almost nothing else:
 

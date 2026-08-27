@@ -1,6 +1,6 @@
 ---
-title: A note the desk was wrong to believe
-description: A note that was true in February is wrong by June, and nothing revisits it. Rank your tables above the memory in the prompt, and watch the desk correct its own file.
+title: A memory note that is out of date
+description: A note that was true in February is wrong by June, and nothing revisits it. Rank your tables above the memory in the prompt. The desk then corrects its own file.
 sidebar:
   order: 4
 ---
@@ -50,11 +50,10 @@ and is wrong now:
   else. Three occurrences in the last twelve months, the same cause every time.
 ```
 
-`04_stale.sql` writes that note with `put_file`, because earning it honestly takes
-six months. Every fact that contradicts it is in `mx_work_orders`, and none of it is
-in the note.
+`04_stale.sql` writes that note with `put_file`. Every fact that contradicts it is
+in `mx_work_orders`, and none of it is in the note.
 
-## Ask the question the note answers wrongly
+## Ask the question the stale note answers
 
 > Flow is dropping on this pump again and I can hear cavitation. Where do I start?
 
@@ -70,19 +69,18 @@ Start on the **suction side** — the open **PRS-LOW** alarm supports it.
 Do **not** start with coupling work.
 </AiOutput>
 
-This is where the lesson has to be honest, because the answer is not a lie. The desk
-read the work orders as well as the note. So it knew about the `SCS-80`, and it did not
-send anybody to clean a strainer that no longer exists.
+The desk read the work orders as well as the note. It named the `SCS-80`, and it
+did not send anybody to clean a strainer that no longer exists.
 
-Two things went wrong all the same:
+Two things still went wrong:
 
 - **It never said the note was out of date.** The technician has no way to know that
   the desk is working from a February assumption.
 - **The note is still there.** The run read it, used it, and left it in the store for
   the next conversation and the one after that.
 
-The second one is the real failure. A wrong answer is one bad shift. A wrong note is
-every shift until somebody finds it.
+A wrong answer is one bad shift. A wrong note is every shift until somebody finds
+it.
 
 ## Rank your tables above the memory
 
@@ -102,7 +100,7 @@ changes. So:
     contradicts it, is a suspect note.
 ```
 
-Three of those four sentences are worth more than they look:
+Three of those four sentences do this:
 
 - **"The work order wins"** gives the model a rule to apply, instead of leaving it to
   decide which of two sources it likes.
@@ -129,7 +127,7 @@ Start on the **suction side** — the low-suction-pressure alarm supports it.
 stale; it was replaced by the self-cleaning SCS-80 on 2026-06-08.
 </AiOutput>
 
-The last paragraph is new, and it is the part a technician needed.
+The last paragraph is new. It states that the note was out of date.
 
 ## The check that does not depend on the wording
 
@@ -160,9 +158,8 @@ remains under Reliability review. Alignment was within limits at that repair.
 The February line is gone. The desk deleted it and wrote the June work order in its
 place, with the work-order date and not today's date.
 
-That is the whole lesson in one `select`. The run before the fix left the stale note
-in the store. The run after it deleted the note. Both answers read reasonably, and
-only the file tells you which run you want.
+The run before the fix left the stale note in the store. The run after it deleted
+the note. The answers look similar. The file shows which run you want.
 
 ## Housekeeping, and what it cannot do
 
@@ -212,11 +209,10 @@ Seven tool calls, and **five of them were `MEMORY`**. Two did the job. The run
 context is on the row, so you can tell which machine this was, and the store key
 follows from it.
 
-That ratio is the last thing worth saying about this feature. A memory is cheap to
-turn on and it is not free to run: it spends tool calls that belong to the work, and
-on a profile with the default budget of 8 calls a run like this one has almost no
-room left. Count the `MEMORY` calls in your own traces, and raise
-`g_max_tool_calls` before you need it.
+A memory is cheap to turn on and it is not free to run: it spends tool calls that
+belong to the work, and on a profile with the default budget of 8 calls a run like
+this one has almost no room left. Count the `MEMORY` calls in your own traces, and
+raise `g_max_tool_calls` before you need it.
 
 ## Key takeaways
 

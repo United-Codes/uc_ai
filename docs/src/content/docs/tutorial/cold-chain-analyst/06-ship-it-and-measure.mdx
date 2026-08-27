@@ -82,7 +82,7 @@ one lesson 2 set, so nothing in this block can be the reason code mode runs. And
 `today` comes from `sysdate`, because `00_setup.sql` makes every date relative to
 `sysdate`, and a literal date would age.
 
-This is the whole job the course promised: compute over 1176 readings, then write.
+This run computes over 1176 readings, then writes.
 
 ```
 run                   program   calls       in     out  trips   secs  finish_reason
@@ -137,7 +137,7 @@ SEQ  ROLE          TOOL_NAME         DETAIL_CHARS
 Read that list from the top. It is the whole run in thirteen rows.
 
 - Row 2 is 2598 characters of JavaScript. Row 3 is 239 characters, which is short
-  for a result and about right for an error — and it was one. The model wrote a
+  for a result and about right for an error. It was an error. The model wrote a
   second program at row 4, and row 5 is the answer. Lesson 2 met this same retry.
 - Rows 7 to 9 are the three write calls, all in one round. The model computed one
   time, then decided three times.
@@ -180,7 +180,7 @@ are two clocks: this one is `completed_at - started_at`, which the framework wri
 and the metric line is `dbms_utility.get_time` around the whole call in your own
 script.
 
-<Aside type="caution" title="Trust the program, not the prose">
+<Aside type="caution" title="Read the program, not the explanation">
 In this recorded run the program was right and the summary was not. The model
 wrote "FROZEN: ⌈minutes / 60⌉ × €288/hr" in its explanation, and the real rate is
 240. Every number in the table above is correct, because the program computed

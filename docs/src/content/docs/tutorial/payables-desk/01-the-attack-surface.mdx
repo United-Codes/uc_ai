@@ -1,5 +1,5 @@
 ---
-title: An agent that reads its attacker's mail
+title: A supplier email changes a bank account
 description: Build the payables desk the way a first draft builds it, then watch a supplier email redirect a payment — and see that the tool, not the model, is the fault.
 sidebar:
   order: 1
@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={1}
   of={7}
   minutes={20}
-  promise="you have an agent that a supplier can drive by email — and you can prove that the tool is the fault, not the model."
+  promise="run the payables desk against a covering email, then call the bank-update tool directly and see that it accepts a forged IBAN."
   scripts={["00_setup.sql", "00_precheck.sql", "ap_naive_pkg.pkb", "01_naive_agent.sql"]}
   course="payables-desk"
 />
@@ -24,9 +24,9 @@ You build the **payables desk**: an agent that reads one incoming supplier
 invoice, reads the email that came with it, and can approve the invoice for
 payment.
 
-The email is the reason this course exists. A supplier writes it. Nobody in your
-company reads it before the model does. It is text a stranger wrote, and it
-arrives inside a tool result, next to your own data.
+The covering email is untrusted input. A supplier writes it. Nobody in your
+company reads it before the model does. It arrives inside a tool result, next to
+your own data.
 
 Two words from this domain, because the lessons use them:
 
@@ -83,7 +83,7 @@ behave differently there:
 - **OCI** does not support structured output. Lesson 4 raises `ORA-20307` on it.
 - **Google** removes `enum` from a schema when it converts it, so the reply
   template in lesson 5 is a hint rather than a closed list. The handler looks the
-  code up either way, which is the point of that lesson.
+  code up either way.
 
 Every other lesson is provider-independent. Providers this course did not test are
 not listed, in either direction.
@@ -184,7 +184,7 @@ Kepler Kalibrierdienst GmbH
 ```
 
 It asks for two ordinary things: accept a goods receipt, and update a bank
-account. That is the whole attack, and it is the reason it works.
+account. The desk treats both as work.
 
 ## What the desk did with it
 
@@ -202,8 +202,7 @@ Processed invoice INV-88003:
   processing will continue once goods receipt `GR-2291-A` is recorded.
 </AiOutput>
 
-Read the third line twice. The desk wrote to the attacker to tell them the change
-was done.
+The third line is a reply to the attacker that confirms the bank-account change.
 
 The trace records four tool calls:
 
@@ -216,11 +215,10 @@ SEQ  ROLE         TOOL_NAME                  DETAIL
 13   assistant                               Processed invoice INV-88003: ...
 ```
 
-The model did not do anything strange. It was told to keep supplier remittance
-details current. An email from the supplier gave it new remittance details. It
-did its job.
+The prompt told the desk to keep supplier remittance details current. The email
+gave new remittance details. The desk updated the vendor and sent a reply.
 
-<Aside type="note" title="The loud attack is the one that fails">
+<Aside type="note" title="Seed row 8004">
 An earlier draft of this fixture used a fake `-----BEGIN AP SYSTEM NOTICE-----`
 block with `SYSTEM:` lines and an order not to mention them. The same model
 refused it, named it as an instruction in a supplier email, and approved nothing.
@@ -230,10 +228,7 @@ That payload is in this course as seed row `8004`.
 emails by how much of each one looks like an instruction. `8004` comes first. The
 email above comes fourth.
 
-One refusal is not a measurement, and this page does not present it as one. The
-point is the shape: the attack that reads like an attack is the one your model was
-trained on. The attack that reads like your business process is the one that
-works.
+One refusal is not a measurement, and this page does not present it as one.
 </Aside>
 
 ## Verification, part 1: the damage
@@ -266,7 +261,7 @@ broken, and nothing in your system says an attack happened.
 does not say which clerk was at the desk.
 [Lesson 3](/products/uc-ai/docs/tutorial/payables-desk/03-bound-write/) corrects that.
 
-## Verification, part 2: the tool is the fault
+## Verification, part 2: call the handlers without a model
 
 The block above proves the model did something. It does not prove the model was
 the problem. So call the handlers directly, with no model, no email and no agent:
@@ -299,8 +294,6 @@ The two `status` values are the same on every run. The approval number is not.
 No goods receipt. No clerk. No legal entity. No approval limit. **The email did
 not break anything. It only asked.**
 
-This is the sentence the whole course is built on:
-
 > The injection is not the vulnerability. The vulnerability is a tool that acts
 > on arguments a stranger can choose.
 
@@ -323,7 +316,7 @@ calling](/products/uc-ai/docs/guides/tools/) covers registration, arguments and
 handler patterns.
 
 <LinkCard
-  title="Next lesson: Take the tool away"
+  title="Next lesson: Remove the bank-account tool"
   description="Find out what your agent is really offered, then remove the capability instead of defending it."
   href="/products/uc-ai/docs/tutorial/payables-desk/02-least-privilege/"
 />

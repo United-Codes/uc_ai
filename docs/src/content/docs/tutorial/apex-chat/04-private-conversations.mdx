@@ -1,6 +1,6 @@
 ---
 title: Keep one user's conversation private
-description: A conversation belongs to the user who started it. See how the plug-in enforces that, and why the column that records the owner is not the one you expect.
+description: A conversation belongs to the user who started it. See how the plug-in enforces that, and which column records the owner.
 sidebar:
   order: 4
 ---
@@ -39,7 +39,7 @@ You do not configure this. It is on.
 
 ## The column that records the owner
 
-Here is the part that catches people. Run this for one conversation:
+Run this for one conversation:
 
 ```sql
 select m.session_id,

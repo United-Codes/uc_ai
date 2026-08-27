@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={1}
   of={5}
   minutes={15}
-  promise="a PDF in a table reaches a model from PL/SQL — and you can measure why the answer it gives back is useless to your code."
+  promise="send a PDF from a table to a model, then see that two runs return different wording for the same facts."
   scripts={["00_setup.sql", "00_load_pdfs.sql", "00_precheck.sql", "01_first_look.sql"]}
   course="invoice-extraction"
 />
@@ -23,8 +23,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
 You build the **invoice inbox**: supplier invoices arrive as PDF files, and your
 database turns each one into an invoice header and its lines.
 
-Four documents go through it. Three are invoices. One is not an invoice, and that
-discovery is a lesson of its own.
+Four documents go through it. Three are invoices. One is not an invoice.
 
 By the end, one call reads the whole inbox. It posts what is safe to post, and it
 names the reason for everything it refuses.
@@ -45,10 +44,9 @@ reports a problem, the [installation
 guide](/products/uc-ai/docs/guides/installation/) and the [network setup
 guide](/products/uc-ai/docs/guides/network-setup/) have the answers.
 
-One thing to know before you run anything, because you cannot discover it later:
-**the whole document goes to your provider.** An invoice is not a question about
-your data. It is your data, and the one in this course has a bank account number,
-an IBAN and a VAT number printed on it.
+Before you run anything: **the whole document goes to your provider.** An invoice
+is not a question about your data. It is your data, and the one in this course has
+a bank account number, an IBAN and a VAT number printed on it.
 
 The recorded output comes from OpenAI and `gpt-5.6-terra`. Anthropic works the same
 way: change the provider constant and the model constant. You do not need the
@@ -121,7 +119,7 @@ when they are not.
 
 ## generate_text has no file parameter
 
-This is the first surprise, and there is no error that tells you about it.
+There is no error that tells you this.
 
 The `generate_text` you know takes `p_user_prompt` and `p_system_prompt`. Neither
 of them can hold a BLOB, and no other parameter can either. A file goes in through
@@ -187,7 +185,7 @@ The total amount due is **GBP 2,563.80**, including GBP 45.00 delivery and GBP
 
 ## What a PDF costs
 
-Two different numbers matter, and they are not related to each other.
+A PDF has two costs, and they are not related.
 
 **How big the request is.** `create_file_content` puts the file into the request as
 base64 text, and base64 needs four characters for every three bytes. So the request
@@ -209,12 +207,12 @@ it:
 {"prompt_tokens":2256,"completion_tokens":78,"reasoning_tokens":0,"total_tokens":2334}
 ```
 
-Read those two numbers together. A 3.8 kB file became a 5 kB request and cost 2,256
-input tokens. Bytes on the wire tell you whether the request will get through.
-Tokens tell you what it costs. Lesson 5 collects the token counts for all four
-documents, and they are not in the order the file sizes would suggest.
+A 3.8 kB file became a 5 kB request and cost 2,256 input tokens. Bytes on the
+wire tell you whether the request will get through. Tokens tell you what it
+costs. Lesson 5 collects the token counts for all four documents, and they are
+not in the order the file sizes would suggest.
 
-## Why your code cannot use this answer
+## The same PDF returns different wording
 
 The answer is correct. Now ask the same question a second time, with the same
 PDF, the same prompt and the same model:
@@ -231,18 +229,14 @@ is due **13 August 2026**.
 Both answers are right, and the facts did not change. The wording did. "The total
 amount due is" became "Total due is", and `GBP 45.00` became `£45.00`.
 
-Now imagine writing the PL/SQL that pulls `2563.80` out of that paragraph. You can
-do it for the first answer. The second answer breaks it, and you cannot see the
-third one yet.
+PL/SQL that pulls `2563.80` out of the first paragraph fails on the second. A
+third run can use a third shape. No `substr` and no regular expression stays
+correct, because the answer is English, and English changes.
 
-That is the failure this course is about. The model is not wrong. It is giving you
-**English**, and English changes shape every time. No `substr` and no regular
-expression stays correct.
+A better prompt does not fix this. Stop asking for a paragraph. Ask for named
+fields instead. Lesson 2 does that.
 
-A better prompt does not fix this. You have to stop asking for a paragraph, and ask
-for named fields instead. That is lesson 2.
-
-## Three mistakes that are easy to make
+## Three file-content mistakes
 
 The last part of the script makes each of these three mistakes on purpose, so you
 see the real error once and recognise it later. Each one catches its own error, so
@@ -261,8 +255,8 @@ an array, so UC AI drops the **whole system message**: the file and the
 NO DOCUMENT
 </AiOutput>
 
-The model answered a question about a document it never received. This is the
-worst failure in the whole course, because nothing in the result says it happened.
+The model answered a question about a document it never received. Nothing in the
+result says that the file was missing.
 
 ### 2. Leaving out the filename
 
@@ -276,8 +270,8 @@ response: { "error": { "message": "The server had an error processing your
 request. Sorry about that! You can retry your request, ..." } }
 ```
 
-Read that message again. It tells you to retry, and a retry fails the same way
-every time. Always give the file a name.
+The message tells you to retry, and a retry fails the same way every time.
+Always give the file a name.
 
 ### 3. Naming the wrong media type
 
@@ -287,7 +281,7 @@ Here UC AI stops the call before anything leaves your database:
 ORA-20303: Unsupported file media type: application/msword
 ```
 
-This is the error you want. It names the type, and it costs no tokens.
+The error names the type, and it costs no tokens.
 
 ## Verification
 
@@ -313,8 +307,8 @@ Then read the invoice yourself, so you know what the right answer is. Open
 `ferrotek.pdf`. It has five printed lines, a subtotal of 2,091.50, a delivery
 charge of 45.00, VAT of 427.30, and a total of 2,563.80.
 
-Write those numbers down. Lesson 2 comes back with a net amount that is on none
-of your notes, and the model is not the reason.
+Write those numbers down. Lesson 2 returns a net amount that is not among those
+figures.
 
 ## Key takeaways
 

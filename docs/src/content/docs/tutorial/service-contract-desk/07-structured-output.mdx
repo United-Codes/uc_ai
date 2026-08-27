@@ -143,11 +143,10 @@ The answer now arrives in parts:
 Your page can now render `answer` in a region, `actions_taken` as a list, and
 `confidence` as a badge, without reading a word of English in PL/SQL.
 
-## The schema did not stop the tools
+## The run still called tools first
 
-This is the part worth checking yourself, because a strict schema can pull a model
-toward answering immediately instead of calling a tool first. It did not here. The
-same run made seven tool calls before it answered:
+A strict schema can pull a model toward answering immediately instead of calling a
+tool first. This run did not. It made seven tool calls before it answered:
 
 ```
 tool call   -> 3  MEMORY

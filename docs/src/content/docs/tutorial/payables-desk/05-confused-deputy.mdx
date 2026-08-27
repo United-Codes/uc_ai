@@ -1,5 +1,5 @@
 ---
-title: Two safe tools that leak together
+title: A read tool and a send tool leak together
 description: See why a tool that reads a bank account and a tool that writes outward are only dangerous together, then close the channel and find out what a poisoned memory really costs.
 sidebar:
   order: 5
@@ -53,7 +53,7 @@ the vulnerability between them.
 
 Neither is wrong on its own. The script drops the package again at the end.
 
-## An attack that asks a reasonable question
+## The covering email on INV-88001
 
 Seed row `8005`, on `INV-88001`, the invoice that is otherwise in order:
 
@@ -114,14 +114,14 @@ SEQ  ROLE         TOOL_NAME               DETAIL
 `AP_GET_VENDOR_FULL_L` is not in that list. The model had it and chose not to use
 it.
 
-<Aside type="note" title="Read that result carefully">
+<Aside type="note" title="A declined disclosure is not a control">
 That recorded run declined to disclose a bank account. One recorded run in
 [lesson 1](/products/uc-ai/docs/tutorial/payables-desk/01-the-attack-surface/)
 changed one.
 
-The pattern is worth knowing: a model resists being asked to **give up a secret**,
-because that is what its training is about. It complies when it is asked to
-**update a record**, because that looks like the job you gave it.
+A model resists being asked to **give up a secret**, because that is what its
+training is about. It complies when it is asked to **update a record**, because
+that looks like the job you gave it.
 
 You cannot know in advance which of those two shapes your attacker finds. The
 difference between those runs is not a control you own.
@@ -313,7 +313,7 @@ approval database makes the final determination if an approval is submitted.
 
 This recorded run did **not** repeat the poison. It answered from the tools.
 
-<Aside type="caution" title="Why that is a weaker result than it looks">
+<Aside type="caution" title="Memory is read on demand">
 UC AI reads memory on demand. The model has a `MEMORY` tool, and it reads a
 file when it decides to. It is not injected into the prompt. So a planted file
 bites only in the runs where the model reads it, and the run above read its own
@@ -384,7 +384,7 @@ memory](/products/uc-ai/docs/guides/agent-memory/) covers the scopes, the store
 key and the administration calls.
 
 <LinkCard
-  title="Next lesson: Limit the damage of a run you already lost"
-  description="Assume you already lost. Bound the run, veto it from outside the model, and be able to take it back."
+  title="Next lesson: Limit what a compromised run can do"
+  description="Bound the run, veto it from outside the model, and be able to take it back."
   href="/products/uc-ai/docs/tutorial/payables-desk/06-blast-radius/"
 />

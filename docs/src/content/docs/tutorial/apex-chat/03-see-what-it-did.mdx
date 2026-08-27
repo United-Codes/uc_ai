@@ -121,8 +121,6 @@ changes under you while you look at it.
 
 ## Fault 3: the answer is empty
 
-This one is worth the lesson.
-
 Run `03_faults.sql`. It puts a **response schema** on the prompt profile, sends
 one message, prints what was stored, and takes the schema off again.
 
@@ -197,7 +195,7 @@ Two columns are worth a look now, because lesson 6 changes them:
 - `audience` is `db`.
 
 The agent runs in a background job, and a background job has no APEX session. UC
-AI records the database user, honestly. Lesson 6 shows how to give the run the
+AI records the database user. Lesson 6 shows how to give the run the
 real user.
 
 ## Check it yourself
@@ -227,6 +225,6 @@ documents every Debug Config flag.
 
 <LinkCard
   title="Next lesson: Keep one user's conversation private"
-  description="Who owns a conversation, and the trap in the column that says so."
+  description="Who owns a conversation, and the column that records the owner."
   href="/products/uc-ai/docs/tutorial/apex-chat/04-private-conversations/"
 />

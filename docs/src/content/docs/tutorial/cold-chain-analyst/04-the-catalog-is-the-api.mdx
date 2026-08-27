@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={4}
   of={6}
   minutes={20}
-  promise="your tool descriptions are the API reference a program reads — and the same question costs one tool call and 3981 input tokens."
+  promise="your tool descriptions are the API reference a program reads. The same question costs one tool call and 3981 input tokens."
   scripts={["04_catalog.sql"]}
   course="cold-chain-analyst"
 />
@@ -62,10 +62,10 @@ What is not there:
 - no JSON schema, and no parameter descriptions from it
 - **nothing at all about the shape of the result**
 
-The last one is the trap. A direct tool call gets the JSON schema, which holds a
-description for each parameter. A `callTool` gets a bare name. And neither of them
-ever documents what the tool returns, so for a program the description is the only
-place that fact can live.
+A direct tool call gets the JSON schema, which holds a description for each
+parameter. A `callTool` gets a bare name. Neither of them documents what the
+tool returns. For a program, the description is the only place that fact can
+live.
 
 <Aside type="note" title="Write each description as one paragraph">
 Each entry has to stay on one line. A newline in a description puts the entries
@@ -120,8 +120,8 @@ Tools the model can call directly:
   uc_ai__run_code
 ```
 
-This is not a hint. The 48 KB of readings can no longer reach the context window
-at all, because no path exists that puts them there.
+The 48 KB of readings can no longer reach the context window at all, because
+no path exists that puts them there.
 
 <Aside type="caution" title="merge_tool_from_schema keeps the access value you leave out">
 `merge_tool_from_schema` defaults `p_code_mode_access` to null, which **keeps** the

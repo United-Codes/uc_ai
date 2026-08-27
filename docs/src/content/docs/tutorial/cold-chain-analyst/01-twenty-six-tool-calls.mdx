@@ -1,5 +1,5 @@
 ---
-title: The question that needs twenty-six tool calls
+title: One question, twenty-six tool calls
 description: Set up the demo schema, ask one batch question with normal tool calling, and write down the tokens it uses.
 sidebar:
   order: 1
@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={1}
   of={6}
   minutes={15}
-  promise="you have a token count for one batch question — and you have seen the same question fail on the tool-call limit a new installation gives you."
+  promise="you have a token count for one batch question, and the same question fails on the default tool-call limit."
   scripts={["00_setup.sql", "00_precheck.sql", "01_tools_classic.sql"]}
   course="cold-chain-analyst"
 />
@@ -101,9 +101,8 @@ The precheck prints this when your database is ready:
 6. The demo schema is in place (4 tables, 1176 readings).
 ```
 
-Check 4 is the one that matters most. It hands three lines of JavaScript to the
-sandbox and reads the answer back, so it proves the whole path in one step. It calls
-no tool and no model.
+Check 4 hands three lines of JavaScript to the sandbox and reads the answer
+back. It proves the whole path in one step. It calls no tool and no model.
 
 <Aside type="caution" title="If check 3 and check 4 disagree, believe check 4">
 Check 3 looks for the sandbox. Check 4 uses it. If check 3 fails and check 4
@@ -138,9 +137,9 @@ Two of the 24 shipments are traps, and the setup script puts them there:
   total is 90 minutes, which is more than the limit allows. The longest run is 30
   minutes. No claim.
 
-`SHP-2058` is the interesting one. It punishes an analyst who adds up every
-minute above the limit, and it punishes an analyst who reads the numbers and
-forms an impression. Only the run-length rule gives the right answer.
+`SHP-2058` punishes an analyst who adds up every minute above the limit, and
+it punishes an analyst who reads the numbers and forms an impression. Only
+the run-length rule gives the right answer.
 
 ## Three tools, and why the question needs 26 calls
 
@@ -216,9 +215,8 @@ Run A, default budget, after 12.8 seconds:
   The run raised, so everything it already paid for is gone.
 ```
 
-Read that carefully, because it is better news than it looks. The run does not
-give you a shorter answer, and it does not warn you. It raises. You cannot mistake
-it for a result.
+The run does not give you a shorter answer, and it does not warn you. It
+raises. You cannot mistake it for a result.
 
 <Aside type="note" title="The limit is checked between rounds">
 UC AI tests the limit before each new round of tool calls, and one round can hold

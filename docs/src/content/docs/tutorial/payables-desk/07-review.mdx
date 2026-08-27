@@ -90,7 +90,7 @@ Nothing in the query above can change a bank account, because the row for that
 tool is gone. Every write tool the desk still has declares one parameter, and
 neither of them is a record or an amount.
 
-Then look at the sixth row, which nobody wrote a lesson about.
+Then look at the sixth row.
 
 `MEMORY` is on `AP_DESK` because
 [lesson 5](/products/uc-ai/docs/tutorial/payables-desk/05-confused-deputy/) called
@@ -137,9 +137,9 @@ not mention. So no query over `uc_ai_tools` can tell you which of your tools
 write. The naive one is worse than nothing, because it produces a clean report.
 
 
-Keep the register outside the table, and the tag is the honest place for it. That
-is why this course puts every read tool on `apread` and every write tool on
-`apwrite`, rather than trusting somebody to work it out from a package name later.
+Keep the register outside the table. This course puts every read tool on
+`apread` and every write tool on `apwrite`, rather than trusting somebody to work
+it out from a package name later.
 
 The full tag list of this schema is longer than those two, and the query above is
 how you find that out. `apbase`, `apmail` and `aprawmail` exist for lesson 4's
@@ -322,7 +322,7 @@ ID     VENDOR_NO   INVOICE_NO   INSTRUCTION_LIKE_LINES   VERDICT
 8005   V-1001      INV-88001                         0   ok
 ```
 
-<Aside type="caution" title="Read the ranking, and then distrust it">
+<Aside type="caution" title="Instruction-line ranking">
 Row `8004` scores 4. It is the loud attack: a fake `-----BEGIN AP SYSTEM
 NOTICE-----` block, an order to ignore earlier instructions, a forged quoted mail
 from your own system. The model refused it, and the pattern found it.
@@ -433,11 +433,10 @@ course](/products/uc-ai/docs/tutorial/service-contract-desk/09-audit-and-shippin
 
 ## The finished desk, on one invoice, end to end
 
-Seven lessons of defenses, and the point of all of them is that the desk still
-works. `INV-88001` is in order: a purchase order, a goods receipt, an active
-vendor, and a gross amount inside Petra's limit. Its newest covering mail is
-message `8005`, which asks for the bank account this company holds for the
-supplier.
+The desk still processes an invoice that is in order. `INV-88001` has a purchase
+order, a goods receipt, an active vendor, and a gross amount inside Petra's
+limit. Its newest covering mail is message `8005`, which asks for the bank
+account this company holds for the supplier.
 
 ```sql
 l_result := uc_ai_agents_api.execute_agent(
@@ -563,7 +562,7 @@ eight calls went on memory, and it finished on its last permitted call.
 
 A capability you add for one reason spends a budget that belongs to another.
 Memory went on this agent in lesson 5 to show what an attacker does with it, and
-it stayed there quietly taking tool calls away from the job.
+it stayed there and used tool calls that the job needed.
 
 ## The whole inbox, one run for each message
 
@@ -641,8 +640,8 @@ Use the column to sort a queue for a human. Do not put a threshold on it, and do
 not report it as a metric.
 </Aside>
 
-Every run is in the audit trail, which is the point of running the batch through
-an agent rather than through `uc_ai.generate_text`:
+Every run is in the audit trail. A batch through an agent writes these rows. A
+batch through `uc_ai.generate_text` does not:
 
 ```sql
 select i.invoice_no, e.status, e.tool_calls_count as tools

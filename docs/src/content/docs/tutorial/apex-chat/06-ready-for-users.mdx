@@ -1,6 +1,6 @@
 ---
 title: Get it ready for real users
-description: Hide the developer detail, record who really ran each turn, and collect a verdict you can report on.
+description: Hide the developer detail, record who ran each turn, and collect a rating you can report on.
 sidebar:
   order: 6
 ---
@@ -19,9 +19,8 @@ import LessonHeader from "../../../../components/LessonHeader.astro";
 
 ## The problem
 
-Everything so far was built for you. The region shows tool calls, reasoning and
-token counts, the audit trail says a background job ran the agent, and nobody has
-told you whether any of the answers were any good.
+The region shows tool calls, reasoning and token counts. The audit trail says a
+background job ran the agent. There is no rating of the answers.
 
 Three attributes fix that.
 
@@ -68,8 +67,8 @@ ID    STATUS     AUDIENCE  CREATED_BY        APEX_USER  APP  PAGE
 ```
 
 `created_by` is the database user, `audience` is `db`, and there is no APEX user
-at all. That is honest — the agent runs in a background job, and a job has no
-APEX session — but it is useless for "who asked this?".
+at all. The agent runs in a background job, and a job has no APEX session. The
+row does not name the person who asked.
 
 Set **Session Init Code**, in the **Agent** group:
 
@@ -104,17 +103,17 @@ That is what you want. Know that it happens on the turn you add this attribute,
 not later.
 </Aside>
 
-## Ask whether the answer was any good
+## Collect feedback
 
 Set **Collect Feedback** in the **Conversation** group.
 
-A thumbs up and a thumbs down appear under the newest answer. They are quiet: no
-dialog, nothing blocks the page, and only a small share of users will ever press
-one. That is the intent. It is a quality signal, not a survey.
+A thumbs up and a thumbs down appear under the newest answer. There is no
+dialog, and nothing blocks the page. Only a small share of users will ever press
+one. It is a quality signal, not a survey.
 
 ![The chat region on an APEX page with a finished answer, and a thumbs up and thumbs down under it.](../../../../assets/tutorial-apex-chat/l6-ready.png)
 
-One verdict is stored for each conversation, on the session:
+One rating is stored for each conversation, on the session:
 
 ```sql
 select session_id, feedback_rating, feedback_comment, feedback_at
@@ -124,8 +123,8 @@ select session_id, feedback_rating, feedback_comment, feedback_at
 ```
 
 `uc_ai_agents_api.list_sessions` returns the same columns, so "list the
-conversations people were unhappy with" is one query. That is the report worth
-building first: it points at the prompts and the tools that need work.
+conversations people were unhappy with" is one query. That query points at the
+prompts and the tools that need work.
 
 ## Check it yourself
 
@@ -149,7 +148,7 @@ while the screen stays clean.
   server: `if apex_authorization.is_authorized('ADMIN_AUTH') then ...`
 - **Session Init Code** with `apex_session.attach` turns `audience = db,
   created_by = UC_AI` into `audience = authenticated, created_by = ADMIN`.
-- One feedback verdict is stored for each conversation, and `list_sessions`
+- One feedback rating is stored for each conversation, and `list_sessions`
   returns it.
 
 ## What to read next

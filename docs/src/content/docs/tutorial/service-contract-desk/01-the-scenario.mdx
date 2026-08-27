@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={1}
   of={9}
   minutes={10}
-  promise="a model answers a question about your own data — and you can see exactly where that approach stops."
+  promise="call generate_text with contract rows in the prompt, then ask a question those rows cannot answer."
   scripts={["00_setup.sql", "00_precheck.sql"]}
 />
 
@@ -123,7 +123,7 @@ This works:
 There are 3 invoices on this contract.
 </AiOutput>
 
-## Where this approach stops
+## A question the pasted rows cannot answer
 
 Now ask a question the pasted rows do not answer. The rows hold an invoice number
 and a total. They do not hold how much of each invoice is already credited:
@@ -138,23 +138,20 @@ That answer is wrong. The correct answer is **0**. Invoice INV-1003 is already
 credited in full, and the database knows it. The next `select` on this page proves
 it.
 
-The model did nothing strange. It saw a total of 200, it saw no credit
-information, and it assumed the total was available. The reasoning is good. The
-data was incomplete, and nothing in the prompt said so.
+The prompt sent a total of 200 and no credit data. The model answered 200. The
+remaining credit on INV-1003 is 0.
 
-This is the failure that matters, because it is quiet:
+This approach has three limits:
 
-- **You** had to know which rows matter, before the engineer asked the question.
-- You pasted invoice numbers and totals, so the model is blind to credits,
-  coverage windows, service calls, and assets.
-- A wrong number here becomes a **second credit note** on an invoice that is
-  already paid back in full.
+- You had to choose which rows to paste before the engineer asked.
+- The pasted rows have invoice numbers and totals only. Credits, coverage
+  windows, service calls, and assets are missing.
+- A wrong number here becomes a second credit note on an invoice that is already
+  credited in full.
 
-You cannot correct this by pasting more rows. A real contract joins six tables,
-and no prompt holds all of them. The model must be able to **ask your database**
-instead.
-
-That is what the rest of the course builds.
+Pasting more rows does not fix this. A real contract joins six tables, and a
+prompt cannot hold all of them. The model must ask the database instead. The next
+lessons give it tools that query those tables.
 
 <Aside type="note" title="The model can also refuse">
 Sometimes the same question gets "the remaining creditable amount cannot be
@@ -197,8 +194,8 @@ by the full amount.
 
 - A model that reads your data from the prompt can answer only the question you
   prepared for. Every other question needs data you did not paste.
-- Incomplete data is more dangerous than missing data. The model reasons from what
-  it has, and a plausible wrong number reads exactly like a right one.
+- Incomplete rows can return a plausible wrong number. The remaining credit on
+  INV-1003 is an example.
 - `uc_ai.generate_text` needs four things: `p_user_prompt`, `p_system_prompt`,
   `p_provider`, `p_model`.
 

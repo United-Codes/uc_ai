@@ -1,5 +1,5 @@
 ---
-title: Take the tool away
+title: Remove the bank-account tool
 description: Find out exactly which tools a run is offered, learn why an empty tag set is not a safe default, and remove the capability an email was steering.
 sidebar:
   order: 2
@@ -73,7 +73,7 @@ end;
 `p_tool_tags => null` does not mean "no tag". `get_tools_array` reads the package
 global `uc_ai.g_tool_tags` instead, and running any prompt profile sets that
 global for the rest of the session. So `null` answers a different question than
-the one you asked, and it answers it quietly.
+the one you asked.
 
 The probe above runs both, in a session that had already set the global:
 
@@ -96,7 +96,7 @@ APNAIVE       ->  0 tools offered
 ```
 
 Your first number will be different, because it counts your schema and not this
-one. That is the point of it.
+one.
 
 Three facts come out of those three lines.
 
@@ -329,8 +329,7 @@ one at a time. The rows you see are always the current truth, which is the reaso
 to run the query rather than to remember it.
 
 Point the lesson 1 email at `AP_TRIAGE` now and it reports what the supplier
-asked for and changes nothing. That answer is pleasant. The three rows above are
-the proof.
+asked for and changes nothing. The three rows above are the proof.
 
 ## Key takeaways
 
@@ -347,7 +346,7 @@ configuration](/products/uc-ai/docs/guides/tools/) covers `g_tool_tags`,
 `g_enable_tools` and the `active` flag.
 
 <LinkCard
-  title="Next lesson: Take the argument away"
+  title="Next lesson: Remove the argument the model can choose"
   description="Give the write tool one parameter, put the seven conditions in PL/SQL, and prove the model cannot steer any of them."
   href="/products/uc-ai/docs/tutorial/payables-desk/03-bound-write/"
 />

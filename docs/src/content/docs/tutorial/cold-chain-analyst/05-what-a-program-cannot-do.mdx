@@ -70,7 +70,7 @@ const result = await callTool("CC_FILE_CLAIM",
  "hint":"Fix the program and call the code tool again. ..."}
 ```
 
-"Tool not found" is the honest answer from inside the program: for a program, this
+"Tool not found" is the answer from inside the program: for a program, this
 tool does not exist. The allow-list of the run answers before any of your code
 runs.
 
@@ -104,7 +104,7 @@ const result = probe;
    the uncommitted row of the caller is still pending: yes
 ```
 
-The second line is the one that matters most, and it is easy to miss why.
+The second line shows the uncommitted row is still pending.
 
 **`COMMIT` and `ROLLBACK` need no privilege.** A sandbox built only on privileges
 still lets generated code throw away the pending work of the caller. Removal of all
@@ -160,8 +160,8 @@ Twenty-five. One for `CC_LIST_SHIPMENTS` and one for each of the 24
 `CC_GET_READINGS` calls. UC AI does not call the hook one time for the program. It
 calls the hook for every `callTool` inside it.
 
-So authorization and auditing through this hook keep working in code mode, which
-is the point. It also means that a hook which writes an audit row must be cheap.
+So authorization and auditing through this hook keep working in code mode.
+It also means that a hook which writes an audit row must be cheap.
 One tool call from the model can produce a hundred rows.
 
 <Aside type="note" title="Why 25 and not 26">

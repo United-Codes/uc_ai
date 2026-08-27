@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={1}
   of={6}
   minutes={20}
-  promise="an APEX page has a working chat region, and you can see the one thing it still cannot do."
+  promise="an APEX page has a working chat region. The first message has no contract."
   scripts={["00_setup.sql"]}
   course="apex-chat"
 />
@@ -176,13 +176,12 @@ Run the page and ask the desk something it should know:
 I can't list invoices because this conversation isn't bound to a service contract.
 </AiOutput>
 
-That is not a failure of the plug-in, and it is not the model being unhelpful.
-The turn worked. The model called the right tool, the tool refused, and the model
+The turn finished. The model called the tool, the tool refused, and the model
 explained the refusal.
 
 ![The chat region on an APEX page. The question is at the top right. Below it a tool call named SC_LIST_INVOICES with the result status refused and reason NO_CONTRACT, then the answer of the assistant.](../../../../assets/tutorial-apex-chat/l1-no-contract.png)
 
-The tool result is the interesting part:
+The tool result:
 
 ```json
 {

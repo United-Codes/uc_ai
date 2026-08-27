@@ -66,7 +66,7 @@ Three columns are worth knowing well:
 ### Tokens are recorded, prices are not
 
 UC AI counts tokens. It does not know what your provider charges, and there is no
-price column anywhere in the schema. So the honest calculation is yours:
+price column anywhere in the schema. Multiply the counts by your own rate:
 
 ```sql
 select s.created_by
@@ -78,9 +78,8 @@ select s.created_by
  order by 2 desc;
 ```
 
-Multiply by your own rate. One recorded run of this desk used **657 input and 76
-output tokens**, which is the order of magnitude to expect for a question with two
-tool calls.
+One recorded run of this desk used **657 input and 76 output tokens**, which is
+the order of magnitude to expect for a question with two tool calls.
 
 <Aside type="tip" title="Spend limits are a separate product">
 Per-model pricing, budgets and spend enforcement are part of
@@ -172,7 +171,7 @@ The veto stopped the run: ORA-20990: The desk cannot raise a credit note
 outside office hours.
 ```
 
-Read that carefully, because it is the point of the lesson:
+Three facts about that output:
 
 - The error came **out of `execute_agent`**. It is not a tool result the model gets
   to reason about, and not a sentence it can explain away. The run is over.

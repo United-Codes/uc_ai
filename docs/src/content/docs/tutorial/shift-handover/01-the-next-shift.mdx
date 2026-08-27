@@ -1,6 +1,6 @@
 ---
-title: The next shift starts from nothing
-description: Two conversations about the same machine, a week apart. One call gives the desk a memory, and the second conversation knows what the first one worked out.
+title: Two conversations, a week apart
+description: Two conversations about the same machine, a week apart. One call gives the desk a memory, and the second conversation knows what the first one recorded.
 sidebar:
   order: 1
 ---
@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={1}
   of={4}
   minutes={15}
-  promise="one conversation can read what an earlier conversation worked out, and you can say which facts belong in a memory and which belong in a column."
+  promise="one conversation can read what an earlier conversation recorded, and you can say which facts belong in a memory and which belong in a column."
   scripts={["00_setup.sql", "00_precheck.sql", "01_recall.sql"]}
   course="shift-handover"
 />
@@ -24,9 +24,8 @@ You build the **maintenance desk** of a beverage plant. One bottling line, six
 machines. A technician stands at one machine and asks the desk about it. The desk
 reads the machine and its repair history through two tools, and answers.
 
-The point of this course is what happens between those conversations. A plant runs
-three shifts. The technician who works something out at 03:00 is not the technician
-who opens the same machine next week.
+A plant runs three shifts. The technician who records a fact at 03:00 is not the
+technician who opens the same machine next week.
 
 Two words from this domain, because the lessons use them:
 
@@ -70,7 +69,7 @@ guide](/products/uc-ai/docs/guides/network-setup/) has the grants a DBA must giv
 Run the first block of `01_recall.sql`. It holds two conversations about the pump
 `AS-14`, and each one gets a **new** session id.
 
-Petra, on nights, works something out and says it out loud:
+Petra, on nights, says:
 
 > The vibration at the drive end is back. I traced it to the coupling again. The
 > reliability engineer wants the alignment measured COLD, before start-up, not
@@ -93,8 +92,7 @@ Before starting, inspect the coupling element closely and check for abnormal rep
 wear or damage.
 </AiOutput>
 
-Read that answer carefully, because it is not a strawman. It is a good answer. The
-desk read the work orders and told Sam about both coupling repairs.
+The desk read the work orders and told Sam about both coupling repairs.
 
 What it does **not** say is "measure the alignment cold". That instruction is the
 one thing Petra added, and it is in no table on this site. The conversation ended,
@@ -259,6 +257,6 @@ every scope, the size caps and the housekeeping calls.
 
 <LinkCard
   title="Next lesson: One store for the desk, or one for each machine"
-  description="The default gives every machine the same memory. Watch a note about a pump reach a conversation about a compressor, and prove the separation without asking the model."
+  description="The default gives every machine the same memory. A note about a pump reaches a conversation about a compressor. Prove the separation without asking the model."
   href="/products/uc-ai/docs/tutorial/shift-handover/02-one-store-or-many/"
 />

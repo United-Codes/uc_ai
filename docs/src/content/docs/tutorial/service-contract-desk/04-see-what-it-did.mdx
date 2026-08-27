@@ -17,9 +17,9 @@ import LessonHeader from "../../../../components/LessonHeader.astro";
 
 ## The problem
 
-Lesson 3 gave the desk three tools and a good answer. One day the answer is wrong,
-or slow, or strangely short. Then you need to know what happened, and the answer
-text does not tell you. It is the **output** of the run, not a record of it.
+Lesson 3 gave the desk three tools and a good answer. One day the answer is wrong
+or slow. Then you need to know what happened, and the answer text does not tell
+you. It is the **output** of the run, not a record of it.
 
 **Without the trace,** you change the prompt and hope. **With the trace,** you can
 see which tool ran, what it returned, and what the model did next.
@@ -65,7 +65,7 @@ Three facts you can read straight off that list:
   results. A round can hold more than one call.
 - The arguments were `{"max_rows":20}`. There is no contract in them, because no
   tool declares one. The trace is where you confirm that.
-- Nothing was invented. The answer at `seq` 7 came after the results at 5 and 6.
+- The answer at `seq` 7 came after the results at 5 and 6.
 
 <Aside type="tip" title="Where is the contract?">
 `tool_input` shows what the **model** sent. UC AI adds `_ctx` to the arguments

@@ -70,7 +70,7 @@ type.
 
 ## The schema for an invoice
 
-The real one has three parts. Each one earns its place.
+The real one has three parts.
 
 **The header fields** name what an invoice is:
 
@@ -129,16 +129,14 @@ of lesson 3 work.
 
 One more field is not in either block above. `extraction_note` is a single string
 for anything the model could not read with confidence. It is one bounded place for
-a hedge, so that hedging does not leak into the fields your code reads. Lesson 3
-shows what it is worth, and what it is not.
+a hedge, so that hedging does not leak into the fields your code reads.
 
 ## Read final_message as text, then parse it yourself
 
 The answer arrives in `final_message`, the same place as the paragraph in lesson 1.
-And it arrives as the same **type** as in lesson 1: a CLOB.
-
-That surprises most people. The CLOB now holds JSON, but `generate_text` does not
-turn it into a JSON object for you. You do that yourself, in one line:
+It arrives as the same **type** as in lesson 1: a CLOB that now holds JSON.
+`generate_text` does not turn it into a JSON object for you. You do that yourself,
+in one line:
 
 ```sql
 -- wrong: gives you null, and raises nothing at all
@@ -154,12 +152,10 @@ Get that wrong and there is no error to follow. `get_object` returns null:
 get_object  -> (null)
 ```
 
-So: read `final_message` with `get_clob`, then wrap it in `json_object_t`. After
+Read `final_message` with `get_clob`, then wrap it in `json_object_t`. After
 that, `get_string` and `get_number` give you the fields.
 
 ## Your schema is not what the provider gets
-
-This is the part of the lesson that changes how you write every schema after it.
 
 Every provider wants a schema in its own dialect, so UC AI rewrites yours before it
 sends it. Two of those rewrites change what your schema **means**, and you cannot
@@ -210,7 +206,7 @@ po_number:    {"type":"string"}
 currency:     {"type":"string","enum":["EUR","GBP","USD"]}
 ```
 
-Three things changed, and all three are deliberate:
+Three things changed:
 
 | What you wrote | What the provider receives | What it means for you |
 | --- | --- | --- |
@@ -222,16 +218,15 @@ Anthropic forces the same required list and deletes the same descriptions, and i
 does not use the title. Google keeps the descriptions and drops every `enum`
 instead.
 
-The first row is the one to remember, and lesson 3 is built on it. Your schema has
-**no way to say "this document does not have that field"**. The model has to put
-something in every field, so *you* decide what "nothing" looks like. This course
-uses an empty string for text and `0` for an amount, and the system prompt says so
-in one line.
+Your schema has **no way to say "this document does not have that field"**. The
+model has to put something in every field, so *you* decide what "nothing" looks
+like. This course uses an empty string for text and `0` for an amount, and the
+system prompt says so in one line.
 
 ## The rules move to the system prompt
 
 Because UC AI deletes the descriptions, every rule lives in the system prompt
-instead. Three of them exist because a run without them was worse:
+instead:
 
 ```
 - Read every page. A total on page 1 is not the total when a later page adds charges.
@@ -241,9 +236,9 @@ instead. Three of them exist because a run without them was worse:
   delivery or a discount, that subtotal is NOT net_amount.
 ```
 
-The third rule is the interesting one. `ferrotek.pdf` prints a subtotal of
-2,091.50 that leaves out the 45.00 delivery charge. "The net amount as printed" is
-not a definition, because the page prints two numbers that both look like one.
+`ferrotek.pdf` prints a subtotal of 2,091.50 that leaves out the 45.00 delivery
+charge. "The net amount as printed" is not a definition, because the page prints
+two numbers that both look like one.
 
 ## The recorded answer for ferrotek.pdf
 
@@ -306,11 +301,9 @@ above. The early-payment discount came back as a **negative** line, because the
 prompt said a discount is negative. The six lines add up to 6,450.85, which is the
 net amount again.
 
-This is what a schema buys you. One shape, whatever the supplier's layout is.
-
 ## Verification
 
-Two checks, and the second one is the one that matters.
+Two checks:
 
 1. The token cost of the two documents. Both blocks print a `Tokens:` line, and
    the two counts are not the same even though the files are within 100 bytes of
@@ -321,8 +314,6 @@ Two checks, and the second one is the one that matters.
 
 2. The sum of the lines equals the net amount, on both documents. Prove it in SQL
    after lesson 4 posts the rows, or read it off the two blocks above.
-
-That second check is the whole of lesson 3.
 
 ## Key takeaways
 

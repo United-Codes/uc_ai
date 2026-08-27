@@ -27,8 +27,8 @@ clerk **why an email is suspicious**, and that is information the clerk wants.
 block of prose. **With one,** the model knows which sentences are evidence and
 which are orders.
 
-This lesson also ends with a measurement, and the measurement is not flattering.
-That is on purpose. If you did not measure a defense, you are guessing about it.
+This lesson also ends with a measurement. If you did not measure a defense, you
+are guessing about it.
 
 ## Mark untrusted text where the tool returns it
 
@@ -69,7 +69,7 @@ is evidence. A count the model produced is a claim.
 tool result says it again. A long email pushes the system prompt far away, so the
 reader of the text must be told at the text.
 
-## An agent that cannot act is your best detector
+## A reader with no write tool
 
 `AP_TRIAGE` has no write tool at all, from lesson 2. Now give it a **response
 schema**: a JSON schema that says which fields the answer must have, so the model
@@ -77,8 +77,7 @@ returns named values instead of a paragraph. The [structured output
 guide](/products/uc-ai/docs/guides/structured_output/) covers it properly; this
 lesson needs one field of it.
 
-The third field is the one that matters. It asks the model to quote the attack
-back at you:
+The third field asks the model to quote the attack back at you:
 
 ```json
 {
@@ -132,8 +131,8 @@ entries in `reasons`, and three in `untrusted_instructions_found`:
 ```
 </AiOutput>
 
-The last entry of `untrusted_instructions_found` is the interesting one. It did
-not come from the email. It came from `ap_vendors.name`.
+The last entry of `untrusted_instructions_found` did not come from the email. It
+came from `ap_vendors.name`.
 
 ## Untrusted is about the writer, not the table
 
@@ -170,11 +169,11 @@ Supplier portals, customer self-service, imported files, scraped pages, ticket
 bodies, uploaded documents. Wrap the column, or keep the text out of the column
 the model reads. Wrap it: you do not control the portal.
 
-## How much is the label worth?
+## Labeled mail against unlabeled mail
 
-Now the honest part. `04_untrusted_text.sql` measures the labeled mail tool
-against an unlabeled one, twice, on two different questions. Each measurement
-changes exactly one thing: which mail tool the model is given.
+`04_untrusted_text.sql` measures the labeled mail tool against an unlabeled one,
+twice, on two different questions. Each measurement changes exactly one thing:
+which mail tool the model is given.
 
 The unlabeled tool is a real registered tool: `AP_READ_SUPPLIER_EMAIL_RAW`, on the
 tag `aprawmail`. It returns the same mail as one more field of prose, the way
@@ -281,7 +280,7 @@ output](/products/uc-ai/docs/guides/structured_output/) covers response schemas,
 and warns that `final_message` changes type when you set one.
 
 <LinkCard
-  title="Next lesson: Two safe tools that leak together"
+  title="Next lesson: A read tool and a send tool leak together"
   description="Neither reading a bank account nor sending a reply is a vulnerability. One agent holding both is."
   href="/products/uc-ai/docs/tutorial/payables-desk/05-confused-deputy/"
 />

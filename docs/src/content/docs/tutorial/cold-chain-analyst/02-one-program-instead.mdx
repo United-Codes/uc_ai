@@ -118,10 +118,9 @@ wrote about its own work is not. Lesson 6 comes back to this.
 
 Same answer. Five tool calls instead of 26, and 41 percent fewer input tokens.
 
-The number that matters most is the **5**. The default tool-call budget is 10, and
-lesson 1 needed a budget of 40 to finish at all. This run fits inside the value a
-new installation gives you, and nothing in the script raises it. The next section
-shows what happens when a run declines the program.
+Five tool calls fit inside the default budget of 10. Lesson 1 needed a budget
+of 40 to finish. This run uses the default. Nothing in the script raises it.
+The next section shows what happens when a run declines the program.
 
 ## Why it is five calls and not one
 
@@ -140,8 +139,6 @@ CALL  uc_ai__run_code          <- a program that only prints the shapes
 CALL  uc_ai__run_code
   RESULT {"brokenShipments":[{"shipment_no":"SHP-2047", ... "claimEur":720}, ...
 ```
-
-Read that sequence, because the whole rest of the course is in it.
 
 1. The first program assumed `CC_GET_READINGS` returns an array. It returns an
    object with a `readings` key, so the loop failed.
@@ -177,8 +174,7 @@ What went back to the model was the value of one variable:
 { "brokenShipments": [ ... 3 rows ... ], "totalClaimEur": 1920 }
 ```
 
-This is the whole idea of code mode. The intermediate data stays where the data
-is. Only the conclusion travels.
+The intermediate data stays where the data is. Only the conclusion travels.
 
 ## Which providers this works on
 
@@ -198,13 +194,13 @@ the question above, on the same database and the same three tools:
 | `mistral` mistral-large-latest | yes | 1 | 2 331 | 7.4 | **wrong** |
 
 <Aside type="caution" title="A wrong program can look like a cheap, healthy run">
-The Mistral run is the one to study. It wrote a program, the program ran, nothing
-raised, and it cost less than every correct run. The answer was `NONE | 0`.
+The Mistral run wrote a program, the program ran, nothing raised, and it
+cost less than every correct run. The answer was `NONE | 0`.
 
 The program read `temp_limit_c` from the limits row. That field is called
 `max_temp_c`. So every comparison was `reading.temp_c > undefined`, which is false,
-so no shipment ever broke the cold chain. The model then reported zero in good
-faith. It failed the same way on a second run.
+so no shipment ever broke the cold chain. The model then reported zero. It
+failed the same way on a second run.
 
 Lesson 3 shows how to see this, and lesson 4 removes the cause.
 </Aside>

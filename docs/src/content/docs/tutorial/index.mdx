@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import { Aside, LinkCard } from "@astrojs/starlight/components";
 
 **A tutorial builds one working thing, in order, from nothing.**
 
@@ -13,31 +13,64 @@ The [guides](/products/uc-ai/docs/guides/quickstart/) explain one topic each, an
 you read them in any order. A tutorial is the other shape: every lesson adds one
 capability to the same artifact, and you finish with something that runs.
 
-Each lesson ends with output from a real recorded run, so you can compare what you
-get. Every SQL script is in the repository.
+Most lessons end with output from a real recorded run, so you can compare what you
+get. Where a lesson has nothing to record it says so. Every SQL script is in the
+repository.
 
-## Available tutorials
+## At a glance
 
-<CardGrid>
+Six courses, ordered from the one to start with to the one that asks most of you.
+Each row is one course, with what it builds and what it costs you in time. The
+section under [the courses in detail](#the-courses-in-detail) says what each one
+teaches that no guide covers.
 
 <LinkCard
   title="Build an Agent →"
-  description="9 lessons · 130 min · OpenAI. A service-contract desk that reads your tables, obeys rules your database owns, remembers each contract, and runs from a page without blocking it."
+  description="9 lessons · 130 min · OpenAI. Start here. A service-contract desk that reads your tables, obeys rules your database owns, remembers each contract, and runs from a page without blocking it."
   href="/products/uc-ai/docs/tutorial/service-contract-desk/01-the-scenario/"
 />
 
-</CardGrid>
+<LinkCard
+  title="Extract structured data from a PDF →"
+  description="5 lessons · 75 min · OpenAI. No tools and no agent. Four supplier PDFs go in and three become invoice rows, through a schema the model must fill and five checks that decide the rest."
+  href="/products/uc-ai/docs/tutorial/invoice-extraction/01-the-pdf-in-the-inbox/"
+/>
+
+<LinkCard
+  title="Give an Agent a Memory →"
+  description="4 lessons · 60 min · OpenAI. The shortest course here. A maintenance desk that carries what the night shift recorded into the next shift’s conversation, and four failure modes."
+  href="/products/uc-ai/docs/tutorial/shift-handover/01-the-next-shift/"
+/>
+
+<LinkCard
+  title="Put an Agent in APEX →"
+  description="6 lessons · 135 min · OpenAI. A chat region on an APEX page. Prove a conversation cannot read another customer’s record, find the answer that never reached the screen, and make the audit trail name the person who asked."
+  href="/products/uc-ai/docs/tutorial/apex-chat/01-a-chat-region/"
+/>
+
+<LinkCard
+  title="Secure an Agent →"
+  description="7 lessons · 140 min · OpenAI. A payables desk that reads mail a supplier wrote. You watch one email redirect a payment, then close every route it used."
+  href="/products/uc-ai/docs/tutorial/payables-desk/01-the-attack-surface/"
+/>
+
+<LinkCard
+  title="Analyze Data at Scale →"
+  description="6 lessons · 110 min · Oracle 23ai and a DBA step. A cold-chain analyst that reads 1176 temperature readings with one tool call, because the model writes a program that runs inside your database. Recorded on Anthropic; measured on OpenAI, xAI and OpenRouter too."
+  href="/products/uc-ai/docs/tutorial/cold-chain-analyst/01-twenty-six-tool-calls/"
+/>
+
+## The courses in detail
 
 ### Build an Agent
 
-The one tutorial available today. You build an agent for a field-service company:
+Start here if you are new to UC AI. You build an agent for a field-service company:
 a support engineer opens one service contract, and the desk answers about it and
 can raise a credit note against one of its invoices.
 
-It is the whole picture rather than one feature, so by the end you have met tools,
-the run context, prompt profiles, agents, the trace, memory, structured output,
-background execution, hooks and deployment — each where it was needed rather than
-in isolation.
+By the end you have met tools, the run context, prompt profiles, agents, the
+trace, memory, structured output, background execution, hooks and deployment.
+Each appears where it is needed, not in isolation.
 
 Four things it teaches that no guide covers:
 
@@ -57,6 +90,189 @@ step that needs a DBA. Later lessons build on the objects the earlier ones creat
 
 <LinkCard
   title="Start: The scenario, and your first answer"
-  description="Set up the demo schema, call a model from PL/SQL, and see where a prompt-only answer stops."
+  description="Set up the demo schema, call a model from PL/SQL, and ask a question the pasted rows cannot answer."
   href="/products/uc-ai/docs/tutorial/service-contract-desk/01-the-scenario/"
+/>
+
+### Extract structured data from a PDF
+
+Supplier invoices arrive as PDF files at a field-service company. The course turns four of them into invoice headers and
+lines for a payables clerk.
+
+There is no tool and no agent in it. A document goes in, a JSON object comes out,
+and the whole difficulty is in what happens between those two points.
+
+Three things it teaches that no guide covers:
+
+- **A strict schema cannot say that a field is missing**, so the model returns a
+  value anyway. The course sends a delivery note through, and the row that comes
+  out looks like a zero-value invoice against a real purchase order.
+- **The arithmetic of the document is the check on an extraction.**
+  Two rules, proved on three real invoices, and both of them cost a prompt rule to
+  get right.
+- **`final_message` has a different PL/SQL type for each UC AI function.** Three
+  shapes, one field, and `get_object` returns null on two of them without an error.
+- **What an agent gives you that a plain call does not.** The last lesson changes
+  one line, and every run from then on has a trace and a token count that you did
+  not have to write.
+
+<Aside type="note" title="Two providers need a warning">
+The course is recorded on OpenAI, and Anthropic works the same way. From lesson 2
+onwards it uses structured output, which OCI does not support, and it relies on
+`enum`, which Google removes when it converts a schema. Lesson 1 has the detail.
+</Aside>
+
+<LinkCard
+  title="Start: The PDF in the inbox"
+  description="Load a supplier invoice into a BLOB, send it to a model from PL/SQL, and measure why the answer is useless to your code."
+  href="/products/uc-ai/docs/tutorial/invoice-extraction/01-the-pdf-in-the-inbox/"
+/>
+
+### Give an Agent a Memory
+
+The shortest course here, at four lessons, and the one to take after **Build an Agent**. You build the
+maintenance desk of a beverage plant: one bottling line, six machines, and a
+technician who stands at one of them and asks about it.
+
+A plant runs three shifts. The technician who records a fact at 03:00 is not the
+technician who opens the same machine next week. Everything this course does is about
+the gap between those two conversations.
+
+Four things it teaches that no guide covers:
+
+- **Which facts belong in a memory, and which belong in a column.** The work orders
+  are a table and a tool reads them. What has no table is what the conversation
+  produced, and lesson 1 draws that border in three lines.
+- **The scope is a decision, and the default fails visibly.** `agent` is the default,
+  which is one store for every machine. A recorded run about a pump is read by a
+  conversation about a compressor, and the trace proves it while the answer looks
+  fine.
+- **A note the agent wrote goes out of date and nothing corrects it.** The
+  fix is a precedence rule, and the proof is that the desk deletes its own stale line.
+- **What the memory costs on every run.** Measured: two to three extra tool calls, and
+  five of seven calls in the closing run went on `MEMORY` rather than on the job.
+
+<Aside type="note" title="It does not teach agents or tools">
+This course is only about memory. `00_setup.sql` builds the schema, the two tools,
+the prompt profile and the agent for you. If you already did **Build an Agent**, run
+it anyway: every object it creates has the `mx_` prefix and it changes nothing that
+course made.
+</Aside>
+
+<LinkCard
+  title="Start: Two conversations, a week apart"
+  description="Two conversations about the same machine, a week apart. One call gives the desk a memory, and the second conversation knows what the first one recorded."
+  href="/products/uc-ai/docs/tutorial/shift-handover/01-the-next-shift/"
+/>
+
+### Put an Agent in APEX
+
+Take this one after **Build an Agent**. It uses the same service-contract desk, and
+the setup script creates all of it, so you can start here either way. You build the
+part in front of the agent: a chat region on an APEX page, bound to the contract the
+page is on.
+
+An engineer opens one contract, asks a question, and reads the answer on the page.
+Everything hard about that is on the far side of the region: what it sends, what it
+stores, who is allowed to read it, and what you look at when it goes quiet.
+
+Four things it teaches that no guide covers:
+
+- **The column that records the owner is not the one you expect.**
+  `uc_ai_chat_messages.created_by` is the signed-in user, and
+  `uc_ai_agent_sessions.created_by` is the background job. Pass `APP_USER` as the
+  owner guard and the write is discarded in silence.
+- **How to tell a stuck turn from a failed one from an empty one**, with one query.
+  The course records all three faults rather than describing them.
+- **What happens when the page moves to another record mid-conversation.** UC AI
+  refuses to re-bind a conversation, so you choose between three settings, and the
+  lesson says when each one is right.
+- **How to make the audit trail name the person who asked**, when the run itself
+  happens in a background job that has no APEX session.
+
+<Aside type="caution" title="This course needs UC AI 26.4 and the plug-in">
+The plug-in package calls `execute_agent` with `p_run_context`, which is new in
+26.4, so it does not compile on an older version. The plug-in is attached to the
+[latest release](https://github.com/United-Codes/uc_ai/releases/latest). Lesson 1
+checks both.
+</Aside>
+
+<LinkCard
+  title="Start: Add a chat region to a page"
+  description="Install the plug-in, put a working chat region on an APEX page, and send the first message."
+  href="/products/uc-ai/docs/tutorial/apex-chat/01-a-chat-region/"
+/>
+
+### Secure an Agent
+
+Take this one after **Build an Agent**: it assumes tools, the run context and the
+trace, and it does not teach them again. You build an accounts-payable desk for a
+manufacturer. A clerk opens one incoming supplier invoice, and the desk reads it,
+reads the email that came with it, and can approve it for payment.
+
+That email is the point. A stranger wrote it, nobody reviewed it, and it reaches
+the model inside a tool result. Lesson 1 records a real run where one email
+redirects a supplier payment to another bank account, and the desk writes back to
+the attacker to confirm it. The other six lessons close every route that email
+used.
+
+Four things it teaches that no guide covers:
+
+- **Which attack works.** A recorded run complies with a polite request to change
+  a bank account and refuses the loud injection that asks for the same thing. The
+  course keeps both and says which one is evidence of what.
+- **How to cut a write tool down to one argument**, so there is nothing left for
+  an email to steer, and how to prove it with forged arguments.
+- **Why a tool that reads a bank account and a tool that sends mail are only
+  dangerous together**, and how to audit the pair rather than the tool.
+- **How to read your own security posture as rows**, in four queries you run after
+  every deployment.
+
+<Aside type="caution" title="It installs attack text on purpose">
+The demo schema of this course holds supplier emails that are written to be obeyed
+by a model, and one vendor name with an instruction in it. Every account number
+and address in the seed data is invalid by construction, and `00_teardown.sql`
+removes all of it.
+</Aside>
+
+<LinkCard
+  title="Start: A supplier email changes a bank account"
+  description="Build the payables desk the way a first draft builds it, and watch one email redirect a payment."
+  href="/products/uc-ai/docs/tutorial/payables-desk/01-the-attack-surface/"
+/>
+
+### Analyze Data at Scale
+
+Take this one when a single question makes your agent call the same tool many
+times. You build a cold-chain analyst for a pharmaceutical logistics operator: 24
+shipments, one temperature logger for each one, and the question "which shipments
+broke the cold chain, and what do we claim?".
+
+That question is 26 tool calls, and the recorded run needs a raised budget to
+finish at all. By lesson 4 it is **one** tool call, because the model writes a
+JavaScript program that loops inside your database and returns only the answer.
+Each lesson prints the tokens its run used, so the course ends with a table built
+from real runs and not from a claim.
+
+Three things it teaches that no guide covers:
+
+- **Where the token saving comes from.** The flag saves 41 percent.
+  Hiding the bulk tools from the model saves the rest. The course measures both.
+- **Your tool descriptions are an API reference.** A program is told the argument
+  names and nothing else. Two different models therefore read a field that does not
+  exist, and one of them reported a confident zero instead of an error.
+- **How to prove the sandbox instead of trusting it.** Five checks, and none of
+  them calls a model: no write tool, no SQL, a hook that fires on every inner
+  call, a veto that cannot be caught, and a call budget.
+
+<Aside type="caution" title="This course needs Oracle 23ai and a DBA">
+Code mode runs the generated JavaScript in a locked-down sandbox schema, and there
+is no fallback without it. Only a DBA can install it, and it needs Oracle 23ai.
+Lesson 1 checks both before you spend a token.
+</Aside>
+
+<LinkCard
+  title="Start: One question, twenty-six tool calls"
+  description="Set up 1176 temperature readings, ask one batch question the ordinary way, and write down the tokens it uses."
+  href="/products/uc-ai/docs/tutorial/cold-chain-analyst/01-twenty-six-tool-calls/"
 />
