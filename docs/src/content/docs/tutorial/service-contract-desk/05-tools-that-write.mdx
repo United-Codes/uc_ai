@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={5}
   of={9}
   minutes={15}
-  promise="the desk can raise a credit note — and the database refuses the three cases it must refuse."
+  promise="the desk can raise a credit note, and the database refuses the three cases it must refuse."
   scripts={["05_tool_write.sql"]}
 />
 
@@ -63,7 +63,7 @@ end if;
 
 ## A refusal is a result, not an error
 
-Notice what those branches do **not** do. They do not raise.
+Those branches do not raise.
 
 An exception stops the run, and the engineer sees a stack trace. A returned
 sentence reaches the model, which reads it and explains it. So each refusal returns
@@ -148,9 +148,9 @@ Credit note refused: INV-1002 is outside this contract's coverage window, so it 
 not covered.
 </AiOutput>
 
-Run 2 is the important one. The model asked for a legal-looking credit note, the
-database said no, and the model explained the reason in the engineer's language. No
-exception, no stack trace, and no way to argue past it.
+In run 2 the model asked for a legal-looking credit note, the database refused,
+and the model explained the reason in the engineer's language. No exception and no
+stack trace.
 
 ## Verification, part 1: the row, and who is on it
 
@@ -176,8 +176,8 @@ sequence are normal and worth knowing before somebody reports them as missing ro
 
 ## Verification, part 2: every branch, with no model
 
-This is the check that matters, and it costs nothing. Each case calls the handler
-directly with a `_ctx` you build yourself:
+Each case calls the handler directly with a `_ctx` you build yourself, and none
+of them calls a model:
 
 ```
 gold, inside window, full amount       -> created  CN-9062
@@ -190,7 +190,7 @@ silver contract, labour only           -> created  CN-9063
 no contract bound to the run           -> refused  NO_CONTRACT
 ```
 
-Two of those deserve attention:
+Two of those cases:
 
 - **`WRONG_CONTRACT`** is the security case. The model asked to credit `INV-2001`,
   which belongs to contract 99, while the run was bound to 88. The refusal is the
@@ -199,7 +199,7 @@ Two of those deserve attention:
   attached. Test both sides of each: the amount exactly equal to the remainder must
   pass, and one cent more must refuse.
 
-## What the model can and cannot talk its way past
+## An "ignore your instructions" prompt
 
 An engineer, or a customer through an engineer, will try this:
 
@@ -226,8 +226,7 @@ writes the run context can bind.
 
 ## The transaction is yours
 
-The handler does not commit. That is deliberate, and it has a consequence you must
-decide about:
+The handler does not commit. That is deliberate, and it has a consequence:
 
 - The credit note is inserted in the transaction of the **caller**. Your
   application decides when it becomes permanent, and it can roll the whole run back.

@@ -134,13 +134,13 @@ ORA-40573: invalid use of PL/SQL JSON object type
 A JSON object is a PL/SQL type, and SQL cannot use it. Read it into a local `clob`
 first, then update with that variable.
 
-The symptom is confusing, so it is worth knowing: the **agent run succeeds** and
-its execution row says `completed`, while your request row says `failed`. Two tables
-disagreeing like that always means the failure came after the run, in your own code.
+The symptom is confusing: the **agent run succeeds** and its execution row says
+`completed`, while your request row says `failed`. Two tables disagreeing like that
+always means the failure came after the run, in your own code.
 </Aside>
 
-The exception handler matters as much as the happy path. A run that raises must
-still leave a final status, or the page polls a row stuck at `running` forever:
+A run that raises must still leave a final status, or the page polls a row stuck
+at `running` forever:
 
 ```sql
 exception
@@ -154,10 +154,9 @@ exception
 
 ## The credential works with no browser session
 
-This is the part people expect to break, and it does not. A scheduler job has no
-APEX session, so an APEX web credential has nothing to hang off. **UC AI creates
-its own APEX session** when none exists, which is what lets the provider call
-succeed from a job, a trigger, or a nightly batch.
+A scheduler job has no APEX session, so an APEX web credential has nothing to
+hang off. **UC AI creates its own APEX session** when none exists, which is what
+lets the provider call succeed from a job, a trigger, or a nightly batch.
 
 It does not pretend a person was there. The execution row of the job run records:
 
@@ -167,8 +166,8 @@ UC_AI        db         (null)                     1   completed
 ```
 
 `audience` is `db`, and `apex_user` is null, because the synthetic session is
-stripped out of the audit trail. So a run from a job is honestly recorded as a run
-from the database, and lesson 9 can tell the two apart.
+stripped out of the audit trail. So a run from a job is recorded as a run from the
+database, and lesson 9 can tell the two apart.
 
 ## Wiring the APEX page
 
@@ -239,7 +238,7 @@ After 4 seconds the status is done.
 - INV-1002 — $350 uncredited (outside coverage)
 ```
 
-Two things to check, and they are the whole point of the lesson:
+Two things to check:
 
 1. `queue_request` returned **before** the answer existed.
 2. The row reached `done`, and the answer is in `sc_ai_requests.answer` where a

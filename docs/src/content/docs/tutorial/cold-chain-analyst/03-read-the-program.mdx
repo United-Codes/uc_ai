@@ -27,8 +27,7 @@ there is no error anywhere.
 **Without the program,** you change the prompt and hope. **With the program,** you
 read the JavaScript that produced the number.
 
-This lesson comes before the harder ones on purpose. You need it at lesson 4, not
-at the end.
+Lesson 4 needs what this lesson teaches, so it comes before the harder ones.
 
 ## The program is an ordinary tool call
 
@@ -166,7 +165,7 @@ A code-mode failure is **data**. UC AI returns it to the model as a JSON object
 with an `error` and a `hint`, and the run continues. The model reads the error and
 writes a better program on its next turn.
 
-UC AI does this deliberately. The consequence is important:
+UC AI does this deliberately.
 
 <Aside type="caution" title="A run that does not raise can still be wrong">
 Your PL/SQL call succeeds when the program failed. `generate_text` returns
@@ -182,8 +181,7 @@ before the program runs.
 
 **Program 3 — the same mistake behind an alias.** `const fetchIt = callTool;`
 cannot be repaired by a text rewrite. So UC AI raises an error instead of letting
-the program use an unfinished call as if it were data. A loud error is better than a
-number computed from nothing.
+the program use an unfinished call as if it were data.
 
 **Program 4 — no `result`.** The program ran and assigned nothing. UC AI has
 nothing to send back and says so in those words.

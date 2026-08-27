@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={3}
   of={9}
   minutes={15}
-  promise="the desk answers from your tables — and it cannot read a contract other than the one you bound the run to."
+  promise="the desk answers from your tables, and it cannot read a contract other than the one you bound the run to."
   scripts={["03_tools_read.sql"]}
 />
 
@@ -30,9 +30,9 @@ the contract records". A **tool** is a PL/SQL function that the model can call. 
 model does not read your tables. It asks your function, and your function reads
 your tables.
 
-That raises the question this lesson exists for. If the model chooses the
-arguments, and one argument is the contract, then the model chooses the contract.
-An engineer on contract 88 must never get an answer about contract 99.
+If the model chooses the arguments, and one argument is the contract, then the
+model chooses the contract. An engineer on contract 88 must never get an answer
+about contract 99.
 
 **Without the run context,** you have to trust the model to name the right
 contract. **With the run context,** the model cannot name a contract at all.
@@ -149,8 +149,8 @@ INV-1003 has $0 still available to credit; its full $200 has already been credit
 The related call (2026-08-14) is inside the coverage window.
 </AiOutput>
 
-Compare that with lesson 1, where the model said "up to 200" from the same
-question. The number is now right because the model stopped guessing and asked.
+Lesson 1 answered "up to 200" to the same question, from rows pasted into the
+prompt. The number is right now because the model called a tool.
 
 ## Verification, part 1: no tool declares a contract
 
@@ -212,8 +212,8 @@ Three invoices, and all three belong to contract 88. Contract 99 has one invoice
 `INV-2001`, and it does not appear. The forged argument was ignored, because the
 handler never reads it.
 
-This is the check to keep. A model that declines to ask is being polite. A handler
-that cannot answer is being safe.
+Keep this check. A model that declines to ask proves nothing about what the
+handler returns when something does ask.
 
 <Aside type="caution" title="The run context binds arguments, not tool lists">
 `_ctx` decides what a tool answers. It does not decide which tools the agent has.

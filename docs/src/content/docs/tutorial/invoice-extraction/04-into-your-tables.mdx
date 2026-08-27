@@ -66,7 +66,7 @@ for i in 0 .. l_lines.get_size - 1 loop
 end loop line_loop;
 ```
 
-Three details are not decoration:
+Three details:
 
 - **Read each value into a variable first.** A `json_object_t` lives in PL/SQL and
   cannot be used inside a `select`, `insert`, `update` or `delete`.
@@ -95,8 +95,6 @@ discount line is negative.
 
 ## Read money as a number, not as text
 
-This is the part that costs people real money.
-
 A JSON number always uses a dot: `7676.51`, never `7676,51`. Much of the world
 writes it the other way, and Oracle follows whatever session it runs in. So the
 same code gives a different answer for a colleague in Berlin.
@@ -113,15 +111,14 @@ validate, told:     1
 validate, wrong:    1
 ```
 
-Read the fourth line again. It is not an error. `7676.51` came back as **767651**,
-a hundred times too big, in a column that holds money. Nothing raised, and nothing
-was logged.
+The fourth line is not an error. `7676.51` came back as **767651**, a hundred times
+too big, in a column that holds money. Nothing raised, and nothing was logged.
 
-Now look at the last line. `validate_conversion` answers `1`, meaning "yes, this
-converts", and it is right. **Both conversions are valid.** One of them is valid
-and wrong, and no validator can tell you which one you meant.
+`validate_conversion` answers `1`, meaning "yes, this converts", and it is right.
+**Both conversions are valid.** One of them is valid and wrong, and no validator
+can tell you which one you meant.
 
-So there is one rule, and it is short:
+The rule is short:
 
 ```sql
 -- right: reads the JSON number itself, and never looks at your session
@@ -176,13 +173,12 @@ number, an empty string arrives in PL/SQL as NULL, and `inv_invoices.invoice_no`
 cannot be null.
 
 Everything else **is** written, with `needs_review` set to `Y` and the reasons next
-to it. An invoice that is over its purchase order is still an invoice, and hiding
-it helps nobody.
+to it. An invoice that is over its purchase order is still an invoice.
 
 ## What is left for a person
 
-The last block writes all four documents and then asks the only question that
-matters:
+The last block writes all four documents, then asks which of them still need a
+person:
 
 ```sql
 select d.filename
@@ -203,8 +199,8 @@ halvorsen.pdf                 HB-88214         Y     DATE_AMBIGUOUS, PO_NOT_FOUN
 ferrotek-delivery-note.pdf
 ```
 
-That is the whole course in four rows. One invoice needs nobody. Two need a person,
-and the row says why. One never became an invoice at all.
+One invoice needs nobody. Two need a person, and the row says why. One never
+became an invoice at all.
 
 ## Verification
 

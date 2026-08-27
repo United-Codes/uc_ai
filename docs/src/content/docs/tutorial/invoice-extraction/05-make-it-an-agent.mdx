@@ -20,8 +20,8 @@ import AiOutput from "../../../../components/AiOutput.astro";
 
 ## The problem
 
-Two things are still missing, and they are the two you need before anybody else
-depends on this.
+Two things are still missing, and you need both before anybody else depends on
+this.
 
 **The prompt is a constant in a package body.** A better prompt means a compile and
 a deployment, and you cannot tell afterwards which prompt read which invoice.
@@ -139,7 +139,7 @@ l_invoice := json_object_t(l_result.get_clob('final_message'));
 l_invoice := l_result.get_object('final_message');
 ```
 
-Worth writing down, because it catches everybody once:
+The three shapes:
 
 | You call | `final_message` is | How to read it |
 | --- | --- | --- |
@@ -183,12 +183,12 @@ end loop document_loop;
 The commit is inside the loop on purpose. One document is one unit of work, and a
 bad PDF at the end of a run of a hundred must not undo the ninety-nine before it.
 
-The handler is longer than it looks like it needs to be, and the reason is worth
-copying. `extract_with_agent` records its own failures. A failure while **writing
-the rows** does not. A short handler then leaves that document at `EXTRACTED`. That
-status is not `NEW`, so the next run skips it, and not `FAILED`, so no list of
-problems shows it. The document disappears quietly. So the handler sets the status
-and writes the message itself, and only then commits.
+The handler is longer than it looks like it needs to be. `extract_with_agent`
+records its own failures. A failure while **writing the rows** does not. A short
+handler then leaves that document at `EXTRACTED`. That status is not `NEW`, so the
+next run skips it, and not `FAILED`, so no list of problems shows it. The document
+is then in no list at all. So the handler sets the status and writes the message
+itself, and only then commits.
 
 ```
 Documents handled: 4.
@@ -221,15 +221,15 @@ the prompt are the same every time. Your `completion_tokens` will not: the model
 writes the answer again on every run, and a description that comes back one word
 longer changes the count.
 
-Two things in that table are worth taking to whoever pays for it:
+Two things in that table:
 
 - **A PDF does not cost by its size on disk.** `ferrotek.pdf` and `nordwind.pdf`
   are within 100 bytes of each other, both one page, and one costs 2,711 prompt
   tokens while the other costs 1,040. The prompt-token count for one document
-  repeats across runs, so this is not noise. It is also not the same between models: `gpt-5.4-nano` charges
-  1,209 prompt tokens for `halvorsen.pdf` where `gpt-5.6-terra` charges 4,055, for
-  the same file. How a provider counts a document is its own business, and the only
-  honest way to know is to store the number for every run.
+  repeats across runs, so this is not noise. It is also not the same between
+  models: `gpt-5.4-nano` charges 1,209 prompt tokens for `halvorsen.pdf` where
+  `gpt-5.6-terra` charges 4,055, for the same file. How a provider counts a document
+  is its own business, so store the number for every run.
 - **A second page costs about half again**, not double. `halvorsen.pdf` is 4,055
   prompt tokens against ferrotek's 2,711. It is also the longer document: eight
   line items to six, and a block of payment and returns text.
@@ -241,7 +241,6 @@ It returned the same net amount, the same total and the same six lines.
 
 ## Which model, and does it need reasoning?
 
-Everybody asks this, so the course measures it instead of guessing.
 `06_model_matrix.sql` holds the whole experiment: the schema and the system prompt
 are held fixed, and only the model and the reasoning level move. It scores every
 run in PL/SQL against amounts typed in by hand from the paper, so nothing marks its
@@ -250,7 +249,7 @@ own work.
 <Aside type="caution" title="This script costs more than the rest of the course">
 `06_model_matrix.sql` makes about 30 calls to the provider, roughly 70,000 tokens.
 It is optional, and the course works without it. Run it when you want these
-numbers for your own documents, which is the only way to really know.
+numbers for your own documents.
 </Aside>
 
 Part 1, one run of each model over the four documents:
@@ -277,7 +276,7 @@ amount, the subtotal printed on the page, instead of `2136.50` which includes th
 delivery charge. So four documents and one pass is an indication, not a
 measurement. Run it a few times.
 
-### Where the cheap model reliably breaks
+### The cheap model on a scanned invoice
 
 Part 3 runs the hardest case three times per tier. It is the same FerroTek invoice,
 rasterized to an image-only PDF with no text layer at all — a scan:
@@ -296,14 +295,12 @@ rasterized to an image-only PDF with no text layer at all — a scan:
 
 Three failures out of three, and the larger model right three times out of three.
 
-Look at what the small model got wrong: `net=2091.5`. That is the **same** mistake
-it made intermittently on the text version. It did not misread a digit. It stopped
-applying a rule from the system prompt, and it did so every time once the input got
-harder. A small model gives up the instructions first.
+The small model returned `net=2091.5`, the **same** mistake it made intermittently
+on the text version. It did not misread a digit. It stopped applying a rule from
+the system prompt, and it did so every time once the input got harder. One pass
+would not have shown that.
 
-That is a boundary you can plan around, and one pass would never have shown it.
-
-### What reasoning did, and did not do
+### Reasoning on the cheapest model
 
 Part 2 turns reasoning on, on the **cheapest** model, because that is where it has
 the best chance of helping:
@@ -316,56 +313,51 @@ gpt-5.4-nano, reasoning high    4 of 4        8086 tokens
 ```
 </AiOutput>
 
-Be careful about what this shows. Reasoning scored 4 of 4 at both levels, in both
-runs of the script. It never made an answer worse. But the model without reasoning
-also scored 4 of 4 in this run, so **these four documents cannot show that
-reasoning fixed anything.** What they do show is the price: 8% more tokens at low,
-and 42% more at high.
+Reasoning scored 4 of 4 at both levels, in both runs of the script. It never made
+an answer worse. But the model without reasoning also scored 4 of 4 in this run, so
+**these four documents cannot show that reasoning fixed anything.** What they do
+show is the price: 8% more tokens at low, and 42% more at high.
 
-The provider guidance says the same thing in a more useful form. Reasoning effort
-buys a model room to **combine several parts of a page**, not sharper eyes. So the
-rule is about the shape of the question:
+The provider guidance says the same thing. Reasoning effort buys a model room to
+**combine several parts of a page**, not sharper eyes. The rule is about the shape
+of the question:
 
 - **Reading a value that is printed** — leave reasoning off.
-- **Combining several parts of the page into one answer** — that is what reasoning
-  is for, and a document with totals on page 2 and adjustments on page 1 is the
-  case to try it on.
+- **Combining several parts of the page into one answer** — turn reasoning on. A
+  document with totals on page 2 and adjustments on page 1 is the case to try it
+  on.
 
 ### Which model to choose
 
 - **Start with the cheapest tier in the family**, and prove it on ten of your own
-  documents, more than once each. That is an afternoon, and it is the only evidence
-  that counts.
+  documents, more than once each. That is an afternoon of work.
 - **Move up a tier for scans and photos**, for hand-filled forms and checkboxes,
   and for scripts other than Latin. Published benchmarks put the largest small-model
   gaps in exactly those places, and much smaller gaps on multi-column layouts.
 - **Try reasoning before a bigger model** when the failure is a rule not applied
   rather than a value misread. It is usually the cheaper of the two, and this
   script is how you find out whether it helps on your documents.
-- **Keep the checks either way.** They are what tells you which of these you have.
+- **Keep the checks either way.** They tell you which of these cases you have.
 
 <Aside type="note" title="Models will make your numbers add up for you">
-This one is worth knowing before you trust any extraction. Published work on 10,656
-real receipts found that models sometimes **change a line item's price, or invent a
-tax line, so that the details match the total** — and that the frontier model did
-this more often than the small one, not less.
+Published work on 10,656 real receipts found that models sometimes **change a line
+item's price, or invent a tax line, so that the details match the total** — and that
+the frontier model did this more often than the small one, not less.
 
 That is the same behaviour this course hit in lesson 3, where allowing `TAX` as a
 line kind made two runs in three add a tax line that was not a line on the page.
 
-So read the sum check in lesson 3 again. It is not only there to catch bad reading.
-It is there to catch the model quietly reconciling on your behalf, which is the
-failure that looks most like success.
+The sum check in lesson 3 catches more than bad reading. It also catches the model
+reconciling the numbers on your behalf.
 </Aside>
 
 <Aside type="tip" title="The sum check is what caught the small model">
-Look at what found the failure above: not a person, and not a benchmark. One check
-from lesson 3 compared the sum of the line items with the net amount, they did not
-agree, and `validate_extraction` returned `SUM_MISMATCH`.
+One check from lesson 3 found the failure above. It compared the sum of the line
+items with the net amount, they did not agree, and `validate_extraction` returned
+`SUM_MISMATCH`.
 
-That is what the checks buy you. With them, choosing a cheaper model is a **cost**
-decision, because you find out when it was not good enough. Without them it is a
-risk nobody can see.
+With the checks, choosing a cheaper model is a **cost** decision, because you find
+out when it was not good enough. Without them it is a risk nobody can see.
 </Aside>
 
 ## The trace UC AI kept for you
@@ -425,7 +417,7 @@ SEQ  ROLE         TOOL_NAME    CHARS
   2  assistant                   956
 ```
 
-Two rows, and each one tells you something:
+Two rows:
 
 - `seq 1`, 22 characters, is your user prompt: `Extract this document.`
 - `seq 2`, 956 characters, is the extraction JSON.
@@ -433,9 +425,8 @@ Two rows, and each one tells you something:
 A third row with the role `reasoning` turns up on some runs and not others,
 depending on what the model did. That is normal.
 
-What matters more is what is **not** there: no `tool_call` row, because this agent
-has no tools. That is what a document-extraction agent looks like, and one glance
-at this table tells you whether a run did what you expected.
+There is no `tool_call` row, because this agent has no tools. One glance at this
+table tells you whether a run did what you expected.
 
 <Aside type="note" title="The PDF is not in this table">
 A file is not written to `uc_ai_agent_messages`, so the trace does not show that a
@@ -464,8 +455,8 @@ HB-88214                 5432  completed     4530
 NW-2026-1188             5431  completed     1508
 ```
 
-That join is why `inv_extractions` stores `execution_id`. Somebody will eventually
-ask why an invoice says what it says, and this is the answer.
+That join is why `inv_extractions` stores `execution_id`. It answers where the
+values on an invoice row came from.
 
 ## Verification
 
@@ -521,8 +512,7 @@ Three directions from here:
   course](/products/uc-ai/docs/tutorial/service-contract-desk/08-apex-page/) queues
   the work in a background job and polls the row.
 - **Give the agent tools.** This agent has none, which is why its trace has no
-  `tool_call` rows. An agent that can look the supplier up while it reads is a
-  different kind of thing.
+  `tool_call` rows. An agent with a tool can look the supplier up while it reads.
 - **Cap what it can spend.** A pipeline that runs on every incoming mail needs a
   budget before it needs anything else.
 
