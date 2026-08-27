@@ -1,0 +1,270 @@
+---
+title: Decide what the desk writes down
+description: The desk invents a new file name on every run. Read the MEMORY PROTOCOL it works from, add filing rules of your own to the prompt profile, and seed a reference note with put_file.
+sidebar:
+  order: 3
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={3}
+  of={4}
+  minutes={15}
+  promise="the desk files its notes under names you chose, and it reads a reference note that a planner wrote and the desk cannot change."
+  scripts={["03_shape.sql"]}
+  course="shift-handover"
+/>
+
+## The problem
+
+Block 1 of `03_shape.sql` lists what the desk has filed so far:
+
+```
+STORE_KEY                         PATH                                  CHAR_COUNT
+context:MX_DESK:asset_no:AS-14    /memories/AS-14-operating-note.txt           430
+context:MX_DESK:asset_no:AS-31    /memories/current_asset.md                   494
+```
+
+Two machines, two file names, and no rule connects them. One has the asset number in
+it and the other does not. One is `.txt` and the other is `.md`.
+
+Now run the first two lessons again from an empty schema, and the names change. These
+four are all real, and all four are for the same two machines:
+
+```
+/memories/as-14-handover.txt
+/memories/AS-14_handover.txt
+/memories/AS-14-operating-note.txt
+/memories/AS-31_status_2026-08-25.txt
+```
+
+The model picks a name each time, and it does not pick the same one twice.
+
+A store you cannot predict is a store you cannot operate. You cannot write the query
+that reads the current handover for a machine. You cannot tell a second agent where to
+look. And you cannot tell whether a file is missing or only called something else.
+
+## The instructions the desk is working from
+
+When memory is on, UC AI appends one block to the rendered system prompt. Read it:
+
+```sql
+declare
+  l_protocol clob := uc_ai_memory.get_memory_protocol;
+begin
+  sys.dbms_output.put_line('Length: ' || sys.dbms_lob.getlength(l_protocol));
+  sys.dbms_output.put_line(l_protocol);
+end;
+/
+```
+
+```
+Length: 918 characters.
+# MEMORY PROTOCOL
+You have a persistent memory directory at /memories, accessed through the "memory"
+tool. It survives across conversations.
+1. ALWAYS check your memory first: view /memories before doing anything else, and
+   read the files relevant to the task.
+2. Record important context as you work - decisions, user preferences, learnings,
+   task progress. Update memory continuously, not only at the end.
+3. ASSUME INTERRUPTION: your context window may be reset at any moment; anything
+   not recorded in memory is lost.
+4. Keep memory organized: small focused files; update or delete stale content
+   instead of piling up new files.
+```
+
+Rule 4 says "keep memory organized". It cannot say what organized means at your
+plant, because it does not know your plant.
+
+That block is 918 characters, it is the same text for every agent in every
+installation, and `enable_for_agent` has no parameter that changes it. So the layout
+is your job, and it belongs in the system prompt of the prompt profile.
+
+## Add filing rules to the profile
+
+```sql
+MEMORY LAYOUT
+Your memory holds one machine only, so never put an asset number in a file name.
+Use these three files and no others:
+
+  /memories/handover.txt    what the next shift must know NOW. Short. Current only.
+  /memories/history.txt     what we have learned about this machine over time.
+  /memories/site_rules.txt  written by the maintenance planner. READ IT, never write to it.
+
+Start every line you add with the date as YYYY-MM-DD, then a space, then a dash.
+Never record a phone number, a home address, or any other personal data. The
+name of a technician on shift is fine.
+When a line stops being true, replace or delete it. Do not append a correction
+underneath it and leave both.
+```
+
+Four decisions are in that block: **which files exist**, **what goes in each one**,
+**how a line starts**, and **what must never be written down**. The last rule sets up
+[lesson 4](/products/uc-ai/docs/tutorial/shift-handover/04-a-note-gone-stale/).
+
+The script reads the profile row, sets the new system prompt, and passes the row
+back. The other columns, and with them the memory tool tag that lesson 1 added,
+stay as they are:
+
+```sql
+l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('MX_DESK_PROFILE', 1);
+l_profile.system_prompt_template := c_system_prompt;
+uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
+```
+
+The script reads the row again and prints the tags, so you can see that they
+survived: `{"g_max_tool_calls":12,"g_tool_tags":["mxdesk","memory"],"g_enable_tools":true}`
+
+Two more facts about a layout change:
+
+- **A new profile version does not carry the memory tool tag.** `enable_for_agent`
+  writes the tag into the version the agent resolves to now. If you make a version 2
+  later, run `enable_for_agent` again. It is safe to repeat.
+- **The rules take effect on the next new session.** An open conversation keeps the
+  system prompt it started with.
+
+## Adopt the layout on an empty store
+
+The store still holds the names the desk chose before the rules existed. Nothing
+migrates them, and asking a model to tidy its own filing is not something you can
+check. So the script empties the AS-14 store first:
+
+```sql
+uc_ai_memory.clear_store_files(l_store_id);
+```
+
+The AS-31 store is left as it was, on purpose. At the end of this lesson it still
+holds `/memories/current_asset.md`, which is a name the rules do not allow. That is
+what an unmigrated store looks like.
+
+## A reference note the planner writes
+
+Nothing says the agent has to be the only author. `put_file` writes into the same
+filesystem, so a maintenance planner can put standing rules where the desk will read
+them:
+
+```sql
+declare
+  l_store_id number;
+  c_rules constant varchar2(1000 char) :=
+'Site rules for LINE-2. Maintained by the maintenance planner. Read only.
+
+2026-01-15 - Work that opens the syrup circuit needs a CIP rinse booked with
+  production before it starts.
+2026-03-02 - Coupling and alignment work on a pump is a TWO-PERSON job. Do not
+  start it alone on a night shift. Call the shift leader instead.
+2026-05-20 - LINE-2 spares are drawn from store 4B. Store 2A no longer holds
+  them.';
+begin
+  l_store_id := uc_ai_memory.resolve_store_id(
+    p_scope         => uc_ai_memory.c_scope_context
+  , p_agent_code    => 'MX_DESK'
+  , p_context_key   => 'asset_no'
+  , p_context_value => 'AS-14'
+  );
+
+  uc_ai_memory.put_file(
+    p_store_id => l_store_id
+  , p_path     => '/memories/site_rules.txt'
+  , p_content  => c_rules
+  );
+  commit;
+end;
+/
+```
+
+<Aside type="note" title="You can only seed a store that exists">
+UC AI creates a store at its first use, and `resolve_store_id` only reads. So there
+is no store to seed for a machine the desk has never run on, and the call raises
+`ORA-20423`.
+
+The AS-14 store exists because lesson 2 wrote to it. To seed a machine that has
+never been opened, let the desk have one ordinary conversation about it first.
+</Aside>
+
+## The test of the seeded file
+
+The second conversation is the one that matters. A technician alone on a night shift
+asks:
+
+> I am on nights on my own. Can I start the coupling job on this pump now?
+
+Nothing in `mx_work_orders` or `mx_alarms` answers that question. Only
+`site_rules.txt` does.
+
+<AiOutput model="gpt-5.6-terra" date="2026-08-25" label="The night-shift answer">
+No. Coupling/alignment is a **two-person job** — do not start it alone on nights.
+Call the shift leader and wait for a second qualified person.
+
+The pump is currently running. When the job is scheduled, measure drive-end alignment
+**cold, before restart**.
+</AiOutput>
+
+And the trace says which file that came from:
+
+```
+   SEQ COMMAND    PATH
+     3 view       /memories
+     6 view       /memories/handover.txt
+     7 view       /memories/site_rules.txt
+    15 insert     /memories/handover.txt
+```
+
+## What the store holds now
+
+```
+PATH                           CHAR_COUNT
+/memories/handover.txt                297
+/memories/site_rules.txt              411
+```
+
+Two of the three names the rules allow, and no asset number in either. The desk wrote
+no `history.txt` in this run, because it had nothing long-term to record yet.
+
+The file it did write follows the line rule:
+
+```
+2026-08-25 - Drive-end vibration has recurred. Reliability requires drive-end
+alignment measured cold before start-up, never after a run.
+2026-08-25 - Tomas is alone on nights; do not start coupling/alignment work until a
+second qualified person is present and the shift leader has been contacted.
+```
+
+And `site_rules.txt` is still 411 characters, byte for byte what the planner seeded.
+The desk read it twice and did not write to it.
+
+<Aside type="caution" title="A prompt rule is not a control">
+Everything in this lesson is an instruction to a model. The desk obeyed it in the
+recorded runs, and a model can leave an instruction out of any run.
+
+If a file must not be written, the control is not a sentence in a prompt. It is
+`clear_store_files` on a schedule, a review of the store, or not giving that agent a
+memory at all. For the case where the untrusted text comes from outside your company,
+read [What to do about a poisoned
+memory](/products/uc-ai/docs/tutorial/payables-desk/05-confused-deputy/#what-to-do-about-a-poisoned-memory).
+</Aside>
+
+## Key takeaways
+
+- The `MEMORY PROTOCOL` is 918 fixed characters and there is no parameter that
+  changes it. Your file layout has to come from your own prompt profile.
+- Change a profile by reading the row with `get_prompt_profile`, setting the one
+  column you want, and passing the row back. Columns you do not touch keep their
+  value, so the memory tool tag survives.
+- `put_file` lets a person seed reference notes the agent will read, in a store that
+  already exists.
+- `uc_ai_memory.put_file(p_store_id => l_store_id, p_path => '/memories/site_rules.txt', p_content => c_rules);`
+
+**Full reference:** [Size caps and
+housekeeping](/products/uc-ai/docs/guides/agent-memory/#size-caps-and-housekeeping)
+covers `put_file`, `list_files`, `delete_file` and the caps that stop a store growing
+without a limit.
+
+<LinkCard
+  title="Next lesson: A note the desk was wrong to believe"
+  description="A note that was true in February is wrong by June. Watch the desk act on it, then rank your tables above the memory and see the desk correct its own file."
+  href="/products/uc-ai/docs/tutorial/shift-handover/04-a-note-gone-stale/"
+/>
