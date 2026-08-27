@@ -8,7 +8,7 @@ sidebar:
 import { Aside } from "@astrojs/starlight/components";
 
 <Aside type="tip" title="Start with the shortest example">
-The [Quickstart](/products/uc-ai/docs/guides/quickstart/) registers one tool without parameters. It then shows the model calling this tool. This guide gives more: parameters, best practices, and examples that read and write data.
+The [Quickstart](/products/uc-ai/docs/guides/quickstart/) registers one tool without parameters. It then shows the model calling this tool. This guide adds parameters, best practices, and examples that read and write data.
 </Aside>
 
 **Tools give the AI access to your data**
@@ -62,7 +62,7 @@ A precise schema definition makes the tool call more reliable.
 - **Always return feedback**: every piece of information helps the AI. If an error occurs, return a text that describes the error. The AI can then call the tool again with corrected input. After a successful action, return a success message also. The AI then knows the result.
 - **Validate inputs**: make sure that all required parameters are present. Make sure also that each value obeys its constraints for enum, minimum, and maximum. If a value breaks a constraint, return an error text. The AI can then call the tool again with corrected parameters.
 - **Describe the tool completely**: more context about a tool helps the AI decide when to call it. Write careful descriptions and constraints in your JSON schema. For some providers, examples in the system prompt help also. Give an example call and example parameters for each tool.
-- **The providers differ greatly**: the intelligence of the model controls how well it picks and calls tools. [Reasoning](/products/uc-ai/docs/guides/reasoning) helps the AI plan its steps and call tools more precisely. Some providers are still weaker at tool calls than others. In my experience, [Anthropic](/products/uc-ai/docs/providers/anthropic/) is the best provider for tool calls today.
+- **The providers differ greatly**: the intelligence of the model controls how well it picks and calls tools. [Reasoning](/products/uc-ai/docs/guides/reasoning) helps the AI plan its steps and call tools more precisely. Some providers are still weaker at tool calls than others. We recommend [Anthropic](/products/uc-ai/docs/providers/anthropic/) for tool calls today.
 - **Restrict the available tools with tags**: many registered tools add much context. This context makes the decision harder for the AI. Filter the tools by tag to give the AI fewer options.
 
 ## Registering a tool
@@ -148,8 +148,8 @@ The handler of the tool then receives:
 
 ### Leave the scoped value out of the schema
 
-Do not declare the scoped value as a tool parameter. The model then cannot name a
-document at all, and there is one place the value can come from:
+Do not declare the scoped value as a tool parameter. The model then cannot name
+a document, and the value has one source:
 
 ```sql
 l_schema := json_object_t.parse('{
@@ -200,12 +200,11 @@ end if;
 rejected at registration.
 
 **Read the arguments by name.** A handler that counts the keys, or that walks
-all of them, sees `_ctx` as one more key. Such a handler changed its meaning
-when the run context came, because the count went up by one for every tool. The
-signature stayed the same and the code kept compiling, so nothing showed the
-change. The built-in `MEMORY` tool had this defect: it treated "one key" as a
-wrapper object of a provider, and it stopped finding the wrapper. Read
-`l_args.get_string('city')`, not the shape of the object.
+all of them, sees `_ctx` as one more key. The run context adds this key to the
+arguments of every tool, and such a handler still compiles. The built-in
+`MEMORY` tool had this defect: it treated "one key" as a wrapper object of a
+provider, and it stopped finding the wrapper. Read `l_args.get_string('city')`,
+not the shape of the object.
 
 The run context reaches a tool through the arguments. It does not reach a
 [PL/SQL workflow step](/products/uc-ai/docs/guides/multi-agent-systems/workflows/),
@@ -363,7 +362,7 @@ end;
 /
 ```
 
-And this is the message array from the return object:
+This is the message array from the return object:
 
 ```json
 {
@@ -423,7 +422,7 @@ And this is the message array from the return object:
 
 ### Write data and parameters
 
-This example is more advanced. The system is a time tracking system. Each employee in the users table can clock in on any project in the projects table, with a note.
+The system in this example is a time tracking system. Each employee in the users table can clock in on any project in the projects table, with a note.
 
 This needs three tools:
 
@@ -433,7 +432,7 @@ This needs three tools:
 
 #### Function definition
 
-The clock-in tool is more advanced, because it needs parameters. Examine the `TT_CLOCK_IN` function:
+The clock-in tool needs parameters. Examine the `TT_CLOCK_IN` function:
 
 ```sql
 FUNCTION clock_in_json(

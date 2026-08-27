@@ -17,7 +17,7 @@ Budgets are part of the paid UC AI Pro layer. [About guardrails](/products/uc-ai
 
 <Steps>
 
-1. **Prices** live in `uc_ai_model_pricing`, as a cost per million tokens for each provider and model. This is data and not code. You can therefore keep it current when a price changes.
+1. **Prices** live in `uc_ai_model_pricing`, as a cost per million tokens for each provider and model. You can therefore keep them current when a price changes.
 
 2. **Budgets** in `uc_ai_budgets` define a limit (`limit_amount`) for a [scope](/products/uc-ai/docs/guides/guardrails/#scope) over a [period](#periods), plus an [enforcement mode](/products/uc-ai/docs/guides/guardrails/#enforcement-mode).
 
@@ -124,7 +124,7 @@ same way.
 has the reasons and the traps.
 
 A `public` budget prices **only** anonymous runs. The `PUB_APP_DAY` row above is
-therefore a true \$20 daily ceiling on anonymous spend. Employees in the same app
+therefore a \$20 daily ceiling on anonymous spend. Employees in the same app
 cannot consume it, and visitors cannot consume the allowance of the company.
 
 <Aside type="caution" title="A per-session budget lags by one run">

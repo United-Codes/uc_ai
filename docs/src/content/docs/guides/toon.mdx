@@ -18,13 +18,13 @@ TOON takes the indentation structure of YAML for a nested object, and a CSV-styl
 
 ## Why Use TOON?
 
-Every token counts when you send data to an LLM:
+TOON sends the same data to an LLM in fewer tokens than JSON:
 
 - **Cost reduction**: fewer tokens give a lower API cost
 - **Context efficiency**: more room for content in the context window
 - **Better parsing**: the structured format helps an LLM read and use the data
 
-The similarity to CSV is intentional. CSV is simple and well known, and TOON keeps that familiarity. TOON is still a lossless representation of JSON for a Large Language Model.
+TOON keeps the layout of CSV, which is simple and well known. It is also a lossless representation of JSON for a Large Language Model.
 
 <Aside type="caution">
   For deeply nested data, or for data without a uniform structure, use JSON. It

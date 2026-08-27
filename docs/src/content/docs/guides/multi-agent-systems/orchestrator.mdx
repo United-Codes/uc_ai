@@ -13,7 +13,7 @@ import { Aside } from "@astrojs/starlight/components";
 Choose the orchestrator when the correct order of agents depends on the input, and the AI must plan this order. If the steps are always the same, a deterministic [workflow](/products/uc-ai/docs/guides/multi-agent-systems/workflows/) is simpler and cheaper.
 </Aside>
 
-UC AI gives each delegate agent to the orchestrator as a [tool](/products/uc-ai/docs/guides/tools/). This is the most flexible pattern, because the AI decides the flow from the task.
+UC AI gives each delegate agent to the orchestrator as a [tool](/products/uc-ai/docs/guides/tools/). The AI decides the flow from the task.
 
 If you need the same specialist in more than one caller, or together with normal tools, register it as a permanent tool. Read the [agent as tool](/products/uc-ai/docs/guides/multi-agent-systems/agent-as-tool/) guide.
 
@@ -282,7 +282,7 @@ On each follow-up call, UC AI registers the delegate agents again as temporary t
 
 ## Message log at a glance
 
-The orchestrator makes the model calls itself, and it reaches each delegate through a **tool call**. The [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript therefore records each delegate as a `tool_call` and `tool_result` pair, with the delegate agent in `tool_name`. These pairs stand around the own reasoning and the final synthesis of the orchestrator. This is a direct pattern, so `agent_code` names the orchestrator on every agent row. The `tool_name` of a tool row names the delegate.
+The orchestrator makes the model calls itself, and it reaches each delegate through a **tool call**. The [`uc_ai_agent_messages`](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) transcript therefore records each delegate as a `tool_call` and `tool_result` pair, with the delegate agent in `tool_name`. These pairs stand around the own reasoning and the final synthesis of the orchestrator. The orchestrator is a direct pattern, so `agent_code` names it on every agent row. The `tool_name` of a tool row names the delegate.
 
 ```sql
 SELECT seq, role, agent_code, tool_name, SUBSTR(content, 1, 50) AS content
@@ -305,4 +305,4 @@ SELECT seq, role, agent_code, tool_name, SUBSTR(content, 1, 50) AS content
 - **Give the orchestrator a plan**: describe the strategy for the delegates in the system prompt of the orchestrator. An example is "First check calendar constraints, then search flights, then hotels."
 - **Limit the delegations**: set `max_delegations` to stop excessive calls. The orchestrator needs room for every relevant agent, but it must not loop forever.
 - **Use structured output on the orchestrator**: if you need the final answer in a fixed format, add a response schema to the prompt profile of the orchestrator.
-- **Input schemas matter**: the `input_schema` of a delegate agent defines how the orchestrator calls it. A clear schema with a good `description` for each field helps the AI pass the correct parameters.
+- **Write a precise input schema**: the `input_schema` of a delegate agent defines how the orchestrator calls it. A clear schema with a good `description` for each field helps the AI pass the correct parameters.

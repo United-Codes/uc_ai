@@ -344,7 +344,7 @@ END IF;
 
 #### p_response_json_schema (Optional - Both Signatures)
 
-You can give a custom JSON schema and force the AI to answer in this format. The output structure is then consistent and predictable. This matters most when an automated system reads the output, or when you store the result.
+You can give a custom JSON schema and force the AI to answer in this format. The output structure is then consistent and predictable. Use a schema when an automated system reads the output, or when you store the result.
 
 [See Structured Output](/products/uc-ai/docs/guides/structured_output) for more information and usage examples.
 
@@ -488,8 +488,7 @@ Notes:
 - A nested object replaces the whole object. There is no deep merge.
 - The "core" keys that define the conversation are **protected**: `model`,
   `messages`, `input`, `instructions`, `system`, and `tools`. UC AI ignores a
-  value for these keys in `g_extra_body` and writes it to the log. This escape
-  hatch therefore cannot corrupt the request that the framework built. Use
+  value for these keys in `g_extra_body` and writes it to the log. Use
   `p_model`, `p_messages`, and `g_provider_tools` for these values.
 - For OCI, `g_extra_body` merges into the `chatRequest` object and not into the
   outer request body. OCI keeps its generation parameters in `chatRequest`.

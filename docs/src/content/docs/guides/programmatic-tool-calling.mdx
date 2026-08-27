@@ -20,11 +20,11 @@ Data-heavy work needs many of these round-trips. An example is "fetch every empl
 
 Code mode makes this **one** call. The model writes a short JavaScript program. UC AI runs the program in the database with the Oracle Multilingual Engine (MLE). The program calls your tools in a loop, filters the data, and aggregates it locally. It returns **only its final result** to the model. The intermediate tool output never reaches the context of the model.
 
-<Aside type="tip" title="Prefer to build it?">
+<Aside type="tip" title="The tutorial course">
 This page explains the feature. [Analyze Data at
 Scale](/products/uc-ai/docs/tutorial/cold-chain-analyst/01-twenty-six-tool-calls/)
-builds one working thing with it in six lessons, and it measures each shape: 26 tool
-calls and 34 413 input tokens become 1 tool call and 3 981.
+builds a working example in six lessons and measures both modes: 26 tool calls
+and 34 413 input tokens become 1 tool call and 3 981.
 </Aside>
 
 <Aside type="tip" title="When code mode helps">
@@ -73,7 +73,7 @@ To undo the installation, run `scripts/uninstall_ptc_sandbox.sql` with the same 
 **The JavaScript of the model has no database access.**
 
 - UC AI evaluates it in a [`PURE` MLE execution context](https://docs.oracle.com/en/database/oracle/oracle-database/26/mlejs/restricted-execution-contexts.html). This context removes every database-facing JavaScript API. The program can neither `require` nor `import` `mle-js-oracledb`, and the `oracledb`, `session`, `soda`, and `plsffi` globals do not exist. The program cannot run one SQL statement.
-- The program therefore cannot `COMMIT` or `ROLLBACK` either. This is important, because transaction control needs no privilege. A privilege wall alone does not stop generated code from discarding your pending work.
+- The program therefore cannot `COMMIT` or `ROLLBACK` either. Transaction control needs no privilege, so a privilege wall alone does not stop generated code from discarding your pending work.
 - PL/SQL therefore **services** `callTool`. The program awaits a tool call and control returns to the runner. The runner calls the UC AI gateway. The program then continues with the result. This is the only channel in or out.
 - As a second barrier, the runner is a **definer's-rights** package. The low-privilege sandbox schema owns it. This schema has no privilege that reaches data. It holds only the three privileges that MLE JavaScript needs (`CREATE MLE`, `EXECUTE DYNAMIC MLE`, `EXECUTE` on `sys.dbms_mle`) and `EXECUTE` on the one gateway package `uc_ai_ptc_api`. It has no tables, no quota, and no other packages.
 - Your tools still run with the full UC AI privileges, because the gateway is a UC AI package. They also run **in the transaction of the caller**, the same as a direct tool call. Each tool therefore keeps control of its own transaction. A tool that commits acts the same in both modes.

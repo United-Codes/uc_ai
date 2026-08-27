@@ -12,7 +12,7 @@ import { Aside, LinkCard, CardGrid } from "@astrojs/starlight/components";
 
 Agentic AI has many definitions. In essence, you give an LLM more capabilities, and the model decides itself when it uses them. The LLM does not run these capabilities itself. You tell the LLM that it can do X, and the LLM then requests X from outside. The core logic of the agent therefore lives in the calling mechanism, and not in the LLM. That mechanism is your PL/SQL code with UC AI.
 
-<Aside type="tip" title="First time building an agent?">
+<Aside type="tip" title="Your first agent">
 Start with the [Quickstart](/products/uc-ai/docs/guides/quickstart/). It builds the smallest agent in a few minutes: reason, call one tool, then answer. The examples below show larger agents for real work.
 </Aside>
 
@@ -137,7 +137,7 @@ END;
 /
 ```
 
-The advantage is clear: you can change a prompt, a model, or a reasoning setting without a change to your application code.
+You can then change a prompt, a model, or a reasoning setting without a change to your application code.
 
 ## Scaling up: multi-agent systems
 

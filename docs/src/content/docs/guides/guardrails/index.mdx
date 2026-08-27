@@ -135,8 +135,8 @@ Install a new limit as `advisory` first. Watch the real usage in the status view
 
 ## Recipe: public visitors a little, logged-in users more
 
-This is the standard setup for an AI feature on a page that anonymous visitors can
-reach. It takes three rows, and **all three matter**:
+The standard setup for an AI feature on a page that anonymous visitors can reach
+takes three rows:
 
 ```sql
 -- 1. Each anonymous visitor: 3 runs per browser session per day
@@ -169,10 +169,9 @@ insert into uc_ai_rate_limits (
 commit;
 ```
 
-Row 2 makes this a real control and not a courtesy. It has
-`audience = 'public'`, so its 500 counts **only anonymous runs**. Your employees
-in the same app cannot exhaust the allowance of the visitors. The visitors cannot
-exhaust the allowance of the company.
+Row 2 has `audience = 'public'`, so its 500 counts **only anonymous runs**. Your
+employees in the same app cannot exhaust the allowance of the visitors. The
+visitors cannot exhaust the allowance of the company.
 
 The same three shapes work for [budgets](/products/uc-ai/docs/guides/guardrails/budget/)
 with `limit_amount` in place of `limit_count`. Examples are \$0.10 for each

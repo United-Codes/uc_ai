@@ -15,7 +15,7 @@ Choose handoff when exactly one specialist must own the answer. An example is a 
 
 ## How it works
 
-A handoff uses a tool. This is the same mechanism as the OpenAI Swarm and Agents SDK:
+A handoff uses a tool, the same mechanism as the OpenAI Swarm and Agents SDK:
 
 1. UC AI runs the configured initial agent, for example a triage agent
 2. For every other agent in the handoff mesh, UC AI registers a temporary `transfer_to_<agent>` tool for that call. The agent keeps its own tools also

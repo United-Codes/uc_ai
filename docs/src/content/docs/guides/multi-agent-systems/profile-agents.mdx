@@ -141,7 +141,7 @@ SELECT ae.id,
 
 Each row also holds the environment of the caller: `created_by`, the database user, the APEX user, session, app, and page, the module, and a full `env_context` JSON snapshot. [Session tracking](/products/uc-ai/docs/guides/multi-agent-systems/#caller-environment-context) describes these columns.
 
-This log helps most when a larger pattern holds your profile agents. A workflow with three profile agent steps writes three execution rows under one session. You can then see which step used the most tokens, or which step failed.
+A workflow with three profile agent steps writes three execution rows under one session. You can then see which step used the most tokens, or which step failed.
 
 ### Message log at a glance
 
@@ -158,7 +158,7 @@ On a follow-up turn, UC AI appends only the new messages of that turn, and conti
 
 ## Profile agents as building blocks
 
-A profile agent does more inside another pattern. Every [workflow step](/products/uc-ai/docs/guides/multi-agent-systems/workflows/), every [orchestrator delegate](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/), and every [conversation participant](/products/uc-ai/docs/guides/multi-agent-systems/conversations/) is a profile agent.
+Every [workflow step](/products/uc-ai/docs/guides/multi-agent-systems/workflows/), every [orchestrator delegate](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/), and every [conversation participant](/products/uc-ai/docs/guides/multi-agent-systems/conversations/) is a profile agent.
 
 For example, a sequential workflow references profile agents by their agent code:
 

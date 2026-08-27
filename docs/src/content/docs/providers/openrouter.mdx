@@ -3,7 +3,7 @@ title: OpenRouter
 description: UC AI provider documentation for OpenRouter - unified API for hundreds of AI models
 ---
 
-The UC AI OpenRouter integration provides access to hundreds of AI models from various providers (OpenAI, Anthropic, Google, Meta, and many more) through a single unified API endpoint.
+The UC AI OpenRouter integration gives you access to hundreds of AI models from different providers (OpenAI, Anthropic, Google, Meta, and many more) through a single API endpoint.
 
 ## Features
 
@@ -26,13 +26,13 @@ You can get an API key by signing up at [OpenRouter](https://openrouter.ai/).
 
 ## Creating a Web Credential
 
-To use your OpenRouter key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following settings:
+To use your OpenRouter key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following configuration:
 
 - Authentication Type: HTTP Header
 - Credential Name: `Authorization`
 - Credential Secret: `Bearer <your_api_key>`
 
-We generally recommend also setting `Valid for URLs` to the OpenRouter API (https://openrouter.ai/) to limit the scope of the credential.
+Also set `Valid for URLs` to the OpenRouter API (https://openrouter.ai/) to limit the scope of the credential.
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_openrouter.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
@@ -248,16 +248,16 @@ Check the [OpenRouter models page](https://openrouter.ai/models) and filter by "
 
 ### Unified API
 
-Access models from OpenAI, Anthropic, Google, Meta, Mistral, and many more through a single API endpoint. This simplifies your code and reduces vendor lock-in.
+Access models from OpenAI, Anthropic, Google, Meta, Mistral, and many more through a single API endpoint. Your code keeps the same provider and credential for all of them.
 
 ### Automatic Fallbacks
 
-OpenRouter automatically handles provider outages by falling back to alternative providers, improving uptime and reliability.
+During a provider outage, OpenRouter sends the request to an alternative provider.
 
 ### Cost Optimization
 
-OpenRouter routes requests to the most cost-effective providers while maintaining quality. You only pay for what you use with no subscriptions required.
+OpenRouter routes each request to a low-cost provider for the model you selected. You pay for each request, and there is no subscription.
 
 ### Model Discovery
 
-Easily experiment with different models by simply changing the model parameter. No need to set up separate API keys or credentials for each provider.
+To try a different model, change the `p_model` parameter. You do not need a separate API key or credential for each provider.

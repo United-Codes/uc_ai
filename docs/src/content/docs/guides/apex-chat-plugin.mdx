@@ -23,8 +23,8 @@ Ask United Codes for the plug-in files.
 ## Why the agent needs a background job
 
 A run takes seconds. An agent with tools takes longer. A page submit that waits
-five seconds is a bad page, and a gateway can stop the request before the model
-answers.
+five seconds blocks the user, and a gateway can stop the request before the
+model answers.
 
 The plug-in never makes the page wait. One message goes through these steps:
 
@@ -200,7 +200,7 @@ the configured **Header Title**.
 The title goes to `uc_ai_agent_sessions.title`. The rating goes to
 `uc_ai_agent_sessions.feedback_rating`, with `feedback_comment` and
 `feedback_at`. `uc_ai_agents_api.list_sessions` returns all four columns, so one
-query gives you the conversations that made people unhappy.
+query gives you the conversations with a negative rating.
 
 ### Appearance
 

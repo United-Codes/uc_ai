@@ -115,7 +115,7 @@ ORA-20411: Rate limit "PUB_SESSION_DAY" (AGENT_EXEC) exceeded: 3 of 3 allowed (a
 
 ## Mid-run tool-call enforcement
 
-UC AI checks a `TOOL_CALL` limit **before every tool call**. It can therefore stop a run part-way through, and not only at the boundary of the run. This is the value of the [core `before_tool_call` hook](/products/uc-ai/docs/guides/execution-hooks/#before_tool_call-optional). When the tool-call count of the window reaches the cap, the next tool call raises `ORA-20412` and the run stops.
+UC AI checks a `TOOL_CALL` limit **before every tool call**, through the [core `before_tool_call` hook](/products/uc-ai/docs/guides/execution-hooks/#before_tool_call-optional). It can therefore stop a run part-way through, and not only at the boundary of the run. When the tool-call count of the window reaches the cap, the next tool call raises `ORA-20412` and the run stops.
 
 <Aside type="caution" title="What the tool-call count includes">
 UC AI writes the tool-call count to `uc_ai_agent_executions.tool_calls_count` when the run **completes**. The `TOOL_CALL` window total therefore holds *completed* runs only. The calls of a run that is still in flight are not yet in this total. The core `max_tool_calls` setting bounds that run instead. A `TOOL_CALL` limit therefore stops a run in mid-flight when *earlier* runs in the window used the allowance. It is a cap for the period, and not a counter inside one run.
@@ -190,4 +190,4 @@ The same race window as budgets applies. Two runs that start at the same moment 
 
 ## Concurrency of features
 
-Rate limiting registers before [budgets](/products/uc-ai/docs/guides/guardrails/budget/), with `sort_order` 50 against 100. A rate-limit denial therefore stops the run before any cost pricing. Use both features together for complete governance. Rate limits bound *how often*, and budgets bound *how much*.
+Rate limiting registers before [budgets](/products/uc-ai/docs/guides/guardrails/budget/), with `sort_order` 50 against 100. A rate-limit denial therefore stops the run before any cost pricing. Use both features together. Rate limits bound *how often*, and budgets bound *how much*.

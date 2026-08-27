@@ -18,7 +18,7 @@ This is the functions signature of `generate_embeddings`:
   ) return json_array_t;
 ```
 
-Most notably `p_input` receives an array of strings as `generate_embeddings` which the function embeds in one go also returning an array of embeddings.
+`p_input` receives an array of strings. `generate_embeddings` embeds them in one call and returns an array of embeddings.
 
 | Parameter    | Type            | Required | Description                                                  |
 | ------------ | --------------- | -------- | ------------------------------------------------------------ |

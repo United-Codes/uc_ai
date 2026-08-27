@@ -3,7 +3,7 @@ title: OCI
 description: UC AI provider documentation for Oracle Cloud Infrastructure
 ---
 
-The UC AI OCI package provides integration with Oracle Cloud Infrastructure's Generative AI models, allowing you to use state-of-the-art language models within your Oracle database applications.
+The UC AI OCI package integrates Oracle Cloud Infrastructure's Generative AI models into your Oracle database applications.
 
 ## Features
 
@@ -26,7 +26,7 @@ OCI chat requests are capped by `maxTokens`, which defaults to `4096`. Raise it 
 uc_ai_oci.g_max_tokens := 8192;
 ```
 
-When the model stops because this cap was reached, UC AI reports `finish_reason = 'length'` so callers can detect truncation. (Can also be set per call via the provider config key `g_max_tokens`.)
+When the model stops because this cap was reached, UC AI reports `finish_reason = 'length'` so callers can detect truncation. (You can also set it per call with the provider configuration key `g_max_tokens`.)
 
 ## Prerequisites
 
@@ -34,13 +34,13 @@ When the model stops because this cap was reached, UC AI reports `finish_reason 
 2. Oracle database with internet access to OCI's API endpoints (see [Network Setup (ACL & Wallet)](/products/uc-ai/docs/guides/network-setup/))
 3. UC AI package installed
 
-Note that OCI uses a complex credential-based authentication system with a private key and three other components rather than a simple API key. Unfortunately Oracle does not provide a PL/SQL SDK to do the cryptographic operations, so the UC AI package builds on Oracle APEX Web Credentials which can do the work.
+OCI uses a credential-based authentication system with a private key and three other components, not a simple API key. Oracle does not provide a PL/SQL SDK for these cryptographic operations, so the UC AI package builds on Oracle APEX Web Credentials, which can do the work.
 
-If you have a way to do the cryptographic operations in PL/SQL, please contact me or open a pull request to improve allow this to work without having to use APEX. Also if you know a way to get `Auth tokens` (simple API keys) to work with the AI APIs, please let me know.
+If you have a way to do the cryptographic operations in PL/SQL, contact us or open a pull request, so that this can also work without APEX. The same applies if you know a way to use `Auth tokens` (simple API keys) with the AI APIs.
 
 ## Models
 
-Which models are available to you is highly dependent on the region where your OCI tenant is located.
+The models available to you depend on the region of your OCI tenant.
 
 Currently Oracle provides Cohere, Meta Llama, xAI Grok models, and Google Gemini models.
 

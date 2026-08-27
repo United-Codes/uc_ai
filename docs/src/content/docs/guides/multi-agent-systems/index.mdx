@@ -16,7 +16,7 @@ One large prompt is not necessary. You break the problem into smaller steps, and
 <CardGrid>
   <LinkCard
     title="Profile Agents"
-    description="The building block: wrap a prompt profile as a trackable, composable agent"
+    description="Wrap a prompt profile as a trackable, composable agent"
     href="/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/"
   />
   <LinkCard
@@ -321,11 +321,11 @@ The [structured output guide](/products/uc-ai/docs/guides/structured_output/) ha
 ## Removing an agent
 
 An agent that has run cannot be deleted: its history points at it, and
-`delete_agent` therefore stops with `ORA-02292`. That is the default on purpose,
-because a deleted history cannot come back. You have three ways out.
+`delete_agent` therefore stops with `ORA-02292`. A deleted history cannot come
+back. You have three ways out.
 
-**Keep everything, hide the agent.** This is the usual one. The agent stops
-resolving, and every row stays:
+**Keep everything, hide the agent.** Archiving is the usual choice. The agent
+stops resolving, and every row stays:
 
 ```sql
 BEGIN

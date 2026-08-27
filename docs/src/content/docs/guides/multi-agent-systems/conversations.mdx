@@ -185,7 +185,7 @@ END;
 
 ## AI-driven conversation
 
-A moderator agent decides who speaks next. The conversation is then more natural, because the moderator directs the discussion at each point.
+A moderator agent decides who speaks next. The order is therefore not fixed: the moderator directs the discussion at each turn.
 
 ### Example: moderated party planning
 
@@ -336,7 +336,7 @@ SELECT seq, role, agent_code, SUBSTR(content, 1, 60) AS content
 | 4   | `assistant` | `synthesizer_agent`  | `Combined Plan: 1. Pirate Football Scavenger...` |
 | 5   | `assistant` | `moderator_agent`    | `Final Party Plan: ...` *(AI-driven summary)*    |
 
-The whole debate is therefore in the database. Filter by `agent_code` to see the contributions of one participant. Read the rows in `seq` order to replay the discussion.
+Filter by `agent_code` to see the contributions of one participant. Read the rows in `seq` order to replay the discussion.
 
 ## Config reference
 
@@ -382,7 +382,7 @@ An input mapping of a conversation agent can use these variables:
 ## Tips
 
 - **Give each agent a distinct personality**: write a clear role in the system prompt of each agent. An overlap gives repeated answers.
-- **Use the agent description as context**: pass `{$.agent_description}` to each agent, so that it knows its role in the conversation. This helps most when one prompt template serves several roles.
+- **Use the agent description as context**: pass `{$.agent_description}` to each agent, so that it knows its role in the conversation. One prompt template can then serve several roles.
 - **Keep `max_turns` small**: each turn calls an AI model. A round-robin with 3 agents and `max_turns: 5` makes up to 15 AI calls.
 - **Termination keywords**: in round-robin mode, instruct the last agent to write a keyword such as "Final Plan" at the end of the discussion.
 - **Moderator instructions**: in AI-driven mode, tell the moderator when to finish. Without this instruction, it continues to `max_turns`.

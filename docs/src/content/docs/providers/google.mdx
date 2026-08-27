@@ -3,13 +3,13 @@ title: Google
 description: UC AI provider documentation for Google Gemini models
 ---
 
-The UC AI Google package provides integration with Google's Gemini models, allowing you to use Google's advanced language models within your Oracle database applications.
+The UC AI Google package integrates Google's Gemini models into your Oracle database applications.
 
 ## Features
 
 - Support for the current Gemini models (Gemini 3.x Flash and Flash-Lite, Gemini 3.1 Pro, Gemini 2.5 series)
 - Full function calling (tools) support
-- Advanced reasoning capabilities with reasoning budget control
+- Reasoning capabilities with reasoning budget control
 - Multi-modal support (text, images, PDFs)
 
 ## Prerequisites
@@ -23,13 +23,13 @@ You can get an API key by signing up at [Google AI Studio](https://aistudio.goog
 
 ## Creating a Web Credential
 
-To use your Google key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following settings:
+To use your Google key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following configuration:
 
 - Authentication Type: URL Query String
 - Credential Name: `key`
 - Credential Secret: `<your_api_key>`
 
-We generally recommend also setting `Valid for URLs` to the Google API (https://generativelanguage.googleapis.com/) to limit the scope of the credential.
+Also set `Valid for URLs` to the Google API (https://generativelanguage.googleapis.com/) to limit the scope of the credential.
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_google.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
@@ -118,7 +118,7 @@ Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) f
 
 ### Reasoning / Thinking
 
-Google's Gemini models support native reasoning capabilities. You can control the reasoning budget to balance thoroughness with speed and cost:
+Google's Gemini models reason natively. You can control the reasoning budget to balance thoroughness with speed and cost:
 
 ```sql
 declare
@@ -144,7 +144,7 @@ The reasoning budget parameter controls how many thinking tokens the model uses:
 - `0` - No reasoning budget
 - Positive number - Fixed token budget
 
-Note that reasoning cannot be disabled with the Pro models as they always use some level of reasoning.
+You cannot disable reasoning for the Pro models. They always use some level of reasoning.
 
 Refer to Google's [thinking documentation](https://ai.google.dev/gemini-api/docs/thinking#set-budget) for more details on reasoning capabilities.
 

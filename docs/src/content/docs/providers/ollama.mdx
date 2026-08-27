@@ -3,7 +3,7 @@ title: Ollama
 description: UC AI provider documentation for Ollama
 ---
 
-The UC AI Ollama package provides integration with locally-running Ollama instances, allowing you to use open-source language models within your Oracle database applications.
+The UC AI Ollama package integrates the open-source language models of a locally running Ollama instance into your Oracle database applications.
 
 ## Features
 
@@ -25,7 +25,7 @@ uc_ai_ollama.g_use_responses_api := false;
 
 1. Install and run Ollama on your local machine or server
 2. Download the models you want to use
-3. Ensure Oracle database can access the Ollama API endpoint — you still need a network ACL for the Ollama host (e.g. `localhost`), see [Network Setup (ACL & Wallet)](/products/uc-ai/docs/guides/network-setup/)
+3. Make sure that the Oracle database can access the Ollama API endpoint — you still need a network ACL for the Ollama host (e.g. `localhost`), see [Network Setup (ACL & Wallet)](/products/uc-ai/docs/guides/network-setup/)
 
 You can follow the [Ollama installation guide](https://github.com/ollama/ollama) for detailed instructions on setting up Ollama. You can run it containerized or directly on your machine, or install the MacOS/Windows GUI application.
 
@@ -86,7 +86,7 @@ end;
 
 ### Using Tools/Function Calling
 
-Refer to the [list of models that support tools](https://ollama.com/search?c=tools) to find models that can use function calling. Note that small models might support it but are not very capable to do complex tasks with it. I noticed that enabling reasoning can help the LLM to call the tools more effectively.
+Refer to the [list of models that support tools](https://ollama.com/search?c=tools) to find models that can use function calling. Small models can support tools, but they are less capable in complex tasks. If you enable reasoning, the model can call the tools more effectively.
 
 See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to set up and use tools.
 

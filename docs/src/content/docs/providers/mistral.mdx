@@ -3,7 +3,7 @@ title: Mistral
 description: UC AI provider documentation for Mistral AI models
 ---
 
-The UC AI Mistral package provides integration with Mistral AI's models (La Plateforme), allowing you to use European frontier language models within your Oracle database applications.
+The UC AI Mistral package integrates Mistral AI's models (La Plateforme) into your Oracle database applications.
 
 ## Features
 
@@ -25,13 +25,13 @@ You can get an API key by signing up at [Mistral La Plateforme](https://console.
 
 ## Creating a Web Credential
 
-To use your Mistral key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following settings:
+To use your Mistral key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following configuration:
 
 - Authentication Type: HTTP Header
 - Credential Name: `Authorization`
 - Credential Secret: `Bearer <your_api_key>`
 
-We generally recommend also setting `Valid for URLs` to the Mistral API (https://api.mistral.ai/) to limit the scope of the credential.
+Also set `Valid for URLs` to the Mistral API (https://api.mistral.ai/) to limit the scope of the credential.
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_mistral.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
@@ -196,7 +196,7 @@ end;
 
 ### Structured Output
 
-Mistral supports structured output with JSON schemas, allowing you to get responses in a specific format:
+Mistral supports structured output with JSON schemas:
 
 ```sql
 declare

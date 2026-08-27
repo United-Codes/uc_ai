@@ -106,23 +106,32 @@ the writer's verdict on the approach.
 
 A list of banned phrases only catches the phrases somebody already caught. These
 are the **shapes**, each with the grep that finds it. Every example below is a
-real sentence that shipped in the UC AI docs and was later cut. Most come from
-the tutorial courses, because that is where the voice reviews happened, but the
-shapes are not tutorial-specific and they turn up in guides too.
+real sentence that shipped in the UC AI docs and was later cut.
 
-**1. The demonstrative recap.** Opens with `That is` / `This is` pointing back at
-the block you just read, and names no new thing.
+**Read the greps as a starting point, not as the job.** See [what the greps are
+worth](#what-the-greps-are-worth) before you trust a quiet result.
+
+**1. The demonstrative recap.** Points back at the block you just read, and names
+no new thing.
 
 > ~~That is the control.~~ ~~That is the whole course in four rows.~~ ~~This is
-> the whole idea of code mode.~~ ~~That is what the checks buy you.~~
+> the whole idea of code mode.~~ ~~**Keep everything, hide the agent.** This is
+> the usual one.~~
 
 Test: delete it. If no fact is lost, it was narrator. Often the fix is to fold
 the noun into the next sentence: `That is the control. It holds whatever the user
 types` becomes `The control holds whatever the user types`.
 
 ```bash
-grep -nE '^(That|This) (is|was) ' <file>
+grep -nE '(That|This|These|Those) (is|are|was|were) ' <file>
 ```
+
+**Do not anchor this one to `^`.** An earlier version of this skill used
+`^(That|This) (is|was) ` and it saw 26% of the candidates: in a file wrapped at
+80 columns a recap almost never starts a line, and in a file with one paragraph
+per line it never does. Four independent reviewers hit this. The unanchored form
+returns roughly 1 real defect in 6; the noise is table cells (`| ... | It is ...
+|`), which you can drop with `grep -v '|'`.
 
 **2. The attention imperative.** Tells the reader to look at text they are
 already reading.
@@ -138,58 +147,79 @@ a code block earns its line. The defect is pointing **back at prose already
 read** — there, state the fact instead.
 
 ```bash
-grep -nE '\b(Read|Look at|Notice|Watch|See) (that|this|those|these|what|how|it|again)\b' <file>
+grep -nE '(^|\. )(Read|Look at|Notice|Watch|See) (that|this|those|these|what|how|it|again)\b' <file>
 ```
+
+Anchor this one to sentence start, the opposite of shape 1. Unanchored it matches
+`you can see how the workflow behaves`, which is a capability statement and not a
+defect.
 
 **3. The pre-emptive defence.** A clause that insists your list or your design
 choice was considered, without giving the reason.
 
-> ~~Three details are not decoration:~~ ~~Each one earns its place.~~ ~~Three
-> things changed, and all three are deliberate:~~
+> ~~Three details are not decoration:~~ ~~Each one earns its place.~~ ~~The
+> similarity to CSV is intentional.~~ ~~This is an intentional trade-off:~~
+> ~~This escape hatch therefore cannot corrupt the request.~~
 
 If a reason follows, keep the reason and drop the defence. `The commit is inside
 the loop on purpose. One document is one unit of work, and a bad PDF at the end
 of a run of a hundred must not undo the ninety-nine before it.` earns it — the
 second sentence is the reason. `Three details are not decoration:` does not.
 
+The reason can also come **first**, with the defence trailing it. Same defect,
+same fix: `UC AI ignores a value for these keys and writes it to the log. ~~This
+escape hatch therefore cannot corrupt the request that the framework built.~~`
+
 ```bash
-grep -nE '\b(not decoration|earns its place|deliberate|on purpose|not a strawman)\b' <file>
+grep -nE '\b(not decoration|earns its place|deliberate(ly)?|intentional(ly)?|on purpose|by design|not an accident|not a strawman)\b' <file>
 ```
+
+False positive to expect on a guide: `deliberate` and `deliberately` also carry a
+literal technical meaning (`an action the model must call deliberately`,
+`reaches a conclusion by deliberate thought`). Read before you cut.
 
 **4. The superlative closer.** Ends a block by ranking it instead of ending it.
 
 > ~~the only honest way to know~~ ~~the only evidence that counts~~ ~~This is the
-> check that matters~~ ~~A loud error is better than a number computed from
-> nothing.~~ ~~the failure that looks most like success~~
+> check that matters~~ ~~**Input schemas matter**~~ ~~This helps most when~~
+> ~~This is the most flexible pattern~~ ~~A loud error is better than a number
+> computed from nothing.~~
 
 ```bash
-grep -nE '\bthe only\b|\bmatters most\b|\bthe one that\b|\bbetter than\b' <file>
+grep -nE '\bthe only\b|\bmatters?\b|\bmatters most\b|\bhelps most\b|\bthe one that\b|\bbetter than\b|\bthe (best|fastest|most) \w+' <file>
 ```
 
-**5. Reader mind-reading.** Tells the reader what they expect, or what everybody
-else does.
+False positive to expect on a guide: `the only` is usually a factual count, not a
+superlative (`the only required parameter`, `the only channel in or out`, `the
+only enforcer`). On one review it produced 6 hits and 0 defects.
+
+**5. Reader mind-reading.** Tells the reader what they expect, what they are, or
+what everybody else does. Includes the rhetorical question.
 
 > ~~Everybody asks this, so the course measures it.~~ ~~This is the part people
-> expect to break, and it does not.~~ ~~That surprises most people.~~ ~~Worth
-> writing down, because it catches everybody once:~~
+> expect to break, and it does not.~~ ~~That surprises most people.~~ ~~New to AI
+> terminology?~~ ~~Prefer code over clicking through an app?~~ ~~First time
+> building an agent?~~
 
 ```bash
-grep -nE '\beverybody\b|\bmost people\b|\bpeople expect\b|\bworth\b' <file>
+grep -nE '\beverybody\b|\bmost people\b|\bpeople expect\b|\bworth\b|\?$' <file>
 ```
 
-**6. The importance trailer.** A clause appended to say the thing you just wrote
-was important.
+`?$` on a prose line is near-exact on a reference page, where a genuine question
+rarely ends a paragraph. It also catches question-form `Aside` titles and
+headings, which are the same defect in a heading slot.
+
+**6. The importance marker.** Says the thing next to it is important. It trails
+as often as it leads.
 
 > ~~The consequence is important:~~ ~~and they are the whole point of the
 > lesson~~ ~~and the reason is worth copying~~ ~~Two of those deserve
-> attention:~~ ~~and each one tells you something~~
+> attention:~~ ~~Most notably, `p_input` receives an array~~ ~~The advantage is
+> clear:~~ ~~This log helps most when~~
 
-Original instances of these shapes, kept because they are the review that started
-this list: "the model did nothing strange / is not wrong / the reasoning is good",
-"this is the failure that matters", "that is what the rest of the course builds",
-"that is the point of this lesson", "read that carefully", "now the honest part",
-"two things that will surprise you", "nothing was invented", "quietly" used for
-drama rather than a technical meaning, "now imagine writing the PL/SQL that...".
+```bash
+grep -nE '^(Most notably|Note that|Importantly|The (advantage|point|consequence|value) is)|\bdeserve attention\b|\bthe whole point\b|\bworth (copying|noting|writing down)\b' <file>
+```
 
 **7. The promise-line trailer**, a clause that sells the page instead of naming
 its outcome. On a tutorial lesson this lives in the `promise=` prop, and an
@@ -199,53 +229,168 @@ em-dash inside that prop is nearly always the trailer:
 grep -n 'promise="[^"]*—' <file>
 ```
 
-The same defect appears in a reference page as a `description:` in the
-frontmatter that advertises rather than describes.
+The same defect appears in a reference page as a frontmatter `description:` that
+advertises rather than describes (`A comprehensive list of all releases`,
+`Interactive tool ... with an easy-to-use interface`). **Do not filter
+`description:` out of your self-check** — it is a defect site, not noise.
 
-A promise line names what the reader can do, in one clause, with no trailer:
+**8. The unmeasured quality claim.** The dominant defect in reference prose, and
+the one the first seven shapes missed entirely. A guide states properties of a
+product rather than narrating a run, so the writer reaches for an adjective
+instead of a measurement. It has four faces:
 
-- Bad: `a model answers a question about your own data — and you can see exactly
-  where that approach stops.`
-- Good: `call generate_text with contract rows in the prompt, then ask a
-  question those rows cannot answer.`
+- **the self-rating adjective** — ~~a scannable reference~~, ~~This is useful
+  when you want to~~, ~~OpenAI provides powerful embedding models~~
+- **the capability blurb** — ~~provides integration with X's models, allowing you
+  to use state-of-the-art language models~~, ~~Advanced reasoning
+  capabilities~~. The `, allowing you to <benefit>` clause almost always deletes
+  with no loss.
+- **the evaluative predicate** — ~~a page submit that waits five seconds is a bad
+  page~~, ~~the conversations that made people unhappy~~, ~~The data quality
+  therefore stays high~~. Replace the grade with the mechanism: `blocks the
+  user`, `with a negative rating`.
+- **the difficulty rating** — ~~This example is more advanced.~~, ~~The clock-in
+  tool is more advanced, because it needs parameters.~~ The reader decides what
+  is hard.
+
+```bash
+grep -nEi '\b(useful|handy|powerful|convenient|scannable|simply|easy|easily|easiest|fastest|seamless|robust|sophisticated|comprehensive|elegant|intuitive|straightforward|state-of-the-art|cutting-edge|frontier|advanced|enhanced|effortless|showcas|unleash|capabilities|more advanced|the hard part|coming soon)\b|, allowing you to |!$' <file>
+```
+
+No emoji and no exclamation mark in body prose. A shipped `🎉` on a verification
+sentence is the purest violation of "unexcited" in the whole corpus, and no word
+grep finds it:
+
+```bash
+grep -nP '[\x{1F300}-\x{1FAFF}\x{2700}-\x{27BF}]' <file>
+```
+
+**9. The first-person author.** "No narrator" includes the author's own `I`. A
+reader cannot act on `I noticed` or `In my experience`.
+
+> ~~In my experience, Anthropic is the best provider for tool calls today.~~ ~~I
+> plan to add more providers.~~ ~~I noticed that enabling reasoning can help.~~
+> ~~please contact me ... please let me know~~ ~~I recommend that both match.~~
+
+Use institutional `we` for a recommendation or a plan (`We recommend`, `We plan
+to add`), or drop the frame and keep the instruction (`We generally recommend
+also setting Valid for URLs` becomes `Also set Valid for URLs`). `we` inside a
+code comment or a quoted prompt is fine and is not this shape.
+
+```bash
+grep -nE '(^|[^A-Za-z`])I( |.(m|ve|ll) )|\bin my experience\b|\bcontact me\b|\blet me know\b|\bwe (generally )?recommend\b' <file>
+```
+
+**Do not launder an opinion into a fact.** This is the one way a voice pass can
+make a page worse, and it has happened: `In my experience, Anthropic is the best
+provider for tool calls today` was rewritten to `Anthropic gives the most
+reliable tool calls today`. The narrator went, and a hedged opinion became an
+unhedged superlative — shape 8 in place of shape 9. When you remove the author,
+keep the hedge or attribute the claim: `We recommend Anthropic for tool calls
+today`.
+
+Original instances of these shapes, kept because they are the review that started
+this list: "the model did nothing strange / is not wrong / the reasoning is good",
+"this is the failure that matters", "that is what the rest of the course builds",
+"that is the point of this lesson", "read that carefully", "now the honest part",
+"two things that will surprise you", "nothing was invented", "quietly" used for
+drama rather than a technical meaning, "now imagine writing the PL/SQL that...".
+
+### Two things the shapes do not catch
+
+**A section whose whole job is commentary.** `## What just happened` followed by
+four sentences of recap is not a sentence defect, it is a section defect, and
+deleting it is a restructure rather than a voice pass. Report it; do not remove
+it inside a voice pass.
+
+**A story told in past tense.** On a reference page current behaviour is present
+tense, so a past-tense clause is a signal that the writer started narrating: `Such
+a handler changed its meaning when the run context came ... The signature stayed
+the same and the code kept compiling, so nothing showed the change.` Rewrite to
+the present-tense fact. `grep -nE '\b(stayed|kept|came|used to|once|turned out|back then)\b'` finds some of them.
+
+## What the greps are worth
+
+**The greps are a tutorial tool. On any other page, reading is the job.** This is
+the single most repeated finding from the reviews, measured independently eight
+times:
+
+| Page type | Grep hits | Real defects found by grep | Found by reading |
+| --- | --- | --- | --- |
+| Tutorial lesson | 54 lines / 7 files | ~30 | the rest |
+| Reference guide | 3 lines / 2688 lines | 0 | 11 of 11 |
+| Dense guide (`tools.mdx`) | 0 | 0 | 7 of 7 |
+| Setup / ops guide | 5 lines / 11 files | 0 | 8 of 8 |
+| Provider page | 2 lines / 8 files | 1 | 45 of 46 |
+| `other/` + `help/` | 4 lines / 5 files | 0 | 12 of 12 |
+
+A quiet grep does not mean a clean page. Budget for a full read of every file,
+and treat the greps as a way to re-check yourself afterwards.
+
+**How much the round-2 greps bought.** Replayed against the 135 prose lines that
+a full eight-reviewer pass actually removed or replaced across 38 docs pages:
+
+| | flags a real defect |
+| --- | --- |
+| the round-1 composite (phrase-ish, anchored shape 1) | 8 of 135 — **6%** |
+| the round-2 composite above (9 shapes, unanchored) | 66 of 135 — **49%** |
+
+Half is the ceiling to plan around. The other half was found by reading, and no
+grep in this file will find it.
+
+Which shapes are live depends on the page type. On a **setup or provider page**
+expect shapes 2, 4, 5, 6 and 7 to be inert and shapes 8 and 9 to carry almost
+everything. On a **tutorial lesson** expect the reverse.
 
 ## Self-check before you ship a page
 
 1. Read only the headings, in order, as they appear in **On this page**. Each
-   one must name a topic you could jump to. Rename any that comment.
-2. Run the greps of all seven shapes above over the page:
+   one must name a topic you could jump to. Report any that comment — see the
+   heading rule above for why you should usually not rename one.
+2. Strip fenced code blocks, then run the union of every shape grep. On a
+   code-dense page most raw hits are prompt strings inside `sql` blocks:
 
    ```bash
-   grep -nEi '^(That|This) (is|was) |\b(Read|Look at|Notice|Watch|See) (that|this|those|these|what|how|it|again)\b|\b(not decoration|earns its place|deliberate|on purpose)\b|\bthe only\b|\bmatters most\b|\bthe one that\b|\beverybody\b|\bmost people\b|\bworth\b|\bmatters\b|\bstrange\b|\bhonest|surprise|the point of|quietly|\bimagine\b' <file>
+   awk '/^```/{f=!f;next} !f' <file> | grep -nEi \
+     '(That|This|These|Those) (is|are|was|were) |(^|\. )(Read|Look at|Notice|Watch|See) (that|this|those|these|what|how|it|again)\b|\b(not decoration|earns its place|deliberate(ly)?|intentional(ly)?|on purpose|by design|not an accident|not a strawman)\b|\bthe only\b|\bmatters?\b|\bhelps most\b|\bthe one that\b|\bbetter than\b|\bthe (best|fastest|most) \w+|\beverybody\b|\bmost people\b|\bpeople expect\b|\bworth\b|\?$|^(Most notably|Note that|Importantly|The (advantage|point|consequence|value) is)|\bdeserve attention\b|\bthe whole point\b|\b(useful|handy|powerful|convenient|simply|easy|easily|fastest|seamless|robust|sophisticated|comprehensive|elegant|intuitive|straightforward|state-of-the-art|cutting-edge|advanced|enhanced|effortless|showcas|capabilities|more advanced|coming soon)\b|, allowing you to |!$|(^|[^A-Za-z`])I( |.(m|ve|ll) )|\bin my experience\b|\bcontact me\b'
    ```
 
-   Pipe through `| grep -vE ':(description|title):|title="Next lesson' | grep -v "^[^:]*:[0-9]*: *--"`
-   to drop frontmatter, `LinkCard` props and SQL comments inside code blocks.
-   Those are the bulk of the false positives.
+   Keep this in sync with the individual shape greps: an earlier version of this
+   block silently dropped `better than`, `people expect` and `not a strawman`,
+   so the thing people actually run was weaker than the thing they read.
 
-   **On a reference page, expect shape 1 to be mostly noise.** Measured across
-   `guides/`, `api/`, `providers/` and `other/`: 38 hits, and most of the
-   `This is ...` ones introduce the code block that follows — `This is the same
-   as the JSON {"name": "Alice"}`, `This is one uc_ai__run_code call.` Those are
-   forward-pointing and they stay. The defect is a demonstrative pointing
-   **back** at prose already read. A reference page is denser and has more code,
-   so it earns more legitimate `This is` lines than a tutorial does.
+   Filter `title:` frontmatter and `LinkCard` props with `grep -vE ':title:|title="Next lesson'`.
+   Do **not** filter `description:` — shape 7 names it as a defect site.
 
    A hit is a prompt to read the sentence, not a delete list. `This script costs
    more than the rest of the course` is a real cost warning and stays, and so is
    `the only thing that decides is the value the application put in the run
    context`.
 
-   Measured on the seven lessons of the second voice pass: this list returned 54
-   lines, of which roughly 30 were real. The literal-phrase list it replaced
-   returned 9 and missed every defect in four of the seven files. That is why
-   this skill lists shapes and not phrases.
-3. Delete any sentence whose only job is to tell the reader that the previous
+3. Check the slots the greps cannot see: `Aside` titles, and the bold lead of a
+   tip bullet. Both are heading slots in disguise and both follow the heading
+   rule. Neither carries an anchor, so both are safe to change.
+
+   ```bash
+   grep -n 'title="[^"]*"' <file>        # Aside titles; ?" is shape 5
+   grep -n '^- \*\*[^*]*\*\*:' <file>    # tip-bullet leads
+   ```
+
+4. Check the CLAUDE.md fixed terminology while you are here — nothing else does:
+
+   ```bash
+   grep -nEi '\b(ensure|verify|confirm|settings|config|options)\b' <file>
+   ```
+
+5. Delete any sentence whose only job is to tell the reader that the previous
    sentence was important.
-4. **Re-wrap every paragraph you edited** to the roughly 80-column convention of
-   the file. Cutting a clause out of the middle leaves a ragged line, and a
-   ragged line is visible in the diff.
-5. Before you rename a heading, make sure that no other page anchors to it, then
+
+6. **Re-wrap every paragraph you edited** to the wrap width already used in that
+   file. The docs are mixed: tutorial lessons and the newer guide sections wrap
+   at ~80, most guides and all provider pages use one line per paragraph. Match
+   the region you are in. A ragged line is visible in the diff.
+
+7. Before you rename a heading, make sure that no other page anchors to it, then
    build. `starlightLinksValidator` fails the build on a dead anchor:
 
    ```bash
@@ -265,3 +410,12 @@ A promise line names what the reader can do, in one clause, with no trailer:
    links before you make it, and never rename a heading only because it reads
    better.
 
+   If you are one of several passes running at once, **report the rename instead
+   of making it** and let whoever owns the build decide.
+
+## A changelog is not a page
+
+`other/release-history.mdx` is a shipped record. Cut a sell line from an entry
+(`More patterns and features coming soon!`) and fix a first-person aside, but do
+not rewrite entries into better prose, and never touch a version number, a date
+or a feature name. An old entry is allowed to read like its release.

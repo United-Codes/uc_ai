@@ -3,14 +3,14 @@ title: Anthropic
 description: UC AI provider documentation for Anthropic/Claude
 ---
 
-The UC AI Anthropic package provides integration with Anthropic's Claude models, allowing you to use state-of-the-art language models within your Oracle database applications.
+The UC AI Anthropic package integrates Anthropic's Claude models into your Oracle database applications.
 
 ## Features
 
 - Support for the current Claude models (Fable, Opus, Sonnet, Haiku)
 - Full function calling (tools) support
 - Structured output (JSON schema-based responses)
-- Advanced reasoning capabilities with Extended Thinking
+- Reasoning capabilities with Extended Thinking
 - Multi-modal support (text, images, PDFs)
 - Streaming responses
 
@@ -25,13 +25,13 @@ You can get an API key by signing up at [Anthropic Console](https://console.anth
 
 ## Creating a Web Credential
 
-To use your Anthropic key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following settings:
+To use your Anthropic key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following configuration:
 
 - Authentication Type: HTTP Header
 - Credential Name: `x-api-key`
 - Credential Secret: `<your_api_key>`
 
-We generally recommend also setting `Valid for URLs` to the Anthropic API (https://api.anthropic.com/) to limit the scope of the credential.
+Also set `Valid for URLs` to the Anthropic API (https://api.anthropic.com/) to limit the scope of the credential.
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_anthropic.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
@@ -105,7 +105,7 @@ end;
 
 ### Max tokens
 
-Anthropic requires an upper limited of maximum generated tokens to be send with API requests. UC AI defaults this setting to `8192`. If you want to generate longer answers or reasoning sequences you have to increase this value:
+Anthropic requires an upper limit of generated tokens to be sent with API requests. UC AI defaults this setting to `8192`. If you want to generate longer answers or reasoning sequences you have to increase this value:
 
 ```sql
 uc_ai_anthropic.g_max_tokens := 32768;
@@ -119,7 +119,7 @@ See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to 
 
 ### Structured Output
 
-Claude models support structured output, allowing you to constrain responses to a specific JSON schema. UC AI automatically converts your schema to the format required by Anthropic's API. See Anthropic's [structured output documentation](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) for model support and best practices.
+Claude models support structured output with JSON schemas. UC AI automatically converts your schema to the format required by Anthropic's API. See Anthropic's [structured output documentation](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) for model support and best practices.
 
 ```sql
 declare
@@ -172,7 +172,7 @@ Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) f
 
 ### Reasoning / Extended Thinking
 
-Claude models support advanced reasoning capabilities. When enabled, Claude uses an internal reasoning process before providing its final answer. Refer to Anthropics [Extended Thinking guide](https://platform.claude.com/docs/en/build-with-claude/extended-thinking) for model support and best practices.
+Claude models support reasoning. When you enable it, Claude reasons internally before it gives its final answer. Refer to Anthropics [Extended Thinking guide](https://platform.claude.com/docs/en/build-with-claude/extended-thinking) for model support and best practices.
 
 :::caution
 Anthropic removed the extended thinking parameter for Claude Opus 4.7 and later models. These models think adaptively, and UC AI cannot set a reasoning budget for them. Use Claude Sonnet 4.5 or Claude Haiku 4.5 if you want to control the budget.
@@ -198,4 +198,4 @@ end;
 /
 ```
 
-The reasoning process will be included in the response messages array as content with type `reasoning`, allowing you to inspect Claude's thought process.
+The response messages array includes the reasoning as content with type `reasoning`. Use it to inspect Claude's thought process.

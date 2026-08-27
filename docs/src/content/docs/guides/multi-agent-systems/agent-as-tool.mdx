@@ -340,7 +340,7 @@ A tool handler gets JSON only. Files that the caller sent with `p_files` therefo
 
 ## Circular references
 
-An agent that reaches itself through its own tool starts a new run on each level. UC AI stops this recursion at 25 levels with `ORA-20405`. A chain through tools can reach the Oracle limit for recursive SQL first, because each level runs the handler with dynamic SQL. Both limits stop the recursion. The exception block of the handler then returns the error as text.
+An agent that reaches itself through its own tool starts a new run on each level. UC AI stops this recursion at 25 levels with `ORA-20405`. A chain through tools can reach the Oracle limit for recursive SQL first, because each level runs the handler with dynamic SQL. The exception block of the handler then returns the error as text.
 
 <Aside type="caution">
   Do not give the tag of the tool to the specialist that the tool runs. The

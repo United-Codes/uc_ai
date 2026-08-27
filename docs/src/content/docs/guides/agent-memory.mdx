@@ -136,8 +136,8 @@ Two rules apply to the value:
 
 - **The run must supply the key.** UC AI checks this before the run starts and
   raises `-20426` when the key is missing. The run does not start, and the error
-  names the key. Forgetting `p_run_context` is the common mistake, and this is
-  what keeps it from becoming a silent one — read [Why a missing key fails the
+  names the key. A run without `p_run_context` therefore stops instead of
+  reading an empty memory — read [Why a missing key fails the
   run](#why-a-missing-key-fails-the-run).
 - The value must be at most 200 characters from `A-Z`, `a-z`, `0-9`, underscore,
   dot, and hyphen. UC AI refuses any other value, because the store key is built
@@ -147,11 +147,11 @@ Two rules apply to the value:
 
 The MEMORY PROTOCOL names the kinds of things that belong in a memory: decisions,
 preferences, learnings, and progress. It also tells the model to keep the files
-small and current. It cannot know what matters in your domain, so that part is
-your work.
+small and current. It cannot know which information is important in your domain,
+so that part is your work.
 
 Put this guidance in the system prompt template of the prompt profile. Describe
-the information that is worth a memory, and the information that must never
+the information that belongs in a memory, and the information that must never
 become one:
 
 ```text

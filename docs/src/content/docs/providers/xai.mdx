@@ -3,13 +3,13 @@ title: xAI
 description: UC AI provider documentation for xAI Grok models
 ---
 
-The UC AI xAI package provides integration with xAI's Grok models, allowing you to use cutting-edge language models within your Oracle database applications.
+The UC AI xAI package integrates xAI's Grok models into your Oracle database applications.
 
 ## Features
 
 - Support for the current Grok models (Grok 4.6, Grok 4.5, Grok 4.3, Grok 4.20)
 - Full function calling (tools) support
-- Advanced reasoning capabilities with reasoning effort control
+- Reasoning capabilities with reasoning effort control
 - Multi-modal support (text, images)
 - Structured output support
 
@@ -24,13 +24,13 @@ You can get an API key by signing up at [xAI Console](https://console.x.ai/).
 
 ## Creating a Web Credential
 
-To use your xAI key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following settings:
+To use your xAI key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following configuration:
 
 - Authentication Type: HTTP Header
 - Credential Name: `Authorization`
 - Credential Secret: `Bearer <your_api_key>`
 
-We generally recommend also setting `Valid for URLs` to the xAI API (https://api.x.ai/) to limit the scope of the credential.
+Also set `Valid for URLs` to the xAI API (https://api.x.ai/) to limit the scope of the credential.
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_xai.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
@@ -131,7 +131,7 @@ See the [tools guide](/products/uc-ai/docs/guides/tools/) for details on how to 
 
 ### Multi-modal Analysis
 
-Grok models support vision capabilities for image analysis. PDF analyisis is not implemented with UC AI yet, as xAI has a quite unique approach.
+Grok models support vision capabilities for image analysis. PDF analysis is not implemented in UC AI yet, because xAI uses a different approach for it.
 
 #### Image Analysis
 
@@ -169,7 +169,7 @@ end;
 
 ### Reasoning / Thinking
 
-xAI's Grok models support enhanced reasoning capabilities. You can control the reasoning effort level to balance speed and cost:
+xAI's Grok models support reasoning. You can control the reasoning effort level to balance speed and cost:
 
 ```sql
 declare
@@ -215,7 +215,7 @@ Refer to xAI's [reasoning guide](https://docs.x.ai/docs/guides/reasoning#control
 
 ### Structured Output
 
-xAI supports structured output with JSON schemas, allowing you to get responses in a specific format:
+xAI supports structured output with JSON schemas:
 
 ```sql
 declare
