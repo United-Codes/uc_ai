@@ -135,15 +135,32 @@ cd docs && bun run build                 # Production build
 
 Content lives in `docs/src/content/docs/` as MDX files. Provider setup guides are in `docs/src/content/docs/providers/`.
 
-**Writing style:** the docs follow ASD-STE100 Simplified Technical English. Invoke the
-`simple-english` skill before you write or edit any page under `docs/src/content/docs/`.
+**Writing style: two skills, both required.** Before you write or edit any page under
+`docs/src/content/docs/`, invoke both:
+
+- **`simple-english`** — sentence mechanics. The docs follow ASD-STE100 Simplified
+  Technical English: sentence-length limits, one word one meaning, active voice,
+  simple tenses.
+- **`docs-voice`** — register. The neutral, unexcited voice every page is written in,
+  the rule that headings are navigation and not commentary, and the seven sentence
+  shapes that mean a draft has slipped into essay voice, each with a grep. Run its
+  self-check before you call a page done.
+
+STE tells you how to build a sentence; `docs-voice` tells you which sentences should
+not exist. `write-tutorial-guide` owns the structure of a multi-lesson course and
+defers to `docs-voice` for how it reads.
+
 Keep the terminology fixed: "make sure that" (never ensure / verify / confirm),
 "configuration" (never config / settings / options in prose), "call" for calling a
 procedure, "run" for one agent execution, "delete" for data (`drop` for DDL only),
 "error" for a raised exception, "failure" for an operation that did not finish. The
 landing page (`index.mdx`) and `guides/use-cases.mdx` keep their persuasive voice — fix
-only mechanics there. Never change heading text: `starlightLinksValidator` fails the
-build on anchors that other pages link to.
+only mechanics there.
+
+**Do not change an existing heading until you have grepped its anchor.**
+`starlightLinksValidator` fails the build on anchors that other pages link to, and a
+guide heading can carry a lot of them — `guides/tools/#the-run-context` is linked from
+13 pages. `docs-voice` has the grep and the numbers.
 
 ## Key Reference Files
 
@@ -163,6 +180,8 @@ Check these files for context on specific topics:
 | Topic | File |
 |-------|------|
 | Architectural patterns & conventions | `.claude/docs/architectural_patterns.md` |
+| Docs voice and register (all docs pages) | `.claude/skills/docs-voice.md` |
+| Structure of a tutorial course | `.claude/skills/write-tutorial-guide.md` |
 | Multi-agent system design | `docs/multi-agent-systems-proposal.md` |
 | Input mapping syntax for workflows | `docs/input-mapping-guide.md` |
 | Provider setup guides | `docs/src/content/docs/providers/*.mdx` |

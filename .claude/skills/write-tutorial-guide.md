@@ -60,108 +60,43 @@ The tutorial's unique value is:
 So: teach the mechanic in the smallest form that serves the thread, then link
 out with "Full reference: [guide]". Spend the reclaimed space on the four gaps.
 
-## Voice: unexcited, frictionless, no narrator
+## Voice: read the `docs-voice` skill
 
-The owner's review of Claude-written lessons, condensed: the prose is fancy, not
-to the point. The reader wants a **neutral, unexcited page they can scan**. They
-do not want a documentary.
+**The voice rules moved.** Register, heading rules, the sentence shapes that mean
+a draft has slipped into essay voice, and the self-check greps now live in
+`.claude/skills/docs-voice.md`, because they apply to every page under
+`docs/src/content/docs/` and not only to tutorials. Read that skill before you
+write a lesson, and run its self-check before you ship one.
 
-**Write like a well-edited Oracle manual.** Not like Anthropic Academy, not like
-a launch post, not like a teacher performing enthusiasm. STE (the `simple-english`
-skill) already bans most of this register. Do not override it with “framing that
-wins attention”.
+Two things it says that decide most of a tutorial draft:
 
-Motivation is a **recorded failure**, not a paragraph that tells the reader to
-feel the pain. Keep “Without X … With X” as a two-line contrast. Do not wrap it
-in an essay about why it matters.
+- Headings are navigation, not commentary. `Where this approach stops` fails;
+  `A question the pasted rows cannot answer` works.
+- Motivation is a **recorded failure**, not a paragraph that tells the reader to
+  feel the pain.
 
-### Headings structure the page
+What stays here, because it is specific to a course:
 
-Headings become the right-hand **On this page** list. That list is navigation. A
-heading that comments, teases, or only makes sense after you have read the
-section fails at its one job: helping the reader jump.
-
-The test is not “is this heading true?” It is: **cover the body. From the heading
-list alone, can you find the block you need?**
-
-Real headings that failed this test:
-
-| Rejected | Why it fails as structure | Write instead |
-| --- | --- | --- |
-| `Where this approach stops` | a verdict; the TOC cannot tell you this is “ask about remaining credit” | `A question the pasted rows cannot answer` |
-| `Two things that will surprise you` | tease; “surprise” is the writer’s feeling | `Memory tags stay on the old profile version` |
-| `Why your code cannot use this answer` | essay title | `The same PDF returns different wording` |
-| `The next shift starts from nothing` | literary | `Two conversations, a week apart` |
-| `An agent that reads its attacker's mail` | a headline | `A supplier email changes a bank account` |
-| `The question that needs twenty-six tool calls` | punchy, not a topic | `One question, twenty-six tool calls` |
-
-Do **not** write headings that:
-
-- judge (`stops`, `fails`, `matters`, `the honest…`)
-- tease (`will surprise you`, `the one that…`, `nothing strange`)
-- need the next sentence to be understood
-
-Do write headings that name the **object or the action**: `Set up the demo
-schema`, `Create the prompt profile`, `Ask about remaining credit`,
-`Verification`. Lesson titles and `Aside` titles follow the same rule. Vivid is
-not a goal. Neutral is.
-
-### Body: state the fact, then the next step
-
-Do not comment on the fact. Do not defend the model. Do not tell the reader how
-to feel. Do not recap what the section was “really about”.
-
-From lesson 1 of Build an Agent, the paragraph the owner pointed at:
-
-**Rejected:**
-
-> The model did nothing strange. It saw a total of 200, it saw no credit
-> information, and it assumed the total was available. The reasoning is good.
-> The data was incomplete, and nothing in the prompt said so.
->
-> This is the failure that matters, because it is quiet:
-
-**Write instead:**
-
-> The prompt sent a total of 200 and no credit data. The model answered 200. The
-> remaining credit on INV-1003 is 0.
->
-> This approach has three limits:
-
-Same facts. No narrator. The heading above that block names the question, not
-the writer’s verdict on the approach.
-
-### Phrases that mean you have slipped into essay voice
-
-If a draft contains any of these, delete the sentence or rewrite it as a fact:
-
-- “the model did nothing strange / is not wrong / the reasoning is good”
-- “this is the failure that matters” / “the one that matters most”
-- “that is what the rest of the course builds”
-- “that is the point of this lesson” / “read that carefully”
-- “now the honest part”
-- “two things that will surprise you”
-- “nothing was invented”
-- “quietly” used for drama, not for a technical meaning
-- “now imagine writing the PL/SQL that…”
-- a promise line that sells the lesson (`and you can see exactly where that
-  approach stops`) instead of naming the outcome
-
-A promise line names what the reader can do, in one clause, with no trailer:
+**The promise line.** It names what the reader can do at the end of the lesson,
+in one clause, with no trailer:
 
 - Bad: `a model answers a question about your own data — and you can see exactly
   where that approach stops.`
 - Good: `call generate_text with contract rows in the prompt, then ask a
   question those rows cannot answer.`
 
-### Self-check before you ship a page
+An em-dash inside a `promise=` prop is nearly always the trailer:
 
-1. Read only the headings, in order, as they appear in **On this page**. Each
-   one must name a topic you could jump to. Rename any that comment.
-2. Search the body for: `matters`, `strange`, `honest`, `surprise`,
-   `the point of`, `quietly`, `imagine`, `the rest of the course`.
-3. Delete any sentence whose only job is to tell the reader that the previous
-   sentence was important.
+```bash
+grep -n 'promise="[^"]*—' docs/src/content/docs/tutorial/*/*.mdx
+```
+
+**Lesson titles and `Aside` titles** follow the same heading rule as `##`
+headings, and a tutorial has many more of them than a guide does.
+
+**Renaming a lesson heading is cheap; renaming a guide heading is not.** The
+whole `tutorial/` tree is the target of 2 cross-page anchors. `docs-voice` has
+the grep and the numbers.
 
 ## Steps
 
@@ -715,11 +650,13 @@ Two habits that prevent all three:
 - Invoke the `simple-english` skill before writing or editing any page under
   `docs/src/content/docs/`. Keep CLAUDE.md's fixed terminology ("make sure
   that", "configuration", "call", "run", "delete", "error", "failure").
-- Run the **Voice** self-check on every page before you call it done: headings
-  as a TOC, then the banned-phrase search. Fancy-pants prose is a ship blocker,
-  same as a broken link.
-- Never change an existing heading: `starlightLinksValidator` fails the build on
-  anchors other pages link to.
+- Run the `docs-voice` self-check on every page before you call it done:
+  headings as a TOC, then the seven sentence-shape greps. Fancy-pants prose is a
+  ship blocker, same as a broken link.
+- Do not change an existing heading until you have grepped its anchor.
+  `starlightLinksValidator` fails the build on anchors other pages link to, and
+  `docs-voice` has the grep. Renaming a *lesson* heading is usually safe; the
+  whole `tutorial/` tree is the target of 2 cross-page anchors.
 - **Only Markdown headings (`##`, `###`) produce anchors.** Asides, tables,
   `<Steps>`, `<Card>` and code blocks do not. **An `<Aside>` never emits an `id`,
   with or without a `title`** — it renders as
