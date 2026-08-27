@@ -256,7 +256,7 @@ uc_ai.g_base_url := 'https://api.deepseek.com';
 -- uc_ai_openai.g_apex_web_credential := 'MY_DEEPKSEEK_WEB_CREDENTIAL';
 
 l_result := uc_ai.GENERATE_TEXT(
-  p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What an I cook with that?',
+  p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',
   p_provider => uc_ai.c_provider_openai,
   p_model => 'deepseek-chat' -- set desired model
 );

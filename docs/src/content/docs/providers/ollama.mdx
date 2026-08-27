@@ -31,7 +31,7 @@ You can follow the [Ollama installation guide](https://github.com/ollama/ollama)
 
 ## Configuration
 
-By default, the package connects to `http://localhost:11434/api/chat`. If your Ollama instance is running on a different host or port, you'll need to modify the `c_api_url` constant in the package body.
+By default, the package connects to `http://localhost:11434/api/chat`. If your Ollama instance runs on a different host or port, set the `uc_ai.g_base_url` global variable before you call `uc_ai.generate_text`.
 
 ```sql
 -- In my case the database is running in a Docker container, so I use the host's internal address
@@ -120,7 +120,7 @@ end;
 /
 ```
 
-###  Generating Embeddings
+### Generating Embeddings
 
 UC AI supports embedding generation with Ollama. You first have to find and download one of the embedding models which are [listed here](https://ollama.com/search?c=embedding). Then you can start generating embeddings:
 
