@@ -116,18 +116,8 @@ begin
                , p_version => 1
                );
 
-  uc_ai_prompt_profiles_api.update_prompt_profile(
-    p_code                   => l_profile.code
-  , p_version                => l_profile.version
-  , p_description            => l_profile.description
-  , p_system_prompt_template => l_profile.system_prompt_template
-  , p_user_prompt_template   => l_profile.user_prompt_template
-  , p_provider               => l_profile.provider
-  , p_model                  => l_profile.model
-  , p_model_config_json      => c_config
-  , p_response_schema        => l_profile.response_schema
-  , p_parameters_schema      => l_profile.parameters_schema
-  );
+  l_profile.model_config_json := c_config;
+  uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
 
   commit;
   sys.dbms_output.put_line('Profile SC_DESK_PROFILE v1 now offers the "scdesk" tools.');

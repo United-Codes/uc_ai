@@ -225,8 +225,8 @@ your own question before you decide.
 ## Turn it off without a deployment
 
 Nothing that calls the agent knows about code mode, so switching it is an update.
-`update_prompt_profile` replaces the whole row, so read the row first and pass every
-other column back unchanged. One line is the change:
+Read the profile row, set the model configuration, and pass the row back. One line
+is the change:
 
 ```sql
 declare
@@ -239,18 +239,8 @@ declare
   }';
 begin
   l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('CC_ANALYST_PROFILE', 1);
-
-  uc_ai_prompt_profiles_api.update_prompt_profile(
-    p_code                   => l_profile.code
-  , p_version                => l_profile.version
-  , p_description            => l_profile.description
-  , p_system_prompt_template => l_profile.system_prompt_template
-  , p_user_prompt_template   => l_profile.user_prompt_template
-  , p_provider               => l_profile.provider
-  , p_model                  => l_profile.model
-  , p_model_config_json      => c_off
-  , p_parameters_schema      => l_profile.parameters_schema
-  );
+  l_profile.model_config_json := c_off;
+  uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
   commit;
 end;
 /

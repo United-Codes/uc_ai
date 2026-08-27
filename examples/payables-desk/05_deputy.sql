@@ -148,20 +148,10 @@ declare
 begin
   l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('AP_DESK_PROFILE', 1);
 
-  uc_ai_prompt_profiles_api.update_prompt_profile(
-    p_code                   => l_profile.code
-  , p_version                => l_profile.version
-  , p_description            => l_profile.description
-  , p_system_prompt_template => l_profile.system_prompt_template
-  , p_user_prompt_template   => l_profile.user_prompt_template
-  , p_provider               => l_profile.provider
-  , p_model                  => l_profile.model
-  , p_model_config_json      => '{"g_enable_tools": true
-                                , "g_tool_tags": ["apread", "apwrite", "apleak"]
-                                , "g_max_tool_calls": 8}'
-  , p_response_schema        => l_profile.response_schema
-  , p_parameters_schema      => l_profile.parameters_schema
-  );
+  l_profile.model_config_json := '{"g_enable_tools": true
+                                 , "g_tool_tags": ["apread", "apwrite", "apleak"]
+                                 , "g_max_tool_calls": 8}';
+  uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
   commit;
   sys.dbms_output.put_line('one tag added to AP_DESK_PROFILE: apleak');
 end;
@@ -262,20 +252,10 @@ declare
 begin
   l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('AP_DESK_PROFILE', 1);
 
-  uc_ai_prompt_profiles_api.update_prompt_profile(
-    p_code                   => l_profile.code
-  , p_version                => l_profile.version
-  , p_description            => l_profile.description
-  , p_system_prompt_template => l_profile.system_prompt_template
-  , p_user_prompt_template   => l_profile.user_prompt_template
-  , p_provider               => l_profile.provider
-  , p_model                  => l_profile.model
-  , p_model_config_json      => '{"g_enable_tools": true
-                                , "g_tool_tags": ["apread", "apwrite"]
-                                , "g_max_tool_calls": 8}'
-  , p_response_schema        => l_profile.response_schema
-  , p_parameters_schema      => l_profile.parameters_schema
-  );
+  l_profile.model_config_json := '{"g_enable_tools": true
+                                 , "g_tool_tags": ["apread", "apwrite"]
+                                 , "g_max_tool_calls": 8}';
+  uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
   commit;
   sys.dbms_output.put_line('apleak taken off AP_DESK_PROFILE');
 end;

@@ -178,15 +178,9 @@ The path is then an interface, like the name of a table. Name the files also whe
 the model invents a new name for the same subject on each run. A model with no
 training on this command set needs more structure than a Claude model does.
 
-<Aside type="caution" title="Put the whole profile row back, not one field">
-`uc_ai_prompt_profiles_api.update_prompt_profile` takes every field, and
-`p_model_config_json` defaults to null. A call that passes only the new system
-prompt deletes the memory tool tag that `enable_for_agent` added. The agent then
-loses the memory tool, and no error tells you.
-
-Read the row with `get_prompt_profile` first, and pass the other fields back
-unchanged.
-</Aside>
+To add these rules, read the profile row with `get_prompt_profile`, set
+`system_prompt_template`, and pass the row to `update_prompt_profile`. The model
+configuration, and with it the memory tool tag, stays as it is.
 
 New rules take effect on the next new session, because an open conversation keeps
 the system prompt that it started with. Lesson 3 of the shift handover course

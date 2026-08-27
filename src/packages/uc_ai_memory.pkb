@@ -1276,18 +1276,8 @@ create or replace package body uc_ai_memory as
     l_config.put('g_tool_tags', l_tags);
     l_config.put('g_enable_tools', true);
 
-    uc_ai_prompt_profiles_api.update_prompt_profile(
-      p_code                   => l_profile.code,
-      p_version                => l_profile.version,
-      p_description            => l_profile.description,
-      p_system_prompt_template => l_profile.system_prompt_template,
-      p_user_prompt_template   => l_profile.user_prompt_template,
-      p_provider               => l_profile.provider,
-      p_model                  => l_profile.model,
-      p_model_config_json      => l_config.to_clob,
-      p_response_schema        => l_profile.response_schema,
-      p_parameters_schema      => l_profile.parameters_schema
-    );
+    l_profile.model_config_json := l_config.to_clob;
+    uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
 
     -- warn when other agents reference the same profile: they gain tool
     -- VISIBILITY (they still resolve their own stores, so no data leaks)
@@ -1380,18 +1370,8 @@ create or replace package body uc_ai_memory as
     end loop tag_loop;
     l_config.put('g_tool_tags', l_new);
 
-    uc_ai_prompt_profiles_api.update_prompt_profile(
-      p_code                   => l_profile.code,
-      p_version                => l_profile.version,
-      p_description            => l_profile.description,
-      p_system_prompt_template => l_profile.system_prompt_template,
-      p_user_prompt_template   => l_profile.user_prompt_template,
-      p_provider               => l_profile.provider,
-      p_model                  => l_profile.model,
-      p_model_config_json      => l_config.to_clob,
-      p_response_schema        => l_profile.response_schema,
-      p_parameters_schema      => l_profile.parameters_schema
-    );
+    l_profile.model_config_json := l_config.to_clob;
+    uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
   end remove_tag_from_profile;
 
 

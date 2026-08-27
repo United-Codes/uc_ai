@@ -60,6 +60,42 @@ create or replace package body uc_ai_prompt_profiles_api as
 
 
   /*
+   * Updates an existing prompt profile from a row
+   */
+  procedure update_prompt_profile(
+    p_profile in uc_ai_prompt_profiles%rowtype
+  )
+  as
+    l_scope  uc_ai_logger.scope := gc_scope_prefix || 'update_prompt_profile';
+  begin
+
+    update uc_ai_prompt_profiles
+    set description            = p_profile.description,
+        system_prompt_template = p_profile.system_prompt_template,
+        user_prompt_template   = p_profile.user_prompt_template,
+        provider               = p_profile.provider,
+        model                  = p_profile.model,
+        model_config_json      = p_profile.model_config_json,
+        response_schema        = p_profile.response_schema,
+        parameters_schema      = p_profile.parameters_schema
+    where id = p_profile.id;
+
+    if sql%rowcount = 0 then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_not_found
+      , p_scope      => l_scope
+      , p0           => 'Prompt profile'
+      , p1           => 'ID ' || p_profile.id
+      );
+    end if;
+  exception
+    when others then
+      uc_ai_logger.log_error('Error updating prompt profile', l_scope);
+      raise;
+  end update_prompt_profile;
+
+
+  /*
    * Updates an existing prompt profile by ID
    */
   procedure update_prompt_profile(

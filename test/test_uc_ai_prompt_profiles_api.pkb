@@ -172,6 +172,82 @@ create or replace package body test_uc_ai_prompt_profiles_api as
   end update_profile_by_code;
 
 
+  procedure update_profile_by_row
+  as
+    l_id      number;
+    l_profile uc_ai_prompt_profiles%rowtype;
+    l_after   uc_ai_prompt_profiles%rowtype;
+    c_config  constant clob := '{"g_enable_tools": true, "g_tool_tags": ["memory"]}';
+    c_schema  constant clob := '{"type": "object", "properties": {"answer": {"type": "string"}}}';
+    c_params  constant clob := '{"type": "object", "properties": {"question": {"type": "string"}}}';
+  begin
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code => gc_test_code || '_UPDATE_ROW',
+      p_description => 'Original description',
+      p_system_prompt_template => 'You are a helpful assistant.',
+      p_user_prompt_template => 'Question: {question}',
+      p_provider => uc_ai.c_provider_openai,
+      p_model => uc_ai_openai.c_model_gpt_4o_mini,
+      p_model_config_json => c_config,
+      p_response_schema => c_schema,
+      p_parameters_schema => c_params
+    );
+
+    -- change one column, pass the row back
+    l_profile := uc_ai_prompt_profiles_api.get_prompt_profile(p_id => l_id);
+    l_profile.system_prompt_template := 'You are a very helpful assistant.';
+    uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
+
+    l_after := uc_ai_prompt_profiles_api.get_prompt_profile(p_id => l_id);
+
+    ut.expect(l_after.system_prompt_template).to_equal(to_clob('You are a very helpful assistant.'));
+
+    -- every other column is untouched, including the optional CLOBs
+    ut.expect(l_after.description).to_equal('Original description');
+    ut.expect(l_after.user_prompt_template).to_equal(to_clob('Question: {question}'));
+    ut.expect(l_after.provider).to_equal(uc_ai.c_provider_openai);
+    ut.expect(l_after.model).to_equal(uc_ai_openai.c_model_gpt_4o_mini);
+    ut.expect(l_after.model_config_json).to_equal(c_config);
+    ut.expect(l_after.response_schema).to_equal(c_schema);
+    ut.expect(l_after.parameters_schema).to_equal(c_params);
+
+    -- code, version and status are not written by the row update
+    l_profile := l_after;
+    l_profile.code    := gc_test_code || '_RENAMED';
+    l_profile.version := 99;
+    l_profile.status  := uc_ai_prompt_profiles_api.c_status_active;
+    uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
+
+    l_after := uc_ai_prompt_profiles_api.get_prompt_profile(p_id => l_id);
+    ut.expect(l_after.code).to_equal(gc_test_code || '_UPDATE_ROW');
+    ut.expect(l_after.version).to_equal(1);
+    ut.expect(l_after.status).to_equal(uc_ai_prompt_profiles_api.c_status_draft);
+
+    sys.dbms_output.put_line('Updated profile by row, ID: ' || l_id);
+  end update_profile_by_row;
+
+
+  procedure update_profile_by_row_not_found
+  as
+    l_profile uc_ai_prompt_profiles%rowtype;
+  begin
+    l_profile.id                     := -1;
+    l_profile.description            := 'nobody';
+    l_profile.system_prompt_template := 'x';
+    l_profile.user_prompt_template   := 'y';
+    l_profile.provider               := uc_ai.c_provider_openai;
+    l_profile.model                  := uc_ai_openai.c_model_gpt_4o_mini;
+
+    begin
+      uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
+      ut.fail('Expected a not-found error');
+    exception
+      when others then
+        ut.expect(sqlcode).to_equal(uc_ai_error.c_err_not_found);
+    end;
+  end update_profile_by_row_not_found;
+
+
   procedure delete_profile_by_id
   as
     l_id number;

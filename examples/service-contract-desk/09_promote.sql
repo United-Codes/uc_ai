@@ -93,8 +93,9 @@ end;
 -- you are ready. Remember that activating a new version retires the old one for
 -- every caller that resolves by null.
 declare
-  l_id     number;
-  l_exists pls_integer;
+  l_id      number;
+  l_exists  pls_integer;
+  l_profile uc_ai_prompt_profiles%rowtype;
 
   c_version constant number := 1;
 
@@ -148,17 +149,15 @@ begin
     );
     sys.dbms_output.put_line('Profile created at version ' || c_version || '.');
   else
-    uc_ai_prompt_profiles_api.update_prompt_profile(
-      p_code                   => 'SC_DESK_PROFILE'
-    , p_version                => c_version
-    , p_description            => 'The service-contract desk.'
-    , p_system_prompt_template => c_system_prompt
-    , p_user_prompt_template   => '{question}'
-    , p_provider               => uc_ai.c_provider_openai
-    , p_model                  => uc_ai_openai.c_model_gpt_5_6_terra
-    , p_model_config_json      => c_config
-    , p_parameters_schema      => c_parameters
-    );
+    l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('SC_DESK_PROFILE', c_version);
+    l_profile.description            := 'The service-contract desk.';
+    l_profile.system_prompt_template := c_system_prompt;
+    l_profile.user_prompt_template   := '{question}';
+    l_profile.provider               := uc_ai.c_provider_openai;
+    l_profile.model                  := uc_ai_openai.c_model_gpt_5_6_terra;
+    l_profile.model_config_json      := c_config;
+    l_profile.parameters_schema      := c_parameters;
+    uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
     sys.dbms_output.put_line('Profile updated at version ' || c_version || '.');
   end if;
 end;

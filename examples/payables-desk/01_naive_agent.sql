@@ -115,8 +115,9 @@ end;
 -- Both create_* calls make a DRAFT. A draft is invisible to a call that does
 -- not name a version, so the change_status calls at the end are not optional.
 declare
-  l_id     number;
-  l_exists pls_integer;
+  l_id      number;
+  l_exists  pls_integer;
+  l_profile uc_ai_prompt_profiles%rowtype;
 
   c_system_prompt constant varchar2(2000 char) :=
 'You are the accounts-payable desk of {entity}.
@@ -157,17 +158,15 @@ begin
     );
     sys.dbms_output.put_line('profile AP_DESK_PROFILE created, id=' || l_id);
   else
-    uc_ai_prompt_profiles_api.update_prompt_profile(
-      p_code                   => 'AP_DESK_PROFILE'
-    , p_version                => 1
-    , p_description            => 'The payables desk, first draft. It can do anything.'
-    , p_system_prompt_template => c_system_prompt
-    , p_user_prompt_template   => '{question}'
-    , p_provider               => uc_ai.c_provider_openai
-    , p_model                  => uc_ai_openai.c_model_gpt_5_6_terra
-    , p_model_config_json      => c_model_config
-    , p_parameters_schema      => c_parameters
-    );
+    l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('AP_DESK_PROFILE', 1);
+    l_profile.description            := 'The payables desk, first draft. It can do anything.';
+    l_profile.system_prompt_template := c_system_prompt;
+    l_profile.user_prompt_template   := '{question}';
+    l_profile.provider               := uc_ai.c_provider_openai;
+    l_profile.model                  := uc_ai_openai.c_model_gpt_5_6_terra;
+    l_profile.model_config_json      := c_model_config;
+    l_profile.parameters_schema      := c_parameters;
+    uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
     sys.dbms_output.put_line('profile AP_DESK_PROFILE updated.');
   end if;
 

@@ -48,7 +48,27 @@ as
 
 
   /*
+   * Updates an existing prompt profile from a row
+   *
+   * Read the row with get_prompt_profile, change the columns you need, and pass
+   * the row back. Columns you do not touch keep their value.
+   *
+   * The row is selected by its id. The columns code, version, and status are
+   * not changed. Use change_status to change the status.
+   *
+   * @param p_profile  The prompt profile row (uc_ai_prompt_profiles%rowtype)
+   */
+  procedure update_prompt_profile(
+    p_profile in uc_ai_prompt_profiles%rowtype
+  );
+
+
+  /*
    * Updates an existing prompt profile
+   *
+   * @deprecated Use update_prompt_profile(p_profile) with the row from
+   *             get_prompt_profile. This overload writes every column it is
+   *             given, and an omitted optional parameter sets its column to null.
    * 
    * @param p_id                      ID of the prompt profile to update
    * @param p_description             Description of the prompt profile
@@ -71,10 +91,15 @@ as
     p_response_schema         in uc_ai_prompt_profiles.response_schema%type default null,
     p_parameters_schema       in uc_ai_prompt_profiles.parameters_schema%type default null
   );
+  pragma deprecate(update_prompt_profile, 'update_prompt_profile with all columns is deprecated; pass a uc_ai_prompt_profiles%rowtype from get_prompt_profile instead');
 
 
   /*
    * Updates an existing prompt profile by code and version
+   *
+   * @deprecated Use update_prompt_profile(p_profile) with the row from
+   *             get_prompt_profile. This overload writes every column it is
+   *             given, and an omitted optional parameter sets its column to null.
    * 
    * @param p_code                    Unique code for the prompt profile
    * @param p_version                 Version number
@@ -99,6 +124,7 @@ as
     p_response_schema         in uc_ai_prompt_profiles.response_schema%type default null,
     p_parameters_schema       in uc_ai_prompt_profiles.parameters_schema%type default null
   );
+  pragma deprecate(update_prompt_profile, 'update_prompt_profile with all columns is deprecated; pass a uc_ai_prompt_profiles%rowtype from get_prompt_profile instead');
 
 
   /*

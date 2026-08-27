@@ -32,6 +32,7 @@ set serveroutput on
 declare
   l_profile_id number;
   l_exists     pls_integer;
+  l_profile    uc_ai_prompt_profiles%rowtype;
 
   c_description constant varchar2(500 char) := 'Cold-chain analyst. Code mode is on.';
 
@@ -91,17 +92,15 @@ begin
     );
     sys.dbms_output.put_line('Prompt profile CC_ANALYST_PROFILE created, id=' || l_profile_id);
   else
-    uc_ai_prompt_profiles_api.update_prompt_profile(
-      p_code                   => 'CC_ANALYST_PROFILE'
-    , p_version                => 1
-    , p_description            => c_description
-    , p_system_prompt_template => c_system_prompt
-    , p_user_prompt_template   => '{question}'
-    , p_provider               => uc_ai.c_provider_anthropic
-    , p_model                  => uc_ai_anthropic.c_model_claude_4_6_sonnet
-    , p_model_config_json      => c_config
-    , p_parameters_schema      => c_parameters
-    );
+    l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('CC_ANALYST_PROFILE', 1);
+    l_profile.description            := c_description;
+    l_profile.system_prompt_template := c_system_prompt;
+    l_profile.user_prompt_template   := '{question}';
+    l_profile.provider               := uc_ai.c_provider_anthropic;
+    l_profile.model                  := uc_ai_anthropic.c_model_claude_4_6_sonnet;
+    l_profile.model_config_json      := c_config;
+    l_profile.parameters_schema      := c_parameters;
+    uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
     sys.dbms_output.put_line('Prompt profile CC_ANALYST_PROFILE updated.');
   end if;
 end;
@@ -310,18 +309,8 @@ declare
   }';
 begin
   l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('CC_ANALYST_PROFILE', 1);
-
-  uc_ai_prompt_profiles_api.update_prompt_profile(
-    p_code                   => l_profile.code
-  , p_version                => l_profile.version
-  , p_description            => l_profile.description
-  , p_system_prompt_template => l_profile.system_prompt_template
-  , p_user_prompt_template   => l_profile.user_prompt_template
-  , p_provider               => l_profile.provider
-  , p_model                  => l_profile.model
-  , p_model_config_json      => c_off
-  , p_parameters_schema      => l_profile.parameters_schema
-  );
+  l_profile.model_config_json := c_off;
+  uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
   commit;
 
   sys.dbms_output.put_line('Code mode is OFF for CC_ANALYST. No calling code changed.');
@@ -339,18 +328,8 @@ declare
   }';
 begin
   l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('CC_ANALYST_PROFILE', 1);
-
-  uc_ai_prompt_profiles_api.update_prompt_profile(
-    p_code                   => l_profile.code
-  , p_version                => l_profile.version
-  , p_description            => l_profile.description
-  , p_system_prompt_template => l_profile.system_prompt_template
-  , p_user_prompt_template   => l_profile.user_prompt_template
-  , p_provider               => l_profile.provider
-  , p_model                  => l_profile.model
-  , p_model_config_json      => c_on
-  , p_parameters_schema      => l_profile.parameters_schema
-  );
+  l_profile.model_config_json := c_on;
+  uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
   commit;
 
   sys.dbms_output.put_line('Code mode is ON again.');

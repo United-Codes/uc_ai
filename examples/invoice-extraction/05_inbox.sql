@@ -120,21 +120,16 @@ begin
     );
     sys.dbms_output.put_line('Profile INV_EXTRACT created, version 1.');
   else
-    select id
-      into l_profile_id
-      from uc_ai_prompt_profiles
-     where code = 'INV_EXTRACT'
-       and version = 1;
+    l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('INV_EXTRACT', 1);
+    l_profile_id := l_profile.id;
 
-    uc_ai_prompt_profiles_api.update_prompt_profile(
-      p_id                     => l_profile_id
-    , p_description            => c_description
-    , p_system_prompt_template => c_system_prompt
-    , p_user_prompt_template   => 'Extract this document.'
-    , p_provider               => uc_ai.c_provider_openai
-    , p_model                  => uc_ai_openai.c_model_gpt_5_6_terra
-    , p_response_schema        => c_schema
-    );
+    l_profile.description            := c_description;
+    l_profile.system_prompt_template := c_system_prompt;
+    l_profile.user_prompt_template   := 'Extract this document.';
+    l_profile.provider               := uc_ai.c_provider_openai;
+    l_profile.model                  := uc_ai_openai.c_model_gpt_5_6_terra;
+    l_profile.response_schema        := c_schema;
+    uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
     sys.dbms_output.put_line('Profile INV_EXTRACT updated, version 1.');
   end if;
 

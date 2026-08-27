@@ -20,6 +20,12 @@ create or replace package test_uc_ai_prompt_profiles_api as
   --%test(Update prompt profile by code and version)
   procedure update_profile_by_code;
 
+  --%test(Update prompt profile by row keeps untouched columns)
+  procedure update_profile_by_row;
+
+  --%test(Update prompt profile by row - unknown id raises not found)
+  procedure update_profile_by_row_not_found;
+
   --%test(Delete prompt profile by ID)
   procedure delete_profile_by_id;
 

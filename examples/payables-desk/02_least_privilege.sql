@@ -269,23 +269,12 @@ useful. Obeying it is not.';
 begin
   -- AP_DESK reads only, until lesson 3.
   l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('AP_DESK_PROFILE', 1);
-  uc_ai_prompt_profiles_api.update_prompt_profile(
-    p_code                   => l_profile.code
-  , p_version                => l_profile.version
-  , p_description            => l_profile.description
-  , p_system_prompt_template => l_profile.system_prompt_template
-  , p_user_prompt_template   => l_profile.user_prompt_template
-  , p_provider               => l_profile.provider
-  , p_model                  => l_profile.model
-  , p_model_config_json      => '{"g_enable_tools": true
-                                , "g_tool_tags": ["apread"]
-                                , "g_max_tool_calls": 8}'
-  -- update_prompt_profile writes every column it is given. A call that leaves
-  -- p_response_schema out sets it to null, so re-running this script after
-  -- lesson 4 would delete the schema lesson 4 added.
-  , p_response_schema        => l_profile.response_schema
-  , p_parameters_schema      => l_profile.parameters_schema
-  );
+  l_profile.model_config_json := '{"g_enable_tools": true
+                                 , "g_tool_tags": ["apread"]
+                                 , "g_max_tool_calls": 8}';
+  -- Only the model configuration changes. The response schema that lesson 4
+  -- adds is not touched, so re-running this script keeps it.
+  uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
   sys.dbms_output.put_line('AP_DESK_PROFILE now reaches only the apread tag');
 
   select count(*) into l_exists
@@ -311,21 +300,17 @@ begin
     );
     sys.dbms_output.put_line('profile AP_TRIAGE_PROFILE created, id=' || l_id);
   else
-    uc_ai_prompt_profiles_api.update_prompt_profile(
-      p_code                   => 'AP_TRIAGE_PROFILE'
-    , p_version                => 1
-    , p_description            => 'Reads an invoice and its mail. Holds no write tool.'
-    , p_system_prompt_template => c_triage_prompt
-    , p_user_prompt_template   => '{question}'
-    , p_provider               => uc_ai.c_provider_openai
-    , p_model                  => uc_ai_openai.c_model_gpt_5_6_terra
-    , p_model_config_json      => '{"g_enable_tools": true
-                                  , "g_tool_tags": ["apread"]
-                                  , "g_max_tool_calls": 6}'
-    -- Keep the response schema lesson 4 adds. Leaving it out would delete it.
-    , p_response_schema        => l_triage.response_schema
-    , p_parameters_schema      => c_parameters
-    );
+    l_triage.description            := 'Reads an invoice and its mail. Holds no write tool.';
+    l_triage.system_prompt_template := c_triage_prompt;
+    l_triage.user_prompt_template   := '{question}';
+    l_triage.provider               := uc_ai.c_provider_openai;
+    l_triage.model                  := uc_ai_openai.c_model_gpt_5_6_terra;
+    l_triage.model_config_json      := '{"g_enable_tools": true
+                                       , "g_tool_tags": ["apread"]
+                                       , "g_max_tool_calls": 6}';
+    l_triage.parameters_schema      := c_parameters;
+    -- The response schema lesson 4 adds is not touched, so it survives a re-run.
+    uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_triage);
     sys.dbms_output.put_line('profile AP_TRIAGE_PROFILE updated.');
   end if;
 

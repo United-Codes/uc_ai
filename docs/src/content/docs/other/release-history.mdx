@@ -44,6 +44,11 @@ Agent memory:
 - **A scope decides which agents and users share one memory**: `agent`, `user`, `session`, `shared`, `global`, or `context`. With the scope `context` an agent keeps one store per run-context value, for example one memory per document. Set `p_scope => 'context'` and `p_context_key => 'document_id'`. Name a `p_store_code` to let several agents share one store per value.
 - **Caps and housekeeping**: `max_file_chars`, `max_files`, and the optional `max_store_chars` bound the growth of a store. `uc_ai_memory.expire_files` deletes the files that nobody used for a number of days. The view `uc_ai_v_memory_files` shows what a store holds.
 
+Prompt profiles:
+
+- **[Update a profile from its row](/products/uc-ai/docs/guides/prompt-profiles/#updating-profiles)**: `uc_ai_prompt_profiles_api.update_prompt_profile` now takes a `uc_ai_prompt_profiles%rowtype`. Read the row with `get_prompt_profile`, change the columns that you need, and pass the row back. The columns that you do not touch keep their values.
+- **The two `update_prompt_profile` overloads that take every column are deprecated.** They still work. An omitted optional parameter sets its column to null, so a call that passes only a new system prompt deletes the model configuration and the schemas without an error. The package spec marks both overloads with `pragma deprecate`.
+
 ## v26.3
 
 To upgrade first run `v26.2_to_v26.3.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.3).

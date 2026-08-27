@@ -31,6 +31,7 @@ set serveroutput on
 declare
   l_profile_id number;
   l_exists     pls_integer;
+  l_profile    uc_ai_prompt_profiles%rowtype;
 
   c_description constant varchar2(400 char) :=
     'The service-contract desk: answers questions about one service contract and '
@@ -80,16 +81,14 @@ begin
     );
     sys.dbms_output.put_line('Prompt profile SC_DESK_PROFILE created, id=' || l_profile_id);
   else
-    uc_ai_prompt_profiles_api.update_prompt_profile(
-      p_code                   => 'SC_DESK_PROFILE'
-    , p_version                => 1
-    , p_description            => c_description
-    , p_system_prompt_template => c_system_prompt
-    , p_user_prompt_template   => '{question}'
-    , p_provider               => uc_ai.c_provider_openai
-    , p_model                  => uc_ai_openai.c_model_gpt_5_6_terra
-    , p_parameters_schema      => c_parameters
-    );
+    l_profile := uc_ai_prompt_profiles_api.get_prompt_profile('SC_DESK_PROFILE', 1);
+    l_profile.description            := c_description;
+    l_profile.system_prompt_template := c_system_prompt;
+    l_profile.user_prompt_template   := '{question}';
+    l_profile.provider               := uc_ai.c_provider_openai;
+    l_profile.model                  := uc_ai_openai.c_model_gpt_5_6_terra;
+    l_profile.parameters_schema      := c_parameters;
+    uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
     sys.dbms_output.put_line('Prompt profile SC_DESK_PROFILE updated.');
   end if;
 end;

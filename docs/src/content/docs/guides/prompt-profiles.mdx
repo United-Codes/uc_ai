@@ -418,42 +418,31 @@ Available status values:
 
 ## Updating profiles
 
-### Update by ID
+Read the row with `get_prompt_profile`, change the columns that you need, and pass
+the row to `update_prompt_profile`. The columns that you do not touch keep their
+values.
 
 ```sql
+DECLARE
+  l_profile uc_ai_prompt_profiles%rowtype;
 BEGIN
-  uc_ai_prompt_profiles_api.update_prompt_profile(
-    p_id => 42,
-    p_description => 'Updated description',
-    p_system_prompt_template => 'New system prompt with {param}',
-    p_user_prompt_template => 'New user prompt: {input}',
-    p_provider => uc_ai.c_provider_anthropic,
-    p_model => uc_ai_anthropic.c_model_claude_5_sonnet
+  l_profile := uc_ai_prompt_profiles_api.get_prompt_profile(
+    p_code    => 'SUMMARIZE_TEXT',
+    p_version => 2
   );
+
+  l_profile.system_prompt_template := 'Updated system prompt with {param}';
+  l_profile.model                  := uc_ai_openai.c_model_gpt_5_6_terra;
+
+  uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
 
   COMMIT;
 END;
 /
 ```
 
-### Update by code and version
-
-```sql
-BEGIN
-  uc_ai_prompt_profiles_api.update_prompt_profile(
-    p_code => 'SUMMARIZE_TEXT',
-    p_version => 2,
-    p_description => 'Updated description',
-    p_system_prompt_template => 'Updated system prompt',
-    p_user_prompt_template => 'Updated user prompt',
-    p_provider => uc_ai.c_provider_openai,
-    p_model => uc_ai_openai.c_model_gpt_5_6_terra
-  );
-
-  COMMIT;
-END;
-/
-```
+The call selects the row by its `id`. It does not change `code`, `version`, or
+`status`. To change the status, call [`change_status`](#changing-status).
 
 <Aside type="caution">
   If a version runs in production, create a new version. Do not update that
