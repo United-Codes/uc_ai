@@ -1,4 +1,6 @@
 ---
+import { getCollection } from "astro:content";
+
 /**
  * Header of one tutorial lesson.
  *
@@ -7,6 +9,12 @@
  *   the promise    what you can do at the end of this lesson
  *   the position   which lesson this is, out of how many
  *   the time       how long the lesson takes
+ *
+ * It also carries the ONE way back. A course lives in a single sidebar entry, so
+ * Starlight's own previous/next links cannot work here: they are built from the
+ * sidebar, and the sidebar does not list the lessons. The back link is therefore
+ * read from the content collection instead of a list kept by hand, so a renamed
+ * or inserted lesson cannot make it wrong.
  *
  * Usage:
  *   <LessonHeader
@@ -54,9 +62,47 @@ const {
 // last lesson does not claim 100% before it is read.
 const percent = Math.round(((lesson - 1) / of) * 100);
 const repoBase = `https://github.com/United-Codes/uc_ai/blob/main/examples/${course}/`;
+
+// Where "back" goes. Lesson 1 has no previous lesson, so it returns to the list
+// of tutorials. Every other lesson returns to the one before it, by name.
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+let backHref = `${base}/tutorial/`;
+let backLabel = "All tutorials";
+
+if (lesson > 1) {
+  const inCourse = await getCollection("docs", (entry) =>
+    entry.id.startsWith(`tutorial/${course}/`),
+  );
+  // The file names are zero padded (01..09), so the id sorts into lesson order.
+  const ordered = inCourse.sort((a, b) => a.id.localeCompare(b.id));
+  const previous = ordered[lesson - 2];
+
+  if (previous) {
+    backHref = `${base}/${previous.id.replace(/\.mdx?$/, "")}/`;
+    backLabel = previous.data.title;
+  }
+}
 ---
 
 <div class="lesson-header" data-lesson={lesson}>
+  <a class="lesson-back" href={backHref}>
+    <svg
+      aria-hidden="true"
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <line x1="19" y1="12" x2="5" y2="12"></line>
+      <polyline points="12 19 5 12 12 5"></polyline>
+    </svg>
+    <span>{backLabel}</span>
+  </a>
+
   <p class="lesson-promise">
     <strong>By the end of this lesson, <span set:html={promise} /></strong>
   </p>
@@ -107,6 +153,41 @@ const repoBase = `https://github.com/United-Codes/uc_ai/blob/main/examples/${cou
      double rule, which looks like a mistake. */
   .lesson-header {
     margin: 0 0 2rem;
+  }
+
+  /* A button, not a sentence: it sits above the promise, reads as one tap target,
+     and does not compete with the lesson title for attention. */
+  .lesson-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0 0 0.9rem;
+    padding: 0.3rem 0.7rem 0.3rem 0.55rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 999px;
+    background: var(--sl-color-black);
+    color: var(--sl-color-gray-2);
+    font-size: var(--sl-text-xs);
+    line-height: 1.3;
+    text-decoration: none;
+    max-width: 100%;
+  }
+
+  .lesson-back:hover,
+  .lesson-back:focus-visible {
+    border-color: var(--sl-color-accent);
+    color: var(--sl-color-white);
+  }
+
+  /* A long lesson title must not push the pill past the page edge. */
+  .lesson-back span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .lesson-back svg {
+    flex: none;
   }
 
   .lesson-promise {
