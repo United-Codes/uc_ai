@@ -100,11 +100,14 @@ You need these three things:
 
 </Steps>
 
-![A finished turn in the chat region: the question of the user, a tool call with the status success, a collapsed reasoning block, the answer of the assistant, and a row with the time, the token counts, a copy button and two thumb buttons](../../../assets/apex-chat/chat-conversation.png)
+![A finished turn in the chat region: the question of the user, a tool call with the status success, a collapsed reasoning block, the answer of the assistant, a row with the time and the token counts, and below it a row with the text Was this helpful and two thumb buttons](../../../assets/apex-chat/chat-conversation.png)
 
 The region above has the tool calls, the reasoning, the token counts, and the
 feedback buttons on. **Debug Config** controls the first three. **Collect
-Feedback** controls the buttons, and it is off by default.
+Feedback** controls the buttons, and it is off by default. The feedback row has
+a line of its own below the answer and stays on screen. The user does not have
+to move the pointer on the message to find it. The question goes away after the
+user clicks a thumb. A thumbs down also opens a box for an optional comment.
 
 While the agent runs, the region shows an indicator. The indicator can also give
 the name of the tool that runs now.
@@ -190,7 +193,7 @@ that can read any table. Give the agent only the tools it needs.
 | **Session Item** | Page Item | — | A page item that holds the session ID. The chat continues this conversation after a page submit. Leave it empty for a conversation that starts again on every page load. |
 | **Suggested Prompts** | Textarea | — | Example questions, one for each line. They show as buttons while the conversation is empty. A click sends the question. |
 | **Auto Generate Title** | Checkbox | `N` | Names the conversation after the first answer, with the language model of the browser. |
-| **Collect Feedback** | Checkbox | `N` | Shows a thumbs up and a thumbs down under the newest answer. |
+| **Collect Feedback** | Checkbox | `N` | Shows a row with the question "Was this helpful?" and two thumb buttons below the newest answer. |
 
 **Auto Generate Title** uses the on-device model of the browser (Chrome 148 or
 later). No text goes to a server and the run costs no tokens. The plug-in never
