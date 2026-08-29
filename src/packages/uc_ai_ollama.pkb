@@ -91,10 +91,18 @@ create or replace package body uc_ai_ollama as
     );
   end get_reasoning_content;
 
+  /*
+   * p_has_tool_calls tells this function that the turn it is looking at also
+   * carries tool calls. A native /api/chat tool-call turn looks exactly like
+   * {"role":"assistant","content":"","tool_calls":[...]} - no text and no
+   * thinking - so an empty result is expected there and must not raise. Only a
+   * turn that carries neither content nor tool calls is a response we cannot use.
+   */
   function process_llm_response(
     p_message in json_object_t
   -- @dblinter ignore(g-7440): pio_state is a run-state accumulator threaded through the call, so in out is intentional
   , pio_state in out nocopy uc_ai_settings.t_run_state
+  , p_has_tool_calls in boolean default false
   ) return json_array_t
   as
     l_lm_text_content  json_object_t;
@@ -104,7 +112,7 @@ create or replace package body uc_ai_ollama as
     l_lm_text_content := get_text_content(p_message, pio_state);
     l_lm_reasoning_content := get_reasoning_content(p_message);
 
-    if l_lm_reasoning_content is null and l_lm_text_content is null then
+    if l_lm_reasoning_content is null and l_lm_text_content is null and not p_has_tool_calls then
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_format_processing
       , p_scope      => c_scope_prefix || 'process_llm_response'
@@ -142,6 +150,7 @@ create or replace package body uc_ai_ollama as
     l_content json_array_t;
     l_content_item json_object_t;
     l_content_type varchar2(255 char);
+    l_media_type varchar2(255 char);
     l_ollama_content clob;
     l_ollama_thinking clob;
     l_images json_array_t;
@@ -183,16 +192,38 @@ create or replace package body uc_ai_ollama as
               when 'text' then
                 l_ollama_content := l_ollama_content || l_content_item.get_clob('text');
               when 'file' then
-                l_images.append(l_content_item.get_clob('data'));
+                -- /api/chat carries attachments only as base64 images in `images`;
+                -- it has no envelope for anything else. Appending a PDF here would
+                -- send it as an image and the model would read garbage, so reject
+                -- every non-image media type instead, like uc_ai_openai does.
+                l_media_type := l_content_item.get_string('mediaType');
+
+                if l_media_type like 'image/%' then
+                  l_images.append(l_content_item.get_clob('data'));
+                else
+                  uc_ai_error.raise_error(
+                    p_error_code => uc_ai_error.c_err_unhandled_format
+                  , p_scope      => l_scope
+                  , p0           => 'file type'
+                  , p1           => l_media_type
+                  , p_extra      => l_content_item.stringify
+                  );
+                end if;
               else
                 uc_ai_logger.log_warn('Unsupported user content type for Ollama: ' || l_content_type, l_scope);
             end case;
           end loop user_content_loop;
-          
-          if length(l_ollama_content) > 0 then
+
+          -- A user message that carries only files is legal in the normalized
+          -- format. The former guard `length(l_ollama_content) > 0` is NULL - and
+          -- so not TRUE - when there is no text part, which dropped the whole
+          -- message and every image with it.
+          if l_ollama_content is not null or l_images.get_size > 0 then
             l_ollama_message := json_object_t();
             l_ollama_message.put('role', 'user');
-            l_ollama_message.put('content', l_ollama_content);
+            -- /api/chat wants a content string on every message; an images-only
+            -- turn sends an empty one rather than a JSON null.
+            l_ollama_message.put('content', coalesce(l_ollama_content, empty_clob()));
             if l_images.get_size > 0 then
               l_ollama_message.put('images', l_images);
             end if;
@@ -397,15 +428,29 @@ create or replace package body uc_ai_ollama as
 
     -- Extract message from response
     l_message := l_resp_json.get_object('message');
-    
-    -- Check if response contains tool calls
-    if l_message.has('tool_calls') then
-      l_tool_calls := l_message.get_array('tool_calls');
-      l_has_tool_calls := l_tool_calls.get_size > 0;
+
+    -- A body without a usable message object would otherwise reach l_message.has
+    -- below and fail with ORA-30625 instead of a UC AI error the caller can read.
+    if l_message is null then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_format_processing
+      , p_scope      => l_scope
+      , p0           => 'Response has no message object'
+      , p_extra      => l_resp
+      );
     end if;
 
-    -- add response text to the per-call conversation history
-    l_assistant_content := process_llm_response(l_message, pio_state);
+    -- Check if response contains tool calls. has() is true for a JSON null as
+    -- well, and OpenAI-compatible servers behind the same route do send
+    -- "tool_calls": null, so the array itself has to be checked.
+    if l_message.has('tool_calls') then
+      l_tool_calls := l_message.get_array('tool_calls');
+      l_has_tool_calls := l_tool_calls is not null and l_tool_calls.get_size > 0;
+    end if;
+
+    -- add response text to the per-call conversation history. A tool-call turn
+    -- legitimately carries no text, so the empty-content guard is skipped there.
+    l_assistant_content := process_llm_response(l_message, pio_state, l_has_tool_calls);
 
     if l_has_tool_calls then
       -- AI wants to call tools - extract calls, execute them, add results to conversation
@@ -423,7 +468,9 @@ create or replace package body uc_ai_ollama as
       begin
         -- Add AI's message with tool calls to conversation history
         l_resp_message.put('role', 'assistant');
-        l_resp_message.put('content', nvl(l_message.get_clob('content'), null));
+        -- A tool-call turn has no text. Replay it as an empty string, not as a
+        -- JSON null, which is not a valid content value for /api/chat.
+        l_resp_message.put('content', coalesce(l_message.get_clob('content'), empty_clob()));
         l_resp_message.put('tool_calls', l_tool_calls);
         pio_messages.append(l_resp_message);
 
@@ -440,10 +487,18 @@ create or replace package body uc_ai_ollama as
           l_function := l_tool_call.get_object('function');
           l_tool_name := l_function.get_string('name');
           
-          -- Parse tool arguments
+          -- Parse tool arguments. has() is true for "arguments": null too, and
+          -- get_object returns NULL for anything that is not an object, so a
+          -- no-argument call from a compatible server must fall back to {}
+          -- rather than carry a NULL into execute_agent_tool (ORA-30625).
           if l_function.has('arguments') then
             l_tool_input := l_function.get_object('arguments');
           else
+            -- reset: the variable outlives one iteration of this loop
+            l_tool_input := null;
+          end if;
+
+          if l_tool_input is null then
             l_tool_input := json_object_t();
           end if;
 
