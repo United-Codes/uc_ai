@@ -152,7 +152,7 @@ create or replace package body test_uc_ai_reasoning_replay as
   as
     l_messages json_array_t := json_array_t();
     l_items    json_array_t;
-    l_instr    varchar2(32767 char);
+    l_instr    clob;
     l_item     json_object_t;
   begin
     -- The reported failure: reasoning summaries are off, so the item carries no
@@ -194,7 +194,7 @@ create or replace package body test_uc_ai_reasoning_replay as
   as
     l_messages json_array_t := json_array_t();
     l_items    json_array_t;
-    l_instr    varchar2(32767 char);
+    l_instr    clob;
     l_item     json_object_t;
     l_summary  json_array_t;
   begin
@@ -227,7 +227,7 @@ create or replace package body test_uc_ai_reasoning_replay as
   as
     l_messages json_array_t := json_array_t();
     l_items    json_array_t;
-    l_instr    varchar2(32767 char);
+    l_instr    clob;
   begin
     -- No encrypted_content and no id, with store=false: nothing the provider could
     -- reconstitute, so the item must be dropped rather than sent.
@@ -254,7 +254,7 @@ create or replace package body test_uc_ai_reasoning_replay as
   as
     l_messages json_array_t := json_array_t();
     l_items    json_array_t;
-    l_instr    varchar2(32767 char);
+    l_instr    clob;
     l_item     json_object_t;
   begin
     -- With store=true the bare rs_... id resolves server-side, so the item is
@@ -287,7 +287,7 @@ create or replace package body test_uc_ai_reasoning_replay as
   as
     l_messages json_array_t := json_array_t();
     l_items    json_array_t;
-    l_instr    varchar2(32767 char);
+    l_instr    clob;
     l_tool_res json_array_t := json_array_t();
     l_item     json_object_t;
   begin
@@ -325,7 +325,7 @@ create or replace package body test_uc_ai_reasoning_replay as
     uc_ai_responses_api.convert_lm_messages_to_items(l_messages, l_items, l_instr);
 
     -- system message is lifted out into instructions, not an input item
-    ut.expect(l_instr).to_equal('You are a math agent.');
+    ut.expect(l_instr).to_equal(to_clob('You are a math agent.'));
 
     -- user, reasoning, function_call, function_call_output, assistant, user
     ut.expect(l_items.get_size).to_equal(6);

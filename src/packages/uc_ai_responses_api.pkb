@@ -38,7 +38,7 @@ create or replace package body uc_ai_responses_api as
   procedure convert_lm_messages_to_items(
     p_lm_messages   in json_array_t
   , po_items        out nocopy json_array_t
-  , po_instructions out nocopy varchar2
+  , po_instructions out nocopy clob
   , p_settings      in uc_ai_settings.t_settings default null
   )
   as
@@ -51,7 +51,8 @@ create or replace package body uc_ai_responses_api as
     l_new_content json_array_t;
     l_content_item json_object_t;
     l_content_type varchar2(255 char);
-    l_system_instructions varchar2(32767 char);
+    -- CLOB: the accumulated system prompt is not bounded by 32 KB.
+    l_system_instructions clob;
     l_media_type varchar2(4000 char);
     l_store_responses boolean := nvl(p_settings.ra_store_responses, false);
   begin
@@ -781,7 +782,7 @@ create or replace package body uc_ai_responses_api as
     l_text_config      json_object_t;
     l_reasoning_config json_object_t;
     l_include_array    json_array_t;
-    l_instructions     varchar2(32767 char);
+    l_instructions     clob;
     l_message          json_object_t;
     l_output           json_array_t;
     l_output_text      clob;

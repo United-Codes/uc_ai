@@ -88,7 +88,9 @@ as
   procedure convert_lm_messages_to_items(
     p_lm_messages   in json_array_t
   , po_items        out nocopy json_array_t
-  , po_instructions out nocopy varchar2
+    -- CLOB, not varchar2: a system prompt has no size bound, and Anthropic and
+    -- Google already carry theirs as a CLOB. A varchar2 formal caps it at 32 KB.
+  , po_instructions out nocopy clob
   , p_settings      in uc_ai_settings.t_settings default null
   );
 
