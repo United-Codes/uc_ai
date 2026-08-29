@@ -52,6 +52,7 @@ create or replace package body test_uc_ai_reset_globals as
     -- OCI
     uc_ai_oci.g_compartment_id     := 'ocid1.dirty';
     uc_ai_oci.g_serving_type       := 'DEDICATED';
+    uc_ai_oci.g_endpoint_id        := 'ocid1.generativeaiendpoint.dirty';
     uc_ai_oci.g_region             := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'DIRTY';
     uc_ai_oci.g_use_responses_api  := false;
@@ -132,6 +133,7 @@ create or replace package body test_uc_ai_reset_globals as
     -- OCI
     ut.expect(uc_ai_oci.g_compartment_id).to_be_null();
     ut.expect(uc_ai_oci.g_serving_type).to_equal('ON_DEMAND');
+    ut.expect(uc_ai_oci.g_endpoint_id).to_be_null();
     ut.expect(uc_ai_oci.g_region).to_equal('us-ashburn-1');
     ut.expect(uc_ai_oci.g_apex_web_credential).to_be_null();
     ut.expect(uc_ai_oci.g_use_responses_api).to_be_true();

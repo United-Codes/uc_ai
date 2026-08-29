@@ -78,7 +78,7 @@ create or replace package test_uc_ai_oci_wire as
   procedure cohere_flat_parameter_definitions;
 
   -- serving mode -------------------------------------------------------------------
-  --%test(OCI raises -20503 for servingType DEDICATED instead of sending an invalid body)
+  --%test(OCI raises -20502 for servingType DEDICATED with no endpoint id)
   procedure dedicated_serving_type_raises;
 
 end test_uc_ai_oci_wire;

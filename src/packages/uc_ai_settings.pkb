@@ -57,6 +57,7 @@ as
     -- oci
     l_s.oc_compartment_id              := null;
     l_s.oc_serving_type                := 'ON_DEMAND';
+    l_s.oc_endpoint_id                 := null;
     l_s.oc_region                      := 'us-ashburn-1';
     l_s.oc_apex_web_credential         := null;
     l_s.oc_use_responses_api           := true;
@@ -145,6 +146,7 @@ as
     -- oci
     l_s.oc_compartment_id              := uc_ai_oci.g_compartment_id;
     l_s.oc_serving_type                := uc_ai_oci.g_serving_type;
+    l_s.oc_endpoint_id                 := uc_ai_oci.g_endpoint_id;
     l_s.oc_region                      := uc_ai_oci.g_region;
     l_s.oc_apex_web_credential         := uc_ai_oci.g_apex_web_credential;
     l_s.oc_use_responses_api           := uc_ai_oci.g_use_responses_api;
@@ -503,6 +505,8 @@ as
                 l_s.oc_compartment_id := l_provider_obj.get_string(l_key);
               when 'g_serving_type' then
                 l_s.oc_serving_type := l_provider_obj.get_string(l_key);
+              when 'g_endpoint_id' then
+                l_s.oc_endpoint_id := l_provider_obj.get_string(l_key);
               when 'g_region' then
                 l_s.oc_region := l_provider_obj.get_string(l_key);
               when 'g_use_responses_api' then

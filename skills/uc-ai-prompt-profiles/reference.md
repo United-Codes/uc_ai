@@ -88,8 +88,10 @@ Nested under the provider name (values of `uc_ai.c_provider_*`). Exactly these k
 | `g_apex_web_credential` | string | null | Provider-specific credential |
 | `g_compartment_id` | string | null | OCID of the compartment to use |
 | `g_serving_type` | string | `ON_DEMAND` | `ON_DEMAND` or `DEDICATED` |
+| `g_endpoint_id` | string | null | OCID of the dedicated AI cluster endpoint; required for `DEDICATED` |
 | `g_region` | string | `us-ashburn-1` | OCI region for the API endpoint |
 | `g_use_responses_api` | boolean | true | Use the Responses-API-compatible endpoint |
+| `g_max_tokens` | number | 4096 | Cap on the tokens the model returns |
 
 ## Complete example
 

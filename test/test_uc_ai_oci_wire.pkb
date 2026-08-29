@@ -894,8 +894,8 @@ create or replace package body test_uc_ai_oci_wire as
   begin
     l_config.put('oci', json_object_t('{"g_compartment_id":"' || c_compartment || '","g_serving_type":"DEDICATED"}'));
 
-    -- DedicatedServingMode is {servingType, endpointId} and has no modelId. UC AI
-    -- has no endpoint setting, so the body it would build is invalid.
+    -- DedicatedServingMode is {servingType, endpointId} and has no modelId. The
+    -- mode itself is supported now, so what is missing is the endpoint OCID.
     begin
       l_result := uc_ai.generate_text(
         p_user_prompt => c_recipe_prompt
@@ -903,13 +903,13 @@ create or replace package body test_uc_ai_oci_wire as
       , p_model       => c_llama
       , p_config      => l_config
       );
-      ut.fail('expected -20503');
+      ut.fail('expected -20502');
     exception
-      when e_invalid_config then
+      when e_missing_config then
         l_code := sqlcode;
     end;
 
-    ut.expect(l_code, 'DEDICATED serving type').to_equal(uc_ai_error.c_err_invalid_config);
+    ut.expect(l_code, 'DEDICATED serving type without an endpoint id').to_equal(uc_ai_error.c_err_missing_config);
     expect_all_consumed(0);
   end dedicated_serving_type_raises;
 

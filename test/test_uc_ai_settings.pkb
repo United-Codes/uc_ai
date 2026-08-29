@@ -36,6 +36,7 @@ create or replace package body test_uc_ai_settings as
 
     uc_ai_oci.g_compartment_id := 'ocid1.sentinel';
     uc_ai_oci.g_serving_type := 'DEDICATED';
+    uc_ai_oci.g_endpoint_id := 'ocid1.generativeaiendpoint.sentinel';
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OC_CRED';
     uc_ai_oci.g_use_responses_api := false;
@@ -90,6 +91,7 @@ create or replace package body test_uc_ai_settings as
     -- oci
     ut.expect(l_s.oc_compartment_id).to_equal('ocid1.sentinel');
     ut.expect(l_s.oc_serving_type).to_equal('DEDICATED');
+    ut.expect(l_s.oc_endpoint_id).to_equal('ocid1.generativeaiendpoint.sentinel');
     ut.expect(l_s.oc_region).to_equal('eu-frankfurt-1');
     ut.expect(l_s.oc_apex_web_credential).to_equal('OC_CRED');
     ut.expect(l_s.oc_use_responses_api).to_be_false();
@@ -184,6 +186,7 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.oa_reasoning_effort).to_equal('low');
     ut.expect(l_s.an_max_tokens).to_equal(8192);
     ut.expect(l_s.oc_serving_type).to_equal('ON_DEMAND');
+    ut.expect(l_s.oc_endpoint_id).to_be_null();
     ut.expect(l_s.ra_text_verbosity).to_equal('medium');
   end config_uses_defaults;
 
@@ -261,6 +264,40 @@ create or replace package body test_uc_ai_settings as
 
     apex_web_service.clear_request_headers;
   end apply_headers_noop_when_empty;
+
+  procedure config_maps_oci_keys
+  as
+    l_config json_object_t;
+    l_s      uc_ai_settings.t_settings;
+  begin
+    -- The oci block is only read when the call names the oci provider, so the
+    -- endpoint id needs its own case: config_maps_keys builds for openai.
+    l_config := json_object_t('{
+      "oci": {
+        "g_compartment_id": "ocid1.compartment.cfg",
+        "g_serving_type": "DEDICATED",
+        "g_endpoint_id": "ocid1.generativeaiendpoint.cfg",
+        "g_region": "eu-frankfurt-1"
+      }
+    }');
+
+    l_s := uc_ai_settings.build_from_config(l_config, uc_ai.c_provider_oci);
+
+    ut.expect(l_s.oc_compartment_id).to_equal('ocid1.compartment.cfg');
+    ut.expect(l_s.oc_serving_type).to_equal('DEDICATED');
+    ut.expect(l_s.oc_endpoint_id).to_equal('ocid1.generativeaiendpoint.cfg');
+    ut.expect(l_s.oc_region).to_equal('eu-frankfurt-1');
+  end config_maps_oci_keys;
+
+  procedure config_rejects_unknown_oci_key
+  as
+    l_s uc_ai_settings.t_settings;
+  begin
+    l_s := uc_ai_settings.build_from_config(
+      json_object_t('{"oci": {"g_not_a_real_key": 1}}')
+    , uc_ai.c_provider_oci
+    );
+  end config_rejects_unknown_oci_key;
 
   procedure config_rejects_unknown_key
   as

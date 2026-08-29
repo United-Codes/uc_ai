@@ -67,6 +67,10 @@ as
   -- Global settings for OCI
   g_compartment_id varchar2(255 char); -- OCID of the compartment to use
   g_serving_type varchar2(64 char) := 'ON_DEMAND'; -- ON_DEMAND or DEDICATED
+  -- OCID of the dedicated AI cluster endpoint. Required when g_serving_type is
+  -- DEDICATED: that serving mode addresses the cluster endpoint and carries no
+  -- model id. Ignored for ON_DEMAND.
+  g_endpoint_id varchar2(255 char);
   g_region varchar2(64 char) := 'us-ashburn-1'; -- OCI region for API endpoint
   g_apex_web_credential varchar2(255 char);
   g_use_responses_api boolean := true;

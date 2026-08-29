@@ -923,6 +923,8 @@ create or replace package body uc_ai_prompt_profiles_api as
                 uc_ai_oci.g_compartment_id := l_provider_obj.get_string(l_key);
               when 'g_serving_type' then
                 uc_ai_oci.g_serving_type := l_provider_obj.get_string(l_key);
+              when 'g_endpoint_id' then
+                uc_ai_oci.g_endpoint_id := l_provider_obj.get_string(l_key);
               when 'g_region' then
                 uc_ai_oci.g_region := l_provider_obj.get_string(l_key);
               when 'g_use_responses_api' then

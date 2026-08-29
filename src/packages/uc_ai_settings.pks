@@ -82,6 +82,7 @@ as
     -- oci
   , oc_compartment_id              varchar2(255 char)
   , oc_serving_type                varchar2(64 char)
+  , oc_endpoint_id                 varchar2(255 char)
   , oc_region                      varchar2(64 char)
   , oc_apex_web_credential         varchar2(255 char)
   , oc_use_responses_api           boolean

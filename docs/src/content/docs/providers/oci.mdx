@@ -30,13 +30,24 @@ When the model stops because this cap was reached, UC AI reports `finish_reason 
 
 ## Serving mode
 
-UC AI reaches a model that OCI hosts for every tenancy. `g_serving_type` accepts
-only `ON_DEMAND`, which is the default.
+`g_serving_type` selects the serving mode. It accepts `ON_DEMAND` and
+`DEDICATED`, and the default is `ON_DEMAND`.
 
-A dedicated AI cluster needs the OCID of its endpoint in place of the model id.
-UC AI has no setting for that OCID, so a request for a dedicated cluster cannot
-be built. `g_serving_type := 'DEDICATED'` raises `ORA-20503` before the request
-goes out.
+`ON_DEMAND` reaches a model that OCI hosts for every tenancy. The request carries
+the model id.
+
+`DEDICATED` reaches a model on a dedicated AI cluster in your tenancy. That mode
+carries the OCID of the cluster endpoint in place of the model id. UC AI reads
+the OCID from `g_endpoint_id`:
+
+```sql
+uc_ai_oci.g_serving_type := 'DEDICATED';
+uc_ai_oci.g_endpoint_id  := 'ocid1.generativeaiendpoint.oc1.eu-frankfurt-1.aaaaaa...';
+```
+
+`g_serving_type := 'DEDICATED'` without `g_endpoint_id` raises `ORA-20502` before
+the request goes out. The provider configuration keys `g_serving_type` and
+`g_endpoint_id` set the same two values per call.
 
 ## Prerequisites
 
@@ -106,7 +117,7 @@ begin
   uc_ai_oci.g_apex_web_credential := 'NAME_OF_YOUR_APEX_WEB_CREDENTIAL';
 
   -- optional
-  uc_ai_oci.g_serving_type := 'ON_DEMAND'; -- only ON_DEMAND is supported, and it is the default
+  uc_ai_oci.g_serving_type := 'ON_DEMAND'; -- the default. DEDICATED also needs g_endpoint_id
 
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is Oracle APEX?',
@@ -130,7 +141,7 @@ begin
   uc_ai_oci.g_apex_web_credential := 'NAME_OF_YOUR_APEX_WEB_CREDENTIAL';
 
   -- optional
-  uc_ai_oci.g_serving_type := 'ON_DEMAND'; -- only ON_DEMAND is supported, and it is the default
+  uc_ai_oci.g_serving_type := 'ON_DEMAND'; -- the default. DEDICATED also needs g_endpoint_id
 
   l_result := uc_ai.generate_text(
     p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',

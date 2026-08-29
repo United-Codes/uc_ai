@@ -403,6 +403,7 @@ create or replace package body uc_ai as
     -- Reset OCI global variables
     uc_ai_oci.g_compartment_id := null;
     uc_ai_oci.g_serving_type := 'ON_DEMAND';
+    uc_ai_oci.g_endpoint_id := null;
     uc_ai_oci.g_region := 'us-ashburn-1';
     uc_ai_oci.g_apex_web_credential := null;
     uc_ai_oci.g_use_responses_api := true;

@@ -70,27 +70,43 @@ create or replace package body uc_ai_oci as
   end args_to_object;
 
   /*
-   * DedicatedServingMode is {servingType, endpointId} and carries no modelId: a
-   * dedicated cluster is addressed by the OCID of its endpoint. UC AI has no
-   * setting for that endpoint, so a DEDICATED request would go out as an
-   * OnDemandServingMode body wearing the wrong servingType. Refuse it here
-   * instead of sending a body the API cannot accept.
+   * The two serving modes are different shapes, not one shape with a flag:
+   * OnDemandServingMode is {modelId, servingType} and DedicatedServingMode is
+   * {servingType, endpointId}, because a dedicated AI cluster is addressed by
+   * the OCID of its endpoint and never by a model id. Sending modelId on a
+   * DEDICATED request produces a body the API cannot accept, so the branch is
+   * here rather than at the call sites - chat and embeddings both need it.
    */
-  procedure assert_serving_type_supported (
-    p_serving_type in varchar2
-  , p_scope        in uc_ai_logger.scope
-  )
+  function build_serving_mode (
+    p_model    in uc_ai.model_type
+  , p_settings in uc_ai_settings.t_settings
+  , p_scope    in uc_ai_logger.scope
+  ) return json_object_t
   as
+    l_serving_type varchar2(64 char);
+    l_serving_mode json_object_t := json_object_t();
   begin
-    if upper(coalesce(p_serving_type, 'ON_DEMAND')) = 'DEDICATED' then
-      uc_ai_error.raise_error(
-        p_error_code => uc_ai_error.c_err_invalid_config
-      , p_scope      => p_scope
-      , p0           => 'OCI serving type'
-      , p1           => 'DEDICATED needs the OCID of a dedicated AI cluster endpoint, which UC AI cannot send yet. Use ON_DEMAND.'
-      );
+    l_serving_type := upper(coalesce(p_settings.oc_serving_type, 'ON_DEMAND'));
+
+    if l_serving_type = 'DEDICATED' then
+      if p_settings.oc_endpoint_id is null then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_missing_config
+        , p_scope      => p_scope
+        , p0           => 'OCI serving type DEDICATED'
+        , p1           => 'uc_ai_oci.g_endpoint_id to hold the OCID of the dedicated AI cluster endpoint'
+        );
+      end if;
+
+      l_serving_mode.put('servingType', 'DEDICATED');
+      l_serving_mode.put('endpointId', p_settings.oc_endpoint_id);
+    else
+      l_serving_mode.put('modelId', p_model);
+      l_serving_mode.put('servingType', coalesce(p_settings.oc_serving_type, 'ON_DEMAND'));
     end if;
-  end assert_serving_type_supported;
+
+    return l_serving_mode;
+  end build_serving_mode;
 
   -- OCI Generative AI reference: https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/
   function get_text_content_generic (
@@ -1240,10 +1256,7 @@ create or replace package body uc_ai_oci as
     l_input_obj.put('compartmentId', l_settings.oc_compartment_id);
 
     -- Set serving mode
-    assert_serving_type_supported(l_settings.oc_serving_type, l_scope);
-    l_serving_mode := json_object_t();
-    l_serving_mode.put('modelId', p_model);
-    l_serving_mode.put('servingType', coalesce(l_settings.oc_serving_type, 'ON_DEMAND'));
+    l_serving_mode := build_serving_mode(p_model, l_settings, l_scope);
     l_input_obj.put('servingMode', l_serving_mode);
 
     if l_mode = gc_mode_generic then
@@ -1368,7 +1381,7 @@ create or replace package body uc_ai_oci as
     l_resp_json     json_object_t;
     l_embeddings    json_array_t;
     l_input_obj     json_object_t := json_object_t();
-    l_serving_mode  json_object_t := json_object_t();
+    l_serving_mode  json_object_t;
     l_inputs        json_array_t := json_array_t();
   begin
     uc_ai_logger.log('Starting generate_embeddings with ' || p_input.get_size || ' input items', l_scope);
@@ -1387,9 +1400,7 @@ create or replace package body uc_ai_oci as
     end loop build_inputs_loop;
 
     -- Build serving mode
-    assert_serving_type_supported(l_settings.oc_serving_type, l_scope);
-    l_serving_mode.put('servingType', coalesce(l_settings.oc_serving_type, 'ON_DEMAND'));
-    l_serving_mode.put('modelId', p_model);
+    l_serving_mode := build_serving_mode(p_model, l_settings, l_scope);
 
     -- Build request body
     l_input_obj.put('inputs', l_inputs);

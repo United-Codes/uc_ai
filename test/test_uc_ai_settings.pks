@@ -23,6 +23,13 @@ create or replace package test_uc_ai_settings as
   --%test(apply_extra_headers is a no-op when no extra headers are set)
   procedure apply_headers_noop_when_empty;
 
+  --%test(build_from_config maps the oci block, including the dedicated endpoint id)
+  procedure config_maps_oci_keys;
+
+  --%test(build_from_config raises on an unknown oci key)
+  --%throws(-20503)
+  procedure config_rejects_unknown_oci_key;
+
   --%test(build_from_config raises on an unknown root key)
   --%throws(-20503)
   procedure config_rejects_unknown_key;
