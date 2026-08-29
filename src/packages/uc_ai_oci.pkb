@@ -564,9 +564,8 @@ create or replace package body uc_ai_oci as
     uc_ai_settings.apply_extra_headers(p_settings);
 
     -- Make the API call using credential (OCI authentication should be configured)
-    l_resp := apex_web_service.make_rest_request(
+    l_resp := uc_ai_http.post(
       p_url => l_api_url,
-      p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
       p_credential_static_id => coalesce(p_settings.apex_web_credential, p_settings.oc_apex_web_credential)
     );
@@ -1242,9 +1241,8 @@ create or replace package body uc_ai_oci as
     uc_ai_logger.log('Request body', l_scope, l_input_obj.to_clob);
     uc_ai_logger.log('Request URL: ' || l_api_url, l_scope);
 
-    l_resp := apex_web_service.make_rest_request(
+    l_resp := uc_ai_http.post(
       p_url => l_api_url,
-      p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
       p_credential_static_id => coalesce(l_settings.apex_web_credential, l_settings.oc_apex_web_credential)
     );

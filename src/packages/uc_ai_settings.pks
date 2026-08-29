@@ -156,7 +156,7 @@ as
    * Append the user-supplied extra HTTP headers (uc_ai.g_extra_headers /
    * "g_extra_headers" config key) to apex_web_service.g_request_headers.
    * Call AFTER the provider set its base headers (Content-Type, auth, ...)
-   * and immediately before apex_web_service.make_rest_request, so a prior
+   * and immediately before uc_ai_http.post, so a prior
    * apex_web_service.set_request_headers (p_reset defaults to true) cannot
    * wipe them.
    */

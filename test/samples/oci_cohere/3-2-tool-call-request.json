@@ -91,7 +91,7 @@
         ]
       }
     ],
-    "message": "Please clock me in to the marketing project with the note \"meeting\".",
+    "message": "Continue processing the user prompt with the provided tool results.",
     "preambleOverride": "You are an assistant to a time tracking system. Your tools give you access to user, project and timetracking information. Answer concise and short.\n        The current user is Michael Scott. Make sure to double check if inputs like user or project are correct.\n\n        If you clock somebody in, answer with: \"You are now clocked in to the project \"{{project_name}}\" with the note \"{{notes| - }}\"."
   }
 }

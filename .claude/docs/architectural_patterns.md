@@ -174,6 +174,7 @@ Agents: `src/packages/uc_ai_agents_api.pks:197-201`
 - Test data management: explicit DELETE + re-insert in setup (no rollback-based isolation)
 - Shared helpers: `uc_ai_test_utils` provides tool creation, message builders, and test fixtures
 - Message validation utilities: `uc_ai_test_message_utils.validate_message_array()`, `valididate_return_object()`
+- Wire-level tests without a network: `uc_ai_http.set_transport('uc_ai_test_http_mock')` swaps the HTTP transport (compiled in only with `plsql_ccflags = 'UC_AI_DEBUG:TRUE'`, see `scripts/enable_test_transport.sql`); `test_uc_ai_wire` compares each request against the recorded ones in `test/samples` (compiled into `uc_ai_test_samples` by `scripts/generate_test_samples.sh`) and replays the recorded responses
 
 ## APEX Web Credential Integration
 

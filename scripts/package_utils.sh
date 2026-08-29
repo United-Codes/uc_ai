@@ -26,6 +26,9 @@ declare -a API_PACKAGES=(
     "uc_ai_structured_output"
     "uc_ai_logger"
     "uc_ai_error"
+    # http must follow logger and error: its body logs through uc_ai_logger, and
+    # every provider body calls uc_ai_http.post in place of apex_web_service.
+    "uc_ai_http"
     "uc_ai_toon"
     "uc_ai_agents_api"
     "uc_ai_agent_exec_api"
@@ -106,6 +109,9 @@ get_package_description() {
             ;;
         "uc_ai_error")
             echo "Error Handling Package"
+            ;;
+        "uc_ai_http")
+            echo "HTTP Transport Package"
             ;;
         "uc_ai_ptc_api")
             echo "Code Mode Tool Gateway Package"

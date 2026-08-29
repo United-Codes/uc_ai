@@ -21,6 +21,7 @@ PROMPT ===================================================
 PROMPT
 PROMPT WARNING: This will remove all UC AI Framework objects
 PROMPT Press Ctrl+C to cancel or Enter to continue...
+PAUSE
 
 -- ============================================================================
 -- 1. DROP PACKAGES (Reverse order from installation)
@@ -51,6 +52,7 @@ DROP PACKAGE uc_ai_agent_workflow_api;
 DROP PACKAGE uc_ai_agent_exec_api;
 DROP PACKAGE uc_ai_agents_api;
 DROP PACKAGE uc_ai_toon;
+DROP PACKAGE uc_ai_http;
 DROP PACKAGE uc_ai_error;
 DROP PACKAGE uc_ai_logger;
 DROP PACKAGE uc_ai_structured_output;

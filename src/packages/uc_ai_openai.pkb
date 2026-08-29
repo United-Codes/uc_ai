@@ -344,9 +344,8 @@ create or replace package body uc_ai_openai as
     l_url := get_generate_text_url(p_settings);
     uc_ai_logger.log('Calling OpenAI API at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null'), l_scope);
 
-    l_resp := apex_web_service.make_rest_request(
+    l_resp := uc_ai_http.post(
       p_url => l_url,
-      p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
       p_credential_static_id => l_web_credential
     );
@@ -833,9 +832,8 @@ create or replace package body uc_ai_openai as
     l_url := get_generate_embeddings_url(l_settings);
     uc_ai_logger.log('Request URL: ' || l_url, l_scope);
 
-    l_resp := apex_web_service.make_rest_request(
+    l_resp := uc_ai_http.post(
       p_url => l_url,
-      p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
       p_credential_static_id => l_web_credential
     );

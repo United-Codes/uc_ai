@@ -3,7 +3,7 @@
   "generationConfig": {
     "thinkingConfig": {
       "includeThoughts": true,
-      "thinkingBudget": "2048"
+      "thinkingBudget": 2048
     }
   },
   "contents": [

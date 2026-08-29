@@ -329,9 +329,8 @@ create or replace package body uc_ai_ollama as
     );
     uc_ai_settings.apply_extra_headers(p_settings);
 
-    l_resp := apex_web_service.make_rest_request(
+    l_resp := uc_ai_http.post(
       p_url => get_generate_text_url(p_settings),
-      p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
       p_credential_static_id => coalesce(p_settings.apex_web_credential, p_settings.ol_apex_web_credential)
     );
@@ -350,30 +349,44 @@ create or replace package body uc_ai_ollama as
       );
     end if;
 
-    -- Extract and store usage information (if available in Ollama response)
+    -- Ollama's native /api/chat reports prompt_eval_count and eval_count; the
+    -- OpenAI-compatible route reports a usage object. Normalize both, so the result
+    -- carries usage on either route.
     if l_resp_json.has('usage') then
       l_usage := l_resp_json.get_object('usage');
-      -- Accumulate usage if it already exists, otherwise create new
-      if pio_result.has('usage') then
-        declare
-          l_existing_usage json_object_t := pio_result.get_object('usage');
-          l_prompt_tokens number := nvl(l_existing_usage.get_number('prompt_tokens'), 0) + nvl(l_usage.get_number('prompt_tokens'), 0);
-          l_completion_tokens number := nvl(l_existing_usage.get_number('completion_tokens'), 0) + nvl(l_usage.get_number('completion_tokens'), 0);
-        begin
-          l_existing_usage.put('prompt_tokens', l_prompt_tokens);
-          l_existing_usage.put('completion_tokens', l_completion_tokens);
-          l_existing_usage.put('total_tokens', l_prompt_tokens + l_completion_tokens);
-          -- Add compatibility names
-          l_existing_usage.put('input_tokens', l_prompt_tokens);
-          l_existing_usage.put('output_tokens', l_completion_tokens);
-        end;
-      else
-        -- Add compatibility names for consistency with other providers
-        l_usage.put('input_tokens', nvl(l_usage.get_number('prompt_tokens'), 0));
-        l_usage.put('output_tokens', nvl(l_usage.get_number('completion_tokens'), 0));
-        l_usage.put('total_tokens', nvl(l_usage.get_number('prompt_tokens'), 0) + nvl(l_usage.get_number('completion_tokens'), 0));
-        pio_result.put('usage', l_usage);
-      end if;
+    elsif l_resp_json.has('prompt_eval_count') or l_resp_json.has('eval_count') then
+      l_usage := json_object_t();
+      l_usage.put('prompt_tokens', nvl(l_resp_json.get_number('prompt_eval_count'), 0));
+      l_usage.put('completion_tokens', nvl(l_resp_json.get_number('eval_count'), 0));
+    else
+      l_usage := null;
+    end if;
+
+    if l_usage is not null then
+      -- Sum over the tool loop and keep the four documented keys, like every other
+      -- provider. Ollama reports no separate reasoning count.
+      declare
+        l_prompt_tokens     number;
+        l_completion_tokens number;
+        l_result_usage      json_object_t;
+      begin
+        l_prompt_tokens     := nvl(l_usage.get_number('prompt_tokens'), 0);
+        l_completion_tokens := nvl(l_usage.get_number('completion_tokens'), 0);
+
+        if pio_result.has('usage') then
+          l_result_usage      := pio_result.get_object('usage');
+          l_prompt_tokens     := l_prompt_tokens + nvl(l_result_usage.get_number('prompt_tokens'), 0);
+          l_completion_tokens := l_completion_tokens + nvl(l_result_usage.get_number('completion_tokens'), 0);
+        else
+          l_result_usage := json_object_t();
+        end if;
+
+        l_result_usage.put('prompt_tokens', l_prompt_tokens);
+        l_result_usage.put('completion_tokens', l_completion_tokens);
+        l_result_usage.put('reasoning_tokens', cast(null as number));
+        l_result_usage.put('total_tokens', l_prompt_tokens + l_completion_tokens);
+        pio_result.put('usage', l_result_usage);
+      end;
     end if;
 
     -- Extract model information
@@ -726,9 +739,8 @@ create or replace package body uc_ai_ollama as
     l_url := get_generate_embeddings_url(l_settings);
     uc_ai_logger.log('Request URL: ' || l_url, l_scope);
 
-    l_resp := apex_web_service.make_rest_request(
+    l_resp := uc_ai_http.post(
       p_url => l_url,
-      p_http_method => 'POST',
       p_body => l_input_obj.to_clob,
       p_credential_static_id => coalesce(l_settings.apex_web_credential, l_settings.ol_apex_web_credential)
     );

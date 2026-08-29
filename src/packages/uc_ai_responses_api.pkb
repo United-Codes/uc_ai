@@ -602,9 +602,8 @@ create or replace package body uc_ai_responses_api as
     l_url := get_generate_text_url(p_settings);
     uc_ai_logger.log('Calling Responses API at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null'), l_scope);
 
-    l_resp := apex_web_service.make_rest_request(
+    l_resp := uc_ai_http.post(
       p_url => l_url,
-      p_http_method => 'POST',
       p_body => l_input_copy.to_clob,
       p_credential_static_id => l_web_credential
     );
@@ -643,6 +642,42 @@ create or replace package body uc_ai_responses_api as
 
 
   /*
+   * Add one response's token usage to the running totals of a generate_text call.
+   * A tool loop makes several requests, and the result has to report all of them,
+   * the way the Chat Completions path does, not only the last one.
+   */
+  procedure accumulate_usage(
+    p_response    in json_object_t
+  , pio_input     in out nocopy number
+  , pio_output    in out nocopy number
+  , pio_total     in out nocopy number
+  , pio_reasoning in out nocopy number
+  )
+  as
+    l_usage  json_object_t;
+    l_input  number;
+    l_output number;
+  begin
+    if p_response is null or not p_response.has('usage') or p_response.get('usage').is_null then
+      return;
+    end if;
+
+    l_usage  := p_response.get_object('usage');
+    l_input  := nvl(l_usage.get_number('input_tokens'), 0);
+    l_output := nvl(l_usage.get_number('output_tokens'), 0);
+
+    pio_input  := pio_input + l_input;
+    pio_output := pio_output + l_output;
+    pio_total  := pio_total + nvl(l_usage.get_number('total_tokens'), l_input + l_output);
+
+    if l_usage.has('output_tokens_details') and not l_usage.get('output_tokens_details').is_null then
+      pio_reasoning := nvl(pio_reasoning, 0)
+        + nvl(l_usage.get_object('output_tokens_details').get_number('reasoning_tokens'), 0);
+    end if;
+  end accumulate_usage;
+
+
+  /*
    * Responses API implementation for text generation
    * 
    * The Responses API is a unified, agentic interface that:
@@ -673,6 +708,11 @@ create or replace package body uc_ai_responses_api as
     l_tools            json_array_t;
     l_result           json_object_t;
     l_api_response     json_object_t;
+    -- token usage summed over every response of this call, tool-loop follow-ups included
+    l_usage_input      number := 0;
+    l_usage_output     number := 0;
+    l_usage_total      number := 0;
+    l_usage_reasoning  number;
     l_response_format  json_object_t;
     l_text_config      json_object_t;
     l_reasoning_config json_object_t;
@@ -804,6 +844,7 @@ create or replace package body uc_ai_responses_api as
 
     -- Make the API call
     l_api_response := internal_generate_text(l_input_obj, l_settings);
+    accumulate_usage(l_api_response, l_usage_input, l_usage_output, l_usage_total, l_usage_reasoning);
 
     -- Initialize unified result object
     l_result := json_object_t();
@@ -996,6 +1037,7 @@ create or replace package body uc_ai_responses_api as
           -- Make another API call with updated items
           l_input_obj.put('input', l_current_items);
           l_current_response := internal_generate_text(l_input_obj, l_settings);
+          accumulate_usage(l_current_response, l_usage_input, l_usage_output, l_usage_total, l_usage_reasoning);
           
           uc_ai_logger.log('Made follow-up API call after tool execution', l_scope);
         end loop tool_execution_loop;
@@ -1044,25 +1086,16 @@ create or replace package body uc_ai_responses_api as
       l_result.put('finish_reason', 'stop');
     end if;
     
-    -- Add normalized usage information
-    if l_api_response.has('usage') then
-      declare
-        l_api_usage json_object_t := l_api_response.get_object('usage');
-        l_usage_obj json_object_t := json_object_t();
-        l_input_tokens number := nvl(l_api_usage.get_number('input_tokens'), 0);
-        l_output_tokens number := nvl(l_api_usage.get_number('output_tokens'), 0);
-        l_reasoning_tokens number;
-      begin
-        if l_api_usage.has('output_tokens_details') and not l_api_usage.get('output_tokens_details').is_null then
-          l_reasoning_tokens := l_api_usage.get_object('output_tokens_details').get_number('reasoning_tokens');
-        end if;
-        l_usage_obj.put('prompt_tokens', l_input_tokens);
-        l_usage_obj.put('completion_tokens', l_output_tokens);
-        l_usage_obj.put('reasoning_tokens', l_reasoning_tokens);
-        l_usage_obj.put('total_tokens', nvl(l_api_usage.get_number('total_tokens'), l_input_tokens + l_output_tokens));
-        l_result.put('usage', l_usage_obj);
-      end;
-    end if;
+    -- Add normalized usage information, summed over every request of this call
+    declare
+      l_usage_obj json_object_t := json_object_t();
+    begin
+      l_usage_obj.put('prompt_tokens', l_usage_input);
+      l_usage_obj.put('completion_tokens', l_usage_output);
+      l_usage_obj.put('reasoning_tokens', l_usage_reasoning);
+      l_usage_obj.put('total_tokens', l_usage_total);
+      l_result.put('usage', l_usage_obj);
+    end;
     
     -- Add model information
     if l_api_response.has('model') then

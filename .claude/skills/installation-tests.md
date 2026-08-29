@@ -46,8 +46,8 @@ Expected counts for UC_AI* objects (verified against a fresh v26.4 install):
 
 | Object type | Count | Notes |
 |---|---|---|
-| PACKAGE | 23 | 25 specs exist; `uc_ai_ptc_api` and `uc_ai_ptc_runner` are installed by the code-mode sandbox script, not the core installer |
-| PACKAGE BODY | 20 | 22 bodies exist, minus the same two sandbox packages |
+| PACKAGE | 24 | 26 specs exist; `uc_ai_ptc_api` and `uc_ai_ptc_runner` are installed by the code-mode sandbox script, not the core installer |
+| PACKAGE BODY | 21 | 23 bodies exist, minus the same two sandbox packages |
 | TABLE | 11 | tools, tool_parameters, tool_tags, prompt_profiles, agents, agent_executions, agent_sessions, agent_messages, memory_stores, memory_files, memory_config |
 | SEQUENCE | 10 | one per table except `uc_ai_tool_tags` |
 | TRIGGER | 10 | `_BIU` / `_BI` per table, all ENABLED, except `uc_ai_memory_files` (deliberate, see `src/triggers/triggers.sql`) |
@@ -56,6 +56,17 @@ Expected counts for UC_AI* objects (verified against a fresh v26.4 install):
 | INDEX | 31 | all named `UC_AI%`; none system-generated |
 
 A fresh install also creates one tool row: `select count(*) from uc_ai_tools where code = 'MEMORY'` must return 1 (from `src/post-scripts/register_memory_tool.sql`).
+
+A tool row that exists is not a tool that runs. Also call the registered handler
+through the tool layer, because that is what binds the arguments:
+
+```sql
+select uc_ai_tools_api.execute_tool('MEMORY', json_object_t('{"command":"view","path":"/memories"}')) from dual;
+```
+
+The result must be a memory result string (without a store it is
+`Error: the memory tool is not available here ...`). An ORA-06550 / PLS-00306 here
+means the stored `function_call` does not match the signature of the handler.
 
 Invalid objects must be 0. If counts drift, cross-check against `install_uc_ai.sql` and `src/tables/install.sql`.
 
