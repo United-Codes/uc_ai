@@ -1,4 +1,5 @@
 create or replace package body uc_ai_tools_api as
+  -- @dblinter ignore(G-7210): the tools API is the shared spine every provider calls; splitting it would need a new public package, which is a spec change
 
   gc_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
 
@@ -63,11 +64,34 @@ create or replace package body uc_ai_tools_api as
 
   /*
    * Converts an input schema to Cohere format
-   * 
-   * Takes a JSON schema with nested parameters object and extracts the properties
-   * from within the outer object, adding isRequired attributes based on the required array.
-   * 
-   * Input example:
+   *
+   * CohereTool.parameterDefinitions is a FLAT map of parameter name ->
+   * {type, description, isRequired} (see the OCI SDK's CohereTool /
+   * CohereParameterDefinition), so the root `properties` of the tool schema is
+   * already the parameter map. This used to read the FIRST root property as a
+   * wrapper object and look for `properties` inside it; a flat schema has none,
+   * so every flat tool went to the model with an empty parameterDefinitions -
+   * the model was told the tool takes no arguments at all. get_tool_schema never
+   * wraps several top-level parameters, so flat is the normal shape, not the
+   * exception.
+   *
+   * The legacy wrapper shape is still supported, because a tool may declare a
+   * single object parameter that carries the real arguments. It is only used when
+   * there is exactly ONE root property AND that property is an object that itself
+   * has `properties` - and we then descend exactly one level. Anything else is
+   * read flat.
+   *
+   * Flat input (the normal case):
+   * {
+   *   "type": "object",
+   *   "properties": {
+   *     "city": {"type": "string", "description": "City name"},
+   *     "unit": {"type": "string", "description": "c or f"}
+   *   },
+   *   "required": ["city"]
+   * }
+   *
+   * Wrapper input (legacy, e.g. TT_CLOCK_IN):
    * {
    *   "type": "object",
    *   "properties": {
@@ -84,7 +108,7 @@ create or replace package body uc_ai_tools_api as
    *   },
    *   "required": ["parameters"]
    * }
-   * 
+   *
    * Output example:
    * {
    *   "user_email": {"type": "string", "description": "Email of the user", "isRequired": true},
@@ -97,10 +121,11 @@ create or replace package body uc_ai_tools_api as
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'convert_input_schema_to_cohere';
-    
+
     l_result_obj        json_object_t := json_object_t();
     l_properties        json_object_t;
-    l_parameters_obj    json_object_t;
+    l_wrapper_obj       json_object_t;
+    l_wrapper_props     json_object_t;
     l_param_props       json_object_t;
     l_required_arr      json_array_t;
     l_param_obj         json_object_t;
@@ -108,44 +133,43 @@ create or replace package body uc_ai_tools_api as
     l_required_keys_arr json_key_list;
     l_prop_name         varchar2(255 char);
     l_is_required       boolean;
-    
+
   begin
     -- Get the properties object from the input schema
     l_properties := treat(p_input_schema.get('properties') as json_object_t);
-    
+
     if l_properties is null then
       uc_ai_logger.log_error('No properties found in input schema', l_scope);
       return l_result_obj;
     end if;
-    
-    -- Look for the parameters object within properties
-    -- In most cases this will be the first (and likely only) property
+
     l_keys_arr := l_properties.get_keys;
-    
+
     if l_keys_arr is null or l_keys_arr.count = 0 then
-      uc_ai_logger.log_error('No properties keys found in input schema', l_scope);
+      -- A tool without parameters is a normal, supported case (get_tool_schema
+      -- emits an empty `properties` for it), so this is not an error: Cohere is
+      -- correctly told the tool takes no arguments.
+      uc_ai_logger.log('Tool has no parameters, sending an empty parameterDefinitions', l_scope);
       return l_result_obj;
     end if;
-    
-    -- Get the first property (assumed to be the parameters object)
-    l_parameters_obj := treat(l_properties.get(l_keys_arr(1)) as json_object_t);
-    
-    if l_parameters_obj is null then
-      uc_ai_logger.log_error('Parameters object is null for key: %s', l_scope, l_keys_arr(1));
-      return l_result_obj;
+
+    -- Default: the root properties ARE the parameters.
+    l_param_props  := l_properties;
+    l_required_arr := treat(p_input_schema.get('required') as json_array_t);
+
+    -- Legacy wrapper shape: exactly one root property, and it is an object schema
+    -- that carries the real parameters. Only then descend, and only one level.
+    if l_keys_arr.count = 1 then
+      l_wrapper_obj := treat(l_properties.get(l_keys_arr(1)) as json_object_t);
+      if l_wrapper_obj is not null then
+        l_wrapper_props := treat(l_wrapper_obj.get('properties') as json_object_t);
+        if l_wrapper_props is not null then
+          l_param_props  := l_wrapper_props;
+          l_required_arr := treat(l_wrapper_obj.get('required') as json_array_t);
+        end if;
+      end if;
     end if;
-    
-    -- Get the properties within the parameters object
-    l_param_props := treat(l_parameters_obj.get('properties') as json_object_t);
-    
-    if l_param_props is null then
-      uc_ai_logger.log_error('No properties found in parameters object', l_scope);
-      return l_result_obj;
-    end if;
-    
-    -- Get the required array from the parameters object
-    l_required_arr := treat(l_parameters_obj.get('required') as json_array_t);
-    
+
     -- Convert required array to a list for easier lookup
     l_required_keys_arr := json_key_list();
     if l_required_arr is not null then
@@ -386,27 +410,59 @@ create or replace package body uc_ai_tools_api as
   /*
    * Name of the key a provider expects the tool's JSON schema under.
    *
-   * Google/Ollama (and the OpenAI-compatible xAI/OpenRouter/Mistral endpoints) call
-   * it "parameters", the rest "input_schema". Single source of truth: every builder
-   * (get_tool_schema, build_code_mode_tool) and every reader (format_tool_for_provider,
-   * tool_param_names) must derive the key from here, otherwise a tool definition is
-   * silently emitted under a key the provider ignores.
+   * Anthropic is the ONLY provider that reads it as "input_schema". Everybody else
+   * calls it "parameters": Google functionDeclarations, and the `function` envelope
+   * of Ollama and of every OpenAI-compatible endpoint (openai, xai, openrouter,
+   * mistral). The Responses API and OCI re-key the schema in
+   * format_tool_for_provider, so for them this is only the internal handover name.
+   *
+   * Plain OpenAI Chat Completions used to land in the "input_schema" branch,
+   * because only the xai/openrouter/mistral overrides were listed. Its tools then
+   * reached the model as {"type":"function","function":{"input_schema":{...}}} - a
+   * function with no parameter schema at all - and gpt-4o-mini answered by calling
+   * them with `arguments: {}`.
+   *
+   * Single source of truth: every builder (get_tool_schema, build_code_mode_tool)
+   * and every reader (format_tool_for_provider, tool_param_names) must derive the
+   * key from here, otherwise a tool definition is silently emitted under a key the
+   * provider ignores.
    */
   function input_schema_key (
     p_provider        in uc_ai.provider_type
-  , p_additional_info in varchar2 default null
+    -- kept so an endpoint variant can override the key later without touching
+    -- every call site; no variant needs an override today
+  , p_additional_info in varchar2 default null -- @dblinter ignore(G-2130): reserved for endpoint-specific overrides
   ) return varchar2
   as
   begin
-    if    p_provider in (uc_ai.c_provider_google, uc_ai.c_provider_ollama)
-       -- xAI uses "parameters" as input schema name
-       or (p_provider = uc_ai.c_provider_openai and p_additional_info in (uc_ai.c_provider_xai, uc_ai.c_provider_openrouter, uc_ai.c_provider_mistral))
-    then
-      return 'parameters';
-    else
+    if p_provider = uc_ai.c_provider_anthropic then
       return 'input_schema';
+    else
+      return 'parameters';
     end if;
   end input_schema_key;
+
+
+  /*
+   * Whether a provider accepts the extra JSON Schema keywords UC AI adds to a tool
+   * schema (additionalProperties, $schema).
+   *
+   * Google's functionDeclarations take a closed OpenAPI subset and answer HTTP 400
+   * "Unknown name" for anything outside it. OCI is in the same position, because
+   * its GENERIC chat route forwards `parameters` verbatim to the model's own
+   * vendor: with a google.* model, $schema produced
+   *   400 ... Unknown name "$schema" at 'tools[0].function_declarations[0].parameters'
+   * (reproduced live on the dev tenancy). Neither keyword tells a model anything it
+   * needs, so OCI leaves both out for every model instead of guessing from the
+   * model id, which this package never sees.
+   */
+  function accepts_schema_keywords (
+    p_provider in uc_ai.provider_type
+  ) return boolean
+  as
+  begin
+    return p_provider not in (uc_ai.c_provider_google, uc_ai.c_provider_oci);
+  end accepts_schema_keywords;
 
 
   /*
@@ -473,7 +529,7 @@ create or replace package body uc_ai_tools_api as
       l_input_schema.put('type', 'object');
       l_input_schema.put('properties', l_properties);
       l_input_schema.put('required', l_required);
-      if p_provider != uc_ai.c_provider_google then
+      if accepts_schema_keywords(p_provider) then
         l_input_schema.put('additionalProperties', FALSE);
         l_input_schema.put('$schema', 'http://json-schema.org/draft-07/schema#');
       end if;
@@ -497,7 +553,7 @@ create or replace package body uc_ai_tools_api as
       l_input_schema.put('type', 'object');
       l_input_schema.put('properties', l_properties);
       l_input_schema.put('required', l_required);
-      if p_provider != uc_ai.c_provider_google then
+      if accepts_schema_keywords(p_provider) then
         l_input_schema.put('additionalProperties', FALSE);
         l_input_schema.put('$schema', 'http://json-schema.org/draft-07/schema#');
       end if;
@@ -506,7 +562,7 @@ create or replace package body uc_ai_tools_api as
       l_input_schema.put('type', 'object');
       l_input_schema.put('properties', json_object_t());
       l_input_schema.put('required', json_array_t());
-      if p_provider != uc_ai.c_provider_google then
+      if accepts_schema_keywords(p_provider) then
         l_input_schema.put('$schema', 'http://json-schema.org/draft-07/schema#');
       end if;
     end if;
@@ -598,9 +654,10 @@ create or replace package body uc_ai_tools_api as
     l_input_schema.put('type', 'object');
     l_input_schema.put('properties', l_props);
     l_input_schema.put('required', l_required);
-    -- Google rejects the request outright for unknown schema keys, so the meta-tool
-    -- follows the same rule as get_tool_schema and omits them there.
-    if p_provider != uc_ai.c_provider_google then
+    -- Google (and OCI, which forwards to Google-hosted models) reject the request
+    -- outright for unknown schema keys, so the meta-tool follows the same rule as
+    -- get_tool_schema and omits them there.
+    if accepts_schema_keywords(p_provider) then
       l_input_schema.put('additionalProperties', false);
     end if;
 
@@ -864,6 +921,58 @@ create or replace package body uc_ai_tools_api as
       return json_object_t();
   end run_context_object;
 
+  /*
+   * Normalizes the arguments a model produced into the ONE shape every tool handler
+   * is documented to read: the tool's own parameters at the top level
+   * (docs/guides/tools.mdx - "Read the arguments by name").
+   *
+   * A tool that declares a single top-level OBJECT parameter is offered to the
+   * model as {"properties":{"<name>":{...}}}, so the model answers with that
+   * wrapper: {"<name>":{"city":"Paris"}}. Anthropic and Google strip the wrapper in
+   * their own response parsers; OpenAI Chat Completions, Ollama and OCI GENERIC do
+   * not, and the Responses API strips it only when the key is literally
+   * "parameters". The same handler therefore saw two different shapes depending on
+   * which provider ran it, and read NULLs on half of them. Normalizing here - the
+   * one place every provider funnels through - gives every handler one shape.
+   *
+   * Idempotent: a payload a provider already unwrapped no longer carries the
+   * wrapper key, so the guard does not fire a second time.
+   */
+  function unwrap_object_parameter(
+    p_tool_code in uc_ai_tools.code%type
+  , p_arguments in json_object_t
+  ) return json_object_t
+  as
+    l_scope      uc_ai_logger.scope := gc_scope_prefix || 'unwrap_object_parameter';
+    l_param_name uc_ai_tool_parameters.name%type;
+  begin
+    if p_arguments is null then
+      return p_arguments;
+    end if;
+
+    -- null for a flat tool (the normal shape) and for anything this package does
+    -- not own, e.g. the code-mode meta-tool: nothing to unwrap then.
+    l_param_name := get_tools_object_param_name(p_tool_code);
+
+    if l_param_name is null then
+      return p_arguments;
+    end if;
+
+    -- is_object, not has() alone: a model that answered flat may still carry a
+    -- scalar property of that name, and treat(...) would turn it into NULL - the
+    -- handler would run with no arguments at all.
+    if not p_arguments.has(l_param_name)
+       or not p_arguments.get(l_param_name).is_object
+    then
+      return p_arguments;
+    end if;
+
+    uc_ai_logger.log('Unwrapping declared object parameter ' || l_param_name, l_scope, p_tool_code);
+
+    return treat(p_arguments.get(l_param_name) as json_object_t);
+  end unwrap_object_parameter;
+
+
   function execute_tool(
     p_tool_code   in uc_ai_tools.code%type
   , p_arguments   in json_object_t
@@ -899,6 +1008,12 @@ create or replace package body uc_ai_tools_api as
     else
       l_args := json_object_t.parse(p_arguments.to_clob);
     end if;
+
+    -- Same argument shape for every provider (see unwrap_object_parameter). Done
+    -- on the copy and BEFORE the run context is added, so the context always ends
+    -- up at the top level of what the handler reads.
+    l_args := unwrap_object_parameter(p_tool_code, l_args);
+
     l_args.put(uc_ai.c_run_context_key, run_context_object(p_run_context));
 
     return exec_function_call(
@@ -1191,6 +1306,90 @@ create or replace package body uc_ai_tools_api as
   end execute_agent_tool;
 
 
+  /*
+   * True when a CLOB still fits into the varchar2(32767) that
+   * apex_plugin_util.t_bind.value is declared as.
+   *
+   * Asked by assignment rather than by length: LENGTHB is not defined for a CLOB
+   * in a multi-byte character set, and a character count of 32767 can still be
+   * four times that many bytes.
+   */
+  function fits_in_bind_varchar2(
+    p_value in clob
+  ) return boolean
+  as
+    -- same declaration as apex_plugin_util.t_bind.value, so it overflows on
+    -- exactly the same input
+    -- @dblinter ignore(G-2135): the assignment IS the test; the value itself is never needed
+    l_value varchar2(32767 byte);
+  begin
+    l_value := p_value;
+    return true;
+  exception
+    when value_error then -- @dblinter ignore(g-5030): the overflow IS the answer
+      return false;
+  end fits_in_bind_varchar2;
+
+
+  /*
+   * Runs a tool's function_call snippet through DBMS_SQL.
+   *
+   * This is the CLOB-safe path: DBMS_SQL.bind_variable takes a CLOB, so an
+   * argument payload of any size reaches the handler. apex_plugin_util cannot do
+   * that - its t_bind.value is a varchar2(32767) - so exec_function_call falls
+   * back to here when the payload does not fit, even inside an APEX session.
+   *
+   * p_bind_name null means the snippet has no bind variable.
+   */
+  function exec_via_dbms_sql(
+    p_fc_code    in clob
+  , p_bind_name  in varchar2
+  , p_bind_value in clob
+  ) return clob
+  as
+    l_scope uc_ai_logger.scope := gc_scope_prefix || 'exec_via_dbms_sql';
+
+    -- a CLOB, not a varchar2(32767): uc_ai_tools.function_call is a CLOB, so a
+    -- long handler snippet would otherwise blow the block up before it is parsed
+    l_plsql_block clob;
+    l_cursor_id   pls_integer;
+    l_rows        pls_integer;
+    l_clob        clob;
+  begin
+    l_plsql_block := '
+        DECLARE
+          function user_function
+          return clob
+          as
+          begin
+            ' || p_fc_code || '
+          end user_function;
+        BEGIN
+          :return_val := user_function;
+        END;';
+
+    uc_ai_logger.log('l_plsql_block', l_scope, l_plsql_block);
+
+    l_cursor_id := sys.dbms_sql.open_cursor;
+    sys.dbms_sql.parse(l_cursor_id, l_plsql_block, sys.dbms_sql.native);
+
+    if p_bind_name is not null then
+      -- CLOB bind: this is the only place a >32 KB tool argument survives
+      sys.dbms_sql.bind_variable(l_cursor_id, ':' || p_bind_name, p_bind_value);
+    end if;
+
+    -- Bind the OUT CLOB variable for the function's result
+    sys.dbms_sql.bind_variable(l_cursor_id, ':return_val', l_clob);
+
+    -- @dblinter ignore(G-2135): dbms_sql.execute is a function, so its result has to be taken somewhere; for an anonymous block it carries no information
+    l_rows := sys.dbms_sql.execute(l_cursor_id);
+    sys.dbms_sql.variable_value(l_cursor_id, ':return_val', l_clob);
+    sys.dbms_sql.close_cursor(l_cursor_id);
+
+    return l_clob;
+  end exec_via_dbms_sql;
+
+
   function exec_function_call(
     p_function_call in clob
   , p_arguments     in json_object_t
@@ -1204,11 +1403,8 @@ create or replace package body uc_ai_tools_api as
     l_bind         apex_plugin_util.t_bind;
     l_return       clob;
 
-    l_clob         clob;
-    l_cursor_id    pls_integer;
-    l_rows_fetched pls_integer;
+    l_bind_name    varchar2(255 char);
     l_bind_value   clob;
-    l_plsql_block  varchar2(32767 char);
   begin
 
     -- Extract bind variables from the PL/SQL function call
@@ -1221,38 +1417,55 @@ create or replace package body uc_ai_tools_api as
     , p_subexpression => '1'
     );
 
+    if l_found_binds is not null and l_found_binds.count > 1 then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'tool function call'
+      , p1           => 'Multiple bind variables found: ' || apex_string.join(l_found_binds, ', ') || '. Only one parameter bind is allowed.'
+      );
+    end if;
+
+    if l_found_binds is not null and l_found_binds.count = 1 then
+      -- Bind the entire JSON arguments object to the single parameter
+      -- Tool function must parse JSON to extract individual values
+      l_bind_name  := upper(l_found_binds(1));
+      l_bind_value := p_arguments.to_clob;
+      -- The payload belongs in p_extra: p_text is a varchar2, so a large argument
+      -- object concatenated into it would raise ORA-06502 while logging
+      uc_ai_logger.log('Bind variable found: ' || l_bind_name, l_scope, l_bind_value);
+    end if;
+
     -- use apex_plugin_util.get_plsql_func_result_clob if apex_session is available
+    -- - unless the arguments do not fit into its varchar2(32767) bind value, in
+    -- which case only the DBMS_SQL path can carry them (see fits_in_bind_varchar2)
     if apex_application.g_instance is not null then
 
       uc_ai_logger.log('Executing tool with apex_plugin_util.get_plsql_func_result_clob', l_scope, l_fc_code);
 
-      if l_found_binds is null or l_found_binds.count = 0 then
-        null;
-      elsif l_found_binds.count = 1 then
-        -- Bind the entire JSON arguments object to the single parameter
-        -- Tool function must parse JSON to extract individual values
-        l_bind.name  := upper(l_found_binds(1));
-        l_bind.value := p_arguments.to_clob;
-        l_bind_list(1) := l_bind;
-        uc_ai_logger.log('Bind variable found', l_scope, l_bind.name || ' = ' || l_bind.value);
+      if l_bind_name is not null and not fits_in_bind_varchar2(l_bind_value) then
+        uc_ai_logger.log(
+          'Tool arguments exceed the 32 KB apex_plugin_util bind limit, running the tool through DBMS_SQL instead'
+        , l_scope
+        );
+        l_return := exec_via_dbms_sql(l_fc_code, l_bind_name, l_bind_value);
       else
-        uc_ai_error.raise_error(
-          p_error_code => uc_ai_error.c_err_invalid_config
-        , p_scope      => l_scope
-        , p0           => 'tool function call'
-        , p1           => 'Multiple bind variables found: ' || apex_string.join(l_found_binds, ', ') || '. Only one parameter bind is allowed.'
+        if l_bind_name is not null then
+          l_bind.name    := l_bind_name;
+          l_bind.value   := l_bind_value;
+          l_bind_list(1) := l_bind;
+        end if;
+
+        uc_ai_logger.log('Executing tool', l_scope, l_fc_code);
+
+        -- Execute the tool's PL/SQL function with bound arguments
+        -- Function should return CLOB result that gets sent back to AI
+        l_return := apex_plugin_util.get_plsql_func_result_clob (
+          p_plsql_function   => l_fc_code
+        , p_auto_bind_items  => false
+        , p_bind_list        => l_bind_list
         );
       end if;
-
-      uc_ai_logger.log('Executing tool', l_scope, l_fc_code);
-
-      -- Execute the tool's PL/SQL function with bound arguments
-      -- Function should return CLOB result that gets sent back to AI
-      l_return := apex_plugin_util.get_plsql_func_result_clob (
-        p_plsql_function   => l_fc_code
-      , p_auto_bind_items  => false
-      , p_bind_list        => l_bind_list
-      );
     
       uc_ai_logger.log('Tool execution result', l_scope, l_return);
 
@@ -1270,67 +1483,7 @@ create or replace package body uc_ai_tools_api as
     else
       uc_ai_logger.log('Executing tool with dbms_sql', l_scope, l_fc_code);
 
-      l_plsql_block := '
-        DECLARE
-          function user_function
-          return clob
-          as
-          begin
-            ' || l_fc_code || '
-          end user_function;
-        BEGIN
-          :return_val := user_function;
-        END;';
-
-      if l_found_binds is null or l_found_binds.count = 0 then
-        -- No binds, directly execute a block that selects the function result into a CLOB variable
-        -- For DBMS_SQL, we need a full PL/SQL block that assigns the result to an OUT variable
-        
-        l_cursor_id := sys.dbms_sql.open_cursor;
-        uc_ai_logger.log('l_plsql_block', l_scope, l_plsql_block);
-        sys.dbms_sql.parse(l_cursor_id, l_plsql_block, sys.dbms_sql.native);
-        sys.dbms_sql.bind_variable(l_cursor_id, ':return_val', l_clob); -- Bind the OUT variable
-
-        l_rows_fetched := sys.dbms_sql.execute(l_cursor_id);
-        sys.dbms_sql.variable_value(l_cursor_id, ':return_val', l_clob); -- Get the value from the OUT variable
-        sys.dbms_sql.close_cursor(l_cursor_id);
-
-        l_return := l_clob;
-      elsif l_found_binds.count = 1 then
-        -- Bind the entire JSON arguments object to the single parameter
-        -- Tool function must parse JSON to extract individual values
-        l_bind.name  := upper(l_found_binds(1));
-        l_bind.value := p_arguments.to_clob;
-        l_bind_value := l_bind.value;
-
-        uc_ai_logger.log('Bind variable found', l_scope, l_bind.name || ' = ' || l_bind.value);
-
-        -- Construct the PL/SQL block for DBMS_SQL with a bind variable and an OUT parameter
-        l_plsql_block := replace(l_plsql_block, ':' || l_bind.name, ':' || l_bind.name);
-        uc_ai_logger.log('l_plsql_block', l_scope, l_plsql_block);
-
-        l_cursor_id := sys.dbms_sql.open_cursor;
-        sys.dbms_sql.parse(l_cursor_id, l_plsql_block, sys.dbms_sql.native);
-
-        -- Bind the input CLOB variable
-        sys.dbms_sql.bind_variable(l_cursor_id, ':' || l_bind.name, l_bind_value);
-        -- Bind the OUT CLOB variable for the function's result
-        sys.dbms_sql.bind_variable(l_cursor_id, ':return_val', l_clob);
-
-        l_rows_fetched := sys.dbms_sql.execute(l_cursor_id);
-        sys.dbms_sql.variable_value(l_cursor_id, ':return_val', l_clob); -- Get the value from the OUT variable
-        sys.dbms_sql.close_cursor(l_cursor_id);
-
-        l_return := l_clob;
-
-      else
-        uc_ai_error.raise_error(
-          p_error_code => uc_ai_error.c_err_invalid_config
-        , p_scope      => l_scope
-        , p0           => 'tool function call'
-        , p1           => 'Multiple bind variables found: ' || apex_string.join(l_found_binds, ', ') || '. Only one parameter bind is allowed.'
-        );
-      end if;
+      l_return := exec_via_dbms_sql(l_fc_code, l_bind_name, l_bind_value);
     end if;
 
     return l_return;
@@ -1350,20 +1503,27 @@ create or replace package body uc_ai_tools_api as
     l_count pls_integer;
     l_param_name uc_ai_tool_parameters.name%type;
   begin
+    -- Count ALL top-level parameters, not just the object-typed ones. Counting
+    -- only the object rows and then selecting every top-level row raised
+    -- TOO_MANY_ROWS for a tool with two top-level parameters of which one is an
+    -- object - swallowed and re-raised by the WHEN OTHERS below, in the middle of
+    -- a tool call. Counting all of them is also the right rule: {a: object,
+    -- b: string} is a flat two-parameter tool, and unwrapping `a` would silently
+    -- drop `b`.
     select count(*)  -- @dblinter ignore(G-8110) we check for exactly 1
       into l_count
       from uc_ai_tool_parameters tp
       join uc_ai_tools t
         on tp.tool_id = t.id
       where t.code = p_tool_code
-        and parent_param_id is null
-        and data_type = 'object';
+        and parent_param_id is null;
 
     if l_count != 1 then
       return null; -- Not exactly one top-level parameter, return null
     end if;
 
-    -- Get the parameter name for the tool's input object
+    -- Get the parameter name for the tool's input object. NO_DATA_FOUND below
+    -- returns null, which is what a single non-object parameter must yield.
     select tp.name
       into l_param_name
       from uc_ai_tool_parameters tp
@@ -1371,6 +1531,7 @@ create or replace package body uc_ai_tools_api as
         on tp.tool_id = t.id
      where t.code = p_tool_code
        and parent_param_id is null
+       and data_type = 'object'
     ;
 
     return l_param_name;
