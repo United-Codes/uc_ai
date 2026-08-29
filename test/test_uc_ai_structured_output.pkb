@@ -299,6 +299,76 @@ create or replace package body test_uc_ai_structured_output as
   end openai_strict_forces_all_required;
 
 
+  /*
+   * A nullable object is written {"type":["object","null"]}, and get_string returns null
+   * for a type array, so the gate that only looked at get_string skipped these nodes.
+   * force_all_required keys on properties and did add a required list, so the two
+   * disagreed and OpenAI strict answered HTTP 400 "'additionalProperties' is required to
+   * be supplied and to be false".
+   */
+  procedure openai_closes_union_objects
+  as
+    l_input  json_object_t;
+    l_schema json_object_t;
+    l_inner  json_object_t;
+  begin
+    l_input := json_object_t('{
+      "type": ["object", "null"],
+      "properties": {
+        "name": {"type": "string"},
+        "inner": {
+          "type": ["object", "null"],
+          "properties": {"a": {"type": "string"}, "b": {"type": "string"}}
+        }
+      },
+      "required": ["name"]
+    }');
+
+    l_schema := openai_schema_of(l_input);
+
+    ut.expect(l_schema.get_boolean('additionalProperties')).to_be_false();
+    ut.expect(l_schema.get_array('required').get_size).to_equal(2);
+
+    l_inner := l_schema.get_object('properties').get_object('inner');
+    ut.expect(l_inner.get_boolean('additionalProperties')).to_be_false();
+    ut.expect(l_inner.get_array('required').get_size).to_equal(2);
+
+    -- Anthropic rejects the same omission, and shares the policy flag
+    l_schema := anthropic_schema_of(l_input);
+    ut.expect(l_schema.get_boolean('additionalProperties')).to_be_false();
+    ut.expect(l_schema.get_object('properties').get_object('inner')
+      .get_boolean('additionalProperties')).to_be_false();
+
+    -- an author-supplied sub-schema is replaced: both providers demand the literal false
+    l_input.put('additionalProperties', json_object_t('{"type":"string"}'));
+    ut.expect(openai_schema_of(l_input).get_boolean('additionalProperties')).to_be_false();
+  end openai_closes_union_objects;
+
+
+  /*
+   * A container that lists properties and no type is an object as far as both providers
+   * are concerned, and force_all_required already treated it as one.
+   */
+  procedure openai_closes_typeless_object
+  as
+    l_input  json_object_t;
+    l_schema json_object_t;
+  begin
+    l_input := json_object_t('{"properties":{"a":{"type":"string"},"b":{"type":"integer"}}}');
+
+    l_schema := openai_schema_of(l_input);
+    ut.expect(l_schema.get_boolean('additionalProperties')).to_be_false();
+    ut.expect(l_schema.get_array('required').get_size).to_equal(2);
+
+    l_schema := anthropic_schema_of(l_input);
+    ut.expect(l_schema.get_boolean('additionalProperties')).to_be_false();
+
+    -- a node that is neither is still left alone
+    ut.expect(openai_schema_of(json_object_t('{"type":"string"}'))
+      .has('additionalProperties')).to_be_false();
+  end openai_closes_typeless_object;
+
+
   procedure openai_strict_recurses_items
   as
     l_schema json_object_t;
@@ -312,6 +382,73 @@ create or replace package body test_uc_ai_structured_output as
     ut.expect(l_items.get_boolean('additionalProperties')).to_be_false();
     ut.expect(l_items.get_array('required').get_size).to_equal(2);
   end openai_strict_recurses_items;
+
+
+  /*
+   * A tuple is an array of schemas under `items` (the draft-07 target of Zod) or under
+   * `prefixItems` (draft 2020-12). Measured HTTP 400 for the tuple form on both
+   * providers - OpenAI "[...] is not of type 'object', 'boolean'", Anthropic "Array
+   * types must be specified with a single object schema for 'items'" - and HTTP 200
+   * with a conforming answer for one items node holding an anyOf. The objects inside
+   * the tuple also have to come out processed, which they did not when get_object
+   * returned null for the array and the whole tuple passed through untouched.
+   */
+  procedure openai_tuple_items_processed
+  as
+    l_pair  json_object_t;
+    l_first json_object_t;
+
+    function pair_of(p_key in varchar2, p_anthropic in boolean default false) return json_object_t
+    as
+      l_input json_object_t;
+      l_converted json_object_t;
+    begin
+      l_input := json_object_t(
+        '{"type":"object","properties":{"pair":{"type":"array","description":"a pair","' || p_key || '":['
+        || '{"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"}}},'
+        || '{"type":"integer"}]}}}'
+      );
+
+      if p_anthropic then
+        l_converted := anthropic_schema_of(l_input);
+      else
+        l_converted := openai_schema_of(l_input);
+      end if;
+
+      return l_converted.get_object('properties').get_object('pair');
+    end pair_of;
+  begin
+    l_pair := pair_of('items');
+
+    ut.expect(l_pair.has('prefixItems')).to_be_false();
+    ut.expect(l_pair.get_object('items').get_array('anyOf').get_size).to_equal(2);
+
+    l_first := treat(l_pair.get_object('items').get_array('anyOf').get(0) as json_object_t);
+    ut.expect(l_first.get_boolean('additionalProperties')).to_be_false();
+    ut.expect(l_first.get_array('required').get_size).to_equal(2);
+
+    -- the length: minItems and maxItems where the provider takes them, and a sentence
+    -- for the model either way
+    ut.expect(l_pair.get_number('minItems')).to_equal(2);
+    ut.expect(l_pair.get_number('maxItems')).to_equal(2);
+    ut.expect(l_pair.get_string('description')).to_be_like('%tuple of 2 items%');
+
+    -- prefixItems is the same tuple spelled the 2020-12 way and ends up identical
+    ut.expect(pair_of('prefixItems').to_string).to_equal(l_pair.to_string);
+
+    -- Anthropic rejects the tuple form with its own message, so it is rewritten too
+    l_pair := pair_of('items', p_anthropic => true);
+    ut.expect(l_pair.get_object('items').get_array('anyOf').get_size).to_equal(2);
+    ut.expect(treat(l_pair.get_object('items').get_array('anyOf').get(0) as json_object_t)
+      .get_boolean('additionalProperties')).to_be_false();
+    -- measured HTTP 400 there: "For 'array' type, property 'maxItems' is not supported"
+    ut.expect(l_pair.has('maxItems')).to_be_false();
+    ut.expect(l_pair.get_string('description')).to_be_like('%tuple of 2 items%');
+
+    -- a single item schema is left where it is
+    ut.expect(openai_schema_of(json_object_t('{"type":"array","items":{"type":"string"}}'))
+      .get_object('items').get_string('type')).to_equal('string');
+  end openai_tuple_items_processed;
 
 
   /*
@@ -646,6 +783,276 @@ create or replace package body test_uc_ai_structured_output as
 
 
   /*
+   * The $ref branch returned as soon as it had resolved the pointer, so a description
+   * written next to the $ref was thrown away. The reference converter merges the
+   * definition with the keys next to it, with those keys winning.
+   */
+  procedure google_ref_keeps_siblings
+  as
+    l_result json_object_t;
+    l_home   json_object_t;
+  begin
+    l_result := uc_ai_structured_output.to_google_format(json_object_t('{
+      "type": "object",
+      "$defs": {
+        "Addr": {
+          "type": "object",
+          "description": "a postal address",
+          "properties": {"city": {"type": "string"}}
+        }
+      },
+      "properties": {
+        "home": {"$ref": "#/$defs/Addr", "description": "where the person lives"}
+      }
+    }'));
+
+    l_home := l_result.get_object('properties').get_object('home');
+    ut.expect(l_home.get_string('type')).to_equal('OBJECT');
+    ut.expect(l_home.get_object('properties').get_object('city').get_string('type')).to_equal('STRING');
+    -- the node's own description wins over the definition's
+    ut.expect(l_home.get_string('description')).to_equal('where the person lives');
+  end google_ref_keeps_siblings;
+
+
+  /*
+   * A schema that points back at itself has no finite expansion. The only bound used to
+   * be a depth limit charged for every descent, so a 200-byte tree inflated to a few
+   * hundred KB of responseSchema and still ended in empty nodes.
+   */
+  procedure google_recursive_ref_raises
+  as
+    l_result json_object_t;
+  begin
+    l_result := uc_ai_structured_output.to_google_format(json_object_t('{
+      "type": "object",
+      "$defs": {
+        "Node": {
+          "type": "object",
+          "properties": {
+            "value": {"type": "string"},
+            "child": {"$ref": "#/$defs/Node"}
+          }
+        }
+      },
+      "properties": {"root": {"$ref": "#/$defs/Node"}},
+      "required": ["root"]
+    }'));
+  end google_recursive_ref_raises;
+
+
+  /*
+   * Pydantic writes a nested model as {"allOf":[{"$ref":...}],"description":"..."}.
+   * allOf was in no list, so the node converted to the description alone and the nested
+   * model disappeared from the request.
+   */
+  procedure google_flattens_pydantic_allof
+  as
+    l_result json_object_t;
+    l_home   json_object_t;
+  begin
+    l_result := uc_ai_structured_output.to_google_format(json_object_t('{
+      "type": "object",
+      "$defs": {
+        "Address": {
+          "type": "object",
+          "properties": {"city": {"type": "string"}, "zip": {"type": "string"}},
+          "required": ["city"]
+        }
+      },
+      "properties": {
+        "home": {"allOf": [{"$ref": "#/$defs/Address"}], "description": "where the person lives"}
+      },
+      "required": ["home"]
+    }'));
+
+    l_home := l_result.get_object('properties').get_object('home');
+
+    ut.expect(l_home.has('allOf')).to_be_false();
+    ut.expect(l_home.get_string('type')).to_equal('OBJECT');
+    ut.expect(l_home.get_string('description')).to_equal('where the person lives');
+    ut.expect(l_home.get_object('properties').get_object('city').get_string('type')).to_equal('STRING');
+    ut.expect(l_home.get_object('properties').get_object('zip').get_string('type')).to_equal('STRING');
+    ut.expect(l_home.get_array('required').get_string(0)).to_equal('city');
+    ut.expect(l_home.get_array('propertyOrdering').get_size).to_equal(2);
+  end google_flattens_pydantic_allof;
+
+
+  /*
+   * The proto has anyOf and no oneOf. Dropping oneOf left the node with nothing in it,
+   * and a root-level oneOf converted to {}.
+   */
+  procedure google_oneof_becomes_anyof
+  as
+    l_result json_object_t;
+    l_pick   json_object_t;
+  begin
+    l_result := uc_ai_structured_output.to_google_format(json_object_t('{
+      "type": "object",
+      "properties": {
+        "pick": {"oneOf": [{"type": "string"}, {"type": "integer"}]}
+      }
+    }'));
+
+    l_pick := l_result.get_object('properties').get_object('pick');
+    ut.expect(l_pick.has('oneOf')).to_be_false();
+    ut.expect(l_pick.get_array('anyOf').get_size).to_equal(2);
+    ut.expect(treat(l_pick.get_array('anyOf').get(0) as json_object_t).get_string('type')).to_equal('STRING');
+    -- the part anyOf cannot say is written down instead of being lost
+    ut.expect(l_pick.get_string('description')).to_be_like('%exactly one%');
+
+    -- a root-level oneOf used to convert to an empty object
+    l_result := uc_ai_structured_output.to_google_format(json_object_t('{
+      "oneOf": [{"type": "object", "properties": {"a": {"type": "string"}}}]
+    }'));
+    ut.expect(l_result.get_array('anyOf').get_size).to_equal(1);
+  end google_oneof_becomes_anyof;
+
+
+  /*
+   * The proto's items is one schema, so a tuple cannot be written position by position.
+   * It used to be dropped altogether, which left an ARRAY node with no item schema -
+   * invalid in the proto.
+   */
+  procedure google_tuple_items_processed
+  as
+    l_result json_object_t;
+    l_pair   json_object_t;
+
+    function pair_of(p_key in varchar2) return json_object_t
+    as
+    begin
+      return uc_ai_structured_output.to_google_format(json_object_t(
+        '{"type":"object","properties":{"pair":{"type":"array","' || p_key || '":['
+        || '{"type":"object","properties":{"a":{"type":"string"}}},{"type":"integer"}]}}}'
+      )).get_object('properties').get_object('pair');
+    end pair_of;
+  begin
+    l_pair := pair_of('items');
+
+    ut.expect(l_pair.get_string('type')).to_equal('ARRAY');
+    ut.expect(l_pair.get_object('items').get_array('anyOf').get_size).to_equal(2);
+    ut.expect(treat(l_pair.get_object('items').get_array('anyOf').get(0) as json_object_t)
+      .get_object('properties').get_object('a').get_string('type')).to_equal('STRING');
+    -- the length, which anyOf cannot carry
+    ut.expect(l_pair.get_number('minItems')).to_equal(2);
+    ut.expect(l_pair.get_number('maxItems')).to_equal(2);
+    ut.expect(l_pair.get_string('description')).to_be_like('%tuple of 2 items%');
+
+    -- prefixItems is the same tuple spelled the 2020-12 way
+    l_pair := pair_of('prefixItems');
+    ut.expect(l_pair.get_object('items').get_array('anyOf').get_size).to_equal(2);
+
+    -- a single item schema is still written straight into items
+    l_result := uc_ai_structured_output.to_google_format(
+      json_object_t('{"type":"array","items":{"type":"string"}}')
+    );
+    ut.expect(l_result.get_object('items').get_string('type')).to_equal('STRING');
+  end google_tuple_items_processed;
+
+
+  procedure google_notes_unexpressible
+  as
+    l_props json_object_t;
+    l_node  json_object_t;
+  begin
+    l_props := uc_ai_structured_output.to_google_format(json_object_t('{
+      "type": "object",
+      "properties": {
+        "x": {"type": "string", "not": {"const": "forbidden"}},
+        "y": {"type": "array", "items": {"type": "integer"}, "contains": {"minimum": 5}},
+        "z": {"type": "object", "properties": {"a": {"type": "string"}},
+              "if": {"required": ["a"]}, "then": {"required": ["a"]}}
+      }
+    }')).get_object('properties');
+
+    l_node := l_props.get_object('x');
+    ut.expect(l_node.has('not')).to_be_false();
+    ut.expect(l_node.get_string('description')).to_be_like('%must not match%forbidden%');
+
+    l_node := l_props.get_object('y');
+    ut.expect(l_node.has('contains')).to_be_false();
+    ut.expect(l_node.get_string('description')).to_be_like('%At least one item must match%');
+
+    l_node := l_props.get_object('z');
+    ut.expect(l_node.has('if')).to_be_false();
+    ut.expect(l_node.get_string('description')).to_be_like('%A rule applies to this value%');
+  end google_notes_unexpressible;
+
+
+  /*
+   * An empty node makes Gemini invent its own field names, which is a wrong answer
+   * rather than a failed request. Refuse instead of sending it.
+   */
+  procedure google_refuses_shapeless_node
+  as
+    l_result json_object_t;
+  begin
+    l_result := uc_ai_structured_output.to_google_format(json_object_t('{
+      "type": "object",
+      "properties": {"ghost": {"description": "no shape at all"}}
+    }'));
+  end google_refuses_shapeless_node;
+
+
+  /*
+   * const is an enum of one member. The proto has no const field and const was in no
+   * list, so the only statement of what the value has to be was dropped.
+   */
+  procedure google_const_is_one_enum
+  as
+    l_props json_object_t;
+    l_node  json_object_t;
+  begin
+    l_props := uc_ai_structured_output.to_google_format(json_object_t('{
+      "type": "object",
+      "properties": {
+        "kind": {"const": "invoice"},
+        "n": {"type": "integer", "const": 5}
+      }
+    }')).get_object('properties');
+
+    l_node := l_props.get_object('kind');
+    ut.expect(l_node.get_array('enum').get_size).to_equal(1);
+    ut.expect(l_node.get_array('enum').get_string(0)).to_equal('invoice');
+    -- a node that states only an enum gets the type its members have
+    ut.expect(l_node.get_string('type')).to_equal('STRING');
+
+    l_node := l_props.get_object('n');
+    ut.expect(l_node.get_array('enum').get_string(0)).to_equal('5');
+    ut.expect(l_node.get_string('type')).to_equal('INTEGER');
+
+    -- the type of an enum-only node comes from its members
+    ut.expect(uc_ai_structured_output.to_google_format(json_object_t('{"enum":[1,2]}'))
+      .get_string('type')).to_equal('INTEGER');
+    ut.expect(uc_ai_structured_output.to_google_format(json_object_t('{"enum":[1.5,2]}'))
+      .get_string('type')).to_equal('NUMBER');
+    ut.expect(uc_ai_structured_output.to_google_format(json_object_t('{"enum":[true,false]}'))
+      .get_string('type')).to_equal('BOOLEAN');
+  end google_const_is_one_enum;
+
+
+  /*
+   * A JSON null enum member has no string form. It used to reach Gemini as the
+   * four-character text "null", and the model answered with that word.
+   */
+  procedure google_null_enum_is_nullable
+  as
+    l_node json_object_t;
+  begin
+    l_node := uc_ai_structured_output.to_google_format(json_object_t('{
+      "type": "object",
+      "properties": {"status": {"enum": ["open", "closed", null]}}
+    }')).get_object('properties').get_object('status');
+
+    ut.expect(l_node.get_array('enum').get_size).to_equal(2);
+    ut.expect(l_node.get_array('enum').get_string(0)).to_equal('open');
+    ut.expect(l_node.get_array('enum').get_string(1)).to_equal('closed');
+    ut.expect(l_node.get_boolean('nullable')).to_be_true();
+    ut.expect(l_node.get_string('type')).to_equal('STRING');
+  end google_null_enum_is_nullable;
+
+
+  /*
    * nullable is the only way the proto expresses an optional value, so a JSON schema
    * union with null has to become one.
    */
@@ -859,6 +1266,100 @@ create or replace package body test_uc_ai_structured_output as
                         .get_array('anyOf').get(0) as json_object_t);
     ut.expect(l_branch.get_boolean('additionalProperties')).to_be_false();
   end anthropic_recurses_defs_and_anyof;
+
+
+  /*
+   * Measured HTTP 400 on both providers, each with its own wording:
+   *   Anthropic "Schema keyword 'not' is not supported",
+   *             "For 'array' type, property 'contains' is not supported",
+   *             "For 'object' type, property 'if' is not supported",
+   *             "For 'object' type, property 'propertyNames' is not supported".
+   *   OpenAI    "Unsupported keywords ('not',)", "'contains' is not permitted",
+   *             "'if' is not permitted", "'propertyNames' is not permitted".
+   * The rule they state is kept in the description, which the model reads.
+   */
+  procedure strict_strips_structural
+  as
+    l_input json_object_t;
+
+    procedure expect_stripped(p_schema in json_object_t)
+    as
+      l_props json_object_t;
+      l_node  json_object_t;
+    begin
+      l_props := p_schema.get_object('properties');
+
+      ut.expect(p_schema.has('if')).to_be_false();
+      ut.expect(p_schema.has('then')).to_be_false();
+      ut.expect(p_schema.has('propertyNames')).to_be_false();
+      ut.expect(p_schema.get_string('description')).to_be_like('%A rule applies to this value%');
+      ut.expect(p_schema.get_string('description')).to_be_like('%Every property name must match%');
+
+      l_node := l_props.get_object('code');
+      ut.expect(l_node.has('not')).to_be_false();
+      ut.expect(l_node.get_string('description')).to_be_like('%must not match%XX%');
+
+      l_node := l_props.get_object('nums');
+      ut.expect(l_node.has('contains')).to_be_false();
+      ut.expect(l_node.get_string('description')).to_be_like('%At least one item must match%');
+    end expect_stripped;
+  begin
+    l_input := json_object_t('{
+      "type": "object",
+      "properties": {
+        "code": {"type": "string", "not": {"type": "string", "const": "XX"}},
+        "nums": {"type": "array", "items": {"type": "integer"}, "contains": {"type": "integer"}}
+      },
+      "required": ["code"],
+      "if": {"required": ["code"]},
+      "then": {"required": ["nums"]},
+      "propertyNames": {"pattern": "^[a-z]+$"}
+    }');
+
+    expect_stripped(openai_schema_of(l_input));
+    expect_stripped(anthropic_schema_of(l_input));
+  end strict_strips_structural;
+
+
+  /*
+   * Measured: OpenAI answers HTTP 400 "'phone' is not a valid format" and "'uri' is not
+   * a valid format"; Anthropic answers "For 'string' type, format 'phone' is not
+   * supported" but returns HTTP 200 for uri and for uuid. The two lists therefore
+   * differ, and a format that has to go is still stated in the description.
+   */
+  procedure strict_keeps_known_formats
+  as
+    l_input json_object_t;
+    l_props json_object_t;
+  begin
+    l_input := json_object_t('{
+      "type": "object",
+      "properties": {
+        "mail": {"type": "string", "format": "email"},
+        "id": {"type": "string", "format": "uuid"},
+        "link": {"type": "string", "format": "uri"},
+        "phone": {"type": "string", "format": "phone"}
+      }
+    }');
+
+    l_props := openai_schema_of(l_input).get_object('properties');
+    ut.expect(l_props.get_object('mail').get_string('format')).to_equal('email');
+    ut.expect(l_props.get_object('id').get_string('format')).to_equal('uuid');
+    ut.expect(l_props.get_object('link').has('format')).to_be_false();
+    ut.expect(l_props.get_object('phone').has('format')).to_be_false();
+    ut.expect(l_props.get_object('phone').get_string('description')).to_be_like('%phone format%');
+
+    l_props := anthropic_schema_of(l_input).get_object('properties');
+    ut.expect(l_props.get_object('mail').get_string('format')).to_equal('email');
+    -- uri returns HTTP 200 here, so it stays
+    ut.expect(l_props.get_object('link').get_string('format')).to_equal('uri');
+    ut.expect(l_props.get_object('phone').has('format')).to_be_false();
+
+    -- Google keeps every format: the proto has the field and nothing was measured
+    -- against it, so the conversion does not touch it.
+    ut.expect(uc_ai_structured_output.to_google_format(l_input)
+      .get_object('properties').get_object('phone').get_string('format')).to_equal('phone');
+  end strict_keeps_known_formats;
 
 
   /*
