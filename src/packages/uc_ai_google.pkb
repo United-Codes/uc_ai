@@ -38,6 +38,71 @@ create or replace package body uc_ai_google as
     return get_api_url_base(p_settings) || '/' || p_model || ':batchEmbedContents';
   end get_generate_embeddings_url;
 
+  /*
+   * json_object_t.get_array hands back a NULL collection both for a missing key
+   * and for a JSON null, and every method call on that NULL raises ORA-30625.
+   * Google answers HTTP 200 with shapes that hit exactly that: a prompt-level
+   * block carries no `candidates` at all, and a candidate stopped by
+   * MALFORMED_FUNCTION_CALL, SAFETY or MAX_TOKENS carries no `content`. Reading
+   * through these two helpers keeps a filtered answer a result instead of an
+   * Oracle error.
+   */
+  function get_array_or_null (
+    p_obj in json_object_t
+  , p_key in varchar2
+  ) return json_array_t
+  as
+  begin
+    if p_obj is null or not p_obj.has(p_key) or p_obj.get(p_key).is_null then
+      return null;
+    end if;
+
+    return p_obj.get_array(p_key);
+  end get_array_or_null;
+
+
+  function get_object_or_null (
+    p_obj in json_object_t
+  , p_key in varchar2
+  ) return json_object_t
+  as
+  begin
+    if p_obj is null or not p_obj.has(p_key) or p_obj.get(p_key).is_null then
+      return null;
+    end if;
+
+    return p_obj.get_object(p_key);
+  end get_object_or_null;
+
+
+  /*
+   * Gemini 3 replaced generationConfig.thinkingConfig.thinkingBudget with
+   * thinkingLevel. Model ids are open-ended and Google keeps shipping new ones,
+   * so the classification is by exclusion: only the generations known to need
+   * the legacy budget shape get it, and everything unrecognized - including the
+   * next model released - gets the current shape.
+   * Mirrors google-model-capabilities.ts of the reference SDK.
+   */
+  function uses_thinking_level (
+    p_model in uc_ai.model_type
+  ) return boolean
+  as
+    l_model varchar2(255 char);
+  begin
+    l_model := lower(p_model);
+
+    -- gemini-1.x, gemini-2.x (2.5 included) and the old gemini-pro aliases
+    if regexp_like(l_model, '(^|/)gemini-(1|2)([.-]|$)')
+       or regexp_like(l_model, '(^|/)gemini-pro(-vision)?$')
+       or regexp_like(l_model, '(^|/)gemini-robotics-er-1\.5([.-]|$)')
+    then
+      return false;
+    end if;
+
+    return true;
+  end uses_thinking_level;
+
+
   function get_thought_content (
     p_message in json_object_t
   -- @dblinter ignore(g-7170): in out kept for a uniform signature across the get_*_content accumulator family
@@ -51,6 +116,13 @@ create or replace package body uc_ai_google as
     l_lm_text_content  json_object_t;
   begin
     l_content := p_message.get_clob('text');
+    -- A zero-length text is no reasoning text at all - Gemini 3 sends one on the
+    -- part that only carries a thoughtSignature. Blank it to NULL so
+    -- create_reasoning_content omits the key instead of writing an empty string.
+    if l_content is not null and sys.dbms_lob.getlength(l_content) = 0 then
+      l_content := null;
+    end if;
+
     -- Must clone: the part object is already referenced by the raw conversation
     -- history handed to the provider, so stripping 'text' from it in place would
     -- silently blank the text out of the request sent on the next turn.
@@ -100,7 +172,16 @@ create or replace package body uc_ai_google as
     , p_provider_options => l_provider_options
     );
 
-    pio_state.final_message := l_content;
+    -- Append, never assign: a turn can carry several visible text parts and only
+    -- their concatenation is the answer. Gemini 3 also ends a turn with a
+    -- zero-length text part that exists only to carry a thoughtSignature, and
+    -- assigning that part would blank the answer out. The parts of one candidate
+    -- are contiguous text, so they are joined without a separator (the reference
+    -- SDK joins them the same way). pio_state.final_message is reset at the
+    -- start of every turn in internal_generate_text, so the last turn wins.
+    if l_content is not null and sys.dbms_lob.getlength(l_content) > 0 then
+      pio_state.final_message := pio_state.final_message || l_content;
+    end if;
 
     return l_lm_text_content;
   end get_text_content;
@@ -363,6 +444,7 @@ create or replace package body uc_ai_google as
     l_parts     json_array_t;
     l_part      json_object_t;
     l_finish_reason varchar2(255 char);
+    l_block_reason  varchar2(255 char);
     l_usage_metadata json_object_t;
     l_web_credential varchar2(255 char);
   begin
@@ -436,8 +518,11 @@ create or replace package body uc_ai_google as
     end if;
 
     -- Process candidates array (Google Gemini format)
-    l_candidates := l_resp_json.get_array('candidates');
-    if l_candidates.get_size > 0 then
+    -- Google answers HTTP 200 when it blocks the prompt itself: the body then
+    -- carries promptFeedback.blockReason and no `candidates` key at all.
+    l_candidates := get_array_or_null(l_resp_json, 'candidates');
+
+    if l_candidates is not null and l_candidates.get_size > 0 then
       l_candidate := treat(l_candidates.get(0) as json_object_t);
       
       -- Extract finish reason
@@ -457,9 +542,16 @@ create or replace package body uc_ai_google as
           pio_result.put('finish_reason', l_finish_reason);
       end case;
 
-      -- Process content and parts
-      l_content := l_candidate.get_object('content');
-      l_parts := l_content.get_array('parts');
+      -- Process content and parts.
+      -- A candidate can arrive without content: MALFORMED_FUNCTION_CALL, SAFETY
+      -- and a MAX_TOKENS budget spent entirely on thinking all produce one. The
+      -- finish reason mapped above is then the whole answer, so an empty parts
+      -- array carries the turn through without a NULL dereference.
+      l_content := get_object_or_null(l_candidate, 'content');
+      l_parts := coalesce(get_array_or_null(l_content, 'parts'), json_array_t());
+      if l_parts.get_size = 0 then
+        uc_ai_logger.log_warn('Google candidate without content parts, finish reason: ' || l_finish_reason, l_scope);
+      end if;
     
       declare
         l_resp_message       json_object_t := json_object_t();
@@ -477,10 +569,19 @@ create or replace package body uc_ai_google as
         l_normalized_messages     json_array_t := json_array_t();
         l_normalized_tool_results json_array_t := json_array_t();
       begin
-        -- Add AI's message with content (including functionCall parts) to conversation history
-        l_resp_message.put('role', 'model');
-        l_resp_message.put('parts', l_parts);
-        pio_messages.append(l_resp_message);
+        -- Every turn recomputes the final message from its own text parts, so a
+        -- turn that answers with tool calls only (or with nothing at all) does
+        -- not leave the previous turn's text standing as the answer.
+        pio_state.final_message := null;
+
+        -- Add AI's message with content (including functionCall parts) to
+        -- conversation history. Skipped when the candidate had no content: an
+        -- empty model turn is not valid input for the next request.
+        if l_parts.get_size > 0 then
+          l_resp_message.put('role', 'model');
+          l_resp_message.put('parts', l_parts);
+          pio_messages.append(l_resp_message);
+        end if;
 
         -- Execute each function call and collect results
         <<parts_loop>>
@@ -583,8 +684,12 @@ create or replace package body uc_ai_google as
             );
             l_normalized_tool_results.append(l_new_msg);
 
-          -- normal text part
-          elsif l_part.has('text') then
+          -- Normal text part. A zero-length text carries no answer: Gemini 3
+          -- ends a turn with {"text":"","thoughtSignature":...} whose only
+          -- purpose is to hand the signature back. Such a part falls through to
+          -- the signature branch below, so the signature survives and no empty
+          -- text item enters the message history.
+          elsif l_part.has('text') and sys.dbms_lob.getlength(l_part.get_clob('text')) > 0 then
             uc_ai_logger.log('Text received', l_scope, l_part.to_clob);
             l_new_msg := get_text_content(l_part, pio_state);
             l_normalized_messages.append(l_new_msg);
@@ -599,7 +704,10 @@ create or replace package body uc_ai_google as
           end if;
         end loop parts_loop;
 
-        pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+        -- No content means no assistant turn to report either.
+        if l_normalized_messages.get_size > 0 then
+          pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
+        end if;
 
 
         if l_used_tool then
@@ -627,12 +735,27 @@ create or replace package body uc_ai_google as
       end;
   
     else
-      -- No candidates returned
-      uc_ai_error.raise_error(
-        p_error_code => uc_ai_error.c_err_provider_response
-      , p_scope      => l_scope
-      , p_message    => 'No candidates in Google API response'
-      );
+      l_temp_obj := get_object_or_null(l_resp_json, 'promptFeedback');
+      if l_temp_obj is not null then
+        l_block_reason := l_temp_obj.get_string('blockReason');
+      end if;
+
+      if l_block_reason is null then
+        -- No candidates and no reason given: the body is not a Gemini response.
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p_message    => 'No candidates in Google API response'
+        );
+      end if;
+
+      -- A blocked prompt is a filtered turn, not a transport failure. Report it
+      -- through finish_reason, the way every other refusal is reported, so the
+      -- caller reads a result instead of catching ORA-30625.
+      uc_ai_logger.log_warn('Google blocked the prompt: ' || l_block_reason, l_scope);
+      pio_result.put('finish_reason', uc_ai.c_finish_reason_content_filter);
+      pio_result.put('block_reason', l_block_reason);
+      pio_state.final_message := null;
     end if;
 
     uc_ai_logger.log('End internal_generate_text - final messages count: ' || pio_messages.get_size, l_scope);
@@ -724,18 +847,69 @@ create or replace package body uc_ai_google as
     if l_settings.enable_reasoning then
       declare
         l_thinking_config json_object_t := json_object_t();
+        l_thinking_level  varchar2(10 char);
+        l_thinking_budget pls_integer;
       begin
         l_thinking_config.put('includeThoughts', true);
+
+        -- go_reasoning_budget is the provider-specific escape hatch: the caller
+        -- named an exact number of thinking tokens, so it is sent unchanged on
+        -- every generation. Google still accepts and honours thinkingBudget on
+        -- Gemini 3 (measured 2026-08: 0 buys no thinking, 24576 buys a lot,
+        -- 999999 is rejected as out of range), so translating it would only
+        -- lose precision.
         if l_settings.go_reasoning_budget is not null then
           l_thinking_config.put('thinkingBudget', l_settings.go_reasoning_budget);
+
         elsif l_settings.reasoning_level is not null then
-          l_thinking_config.put('thinkingBudget', case l_settings.reasoning_level
-            when uc_ai.c_reasoning_level_low then 2048
-            when uc_ai.c_reasoning_level_medium then 8192
-            when uc_ai.c_reasoning_level_high then 32768
-            else l_settings.reasoning_level
-          end);
+          if uses_thinking_level(p_model) then
+            -- Gemini 3 takes the depth as thinkingLevel
+            -- (minimal | low | medium | high), and a request that carries both
+            -- keys is refused with "You can only set only one of thinking budget
+            -- and thinking level" - hence the elsif above. uc_ai's three levels
+            -- map one for one onto the three upper values, so low, medium and
+            -- high keep meaning what they meant on 2.5. `minimal` has no uc_ai
+            -- level of its own and stays reachable through
+            -- go_reasoning_budget = 0.
+            -- Sending thinkingLevel to gemini-2.5 is an HTTP 400
+            -- ("Thinking level is not supported for this model"), which is why
+            -- this branch exists at all.
+            l_thinking_level := case l_settings.reasoning_level
+              when uc_ai.c_reasoning_level_low then 'low'
+              when uc_ai.c_reasoning_level_medium then 'medium'
+              when uc_ai.c_reasoning_level_high then 'high'
+              else null
+            end;
+
+            if l_thinking_level is not null then
+              l_thinking_config.put('thinkingLevel', l_thinking_level);
+            else
+              -- An unknown level sends no depth at all and lets Google pick its
+              -- default. It used to reach a numeric assignment and raise
+              -- ORA-06502, and an unknown value forwarded verbatim would be an
+              -- HTTP 400 anyway.
+              uc_ai_logger.log_warn('Unknown reasoning level: ' || l_settings.reasoning_level, l_scope);
+            end if;
+
+          else
+            -- gemini-2.5 and older: reasoning depth is a token budget.
+            l_thinking_budget := case l_settings.reasoning_level
+              when uc_ai.c_reasoning_level_low then 2048
+              when uc_ai.c_reasoning_level_medium then 8192
+              when uc_ai.c_reasoning_level_high then 32768
+              else null
+            end;
+
+            if l_thinking_budget is not null then
+              l_thinking_config.put('thinkingBudget', l_thinking_budget);
+            else
+              -- Same guard as above: an unknown level used to reach the numeric
+              -- ELSE of this CASE and raise ORA-06502.
+              uc_ai_logger.log_warn('Unknown reasoning level: ' || l_settings.reasoning_level, l_scope);
+            end if;
+          end if;
         end if;
+
         l_generation_config.put('thinkingConfig', l_thinking_config);
       end;
     end if;
@@ -937,7 +1111,18 @@ create or replace package body uc_ai_google as
     declare
       l_resp_embeddings json_array_t;
     begin
-      l_resp_embeddings := l_resp_json.get_array('embeddings');
+      -- Same NULL trap as on the chat path: a 200 body without an embeddings
+      -- array must not become ORA-30625.
+      l_resp_embeddings := get_array_or_null(l_resp_json, 'embeddings');
+
+      if l_resp_embeddings is null then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p_message    => 'No embeddings in Google API response'
+        );
+      end if;
+
       
       <<embeddings_loop>>
       for i in 0 .. l_resp_embeddings.get_size - 1
