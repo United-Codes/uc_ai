@@ -12,6 +12,86 @@ create or replace package body uc_ai_oci as
   -- token counters, mode, cohere prompts) is threaded as parameters, not package
   -- globals, so nested calls do not corrupt each other.
 
+  -- The message COHERE gets when a replayed history has no user turn left to
+  -- answer. CohereChatRequest.message is required, and sending null makes OCI
+  -- reject the request.
+  gc_cohere_replay_message constant varchar2(200 char) := 'Continue processing the conversation above.';
+
+  /*
+   * True only when p_key holds a JSON array with at least one element.
+   * OCI models disagree on how they say "nothing here": some omit the key, some
+   * send an empty array, some send a JSON null. `has` reports a JSON null as
+   * present and `get_array` then raises ORA-30625, and an empty `toolCalls`
+   * array used to be read as a tool turn, which sent the run into another
+   * request that could never terminate. One guard covers all three shapes.
+   */
+  function has_items (
+    p_obj in json_object_t
+  , p_key in varchar2
+  ) return boolean
+  as
+    l_node json_element_t;
+  begin
+    if p_obj is null or not p_obj.has(p_key) then
+      return false;
+    end if;
+
+    l_node := p_obj.get(p_key);
+
+    if l_node is null or not l_node.is_array then
+      return false;
+    end if;
+
+    return treat(l_node as json_array_t).get_size > 0;
+  end has_items;
+
+  /*
+   * The normalized `args` of a tool call is the JSON text the model produced.
+   * Cohere wants it as an object (CohereToolCall.parameters), so parse it here.
+   * A model can produce text that is not a JSON object; a replayed history must
+   * still build a request the provider accepts, so fall back to an empty object.
+   */
+  -- @dblinter ignore(g-5080): the fallback IS the handling; the raw args are logged and the run continues
+  function args_to_object (
+    p_args in clob
+  ) return json_object_t
+  as
+  begin
+    if p_args is null then
+      return json_object_t();
+    end if;
+
+    return json_object_t.parse(p_args);
+  exception
+    when others then
+      uc_ai_logger.log_warn('Tool call args are not a JSON object, replaying empty parameters'
+        , c_scope_prefix || 'args_to_object', p_args);
+      return json_object_t();
+  end args_to_object;
+
+  /*
+   * DedicatedServingMode is {servingType, endpointId} and carries no modelId: a
+   * dedicated cluster is addressed by the OCID of its endpoint. UC AI has no
+   * setting for that endpoint, so a DEDICATED request would go out as an
+   * OnDemandServingMode body wearing the wrong servingType. Refuse it here
+   * instead of sending a body the API cannot accept.
+   */
+  procedure assert_serving_type_supported (
+    p_serving_type in varchar2
+  , p_scope        in uc_ai_logger.scope
+  )
+  as
+  begin
+    if upper(coalesce(p_serving_type, 'ON_DEMAND')) = 'DEDICATED' then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => p_scope
+      , p0           => 'OCI serving type'
+      , p1           => 'DEDICATED needs the OCID of a dedicated AI cluster endpoint, which UC AI cannot send yet. Use ON_DEMAND.'
+      );
+    end if;
+  end assert_serving_type_supported;
+
   -- OCI Generative AI reference: https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/
   function get_text_content_generic (
     p_message in json_object_t
@@ -99,6 +179,7 @@ create or replace package body uc_ai_oci as
     l_content_type varchar2(255 char);
     l_oci_content json_array_t;
     l_oci_content_item json_object_t;
+    l_oci_tool_calls json_array_t;
   begin
     uc_ai_logger.log('Converting ' || p_lm_messages.get_size || ' LLM messages to OCI generic format', l_scope);
     
@@ -193,16 +274,20 @@ create or replace package body uc_ai_oci as
           end if;
 
         when 'assistant' then
-          -- Assistant message: convert to ASSISTANT role
+          -- Assistant message: convert to ASSISTANT role. One normalized turn
+          -- becomes exactly one OCI message, which can carry `content` and
+          -- `toolCalls` at the same time (AssistantMessage has both as
+          -- independent optional fields) - the same shape the live loop sends.
           l_content := l_lm_message.get_array('content');
           l_oci_content := json_array_t();
-          
+          l_oci_tool_calls := json_array_t();
+
           <<assistant_content_loop>>
           for j in 0 .. l_content.get_size - 1
           loop
             l_content_item := treat(l_content.get(j) as json_object_t);
             l_content_type := l_content_item.get_string('type');
-            
+
             case l_content_type
               when 'text' then
                 -- Add text content
@@ -211,52 +296,68 @@ create or replace package body uc_ai_oci as
                 l_oci_content_item.put('text', l_content_item.get_clob('text'));
                 l_oci_content.append(l_oci_content_item);
               when 'tool_call' then
-                -- OCI tool calls handling would need to be implemented based on OCI's format
-                -- For now, we'll convert to text description
+                -- Replay the call as the FunctionCall the live loop puts into
+                -- the history. It used to become the text "Tool call: NAME",
+                -- which dropped the id and the arguments, so the model could not
+                -- match the TOOL message that answers it to the call it answers.
                 l_oci_content_item := json_object_t();
-                l_oci_content_item.put('type', 'TEXT');
-                l_oci_content_item.put('text', 'Tool call: ' || l_content_item.get_string('toolName'));
-                l_oci_content.append(l_oci_content_item);
+                l_oci_content_item.put('type', 'FUNCTION');
+                l_oci_content_item.put('id', l_content_item.get_string('toolCallId'));
+                l_oci_content_item.put('name', l_content_item.get_string('toolName'));
+                l_oci_content_item.put('arguments', l_content_item.get_clob('args'));
+                l_oci_tool_calls.append(l_oci_content_item);
               else
                 -- Includes 'reasoning': OCI has no reasoning channel, so a history
                 -- carrying reasoning from another provider is replayed without it.
                 null; -- Skip unknown content types
             end case;
           end loop assistant_content_loop;
-          
-          if l_oci_content.get_size > 0 then
+
+          if l_oci_content.get_size > 0 or l_oci_tool_calls.get_size > 0 then
             l_oci_message := json_object_t();
             l_oci_message.put('role', 'ASSISTANT');
-            l_oci_message.put('content', l_oci_content);
+
+            -- AssistantMessage documents content as absent (not []) on a turn
+            -- that only calls tools.
+            if l_oci_content.get_size > 0 then
+              l_oci_message.put('content', l_oci_content);
+            end if;
+
+            if l_oci_tool_calls.get_size > 0 then
+              l_oci_message.put('toolCalls', l_oci_tool_calls);
+            end if;
+
             po_oci_messages.append(l_oci_message);
           end if;
 
         when 'tool' then
-          -- Tool results are typically sent as user messages in OCI
+          -- One TOOL message per result: ToolMessage carries a single
+          -- toolCallId, so a turn that answers N parallel calls becomes N
+          -- messages. The results used to be replayed as one USER message whose
+          -- text was "Tool result from NAME: ...", which lost every id and told
+          -- the model the user had said it.
           l_content := l_lm_message.get_array('content');
-          l_oci_content := json_array_t();
-          
+
           <<tool_content_loop>>
           for j in 0 .. l_content.get_size - 1
           loop
             l_content_item := treat(l_content.get(j) as json_object_t);
             l_content_type := l_content_item.get_string('type');
-            
+
             if l_content_type = 'tool_result' then
+              l_oci_content := json_array_t();
               l_oci_content_item := json_object_t();
-              -- TODO: validate if this is correct:
               l_oci_content_item.put('type', 'TEXT');
-              l_oci_content_item.put('text', 'Tool result from ' || l_content_item.get_string('toolName') || ': ' || l_content_item.get_clob('result'));
+              l_oci_content_item.put('text', l_content_item.get_clob('result'));
               l_oci_content.append(l_oci_content_item);
+
+              l_oci_message := json_object_t();
+              l_oci_message.put('role', 'TOOL');
+              l_oci_message.put('toolCallId', l_content_item.get_string('toolCallId'));
+              l_oci_message.put('content', l_oci_content);
+              po_oci_messages.append(l_oci_message);
             end if;
           end loop tool_content_loop;
-          
-          if l_oci_content.get_size > 0 then
-            l_oci_message := json_object_t();
-            l_oci_message.put('role', 'USER');
-            l_oci_message.put('content', l_oci_content);
-            po_oci_messages.append(l_oci_message);
-          end if;
 
         else
           uc_ai_logger.log_warn('Unknown message role: ' || l_role, l_scope);
@@ -287,10 +388,16 @@ create or replace package body uc_ai_oci as
     l_content_type varchar2(255 char);
     l_oci_content_item json_object_t;
 
-    l_has_tool_call boolean := false;
     l_tool_call json_object_t;
     l_tool_call_message clob;
     l_tool_calls json_array_t;
+    l_tool_result json_object_t;
+    l_tool_results json_array_t;
+    l_outputs json_array_t;
+    -- toolCallId -> the CohereToolCall of the assistant turn that made the call.
+    -- A normalized tool_result carries no arguments of its own, so the call it
+    -- answers is the only place its parameters can come from.
+    l_calls_by_id json_object_t := json_object_t();
   begin
     uc_ai_logger.log('Converting ' || p_lm_messages.get_size || ' LLM messages to OCI cohere format', l_scope, p_lm_messages.to_clob);
     
@@ -342,98 +449,101 @@ create or replace package body uc_ai_oci as
           
 
         when 'assistant' then
-          -- Assistant message: convert to ASSISTANT role
+          -- One assistant turn becomes exactly one CHATBOT message. It used to
+          -- become one message per content item, and the tool-call flags were
+          -- never reset between turns, so every later plain-text turn was sent
+          -- with a spurious empty toolCalls array.
           l_content := l_lm_message.get_array('content');
+          l_tool_calls := json_array_t();
+          l_tool_call_message := null;
 
-          <<check_if_has_tool_call>>
-          for j in 0 .. l_content.get_size - 1
-          loop
-            l_content_item := treat(l_content.get(j) as json_object_t);
-            l_content_type := l_content_item.get_string('type');
-            if l_content_type = 'tool_call' then
-              l_has_tool_call := true;
-              exit check_if_has_tool_call;
-            end if;
-          end loop check_if_has_tool_call;
-          
           <<assistant_content_loop>>
           for j in 0 .. l_content.get_size - 1
           loop
             l_content_item := treat(l_content.get(j) as json_object_t);
             l_content_type := l_content_item.get_string('type');
 
-            -- Cohere has no reasoning channel, so reasoning items are dropped here.
-            -- They used to be re-sent as a CHATBOT turn whose body was the raw
-            -- reasoning text (no type check below), or to raise outright on the
-            -- tool-call path - both wrong for a history that was produced by a
-            -- reasoning-capable provider and is now being continued against OCI.
-            continue when l_content_type = 'reasoning';
+            case l_content_type
+              when 'text' then
+                l_tool_call_message := l_content_item.get_clob('text');
+              when 'tool_call' then
+                -- CohereToolCall.parameters is an object. Putting the args CLOB
+                -- there sent the whole argument list as one JSON-encoded string.
+                l_tool_call := json_object_t();
+                l_tool_call.put('name', l_content_item.get_string('toolName'));
+                l_tool_call.put('parameters', args_to_object(l_content_item.get_clob('args')));
+                l_tool_calls.append(l_tool_call);
 
-            if not l_has_tool_call then
-              -- Only text carries a Cohere message body; anything else would put a
-              -- null (or the wrong field's) content into the transcript.
-              if l_content_type = 'text' then
-                l_oci_message := json_object_t();
-                l_oci_message.put('role', 'CHATBOT');
-                l_oci_message.put('message', l_content_item.get_clob('text'));
-                po_oci_messages.append(l_oci_message);
-              end if;
-            else
-              l_tool_calls := json_array_t();
-
-              case l_content_type
-                when 'text' then
-                  l_tool_call_message := l_content_item.get_clob('text');
-                when 'tool_call' then
-                  -- OCI tool calls handling would need to be implemented based on OCI's format
-                  -- For now, we'll convert to text description
-                  l_tool_call := json_object_t();
-                  l_tool_call.put('name', l_content_item.get_string('toolName'));
-                  l_tool_call.put('parameters', l_content_item.get_clob('args'));
-
-                  l_tool_calls.append(l_tool_call);
-                else
-                  uc_ai_error.raise_error(
-                    p_error_code => uc_ai_error.c_err_unsupported_content
-                  , p_scope      => l_scope
-                  , p0           => l_content_type
-                  );
-              end case;
-                l_oci_message := json_object_t();
-                l_oci_message.put('role', 'CHATBOT');
-                l_oci_message.put('message', l_tool_call_message);
-                l_oci_message.put('toolCalls', l_tool_calls);
-                po_oci_messages.append(l_oci_message);
-
-            end if;
+                l_calls_by_id.put(l_content_item.get_string('toolCallId'), l_tool_call.clone());
+              else
+                -- Includes 'reasoning': Cohere has no reasoning channel, so a
+                -- history from a reasoning-capable provider is replayed without
+                -- it. The reasoning text used to be re-sent as the body of a
+                -- CHATBOT turn, or to raise on the tool-call path.
+                uc_ai_logger.log_warn('Skipping assistant content type ' || l_content_type
+                  || ': COHERE has no channel for it', l_scope);
+            end case;
           end loop assistant_content_loop;
 
+          if l_tool_call_message is not null or l_tool_calls.get_size > 0 then
+            l_oci_message := json_object_t();
+            l_oci_message.put('role', 'CHATBOT');
+
+            if l_tool_call_message is not null then
+              l_oci_message.put('message', l_tool_call_message);
+            end if;
+
+            if l_tool_calls.get_size > 0 then
+              l_oci_message.put('toolCalls', l_tool_calls);
+            end if;
+
+            po_oci_messages.append(l_oci_message);
+          end if;
+
         when 'tool' then
-          -- Tool results are typically sent as user messages in OCI
+          -- Tool results replay as a TOOL message of CohereToolResults, one per
+          -- result: {call: {name, parameters}, outputs: [...]}. `outputs` used to
+          -- be the bare result string instead of an array, and `call.parameters`
+          -- a JSON null, because a normalized tool_result has no arguments; the
+          -- call recorded on the assistant turn above supplies them.
           l_content := l_lm_message.get_array('content');
-          l_tool_calls := json_array_t();
-          
+          l_tool_results := json_array_t();
+
           <<tool_content_loop>>
           for j in 0 .. l_content.get_size - 1
           loop
             l_content_item := treat(l_content.get(j) as json_object_t);
             l_content_type := l_content_item.get_string('type');
-            
+
             if l_content_type = 'tool_result' then
+              l_tool_call := treat(l_calls_by_id.get(l_content_item.get_string('toolCallId')) as json_object_t);
+
+              if l_tool_call is null then
+                -- The history was trimmed, or the call was made against another
+                -- provider. Name the tool and send no parameters rather than
+                -- dropping the result.
+                l_tool_call := json_object_t();
+                l_tool_call.put('name', l_content_item.get_string('toolName'));
+                l_tool_call.put('parameters', json_object_t());
+              end if;
+
+              -- Cohere wants an array of objects, so return [ { result: <value> } ]
               l_oci_content_item := json_object_t();
-              l_oci_content_item.put('outputs', l_content_item.get_clob('result'));
-              l_tool_call := json_object_t();
-              l_tool_call.put('name', l_content_item.get_string('toolName'));
-              l_tool_call.put('parameters', l_content_item.get_clob('args'));
-              l_oci_content_item.put('call', l_tool_call);
-              l_tool_calls.append(l_oci_content_item);
+              l_oci_content_item.put('result', l_content_item.get_clob('result'));
+              l_outputs := json_array_t();
+              l_outputs.append(l_oci_content_item);
+
+              l_tool_result := json_object_t();
+              l_tool_result.put('call', l_tool_call.clone());
+              l_tool_result.put('outputs', l_outputs);
+              l_tool_results.append(l_tool_result);
             end if;
           end loop tool_content_loop;
-          
-          if l_tool_calls.get_size > 0 then
+
+          if l_tool_results.get_size > 0 then
             l_oci_message := json_object_t();
             l_oci_message.put('role', 'TOOL');
-            l_oci_message.put('toolResults', l_tool_calls);
+            l_oci_message.put('toolResults', l_tool_results);
             po_oci_messages.append(l_oci_message);
           end if;
 
@@ -443,6 +553,19 @@ create or replace package body uc_ai_oci as
     end loop message_loop;
 
     uc_ai_logger.log('Cohere messages after conversion: ', l_scope, po_oci_messages.to_clob);
+
+    -- COHERE puts the turn to answer in `message` and everything before it in
+    -- `chatHistory`.
+    if po_oci_messages.get_size = 0 then
+      -- Reading the last element of an empty array raises ORA-30625, and there
+      -- would be no message to send anyway.
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_missing_config
+      , p_scope      => l_scope
+      , p0           => 'OCI COHERE chat'
+      , p1           => 'at least one message'
+      );
+    end if;
 
     declare
       l_last_message json_object_t;
@@ -456,6 +579,13 @@ create or replace package body uc_ai_oci as
 
         -- remove last message as cohere expects it in the body (message) and not in the chat history
         po_oci_messages.remove(po_oci_messages.get_size - 1);
+      else
+        -- A history that ends with an assistant or a tool turn (an agent
+        -- continuing after a tool result) has no user turn left to move. The
+        -- required `message` used to go out as null, which OCI rejects.
+        uc_ai_logger.log_warn('History ends with a ' || l_last_message_role
+          || ' turn; asking the model to continue', l_scope);
+        po_user_message := gc_cohere_replay_message;
       end if;
     end;
 
@@ -670,7 +800,7 @@ create or replace package body uc_ai_oci as
                 -- `if` branches: an `if/elsif` would let a present-but-empty `content`
                 -- short-circuit the tool-call handling, yielding an empty final message
                 -- and tool_calls_count = 0.
-                if l_resp_message.has('content') then
+                if has_items(l_resp_message, 'content') then
                   l_content_arr := l_resp_message.get_array('content');
 
                   <<content_loop>>
@@ -682,7 +812,7 @@ create or replace package body uc_ai_oci as
                   end loop content_loop;
                 end if;
 
-                if l_resp_message.has('toolCalls') then
+                if has_items(l_resp_message, 'toolCalls') then
                   declare
                     l_tool_call_arr  json_array_t;
                     l_tool_call_item json_object_t;
@@ -756,6 +886,10 @@ create or replace package body uc_ai_oci as
                       l_tool_response_content := json_object_t();
                       l_tool_response_content.put('type', 'TEXT');
                       l_tool_response_content.put('text', l_tool_result);
+                      -- Built per call: ToolMessage answers a single
+                      -- toolCallId, so the array must not carry the results of
+                      -- the calls before it in a parallel tool turn.
+                      l_tool_content := json_array_t();
                       l_tool_content.append(l_tool_response_content);
                       l_tool_response.put('content', l_tool_content);
                       pio_messages.append(l_tool_response);
@@ -842,6 +976,16 @@ create or replace package body uc_ai_oci as
 
             l_tmp_obj json_object_t;
           begin
+            -- OCI returns the model's preamble in chatResponse.text next to the
+            -- tool calls. It belongs to the same assistant turn, so keep it in
+            -- the normalized history: an agent continuation reloads that history
+            -- and would otherwise see a turn that said nothing.
+            if l_chat_response.has('text') and not l_chat_response.get('text').is_null then
+              l_normalized_messages.append(uc_ai_message_api.create_text_content(
+                p_text => l_chat_response.get_clob('text')
+              ));
+            end if;
+
             l_tool_calls := l_chat_response.get_array('toolCalls');
             <<tool_calls_loop>>
             for i in 0 .. l_tool_calls.get_size - 1 loop
@@ -891,6 +1035,10 @@ create or replace package body uc_ai_oci as
 
               -- Cohere wants an array of objects for some reason
               -- so just return [ { result: <value> } ]
+              -- The array is built per call: one CohereToolResult carries the
+              -- outputs of ONE call. Sharing it across the loop made entry n
+              -- carry the results of calls 1..n.
+              l_tool_outputs := json_array_t();
               l_tmp_obj := json_object_t();
               l_tmp_obj.put('result', l_tool_result);
               l_tool_outputs.append(l_tmp_obj);
@@ -938,22 +1086,41 @@ create or replace package body uc_ai_oci as
           declare
             l_new_msg json_object_t;
             l_normalized_messages json_array_t := json_array_t();
+            l_finish_reason varchar2(255 char);
           begin
             l_new_msg := get_text_content_cohere(l_chat_response, pio_state);
             l_normalized_messages.append(l_new_msg);
 
             pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_normalized_messages));
 
-            -- Map OCI COHERE finishReason so callers can detect truncation (length)
-            case upper(l_chat_response.get_string('finishReason'))
-              when 'MAX_TOKENS' then
+            -- Map the COHERE finishReason (CohereChatResponse.FinishReason:
+            -- COMPLETE, ERROR_TOXIC, ERROR_LIMIT, ERROR, USER_CANCEL,
+            -- MAX_TOKENS) onto the documented finish reasons. Everything except
+            -- MAX_TOKENS used to be reported as `stop`, so a filtered, cancelled
+            -- or failed generation looked like a clean but empty answer. The
+            -- old CONTENT_FILTER branch was dead: the enum has no such value.
+            l_finish_reason := upper(l_chat_response.get_string('finishReason'));
+
+            case
+              when l_finish_reason is null or l_finish_reason in ('COMPLETE', 'STOP_SEQUENCE') then
+                pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
+              when l_finish_reason = 'MAX_TOKENS' then
                 pio_result.put('finish_reason', uc_ai.c_finish_reason_length);
-              when 'CONTENT_FILTER' then
+              when l_finish_reason = 'ERROR_TOXIC' then
                 pio_result.put('finish_reason', uc_ai.c_finish_reason_content_filter);
               else
-                -- COMPLETE, STOP_SEQUENCE, null, or unknown -> normal completion
-                pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
+                -- ERROR, ERROR_LIMIT, USER_CANCEL, and whatever the enum gains
+                -- later: not a completion. 'error' is the literal this package
+                -- already reports for a response it cannot read.
+                pio_result.put('finish_reason', 'error');
+                uc_ai_logger.log_error('Cohere generation finished with ' || l_finish_reason, l_scope, l_chat_response.to_clob);
             end case;
+
+            -- errorMessage carries the provider's reason for the states above.
+            -- Without it the caller only sees an answer that is short or empty.
+            if l_chat_response.has('errorMessage') and not l_chat_response.get('errorMessage').is_null then
+              pio_result.put('error_message', l_chat_response.get_string('errorMessage'));
+            end if;
           end;
         else
           uc_ai_logger.log_error('No text in OCI chatResponse', l_scope);
@@ -1073,6 +1240,7 @@ create or replace package body uc_ai_oci as
     l_input_obj.put('compartmentId', l_settings.oc_compartment_id);
 
     -- Set serving mode
+    assert_serving_type_supported(l_settings.oc_serving_type, l_scope);
     l_serving_mode := json_object_t();
     l_serving_mode.put('modelId', p_model);
     l_serving_mode.put('servingType', coalesce(l_settings.oc_serving_type, 'ON_DEMAND'));
@@ -1219,7 +1387,8 @@ create or replace package body uc_ai_oci as
     end loop build_inputs_loop;
 
     -- Build serving mode
-    l_serving_mode.put('servingType', l_settings.oc_serving_type);
+    assert_serving_type_supported(l_settings.oc_serving_type, l_scope);
+    l_serving_mode.put('servingType', coalesce(l_settings.oc_serving_type, 'ON_DEMAND'));
     l_serving_mode.put('modelId', p_model);
 
     -- Build request body
