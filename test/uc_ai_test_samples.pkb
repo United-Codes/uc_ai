@@ -388,9 +388,7 @@ create or replace package body uc_ai_test_samples as
           },
           "required": [
             "parameters"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          ]
         }
       },
       {
@@ -400,8 +398,7 @@ create or replace package body uc_ai_test_samples as
         "parameters": {
           "type": "object",
           "properties": {},
-          "required": [],
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          "required": []
         }
       },
       {
@@ -411,8 +408,7 @@ create or replace package body uc_ai_test_samples as
         "parameters": {
           "type": "object",
           "properties": {},
-          "required": [],
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          "required": []
         }
       }
     ],
@@ -519,9 +515,7 @@ create or replace package body uc_ai_test_samples as
           },
           "required": [
             "parameters"
-          ],
-          "additionalProperties": false,
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          ]
         }
       },
       {
@@ -531,8 +525,7 @@ create or replace package body uc_ai_test_samples as
         "parameters": {
           "type": "object",
           "properties": {},
-          "required": [],
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          "required": []
         }
       },
       {
@@ -542,8 +535,7 @@ create or replace package body uc_ai_test_samples as
         "parameters": {
           "type": "object",
           "properties": {},
-          "required": [],
-          "$schema": "http://json-schema.org/draft-07/schema#"
+          "required": []
         }
       }
     ],
@@ -1458,7 +1450,7 @@ create or replace package body uc_ai_test_samples as
     {
       "type": "function",
       "function": {
-        "input_schema": {
+        "parameters": {
           "type": "object",
           "properties": {},
           "required": [],
@@ -1471,7 +1463,7 @@ create or replace package body uc_ai_test_samples as
     {
       "type": "function",
       "function": {
-        "input_schema": {
+        "parameters": {
           "type": "object",
           "properties": {},
           "required": [],
@@ -1484,7 +1476,7 @@ create or replace package body uc_ai_test_samples as
     {
       "type": "function",
       "function": {
-        "input_schema": {
+        "parameters": {
           "type": "object",
           "properties": {
             "parameters": {
@@ -1595,7 +1587,7 @@ create or replace package body uc_ai_test_samples as
     {
       "type": "function",
       "function": {
-        "input_schema": {
+        "parameters": {
           "type": "object",
           "properties": {},
           "required": [],
@@ -1608,7 +1600,7 @@ create or replace package body uc_ai_test_samples as
     {
       "type": "function",
       "function": {
-        "input_schema": {
+        "parameters": {
           "type": "object",
           "properties": {},
           "required": [],
@@ -1621,7 +1613,7 @@ create or replace package body uc_ai_test_samples as
     {
       "type": "function",
       "function": {
-        "input_schema": {
+        "parameters": {
           "type": "object",
           "properties": {
             "parameters": {
@@ -3084,7 +3076,7 @@ create or replace package body uc_ai_test_samples as
     }
   },
   "model": "grok-4-fast-reasoning",
-  "reasoning_level": "low",
+  "reasoning_effort": "low",
   "messages": [
     {
       "role": "system",
@@ -3145,7 +3137,7 @@ create or replace package body uc_ai_test_samples as
       when 'xai/5-reasoning-request' then
         return q'~{
   "model": "grok-4-fast-reasoning",
-  "reasoning_level": "low",
+  "reasoning_effort": "low",
   "messages": [
     {
       "role": "user",

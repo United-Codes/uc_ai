@@ -77,7 +77,7 @@ create or replace package test_uc_ai_wire as
   --%test(Google sends generationConfig.responseSchema and parses the JSON text back)
   procedure google_structured_output;
 
-  --%test(xAI sends the Chat Completions response_format with reasoning_level)
+  --%test(xAI sends the Chat Completions response_format with reasoning_effort)
   procedure xai_structured_output;
 
   --%test(Ollama sends the native format key and parses the JSON text back)

@@ -108,11 +108,9 @@ create or replace package test_uc_ai_wire_2 as
 
   -- oci ------------------------------------------------------------------------
   --%test(OCI GENERIC plain text request and response)
-  --%disabled(BUG uc_ai_oci.pkb internal_generate_text: an empty toolCalls array on a normal completion is treated as a tool turn and triggers another request)
   procedure oci_generic_simple_text;
 
   --%test(OCI GENERIC converts a conversation history to SYSTEM/USER/ASSISTANT messages)
-  --%disabled(BUG uc_ai_oci.pkb internal_generate_text: an empty toolCalls array on a normal completion is treated as a tool turn and triggers another request)
   procedure oci_generic_continue_conversation;
 
   --%test(OCI GENERIC replays the recorded six-request tool round trip)
@@ -131,7 +129,6 @@ create or replace package test_uc_ai_wire_2 as
   procedure oci_cohere_tool_round_trip;
 
   --%test(OCI COHERE gives every toolResults entry only its own output)
-  --%disabled(BUG uc_ai_oci.pkb internal_generate_text cohere branch: l_tool_outputs is shared across the tool loop, so toolResults[n].outputs carries the results of every earlier call too)
   procedure oci_cohere_tool_results_carry_own_output;
 
   --%test(OCI embeddings request and response)
@@ -157,14 +154,12 @@ create or replace package test_uc_ai_wire_2 as
   procedure openai_chat_unknown_tool_raises;
 
   --%test(OpenAI Chat Completions declares tool schemas under parameters)
-  --%disabled(BUG uc_ai_tools_api.input_schema_key: plain OpenAI Chat Completions gets the Anthropic key input_schema, so the model never sees a tool's parameter schema)
   procedure openai_chat_tool_schema_key;
 
   --%test(xAI replays the recorded tool round trip and unwraps the parameters wrapper)
   procedure xai_tool_round_trip;
 
   --%test(Ollama native offers tools and sends tool results with tool_name)
-  --%disabled(BUG uc_ai_ollama.pkb process_llm_response: a tool-call turn with empty content raises -20304 "No content to process response" instead of executing the tool)
   procedure ollama_native_tool_round_trip;
 
   --%test(Mistral uses the parameters key and unwraps wrapped arguments before binding)

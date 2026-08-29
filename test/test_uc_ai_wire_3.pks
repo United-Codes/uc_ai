@@ -50,6 +50,9 @@ create or replace package test_uc_ai_wire_3 as
   --%test(OCI sends IMAGE and DOCUMENT parts, Ollama sends the images array)
   procedure oci_ollama_file_inputs;
 
+  --%test(Ollama refuses a document instead of sending it as an image)
+  procedure ollama_rejects_a_document;
+
   -- finish reasons -------------------------------------------------------------
   --%test(Anthropic maps max_tokens to length and keeps the partial text)
   procedure anthropic_max_tokens_is_length;

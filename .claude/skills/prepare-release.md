@@ -126,7 +126,7 @@ Run the LLM-free suites by name.
 
 **LLM-free suites** — verified: none of these calls `generate_text`,
 `generate_embeddings`, `execute_agent` or `execute_profile` in a way that reaches a
-provider. 315 tests, all of them fast and free:
+provider. 409 tests, all of them fast and free:
 
 ```sql
 begin ut.run('test_uc_ai_toon'); end;                    -- 22
@@ -162,6 +162,20 @@ begin ut.run('test_uc_ai_wire'); end;                    -- 24
 begin ut.run('test_uc_ai_wire_2'); end;                  -- 22 (5 disabled: known bugs, see the spec)
 /
 begin ut.run('test_uc_ai_wire_3'); end;                  -- 17
+/
+begin ut.run('test_uc_ai_anthropic_wire'); end;          -- 13
+/
+begin ut.run('test_uc_ai_google_wire'); end;             -- 13
+/
+begin ut.run('test_uc_ai_openai_wire'); end;             --  7
+/
+begin ut.run('test_uc_ai_responses_wire'); end;          -- 13
+/
+begin ut.run('test_uc_ai_oci_wire'); end;                -- 14
+/
+begin ut.run('test_uc_ai_ollama_wire'); end;             --  8
+/
+begin ut.run('test_uc_ai_tools_wire'); end;              -- 11
 /
 ```
 

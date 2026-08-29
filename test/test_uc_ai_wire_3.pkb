@@ -468,6 +468,28 @@ create or replace package body test_uc_ai_wire_3 as
   end anthropic_google_file_inputs;
 
 
+  /*
+   * The PNG half of files_message: one image file, one text part.
+   */
+  function png_only_message return json_array_t
+  as
+    l_messages json_array_t := json_array_t();
+    l_files    uc_ai_message_api.t_files := uc_ai_message_api.t_files();
+  begin
+    l_files.extend(1);
+    l_files(1).media_type := 'image/png';
+    l_files(1).data_blob  := sys.utl_raw.cast_to_raw('hello');
+    l_files(1).filename   := 'pic.png';
+
+    l_messages.append(uc_ai_message_api.create_user_message(
+      p_text  => 'Describe the files.'
+    , p_files => l_files
+    ));
+
+    return l_messages;
+  end png_only_message;
+
+
   procedure oci_ollama_file_inputs
   as
     l_result  json_object_t;
@@ -489,22 +511,48 @@ create or replace package body test_uc_ai_wire_3 as
     ut.expect(item(l_content, 2)).to_equal(json_object_t(
       '{"type":"DOCUMENT","documentUrl":{"url":"data:application/pdf;base64,' || c_fake_base64 || '","detail":"AUTO"}}'));
 
-    enqueue(test_uc_ai_wire_2.ollama_chat(json_object_t('{"role":"assistant","content":"Two files."}')));
+    -- Ollama takes bare base64 in a parallel images array, but /api/chat has no
+    -- envelope for a document, so only an image may go in it. A PNG passes; the
+    -- PDF of files_message is refused rather than sent as if it were an image.
+    enqueue(test_uc_ai_wire_2.ollama_chat(json_object_t('{"role":"assistant","content":"One picture."}')));
     l_result := uc_ai.generate_text(
-      p_messages => test_uc_ai_wire_2.files_message
+      p_messages => png_only_message
     , p_provider => uc_ai.c_provider_ollama
-    , p_model    => 'qwen3:4b'
+    , p_model    => 'qwen3.5:2b'
     , p_config   => config('{"ollama":{"g_use_responses_api":false}}')
     );
 
-    -- Ollama takes bare base64 in a parallel images array, one entry per file
     l_message := item(request_json(2).get_array('messages'), 0);
     ut.expect(l_message.get_clob('content')).to_equal(to_clob('Describe the files.'));
-    ut.expect(l_message.get_array('images')).to_equal(json_array_t('["' || c_fake_base64 || '","' || c_fake_base64 || '"]'));
+    ut.expect(l_message.get_array('images')).to_equal(json_array_t('["' || c_fake_base64 || '"]'));
+    ut.expect(l_result.get_clob('final_message')).to_equal(to_clob('One picture.'));
 
-    ut.expect(l_result.get_clob('final_message')).to_equal(to_clob('Two files.'));
     expect_all_consumed(2);
   end oci_ollama_file_inputs;
+
+
+  procedure ollama_rejects_a_document
+  as
+    l_result json_object_t;
+    l_raised boolean := false;
+  begin
+    -- No request must be built at all: a media type Ollama cannot carry is an
+    -- error, not something to smuggle into the images array.
+    begin
+      l_result := uc_ai.generate_text(
+        p_messages => test_uc_ai_wire_2.files_message
+      , p_provider => uc_ai.c_provider_ollama
+      , p_model    => 'qwen3.5:2b'
+      , p_config   => config('{"ollama":{"g_use_responses_api":false}}')
+      );
+    exception
+      when uc_ai.e_unhandled_format then
+        l_raised := true;
+    end;
+
+    ut.expect(l_raised, 'a PDF raises -20303 on the native route').to_be_true();
+    expect_all_consumed(0);
+  end ollama_rejects_a_document;
 
 
   -- ---- finish reasons ----------------------------------------------------------

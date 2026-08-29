@@ -43,6 +43,13 @@ begin
   , 'test_uc_ai_wire'
   , 'test_uc_ai_wire_2'
   , 'test_uc_ai_wire_3'
+  , 'test_uc_ai_anthropic_wire'
+  , 'test_uc_ai_google_wire'
+  , 'test_uc_ai_openai_wire'
+  , 'test_uc_ai_responses_wire'
+  , 'test_uc_ai_oci_wire'
+  , 'test_uc_ai_ollama_wire'
+  , 'test_uc_ai_tools_wire'
   ));
 end;
 /
