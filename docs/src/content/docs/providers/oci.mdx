@@ -28,6 +28,16 @@ uc_ai_oci.g_max_tokens := 8192;
 
 When the model stops because this cap was reached, UC AI reports `finish_reason = 'length'` so callers can detect truncation. (You can also set it per call with the provider configuration key `g_max_tokens`.)
 
+## Serving mode
+
+UC AI reaches a model that OCI hosts for every tenancy. `g_serving_type` accepts
+only `ON_DEMAND`, which is the default.
+
+A dedicated AI cluster needs the OCID of its endpoint in place of the model id.
+UC AI has no setting for that OCID, so a request for a dedicated cluster cannot
+be built. `g_serving_type := 'DEDICATED'` raises `ORA-20503` before the request
+goes out.
+
 ## Prerequisites
 
 1. Create OCI API Key and APEX Web Credential (see [guide](/products/uc-ai/docs/help/create-oci-key/))
@@ -96,7 +106,7 @@ begin
   uc_ai_oci.g_apex_web_credential := 'NAME_OF_YOUR_APEX_WEB_CREDENTIAL';
 
   -- optional
-  uc_ai_oci.g_serving_type := 'ON_DEMAND'; -- ON_DEMAND or DEDICATED, default is ON_DEMAND
+  uc_ai_oci.g_serving_type := 'ON_DEMAND'; -- only ON_DEMAND is supported, and it is the default
 
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is Oracle APEX?',
@@ -120,7 +130,7 @@ begin
   uc_ai_oci.g_apex_web_credential := 'NAME_OF_YOUR_APEX_WEB_CREDENTIAL';
 
   -- optional
-  uc_ai_oci.g_serving_type := 'ON_DEMAND'; -- ON_DEMAND or DEDICATED, default is ON_DEMAND
+  uc_ai_oci.g_serving_type := 'ON_DEMAND'; -- only ON_DEMAND is supported, and it is the default
 
   l_result := uc_ai.generate_text(
     p_user_prompt => 'I have tomatoes, salad, potatoes, olives, and cheese. What can I cook with that?',

@@ -571,6 +571,10 @@ The return object contains the following properties:
 }
 ```
 
+Three more properties are present only in the conditions that produce them:
+`block_reason`, `provider_finish_reason` and `error_message`. The table below
+gives the condition for each one.
+
 <Aside type="caution" title="A response schema does not change the type of final_message">
 With `p_response_json_schema`, `final_message` is still a `CLOB`. The CLOB holds
 the JSON, and nothing parses it for you:
@@ -595,6 +599,9 @@ l_output := json_object_t(l_result.get_clob('final_message'));
 | `tool_calls_count`  | `NUMBER`        | Total number of tool calls executed during the conversation                                          |
 | `model`             | `VARCHAR2`      | The AI model used (for example `gpt-5.6-luna` or `claude-sonnet-5`)                                  |
 | `provider`          | `VARCHAR2`      | AI provider identifier (`openai`, `anthropic`, `google`)                                             |
+| `block_reason`      | `VARCHAR2`      | Google only, and only when the provider blocked the prompt. Holds the reason, for example `PROHIBITED_CONTENT`. `finish_reason` is `content_filter` and `final_message` is null |
+| `provider_finish_reason` | `VARCHAR2` | Present when the provider ended the run for a reason that maps to no value in the table below. `finish_reason` is then `unknown`, and this property holds the provider's own word |
+| `error_message`     | `VARCHAR2`      | OCI Cohere only, and only when the provider reported an error instead of an answer. Holds the message that came with it |
 
 ### Accessing Return Values
 
@@ -734,6 +741,11 @@ The `finish_reason` indicates how the AI conversation ended:
 | `length`                  | The maximum token limit truncated the response |
 | `content_filter`          | The content policy filtered the response        |
 | `max_tool_calls_exceeded` | The conversation reached the maximum number of tool calls |
+| `unknown`                 | The provider used a reason UC AI does not map. `provider_finish_reason` holds the original |
+
+A provider can add a reason at any time. A branch on `finish_reason` therefore
+needs an `ELSE` case. The `unknown` value keeps a new provider reason from being
+read as `stop`.
 
 #### Handling Different Finish Reasons
 
