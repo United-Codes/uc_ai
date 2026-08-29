@@ -88,7 +88,7 @@ generate: install_uc_ai.sql install_uc_ai_complete.sql upgrade_packages.sql unin
 
 # --- Tests -------------------------------------------------------------------
 
-test-free: ## Run the 409 LLM-free tests (fast, no provider calls, no cost)
+test-free: ## Run the 416 LLM-free tests (fast, no provider calls, no cost)
 	sql -name $(DB_CONN) @scripts/run_tests_free.sql
 
 test: ## Run one suite/package/test - make test SUITE=test_uc_ai_hook (may call a real LLM)

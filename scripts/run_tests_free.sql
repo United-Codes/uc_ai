@@ -50,6 +50,7 @@ begin
   , 'test_uc_ai_oci_wire'
   , 'test_uc_ai_ollama_wire'
   , 'test_uc_ai_tools_wire'
+  , 'test_uc_ai_spec_wire'
   ));
 end;
 /
