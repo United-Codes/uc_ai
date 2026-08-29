@@ -1,6 +1,6 @@
 {
   "model": "grok-4-fast-reasoning",
-  "reasoning_level": "low",
+  "reasoning_effort": "low",
   "messages": [
     {
       "role": "user",

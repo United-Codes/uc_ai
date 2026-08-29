@@ -374,15 +374,18 @@ create or replace package body uc_ai_openai as
       end if;
     end if;
 
-    -- Extract and accumulate usage information in global counters
-    if l_resp_json.has('usage') then
+    -- Extract and accumulate usage information in global counters.
+    -- has() is also true for a JSON null, so a gateway that answers
+    -- "usage": null would make get_object return NULL and every read below
+    -- raise ORA-30625. Check the value, not just the key.
+    if l_resp_json.has('usage') and not l_resp_json.get('usage').is_null then
       l_usage := l_resp_json.get_object('usage');
       pio_state.input_tokens := pio_state.input_tokens + nvl(l_usage.get_number('prompt_tokens'), 0);
       pio_state.output_tokens := pio_state.output_tokens + nvl(l_usage.get_number('completion_tokens'), 0);
       pio_state.total_tokens := pio_state.total_tokens + nvl(l_usage.get_number('total_tokens'), 0);
 
       -- Extract reasoning tokens from completion_tokens_details if available
-      if l_usage.has('completion_tokens_details') then
+      if l_usage.has('completion_tokens_details') and not l_usage.get('completion_tokens_details').is_null then
         declare
           l_completion_details json_object_t := l_usage.get_object('completion_tokens_details');
         begin
@@ -395,6 +398,19 @@ create or replace package body uc_ai_openai as
     if l_resp_json.has('model') then
       l_model := l_resp_json.get_string('model');
       pio_result.put('model', l_model);
+    end if;
+
+    -- A missing, null or non-array "choices" leaves l_choices NULL and the loop
+    -- header below raises ORA-30625. Report it as what it is: a response the
+    -- provider should never have sent.
+    if not l_resp_json.has('choices') or not l_resp_json.get('choices').is_array then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'openai'
+      , p1           => 'response has no choices array'
+      , p_extra      => l_resp_json.to_clob
+      );
     end if;
 
     l_choices := l_resp_json.get_array('choices');
@@ -423,16 +439,30 @@ create or replace package body uc_ai_openai as
             l_tool_result     clob;
             l_new_msg         json_object_t;
    
-            l_lm_tool_calls   json_array_t;
+            l_preamble        clob;
+            l_lm_content      json_array_t;
             l_lm_tool_results json_array_t;
           begin
-            l_lm_tool_calls   := json_array_t();
+            l_lm_content      := json_array_t();
             l_lm_tool_results := json_array_t();
    
             -- Add AI's message with tool_calls to conversation history
             l_resp_message := l_choice.get_object('message');
             pio_messages.append(l_resp_message);
             l_tool_calls := l_resp_message.get_array('tool_calls');
+
+            -- The model may put text next to its tool calls. The raw history keeps
+            -- it (l_resp_message is appended whole above), but the normalized
+            -- history is rebuilt from the tool calls alone, so without this the
+            -- preamble is lost for good - and result.messages is what
+            -- uc_ai_agent_exec_api reloads as agent history on the next run.
+            -- Text part first, then the tool calls, in the order the model sent them.
+            if l_resp_message.has('content') and not l_resp_message.get('content').is_null then
+              l_preamble := l_resp_message.get_clob('content');
+              if length(l_preamble) > 0 then
+                l_lm_content.append(uc_ai_message_api.create_text_content(p_text => l_preamble));
+              end if;
+            end if;
    
             -- Execute each tool call and add results as tool messages
             <<tool_call_loop>>
@@ -444,9 +474,11 @@ create or replace package body uc_ai_openai as
               l_call_id := l_curr_call.get_string('id');
               l_function := l_curr_call.get_object('function');
               l_tool_id := l_function.get_string('name');
-              l_arguments := l_function.get_string('arguments');
+              -- get_clob, not get_string: get_string returns a varchar2 and raises
+              -- ORA-06502 as soon as the model emits more than 32 KB of arguments
+              l_arguments := l_function.get_clob('arguments');
    
-              l_lm_tool_calls.append(
+              l_lm_content.append(
                 uc_ai_message_api.create_tool_call_content(
                   p_tool_call_id => l_call_id
                 , p_tool_name    => l_tool_id
@@ -455,15 +487,20 @@ create or replace package body uc_ai_openai as
               );
    
    
-              uc_ai_logger.log('Tool call', l_scope, 'Tool ID: ' || l_tool_id || ', Call ID: ' || l_call_id || ', Arguments: ' || l_arguments);
+              -- Arguments belong in p_extra: p_text is a varchar2, so concatenating a
+              -- large argument payload into it would raise ORA-06502 while logging
+              uc_ai_logger.log('Tool call - Tool ID: ' || l_tool_id || ', Call ID: ' || l_call_id, l_scope, l_arguments);
               l_args_json := json_object_t.parse(coalesce(l_arguments, '{}'));
 
-              -- xAI wraps arguments in "parameters" object; Mistral models do the
-              -- same but not reliably, so only unwrap when the wrapper is present
-              if p_settings.provider_override = uc_ai.c_provider_xai
-                or (    p_settings.provider_override = uc_ai.c_provider_mistral
-                    and l_args_json.has('parameters')
-                    and l_args_json.get('parameters').is_object)
+              -- xAI wraps arguments in a "parameters" object; Mistral models do the
+              -- same but not reliably, so only unwrap when the wrapper is present.
+              -- The guard has to cover xAI as well: unwrapping unconditionally turns
+              -- flat arguments into a NULL json_object_t, and the tool then runs with
+              -- an empty argument object (uc_ai_tools_api substitutes one) or, in code
+              -- mode, dereferences NULL with ORA-30625.
+              if p_settings.provider_override in (uc_ai.c_provider_xai, uc_ai.c_provider_mistral)
+                and l_args_json.has('parameters')
+                and l_args_json.get('parameters').is_object
               then
                 l_args_json := treat( l_args_json.get('parameters') as json_object_t );
               end if;
@@ -494,7 +531,7 @@ create or replace package body uc_ai_openai as
               );
             end loop tool_call_loop;
    
-            pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_lm_tool_calls));
+            pio_norm_messages.append(uc_ai_message_api.create_assistant_message(l_lm_content));
             pio_norm_messages.append(uc_ai_message_api.create_tool_message(l_lm_tool_results));
 
 
@@ -647,7 +684,13 @@ create or replace package body uc_ai_openai as
               uc_ai_logger.log('Switching model to reasoning variant for xAI provider: ' || l_model, l_scope);
             end if;
 
-            l_input_obj.put('reasoning_level', l_reasoning_effort);
+            -- reasoning_effort, not reasoning_level: xAI has no reasoning_level and
+            -- drops it like any unknown body key, so the setting had no effect at
+            -- all. Measured live on grok-4.3: reasoning_effort "none" bills 0
+            -- reasoning tokens and a bogus value is rejected with HTTP 400
+            -- "Invalid reasoning effort", while reasoning_level "none" still bills
+            -- 400-500 reasoning tokens and a bogus value is accepted with HTTP 200.
+            l_input_obj.put('reasoning_effort', l_reasoning_effort);
           end;
         when uc_ai.c_provider_openrouter then
           declare
