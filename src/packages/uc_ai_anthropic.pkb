@@ -5,6 +5,13 @@ create or replace package body uc_ai_anthropic as
   c_api_generate_text_path constant varchar2(255 char) := '/messages';
   c_anthropic_version constant varchar2(32 char) := '2023-06-01';
 
+  -- Anthropic's documented floor for a legacy thinking budget
+  c_min_reasoning_tokens constant pls_integer := 1024;
+
+  -- space, tab, newline, carriage return - what Anthropic counts as trailing
+  -- whitespace on a prefilled assistant message
+  c_whitespace constant varchar2(4 char) := ' ' || chr(9) || chr(10) || chr(13);
+
   -- Per-call conversation state is threaded as run-state/message parameters,
   -- not package globals, so nested calls do not corrupt each other.
 
@@ -43,7 +50,17 @@ create or replace package body uc_ai_anthropic as
     , p_provider_options => l_provider_options
     );
 
-    pio_state.final_message := l_content;
+    -- One turn can carry several text blocks: citations split the answer, and a
+    -- provider-side tool puts its commentary in its own block. Assigning here
+    -- kept only the last of them, so the caller lost everything before it.
+    -- Empty blocks are skipped: a text part with no text is a carrier for
+    -- provider metadata, not part of the answer.
+    if l_content is not null and length(l_content) > 0 then
+      if pio_state.final_message is not null then
+        pio_state.final_message := pio_state.final_message || chr(10);
+      end if;
+      pio_state.final_message := pio_state.final_message || l_content;
+    end if;
 
     return l_lm_text_content;
   end get_text_content;
@@ -102,6 +119,7 @@ create or replace package body uc_ai_anthropic as
     l_thinking_blocks json_array_t;
     l_tool_use json_object_t;
     l_tool_result json_object_t;
+    l_system_text clob;
   begin
     uc_ai_logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to Anthropic format', l_scope);
     
@@ -116,8 +134,19 @@ create or replace package body uc_ai_anthropic as
 
       case l_role
         when 'system' then
-          -- System message: extract content for separate system field
-          po_system_prompt := l_lm_message.get_clob('content');
+          -- System message: extract content for the separate system field.
+          -- Several system messages are legal on the way in (a guardrail block
+          -- plus a policy block, or an agent prompt plus a memory protocol).
+          -- Anthropic has exactly one system field, so they are joined with a
+          -- blank line instead of overwriting each other - message N used to
+          -- silently delete message N-1.
+          l_system_text := l_lm_message.get_clob('content');
+          if l_system_text is not null and length(l_system_text) > 0 then
+            if po_system_prompt is not null then
+              po_system_prompt := po_system_prompt || chr(10) || chr(10);
+            end if;
+            po_system_prompt := po_system_prompt || l_system_text;
+          end if;
 
         when 'user' then
           -- User message: extract content from content array
@@ -312,6 +341,35 @@ create or replace package body uc_ai_anthropic as
             end;
           end if;
 
+          -- An assistant message in last position is a prefill: Anthropic
+          -- continues writing from it instead of starting a new turn, and
+          -- rejects the request with HTTP 400 "final assistant content cannot
+          -- end with trailing whitespace" when the text it must continue ends
+          -- in a space or newline. Only the very last block is affected, and
+          -- only when it is a text block - a trailing tool_use is untouched.
+          -- The block is rebuilt rather than mutated in place so the array node
+          -- is replaced wholesale. json_array_t.put defaults to INSERTING at the
+          -- position and shifting the rest, so the overwrite flag is required -
+          -- without it the trailing text block is duplicated.
+          if i = p_lm_messages.get_size - 1 and l_anthropic_content.get_size > 0 then
+            declare
+              l_last_pos   pls_integer;
+              l_last_block json_object_t;
+              l_prefill    clob;
+            begin
+              l_last_pos := l_anthropic_content.get_size - 1;
+              l_last_block := treat(l_anthropic_content.get(l_last_pos) as json_object_t);
+
+              if l_last_block.get_string('type') = 'text' then
+                l_prefill := rtrim(l_last_block.get_clob('text'), c_whitespace);
+                l_last_block := json_object_t();
+                l_last_block.put('type', 'text');
+                l_last_block.put('text', l_prefill);
+                l_anthropic_content.put(l_last_pos, l_last_block, true);
+              end if;
+            end;
+          end if;
+
           if l_anthropic_content.get_size > 0 then
             l_anthropic_message := json_object_t();
             l_anthropic_message.put('role', 'assistant');
@@ -458,22 +516,50 @@ create or replace package body uc_ai_anthropic as
     -- Extract stop reason
     l_stop_reason := l_resp_json.get_string('stop_reason');
     
-    -- Map Anthropic stop reasons to OpenAI format for consistency
+    -- Map Anthropic stop reasons to the uc_ai.c_finish_reason_* vocabulary.
+    -- Anthropic sends more than the four values this used to handle, all on an
+    -- HTTP 200: 'refusal' when the model declines, 'pause_turn' when a
+    -- provider-side tool runs long, 'model_context_window_exceeded' when the
+    -- window fills. Writing those through unchanged handed the caller a
+    -- finish_reason that matches none of the constants it is told to compare
+    -- against. The provider's own word is kept beside the mapped one so nothing
+    -- is lost. See https://docs.anthropic.com/en/api/messages#response-stop-reason
+    if l_stop_reason is not null then
+      pio_result.put('provider_finish_reason', l_stop_reason);
+    end if;
+
     case l_stop_reason
       when 'end_turn' then
+        pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
+      when 'stop_sequence' then
+        pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
+      when 'pause_turn' then
+        -- the turn stopped early but nothing went wrong; the caller may send the
+        -- conversation back to continue it
         pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
       when 'tool_use' then
         pio_result.put('finish_reason', uc_ai.c_finish_reason_tool_calls);
       when 'max_tokens' then
         pio_result.put('finish_reason', uc_ai.c_finish_reason_length);
-      when 'stop_sequence' then
-        pio_result.put('finish_reason', uc_ai.c_finish_reason_stop);
+      when 'model_context_window_exceeded' then
+        pio_result.put('finish_reason', uc_ai.c_finish_reason_length);
+      when 'refusal' then
+        pio_result.put('finish_reason', uc_ai.c_finish_reason_content_filter);
       else
-        pio_result.put('finish_reason', l_stop_reason);
+        -- a null selector lands here too, which is what a truncated response
+        -- looks like. 'unknown' is the value the result object starts with.
+        uc_ai_logger.log_warn('Unmapped Anthropic stop_reason: ' || nvl(l_stop_reason, '<null>'), l_scope);
+        pio_result.put('finish_reason', 'unknown');
     end case;
 
     -- Process content array
     l_content := l_resp_json.get_array('content');
+
+    -- final_message is the answer of the LAST turn, so the text collected in the
+    -- turns before this one is dropped here. Without the reset a final turn that
+    -- carries no text at all (only server-side tool blocks) returned the text of
+    -- an earlier turn as if the model had just written it.
+    pio_state.final_message := null;
     
     -- Check if response contains tool use
     <<content_loop>>
@@ -525,26 +611,33 @@ create or replace package body uc_ai_anthropic as
               l_tool_name := l_content_prompt.get_string('name');
               l_tool_input := l_content_prompt.get_object('input');
               if l_tool_input is not null then
+                -- when we have a top-level object parameter, extract it. Anthropic wraps it into a named object
                 l_param_name := uc_ai_tools_api.get_tools_object_param_name(l_tool_name);
                 if l_param_name is not null then
                   l_tool_input := l_tool_input.get_object(l_param_name);
                 end if;
               end if;
-   
-              l_new_msg := uc_ai_message_api.create_tool_call_content(
-                p_tool_call_id => l_tool_call_id
-              , p_tool_name    => l_tool_name
-              , p_args         => l_tool_input.to_clob
-              );
-              l_normalized_messages.append(l_new_msg);
-   
+
               uc_ai_logger.log('Tool call', l_scope, 'Tool Name: ' || l_tool_name || ', Tool ID: ' || l_tool_call_id);
+
+              -- The unwrap above yields NULL whenever the model left the wrapper
+              -- object out ({"input":{}} for a tool whose single object parameter
+              -- is optional). That has to be turned into an empty object BEFORE
+              -- anything dereferences it - to_clob on a NULL json_object_t raises
+              -- ORA-30625, which used to kill the whole run.
               if l_tool_input is not null then
                 uc_ai_logger.log('Tool input', l_scope, 'Input: ' || l_tool_input.to_clob);
               else
                 uc_ai_logger.log('Tool input', l_scope, 'No input provided');
                 l_tool_input := json_object_t();
               end if;
+
+              l_new_msg := uc_ai_message_api.create_tool_call_content(
+                p_tool_call_id => l_tool_call_id
+              , p_tool_name    => l_tool_name
+              , p_args         => l_tool_input.to_clob
+              );
+              l_normalized_messages.append(l_new_msg);
    
               -- Fire the per-tool-call hook (may veto by raising, stopping the run)
               uc_ai_tools_api.before_tool_call(p_tool_code => l_tool_name, p_settings => p_settings);
@@ -678,6 +771,101 @@ create or replace package body uc_ai_anthropic as
 
 
   /*
+   * True when the model takes the ADAPTIVE thinking shape
+   * (thinking:{"type":"adaptive"} plus output_config.effort), false when it takes
+   * the legacy budget shape (thinking:{"type":"enabled","budget_tokens":N}).
+   *
+   * The two are not interchangeable. Claude 4.6 and later answer the legacy shape
+   * with HTTP 400 ("thinking.type.enabled is not supported for this model"), and
+   * pre-4.6 models answer the adaptive shape the same way, so the request has to
+   * be built for the model it is sent to.
+   *
+   * The test is written the other way round on purpose: the models that need the
+   * LEGACY shape are named, and everything else - including a model id this
+   * version of UC AI has never heard of - gets the adaptive shape. Anthropic
+   * releases models faster than UC AI releases versions, and every model since
+   * 4.6 is adaptive, so an unknown id is far more likely to be newer than older.
+   */
+  function uses_adaptive_thinking(
+    p_model in uc_ai.model_type
+  ) return boolean
+  as
+    l_model varchar2(128 char);
+  begin
+    l_model := lower(p_model);
+
+    -- Opus/Sonnet 4.0 to 4.5, Haiku 4.5, and everything from Claude 3 and older
+    if regexp_like(l_model, 'claude-(opus|sonnet)-4-[0-5]')
+       or l_model like '%claude-haiku-4-5%'
+       or regexp_like(l_model, 'claude-(3|2|instant)')
+    then
+      return false;
+    end if;
+
+    return true;
+  end uses_adaptive_thinking;
+
+
+  /*
+   * 4.6 was the first model with adaptive thinking, but its efforts stop at
+   * 'max'. 'xhigh' arrived with the models after it (opus-4-7, opus-4-8,
+   * opus-5, sonnet-5, fable-5), so an unknown - assumed newer - id gets it too.
+   */
+  function supports_xhigh_effort(
+    p_model in uc_ai.model_type
+  ) return boolean
+  as
+    l_model varchar2(128 char);
+  begin
+    l_model := lower(p_model);
+
+    return not (l_model like '%claude-opus-4-6%' or l_model like '%claude-sonnet-4-6%');
+  end supports_xhigh_effort;
+
+
+  /*
+   * Maps the UC AI reasoning level to the effort adaptive thinking takes inside
+   * output_config. Returns null when the level carries nothing an effort can be
+   * made of - the effort key is then left out and the model picks its own depth,
+   * which is the whole point of adaptive thinking.
+   */
+  function map_reasoning_effort(
+    p_model in uc_ai.model_type
+  , p_level in varchar2
+  ) return varchar2
+  as
+    l_scope uc_ai_logger.scope := c_scope_prefix || 'map_reasoning_effort';
+    l_level  varchar2(100 char);
+    l_effort varchar2(10 char);
+  begin
+    l_level := lower(p_level);
+
+    case l_level
+      when uc_ai.c_reasoning_level_low then
+        l_effort := 'low';
+      when uc_ai.c_reasoning_level_medium then
+        l_effort := 'medium';
+      when uc_ai.c_reasoning_level_high then
+        l_effort := 'high';
+      when 'xhigh' then
+        l_effort := case when supports_xhigh_effort(p_model) then 'xhigh' else 'max' end;
+      when 'max' then
+        l_effort := 'max';
+      else
+        -- Includes a null level and a raw token budget passed as a level. A
+        -- budget means nothing here: the model, not the caller, decides how long
+        -- to think, so the request goes out without an effort rather than with a
+        -- value Anthropic would reject.
+        if l_level is not null then
+          uc_ai_logger.log_warn('Reasoning level "' || p_level || '" has no adaptive thinking effort, letting the model choose', l_scope);
+        end if;
+    end case;
+
+    return l_effort;
+  end map_reasoning_effort;
+
+
+  /*
    * Core conversation handler with Anthropic API
    * 
    * Critical workflow for AI function calling:
@@ -722,6 +910,7 @@ create or replace package body uc_ai_anthropic as
     l_message            json_object_t;
     l_reasoning_tokens   pls_integer;
     l_output_config      json_object_t;
+    l_effort             varchar2(10 char);
   begin
     l_result := json_object_t();
     uc_ai_logger.log('Starting generate_text with ' || p_messages.get_size || ' input messages', l_scope);
@@ -762,19 +951,42 @@ create or replace package body uc_ai_anthropic as
 
     if l_settings.enable_reasoning then
       l_reasoning := json_object_t();
-      l_reasoning.put('type', 'enabled');
-      if l_settings.an_reasoning_budget_tokens is not null then
-        l_reasoning_tokens := l_settings.an_reasoning_budget_tokens;
-      elsif l_settings.reasoning_level is not null then
-        l_reasoning_tokens := case l_settings.reasoning_level
-          when uc_ai.c_reasoning_level_low then 2048
-          when uc_ai.c_reasoning_level_medium then 8192
-          when uc_ai.c_reasoning_level_high then 32768
-          else l_settings.reasoning_level
-        end;
+
+      if uses_adaptive_thinking(p_model) then
+        -- Adaptive thinking: the model decides per turn how long to think, and
+        -- the caller only says how hard to try. 'summarized' is what makes the
+        -- reasoning readable in the response at all - the default is 'omitted',
+        -- which would leave the normalized reasoning content empty.
+        l_reasoning.put('type', 'adaptive');
+        l_reasoning.put('display', 'summarized');
+
+        -- The effort belongs INSIDE output_config, which structured output also
+        -- writes to, so it is collected here and merged below.
+        l_effort := map_reasoning_effort(p_model, l_settings.reasoning_level);
+        uc_ai_logger.log_info('Using adaptive thinking with effort: ' || nvl(l_effort, 'model default'), l_scope);
+      else
+        l_reasoning.put('type', 'enabled');
+        if l_settings.an_reasoning_budget_tokens is not null then
+          l_reasoning_tokens := l_settings.an_reasoning_budget_tokens;
+        elsif l_settings.reasoning_level is not null then
+          l_reasoning_tokens := case l_settings.reasoning_level
+            when uc_ai.c_reasoning_level_low then 2048
+            when uc_ai.c_reasoning_level_medium then 8192
+            when uc_ai.c_reasoning_level_high then 32768
+            else l_settings.reasoning_level
+          end;
+        end if;
+
+        -- Reasoning switched on with neither a budget nor a level used to send
+        -- budget_tokens: null, which Anthropic answers with HTTP 400. The
+        -- documented minimum is 1024, so that is what an unset or too small
+        -- budget becomes.
+        l_reasoning_tokens := greatest(nvl(l_reasoning_tokens, c_min_reasoning_tokens), c_min_reasoning_tokens);
+
+        uc_ai_logger.log_info('Using reasoning with budget tokens: ' || l_reasoning_tokens, l_scope);
+        l_reasoning.put('budget_tokens', l_reasoning_tokens);
       end if;
-      uc_ai_logger.log_info('Using reasoning with budget tokens: ' || l_reasoning_tokens, l_scope);
-      l_reasoning.put('budget_tokens', l_reasoning_tokens);
+
       l_input_obj.put('thinking', l_reasoning);
     end if;
 
@@ -783,10 +995,25 @@ create or replace package body uc_ai_anthropic as
       l_output_config := uc_ai_structured_output.to_anthropic_format(
         p_schema => p_schema
       );
+    end if;
+
+    -- The reasoning effort and the structured output format live in the SAME
+    -- output_config object, so the one built second is merged into the one built
+    -- first instead of replacing it.
+    if l_effort is not null then
+      if l_output_config is null then
+        l_output_config := json_object_t();
+      end if;
+      l_output_config.put('effort', l_effort);
+    end if;
+
+    if l_output_config is not null then
       l_input_obj.put('output_config', l_output_config);
     end if;
 
-    if l_settings.an_max_tokens <= l_reasoning_tokens then
+    -- Only the legacy shape reserves thinking tokens out of max_tokens. On the
+    -- adaptive path l_reasoning_tokens stays null and there is nothing to check.
+    if l_reasoning_tokens is not null and l_settings.an_max_tokens <= l_reasoning_tokens then
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_reasoning_budget
       , p_scope      => l_scope
