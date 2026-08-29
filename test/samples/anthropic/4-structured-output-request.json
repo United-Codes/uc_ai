@@ -1,0 +1,41 @@
+{
+  "model": "claude-haiku-4-5",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "What is the capital of France? Please respond with confidence."
+        }
+      ]
+    }
+  ],
+  "output_config": {
+    "format": {
+      "type": "json_schema",
+      "schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "title": "Response with confidence score",
+        "required": [
+          "response",
+          "confidence"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "response": {
+            "type": "string",
+            "description": "The generated response text"
+          },
+          "confidence": {
+            "type": "number",
+            "description": "Confidence score between 0 and 1. Must be at least 0. Must be at most 1."
+          }
+        }
+      }
+    }
+  },
+  "system": "You are a helpful assistant that provides accurate information.",
+  "max_tokens": 8192
+}

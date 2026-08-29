@@ -11,6 +11,7 @@
   "generationConfig": {
     "responseSchema": {
       "type": "OBJECT",
+      "title": "Response with confidence score",
       "properties": {
         "response": {
           "type": "STRING",
@@ -18,7 +19,9 @@
         },
         "confidence": {
           "type": "NUMBER",
-          "description": "Confidence score between 0 and 1"
+          "description": "Confidence score between 0 and 1",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "required": [
