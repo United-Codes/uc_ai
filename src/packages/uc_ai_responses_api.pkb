@@ -259,8 +259,14 @@ create or replace package body uc_ai_responses_api as
                 declare
                   l_result_value json_element_t := l_content_item.get('result');
                 begin
-                  if l_result_value.is_string then
-                    l_item.put('output', l_content_item.get_string('result'));
+                  -- get_clob, not get_string: get_string returns a varchar2 and
+                  -- raises ORA-06502 above 32767 bytes. This branch is taken for
+                  -- every tool result UC AI itself produced, because
+                  -- create_tool_result_content stores the result as a JSON string,
+                  -- so a tool answering with more than 32 KB would break replay.
+                  -- get_clob returns null for a container, hence the serialization.
+                  if l_result_value.is_object or l_result_value.is_array then
+                    l_item.put('output', l_result_value.to_clob);
                   else
                     l_item.put('output', l_content_item.get_clob('result'));
                   end if;
@@ -375,6 +381,11 @@ create or replace package body uc_ai_responses_api as
     -- For collecting assistant message content
     l_assistant_content json_array_t;
     l_has_text boolean := false;
+
+    -- call_id -> tool name, filled from the function_call items so a
+    -- function_call_output (which carries no name) can be normalized with one
+    type t_tool_names is table of varchar2(4000 char) index by varchar2(4000 char);
+    l_tool_names_map t_tool_names;
   begin
     uc_ai_logger.log('Converting ' || p_output.get_size || ' output items to LM messages', l_scope);
 
@@ -403,9 +414,11 @@ create or replace package body uc_ai_responses_api as
               
               if l_content_item.get_string('type') = 'output_text' then
                 -- Convert to standardized text content (also fires assistant_text event)
+                -- get_clob, not get_string: model text has no size bound on the
+                -- wire and get_string raises ORA-06502 above 32767 bytes.
                 l_assistant_content.append(
                   uc_ai_message_api.create_text_content(
-                    p_text => l_content_item.get_string('text')
+                    p_text => l_content_item.get_clob('text')
                   )
                 );
                 l_has_text := true;
@@ -420,39 +433,55 @@ create or replace package body uc_ai_responses_api as
           end if;
           
         when 'function_call' then
-          -- Convert function call to tool_use content
+          -- Build the SHARED tool_call content, not a hand-rolled Anthropic-style
+          -- {"type":"tool_use","id":...} block. Only the shared shape replays:
+          -- convert_lm_messages_to_items above understands 'tool_call' and logs
+          -- "Unknown assistant content type" for anything else, and only the
+          -- builder fires uc_ai.c_event_tool_call. The in-run tool loop of this
+          -- same package already does it this way.
           declare
-            l_tool_use json_object_t := json_object_t();
-            l_arguments_str clob;
-            l_arguments_obj json_object_t;
+            l_call_id varchar2(4000 char);
+            l_tool_name varchar2(4000 char);
           begin
-            l_tool_use.put('type', 'tool_use');
-            l_tool_use.put('id', l_output_item.get_string('call_id'));
-            l_tool_use.put('name', l_output_item.get_string('name'));
-            
-            -- Parse arguments string to object
-            l_arguments_str := l_output_item.get_clob('arguments');
-            if l_arguments_str is not null then
-              l_arguments_obj := json_object_t.parse(l_arguments_str);
-              l_tool_use.put('input', l_arguments_obj);
-            else
-              l_tool_use.put('input', json_object_t());
+            l_call_id := l_output_item.get_string('call_id');
+            l_tool_name := l_output_item.get_string('name');
+
+            -- A function_call_output item carries no tool name, so remember the
+            -- name of the call it answers.
+            if l_call_id is not null then
+              l_tool_names_map(l_call_id) := l_tool_name;
             end if;
-            
-            l_assistant_content.append(l_tool_use);
-          end; 
+
+            l_assistant_content.append(
+              uc_ai_message_api.create_tool_call_content(
+                p_tool_call_id => l_call_id
+              , p_tool_name    => l_tool_name
+              , p_args         => coalesce(l_output_item.get_clob('arguments'), '{}')
+              )
+            );
+          end;
         when 'function_call_output' then
-          -- Convert to tool result message
+          -- Convert to tool result message, again with the shared builder so the
+          -- item replays and uc_ai.c_event_tool_result fires.
           declare
-            l_tool_result json_object_t := json_object_t();
+            l_call_id varchar2(4000 char);
+            l_tool_name varchar2(4000 char);
             l_tool_content json_array_t := json_array_t();
           begin
-            l_tool_result.put('type', 'tool_result');
-            l_tool_result.put('tool_use_id', l_output_item.get_string('call_id'));
-            l_tool_result.put('content', l_output_item.get_string('output'));
-            
-            l_tool_content.append(l_tool_result);
-            
+            l_call_id := l_output_item.get_string('call_id');
+
+            if l_call_id is not null and l_tool_names_map.exists(l_call_id) then
+              l_tool_name := l_tool_names_map(l_call_id);
+            end if;
+
+            l_tool_content.append(
+              uc_ai_message_api.create_tool_result_content(
+                p_tool_call_id => l_call_id
+              , p_tool_name    => l_tool_name
+              , p_result       => l_output_item.get_clob('output')
+              )
+            );
+
             l_message := json_object_t();
             l_message.put('role', 'tool');
             l_message.put('content', l_tool_content);
@@ -540,7 +569,9 @@ create or replace package body uc_ai_responses_api as
             if l_text is not null then
               l_text := l_text || chr(10);
             end if;
-            l_text := l_text || l_content_item.get_string('text');
+            -- get_clob, not get_string: the answer is returned as a CLOB and a
+            -- long one would otherwise raise ORA-06502 at 32767 bytes.
+            l_text := l_text || l_content_item.get_clob('text');
           end if;
         end loop content_loop;
       end if;
@@ -678,8 +709,41 @@ create or replace package body uc_ai_responses_api as
 
 
   /*
+   * The reason a Responses API response did not finish, or null when it did.
+   *
+   * The Responses API has no 'stop_reason' key - none of the recorded responses
+   * under test/samples/openai/responses carries one. It reports the outcome with
+   * 'status' plus, when the status is not 'completed', 'incomplete_details.reason'
+   * ('max_output_tokens', 'content_filter'). Both keys can be present and JSON
+   * null on a completed response, so every level is guarded.
+   */
+  function get_incomplete_reason(
+    p_response in json_object_t
+  ) return varchar2
+  as
+    l_details json_object_t;
+  begin
+    if p_response is null
+       or not p_response.has('incomplete_details')
+       or p_response.get('incomplete_details').is_null
+       or not p_response.get('incomplete_details').is_object
+    then
+      return null;
+    end if;
+
+    l_details := treat(p_response.get('incomplete_details') as json_object_t);
+
+    if not l_details.has('reason') or l_details.get('reason').is_null then
+      return null;
+    end if;
+
+    return l_details.get_string('reason');
+  end get_incomplete_reason;
+
+
+  /*
    * Responses API implementation for text generation
-   * 
+   *
    * The Responses API is a unified, agentic interface that:
    * - Accepts standardized LM message arrays
    * - Handles multi-turn conversations via previous_response_id in providerOptions
@@ -727,6 +791,11 @@ create or replace package body uc_ai_responses_api as
     l_conversation_msgs json_array_t := json_array_t();
     l_final_message     clob;
     l_prev_response_id  varchar2(4000 char);
+    -- finish reason inputs, see the mapping at the end of this function
+    l_finish_reason       uc_ai.finish_reason_type;
+    l_incomplete_reason   varchar2(255 char);
+    l_max_calls_exceeded  boolean := false;
+    l_ends_with_tool_call boolean := false;
   begin
     uc_ai_logger.log('Starting generate_text with Responses API', l_scope);
 
@@ -832,7 +901,14 @@ create or replace package body uc_ai_responses_api as
     -- Configure storage and encrypted reasoning
     l_input_obj.put('store', coalesce(l_settings.ra_store_responses, false));
 
-    if l_settings.ra_include_encrypted_reasoning then
+    -- With store=false the provider persists nothing, so a reasoning item can only
+    -- be replayed on the next tool turn when the response carries its encrypted
+    -- blob. Ask for the blob whenever reasoning is on and storage is off, not only
+    -- when the caller set the flag - otherwise the chain of thought is dropped on
+    -- every tool turn of a reasoning run.
+    if l_settings.ra_include_encrypted_reasoning
+       or (l_settings.enable_reasoning and not coalesce(l_settings.ra_store_responses, false))
+    then
       l_include_array := json_array_t();
       l_include_array.append('reasoning.encrypted_content');
       l_input_obj.put('include', l_include_array);
@@ -851,7 +927,7 @@ create or replace package body uc_ai_responses_api as
     l_result.put('tool_calls_count', 0);
     
     -- Convert output to normalized LM messages (with response_id embedded)
-    if l_api_response.has('output') then
+    if l_api_response.has('output') and not l_api_response.get('output').is_null then
       l_output := l_api_response.get_array('output');
       
       -- Check if output contains function calls that need execution
@@ -882,8 +958,17 @@ create or replace package body uc_ai_responses_api as
             end if;
           end loop check_function_calls;
           
-          -- If no function calls or max tool calls exceeded, exit loop
-          exit tool_execution_loop when not l_has_function_calls or l_tool_calls_count >= p_max_tool_calls;
+          -- The loop ends for one of two reasons and they are not the same answer:
+          -- the model stopped asking for tools, or the caller's tool budget is
+          -- used up with a tool call still outstanding. Record the second so the
+          -- result reports 'max_tool_calls_exceeded', as every other provider does.
+          if not l_has_function_calls then
+            exit tool_execution_loop;
+          elsif l_tool_calls_count >= p_max_tool_calls then
+            l_max_calls_exceeded := true;
+            uc_ai_logger.log_warn('Stopping at max_tool_calls (' || p_max_tool_calls || ') with tool calls outstanding', l_scope);
+            exit tool_execution_loop;
+          end if;
           
           uc_ai_logger.log('Found function calls in output, executing tools', l_scope, 'Previous response_id: ' || l_prev_response_id);
 
@@ -980,8 +1065,18 @@ create or replace package body uc_ai_responses_api as
                     l_arguments_obj := json_object_t();
                   else
                     l_arguments_obj := json_object_t.parse(l_arguments_str);
-                    if l_arguments_obj.has('parameters') then
-                      l_arguments_obj := l_arguments_obj.get_object('parameters');
+
+                    -- Some models wrap the arguments in a "parameters" object.
+                    -- Unwrap only when that key really holds an object: a tool may
+                    -- declare a scalar property named "parameters", and the
+                    -- unconditional unwrap turned those arguments into NULL, which
+                    -- uc_ai_tools_api then replaces with an empty object - the
+                    -- handler runs with nothing. Same guard as the Mistral branch
+                    -- in uc_ai_openai.
+                    if l_arguments_obj.has('parameters')
+                       and l_arguments_obj.get('parameters').is_object
+                    then
+                      l_arguments_obj := treat(l_arguments_obj.get('parameters') as json_object_t);
                     end if;
                   end if;
                   
@@ -1044,6 +1139,10 @@ create or replace package body uc_ai_responses_api as
         
         -- Store final tool calls count
         l_result.put('tool_calls_count', l_tool_calls_count);
+
+        -- The last response still asked for a tool: the run ends on tool calls,
+        -- not on a completed answer (hasFunctionCall in the AI SDK mapping).
+        l_ends_with_tool_call := l_has_function_calls;
         
         -- Use the final response output for conversion
         l_output := l_current_response.get_array('output');
@@ -1068,7 +1167,21 @@ create or replace package body uc_ai_responses_api as
       l_output_text := extract_output_text(l_output);
       l_final_message := l_output_text;
     else
-      l_normalized_messages := json_array_t();
+      -- A 200 with no 'output' array is not an answer. Returning a null
+      -- final_message here hid the real cause - almost always
+      -- incomplete_details.reason - behind a result that looked successful.
+      -- The AI SDK raises on the same condition.
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'Responses API'
+      , p1           => 'response contains no output'
+                        || case
+                             when get_incomplete_reason(l_api_response) is not null
+                             then ' (' || get_incomplete_reason(l_api_response) || ')'
+                           end
+      , p_extra      => l_api_response.to_clob
+      );
     end if;
 
     -- Always set final_message so the result contract matches other providers
@@ -1079,12 +1192,30 @@ create or replace package body uc_ai_responses_api as
     -- Use the per-call conversation history (already contains full history)
     l_result.put('messages', l_conversation_msgs);
     
-    -- Add finish_reason (Responses API uses 'stop_reason')
-    if l_api_response.has('stop_reason') then
-      l_result.put('finish_reason', l_api_response.get_string('stop_reason'));
-    else
-      l_result.put('finish_reason', 'stop');
+    -- Finish reason. The Responses API never sends a 'stop_reason' key; reading it
+    -- pinned every run to 'stop' and made 'length' and 'content_filter'
+    -- unreachable. The outcome lives in 'status' plus 'incomplete_details.reason'.
+    -- Mapping follows map-openai-responses-finish-reason.ts of the AI SDK.
+    l_incomplete_reason := get_incomplete_reason(l_api_response);
+
+    l_finish_reason :=
+      case
+        when l_max_calls_exceeded                      then 'max_tool_calls_exceeded'
+        when l_incomplete_reason = 'max_output_tokens' then uc_ai.c_finish_reason_length
+        when l_incomplete_reason = 'content_filter'    then uc_ai.c_finish_reason_content_filter
+        when l_ends_with_tool_call                     then uc_ai.c_finish_reason_tool_calls
+        else uc_ai.c_finish_reason_stop
+      end;
+
+    -- An incomplete response whose reason the mapping does not know still reports
+    -- 'stop', because there is no constant for it, so say what was lost.
+    if l_api_response.get_string('status') = 'incomplete'
+       and l_finish_reason = uc_ai.c_finish_reason_stop
+    then
+      uc_ai_logger.log_warn('Unmapped incomplete_details.reason: ' || nvl(l_incomplete_reason, 'null'), l_scope);
     end if;
+
+    l_result.put('finish_reason', l_finish_reason);
     
     -- Add normalized usage information, summed over every request of this call
     declare
