@@ -1,0 +1,188 @@
+page 20 (
+    name: Give an Agent a Memory
+    alias: GIVE-AN-AGENT-A-MEMORY
+    title: Give an Agent a Memory
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region about (
+        name: About
+        type: staticContent
+        source {
+            htmlCode: <p>The chat region on this page runs the agent <code>MX_DESK</code>, the maintenance desk of a bottling line. The page stands at one machine, <code>AS-14</code>, and passes it in the run context.</p><p>A plant runs three shifts. The technician who works something out at 03:00 is not the one who opens the same machine next week, and a memory is what carries the first conversation into the second. Tell the desk something worth keeping, start a new chat, and ask for it again.</p><p>Setup script: <code>examples/give-an-agent-a-memory/00_setup.sql</code>. It leaves the memory switched off, because that is where lesson 1 starts. Run <code>01_recall.sql</code> to switch it on, and <code>02_stores.sql</code> to scope one store per machine.</p><p>The course this page comes from: <a href="https://www.united-codes.com/products/uc-ai/docs/tutorial/give-an-agent-a-memory/01-the-next-shift/">Give an Agent a Memory</a>.</p>
+        }
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/collapsible
+            templateOptions: [
+                #DEFAULT#
+                is-collapsed
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region breadcrumb (
+        name: Breadcrumb
+        type: breadcrumb
+        source {
+            breadcrumb: @breadcrumb
+        }
+        layout {
+            sequence: 10
+            slot: breadcrumbBar
+        }
+        appearance {
+            template: @/title-bar
+            templateOptions: [
+                #DEFAULT#
+                t-BreadcrumbRegion--useBreadcrumbTitle
+            ]
+        }
+        componentAppearance {
+            breadcrumbTemplate: @/breadcrumb
+            templateOptions: #DEFAULT#
+        }
+    )
+
+    region chat (
+        name: Chat
+        type: plugin/ucAiChat
+        layout {
+            sequence: 20
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--noPadding
+                t-Region--removeHeader js-removeLandmark
+                t-Region--scrollBody
+            ]
+        }
+        plugin-agent {
+            agentCode: MX_DESK
+            agentInputMapping:
+                ```
+                {
+                  "technician_name": "&APP_USER.",
+                  "today": "&P20_TODAY.",
+                  "question": "#USER_MESSAGE#"
+                }
+                ```
+            sessionInitCode:
+                ```plsql
+                apex_session.attach(
+                  p_app_id     => :APP_ID,
+                  p_page_id    => :APP_PAGE_ID,
+                  p_session_id => :APP_SESSION
+                );
+                ```
+        }
+        plugin-runContext {
+            agentRunContext:
+                ```
+                {
+                  "asset_no": "&P20_ASSET_NO.",
+                  "technician": "&APP_USER."
+                }
+                ```
+            runContextDrift: error
+        }
+        plugin-conversation {
+            sessionItem: P20_SESSION_ID
+            autoGenerateTitle: true
+            collectFeedback: true
+            suggestedPrompts:
+                ```
+                Is there anything the last shift worked out that I should know?
+                What work orders are open on this machine?
+                The vibration at the drive end is back. What did we try before?
+                ```
+        }
+        plugin-appearance {
+            headerTitle: Give an Agent a Memory
+            welcomeMessage: Ask about the machine you are standing at.
+            minHeight: 450px
+            avatarIcon: fa-wrench
+            thinkingAnimation: braille
+        }
+        plugin-developer {
+            debugConfig:
+                ```plsql
+                return q'!{
+                  "show_reasoning": true,
+                  "show_tools": true,
+                  "show_metadata": true,
+                  "show_debug": true
+                }!';
+                ```
+        }
+    )
+
+    pageItem P20_ASSET_NO (
+        type: hidden
+        layout {
+            sequence: 30
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    pageItem P20_SESSION_ID (
+        type: hidden
+        layout {
+            sequence: 40
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    pageItem P20_TODAY (
+        type: hidden
+        layout {
+            sequence: 20
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    computation asset (
+        itemName: P20_ASSET_NO
+        execution {
+            sequence: 20
+            point: beforeHeader
+        }
+        computation {
+            type: staticValue
+            staticValue: AS-14
+        }
+    )
+
+    computation today (
+        itemName: P20_TODAY
+        execution {
+            sequence: 10
+            point: beforeHeader
+        }
+        computation {
+            type: expression
+            plsqlExpression: to_char(sysdate, 'YYYY-MM-DD')
+        }
+    )
+
+)
+

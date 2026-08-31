@@ -14,6 +14,148 @@ page 1 (
         formAutoComplete: false
     }
 
+    region new (
+        name: Pages
+        type: themeTemplateComponent/contentRow
+        source {
+            location: localDatabase
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                -- One row per tutorial page, in the order the courses build on
+                -- each other. Every link is a docs course you can read next to it.
+                select 10 as seq
+                     , 'Put an Agent in APEX' as title
+                     , 'A chat region on a page, bound to one service contract. It answers from your tables, and it cannot read another contract.' as description
+                     , apex_page.get_url(p_page => 10) as link
+                     , 'fa-comments-o' as icon
+                  from dual
+                union all
+                select 20
+                     , 'Give an Agent a Memory'
+                     , 'The maintenance desk of one bottling line. What one shift records, the next shift reads, because the agent has a memory.'
+                     , apex_page.get_url(p_page => 20)
+                     , 'fa-lightbulb-o'
+                  from dual
+                union all
+                select 30
+                     , 'Secure an Agent'
+                     , 'A payables desk that reads mail a supplier wrote. The tools are cut down until an email cannot steer them.'
+                     , apex_page.get_url(p_page => 30)
+                     , 'fa-shield'
+                  from dual
+                union all
+                select 40
+                     , 'Analyze Data at Scale'
+                     , '1176 temperature readings in one tool call, because the model writes a program that runs inside the database.'
+                     , apex_page.get_url(p_page => 40)
+                     , 'fa-bar-chart'
+                  from dual
+                 order by seq
+                ```
+        }
+        layout {
+            sequence: 20
+            slot: body
+        }
+        appearance {
+            template: @/blank-with-attributes-no-grid
+            templateOptions: #DEFAULT#
+        }
+        accessibility {
+            landmarkType: region
+        }
+        componentAppearance {
+            display: report
+        }
+        settings {
+            title: &TITLE.
+            description: &DESCRIPTION.
+            displayAvatar: true
+        }
+        plugin-avatar {
+            icon: &ICON.
+        }
+
+        column DESCRIPTION (
+            layout {
+                sequence: 20
+            }
+            source {
+                databaseColumn: DESCRIPTION
+                dataType: varchar2
+            }
+        )
+
+        column ICON (
+            layout {
+                sequence: 40
+            }
+            source {
+                databaseColumn: ICON
+                dataType: varchar2
+            }
+        )
+
+        column LINK (
+            layout {
+                sequence: 30
+            }
+            source {
+                databaseColumn: LINK
+                dataType: varchar2
+            }
+        )
+
+        column SEQ (
+            layout {
+                sequence: 50
+            }
+            source {
+                databaseColumn: SEQ
+                dataType: number
+            }
+        )
+
+        column TITLE (
+            layout {
+                sequence: 10
+            }
+            source {
+                databaseColumn: TITLE
+                dataType: varchar2
+            }
+        )
+
+        action action (
+            position: fullRowLink
+            layout {
+                sequence: 10
+            }
+            behavior {
+                type: redirectUrl
+                targetUrl: &LINK.
+            }
+        )
+
+    )
+
+    region provider-model (
+        name: Change Model
+        type: staticContent
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--scrollBody
+            ]
+        }
+    )
+
     region uc-ai-tutorials (
         name: UC AI Tutorials
         type: staticContent
@@ -27,6 +169,157 @@ page 1 (
         }
         image {
             fileUrl: #APP_FILES#icons/app-icon-512.png
+        }
+    )
+
+    pageItem P1_MODEL (
+        type: selectOne
+        label {
+            label: Model
+            alignment: left
+        }
+        lov {
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select MODEL_ID as d,
+                       MODEL_ID as r
+                  from uc_ai_utils.get_models()
+                 where PROVIDER = :P1_PROVIDER
+                ```
+        }
+        cascadingLov {
+            parentItems: P1_PROVIDER
+            itemsToSubmit: P1_PROVIDER
+        }
+        layout {
+            sequence: 20
+            region: @provider-model
+            slot: regionBody
+            alignment: left
+            startNewRow: false
+        }
+        appearance {
+            template: @/optional-floating
+            templateOptions: #DEFAULT#
+            width: 30
+        }
+    )
+
+    pageItem P1_PROVIDER (
+        type: selectOne
+        label {
+            label: Provider
+            alignment: left
+        }
+        lov {
+            type: sqlQuery
+            sqlQuery:
+                ```sql
+                select PROVIDER_NAME as d,
+                       PROVIDER_ID as r
+                  from uc_ai_utils.get_providers()
+                ```
+        }
+        layout {
+            sequence: 10
+            region: @provider-model
+            slot: regionBody
+            alignment: left
+        }
+        appearance {
+            template: @/optional-floating
+            templateOptions: #DEFAULT#
+            width: 30
+        }
+    )
+
+    button apply (
+        buttonName: APPLY
+        label: Apply Model
+        layout {
+            sequence: 10
+            region: @provider-model
+            slot: change
+        }
+        appearance {
+            buttonTemplate: @/text
+            hot: true
+            templateOptions: #DEFAULT#
+        }
+        behavior {
+            warnOnUnsavedChanges: doNotCheck
+        }
+    )
+
+    process apply-model (
+        name: Apply model
+        type: executeCode
+        source {
+            plsqlCode:
+                ```plsql
+                declare
+                  -- Every page of this app runs a profile agent, and a profile agent
+                  -- holds no model of its own: the prompt profile behind it owns the
+                  -- provider and the model. So changing the model here means updating
+                  -- the profile that each agent points at.
+                  l_profile uc_ai_prompt_profiles%rowtype;
+                  l_changed pls_integer := 0;
+                begin
+                  if :P1_PROVIDER is null or :P1_MODEL is null then
+                    apex_error.add_error(
+                      p_message          => 'Choose a provider and a model first.'
+                    , p_display_location => apex_error.c_inline_in_notification
+                    );
+                    return;
+                  end if;
+                
+                  for r in (
+                    select a.prompt_profile_code
+                         , a.prompt_profile_version
+                      from uc_ai_agents a
+                     where a.code in ('SC_DESK', 'MX_DESK', 'AP_DESK', 'AP_TRIAGE', 'CC_ANALYST')
+                       and a.status = 'active'
+                       and a.prompt_profile_code is not null
+                  )
+                  loop
+                    -- Read the whole row and write it back with two columns changed.
+                    -- The overload that takes every column sets an omitted one to
+                    -- null, which would empty the system prompt of the profile.
+                    l_profile := uc_ai_prompt_profiles_api.get_prompt_profile(
+                                   p_code    => r.prompt_profile_code
+                                 , p_version => r.prompt_profile_version
+                                 );
+                
+                    l_profile.provider := :P1_PROVIDER;
+                    l_profile.model    := :P1_MODEL;
+                
+                    uc_ai_prompt_profiles_api.update_prompt_profile(p_profile => l_profile);
+                    l_changed := l_changed + 1;
+                  end loop;
+                
+                  if l_changed = 0 then
+                    apex_error.add_error(
+                      p_message          => 'No active agent of this app was found. Run the setup script of a course first.'
+                    , p_display_location => apex_error.c_inline_in_notification
+                    );
+                    return;
+                  end if;
+                
+                  apex_application.g_print_success_message :=
+                    l_changed || ' agents now run on ' || :P1_MODEL || '. '
+                    || 'A conversation that is already open keeps the model it started with.';
+                end;
+                ```
+        }
+        execution {
+            sequence: 10
+        }
+        advanced {
+            executionMappingIdentifier: 14871089263638645
+        }
+        serverSideCondition {
+            whenButtonPressed: @apply
         }
     )
 

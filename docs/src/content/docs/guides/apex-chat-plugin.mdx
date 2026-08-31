@@ -13,7 +13,7 @@ chat interface. You set one attribute, the agent code, and the region works.
 The plug-in does the parts that are difficult to build: it runs the agent in a
 background job, it polls for the answer, and it keeps the conversation.
 
-![An empty UC AI chat region: the title APEX Helper, a welcome message next to the assistant avatar, two suggested prompt chips, and a message box](../../../assets/apex-chat/chat-empty-state.png)
+![An empty UC AI chat region: the title APEX Helper, a welcome message next to the assistant avatar, and a row of three outlined suggested-prompt buttons labelled "Try asking" directly above the message box](../../../assets/apex-chat/chat-empty-state.png)
 
 <Aside type="note" title="Where to get the plug-in">
 The plug-in is not part of the UC AI installation. It is a separate download.
@@ -34,7 +34,7 @@ The plug-in never makes the page wait. One message goes through these steps:
    tool calls, and the reasoning to the same table.
 3. The browser polls every 2 seconds. It stops when the turn is complete.
 
-[Lesson 8 of the tutorial](/products/uc-ai/docs/tutorial/service-contract-desk/08-apex-page/)
+[Lesson 8 of the tutorial](/products/uc-ai/docs/tutorial/build-an-agent/08-apex-page/)
 builds this pattern by hand. Read that lesson to learn how the pattern works. Use
 the plug-in when you want the pattern without the code.
 
@@ -191,7 +191,7 @@ that can read any table. Give the agent only the tools it needs.
 | Attribute | Type | Default | What it does |
 | --- | --- | --- | --- |
 | **Session Item** | Page Item | — | A page item that holds the session ID. The chat continues this conversation after a page submit. Leave it empty for a conversation that starts again on every page load. |
-| **Suggested Prompts** | Textarea | — | Example questions, one for each line. They show as buttons while the conversation is empty. A click sends the question. |
+| **Suggested Prompts** | Textarea | — | Example questions, one for each line. They show as buttons above the message box, with the label "Try asking", while the conversation is empty. A click sends the question immediately. Each button shows the full question. |
 | **Auto Generate Title** | Checkbox | `N` | Names the conversation after the first answer, with the language model of the browser. |
 | **Collect Feedback** | Checkbox | `N` | Shows a row with the question "Was this helpful?" and two thumb buttons below the newest answer. |
 
@@ -211,7 +211,7 @@ query gives you the conversations with a negative rating.
 | --- | --- | --- | --- |
 | **Display Mode** | Select List | `region` | `region` puts the chat in the page. `dialog` shows a small button that opens the chat in a dialog. |
 | **Header Title** | Text | `UC AI Chat` | The title in the header of the chat. |
-| **Welcome Message** | Textarea | `Ask me anything...` | The text above the suggested prompts, while the conversation is empty. |
+| **Welcome Message** | Textarea | `Ask me anything...` | The first message of the assistant, while the conversation is empty. |
 | **Avatar Icon** | Icon | `fa-robot` | The icon of the assistant, and the icon of the button in dialog mode. |
 | **Min Height** | Text | `450px` | The minimum height of the region. |
 | **Thinking Animation** | Select List | `dots` | The animation during a run: `dots`, `braille`, `plasma`, or `matrix`. |
@@ -236,6 +236,20 @@ identifier and can tell a user more about your system than you want.
 The value `off` removes the text for the eye only. A screen reader gets the
 announcement at every level, because a visual preference must not remove the only
 signal that a run is active.
+
+The attributes above control the chat. The frame around it is an ordinary APEX
+region, and the region template decides that frame. The chat has a header, padding and
+a scroll area of its own. A region with the default template repeats all three.
+
+To give the chat the whole region, set the region template to **Standard** and
+turn on these template options:
+
+- **Remove Header** — the chat has a header of its own.
+- **No Padding** — the messages then reach the edges of the region.
+- **Scroll Body** — the conversation scrolls inside the region, and the page
+  stays where it is.
+
+The screenshots on this page use all three.
 
 ### Developer
 
@@ -317,5 +331,5 @@ The current plug-in needs UC AI 26.4, because the package body calls
 <LinkCard
   title="Build the pattern yourself"
   description="Lesson 8 of the tutorial writes the queue, the job, and the poll by hand."
-  href="/products/uc-ai/docs/tutorial/service-contract-desk/08-apex-page/"
+  href="/products/uc-ai/docs/tutorial/build-an-agent/08-apex-page/"
 />

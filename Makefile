@@ -35,6 +35,10 @@ APP_ID     ?= 100
 APP_DIR    ?= applications
 APP        ?= uc-ai-chat
 
+TUT_APP_ID  ?= 777
+TUT_APP_DIR ?= examples/sample-apps/tutorials
+TUT_APP     ?= uc-ai-tutorials
+
 # Every generated script is rebuilt from these.
 SOURCES := $(shell find src -type f \( -name '*.pks' -o -name '*.pkb' -o -name '*.sql' \))
 GENERATOR_DEPS := scripts/package_utils.sh
@@ -125,6 +129,15 @@ app-export: ## Export the APEX app as APEXLANG into the export folder
 app-import: ## Import the exported app folder back into the database
 	@test -d $(APP_DIR)/$(APP) || { echo "$(APP_DIR)/$(APP) not found - set APP=<folder>"; exit 1; }
 	printf 'apex import -input %s\nexit\n' '$(CURDIR)/$(APP_DIR)/$(APP)' | sql -name $(DB_CONN)
+
+tut-app-export:
+	printf 'apex export -applicationid %s -exptype APEXLANG -dir %s  -overwrite-files -exitwhendone\n' \
+	  '$(TUT_APP_ID)' '$(TUT_APP_DIR)' | sql -name $(DB_CONN)
+	@bash scripts/relink_tut_plugin_scripts.sh $(TUT_APP_DIR)/$(TUT_APP)
+
+tut-app-import:
+	@test -d $(TUT_APP_DIR)/$(TUT_APP) || { echo "$(TUT_APP_DIR)/$(TUT_APP) not found - set APP=<folder>"; exit 1; }
+	printf 'apex import -input %s\nexit\n' '$(CURDIR)/$(TUT_APP_DIR)/$(TUT_APP)' | sql -name $(DB_CONN)
 
 # --- Audits ------------------------------------------------------------------
 

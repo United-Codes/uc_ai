@@ -1,0 +1,303 @@
+---
+title: One program instead of twenty-six calls
+description: Turn on code mode with one line, watch the model write a JavaScript program that loops inside the database, and compare the two numbers.
+sidebar:
+  order: 2
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={2}
+  of={6}
+  minutes={15}
+  promise="the same question runs inside the default tool-call budget, and you know which line did it."
+  scripts={["02_code_mode.sql"]}
+  course="analyze-data-at-scale"
+/>
+
+## The problem
+
+Lesson 1 has the right answer and a bad shape. Twenty-six tool calls, 34 413 input
+tokens, and 48 KB of temperature readings that pass through the context window of
+the model. The part of the answer that a system uses is one line:
+`RESULT: SHP-2047, SHP-2052, SHP-2061 | 1920`.
+
+The readings are not there to be read. They are there to be **counted**. Nothing
+in this question needs a language model to look at 1176 numbers. It needs
+something to apply one rule to them.
+
+**Without code mode,** the loop runs in the model, and every value it loops over
+has to reach the model. **With code mode,** the loop runs in the database, and
+only the result reaches the model.
+
+## Turn code mode on
+
+`02_code_mode.sql` asks the question of lesson 1, against the tools of lesson 1.
+One line is new:
+
+```sql
+uc_ai.g_enable_tools              := true;
+uc_ai.g_tool_tags                 := apex_t_varchar2('coldchain');
+-- The one line that this whole lesson is about.
+uc_ai.g_enable_programmatic_tools := true;
+```
+
+<Aside type="caution" title="These three values last for the whole session">
+A package global keeps its value until you change it or the session ends. So after
+this lesson, code mode stays on for everything else you run in that session, and
+lesson 1 no longer shows what it is there to show. `uc_ai.reset_globals` clears them
+all, and `01_tools_classic.sql` calls it for exactly this reason.
+
+`generate_text` also takes a `p_config` parameter that carries the same values for
+one call only, and reads and writes no global:
+
+```sql
+l_result := uc_ai.generate_text(
+  p_user_prompt => c_question
+, p_provider    => uc_ai.c_provider_anthropic
+, p_model       => uc_ai_anthropic.c_model_claude_4_6_sonnet
+, p_config      => json_object_t('{
+    "g_enable_tools": true,
+    "g_enable_programmatic_tools": true,
+    "g_tool_tags": ["coldchain"] }')
+);
+```
+
+That is the safer shape for anything you deploy, and it is the same JSON object
+lesson 6 puts on the prompt profile.
+</Aside>
+
+That flag adds one more tool to the list the model sees. UC AI builds this tool
+itself, so it is a **meta-tool**: a tool whose job is to run your other tools. It is
+called `uc_ai__run_code`, and its one argument is a string of JavaScript.
+
+```
+Tools the model sees with code mode on:
+  CC_LIST_SHIPMENTS
+  CC_GET_READINGS
+  CC_GET_LIMITS
+  uc_ai__run_code
+```
+
+The three tools are unchanged. Code mode adds a possibility and removes nothing.
+The model can still call a tool directly, and it can write a program instead.
+
+<Aside type="caution" title="Code mode can be off with nothing to tell you">
+UC AI appends `uc_ai__run_code` only when at least one of your tools is callable
+from a program. If your tag matches no tool, or if you set every tool to
+`direct`, the meta-tool is not there at all. Nothing fails and nothing warns you.
+Print the tool names, as the script above does, before you change the prompt.
+</Aside>
+
+## The same question with code mode: 5 tool calls instead of 26
+
+```
+run                   program   calls       in     out  trips   secs  finish_reason
+------------------------------------------------------------------------------------
+classic, 40 calls     no           26    34413    3723      3   46.6  stop
+code mode             yes           5    20280    3380      5     48  stop
+```
+
+<AiOutput model="claude-sonnet-4-6" date="2026-08-25" seconds={48}>
+| Shipment | Class | Claimable run | Ceil hours | Claim |
+|---|---|---|---|---|
+| **SHP-2047** | FROZEN | 150 min (1 run > 60 min) | 3 h | € 720 |
+| **SHP-2052** | CHILLED | 90 min (1 run > 60 min) | 2 h | € 240 |
+| **SHP-2061** | FROZEN | 210 min (1 run > 60 min) | 4 h | € 960 |
+
+RESULT: SHP-2047, SHP-2052, SHP-2061 | 1920
+</AiOutput>
+
+One detail in that table is wrong, and it is left in on purpose. `SHP-2061` has
+**two** breaks, of 120 and 90 minutes, not one of 210. The total is right and the
+claim is right, because the program added them correctly. The sentence the model
+wrote about its own work is not. Lesson 6 comes back to this.
+
+Same answer. Five tool calls instead of 26, and 41 percent fewer input tokens.
+
+Five tool calls fit inside the default budget of 10. Lesson 1 needed a budget
+of 40 to finish. This run uses the default. Nothing in the script raises it.
+The next section shows what happens when a run declines the program.
+
+## Why it is five calls and not one
+
+The model did not write one program. It wrote several, because the first one was
+wrong. Here is the trace of another recording of this same script, which needed
+four:
+
+```
+CALL  uc_ai__run_code
+  RESULT {"error":"code execution failed: {shipment_id: 1, readings: Array(49)}
+          is not iterable","hint":"..."}
+CALL  uc_ai__run_code
+  RESULT {"brokenShipments":[],"totalClaimEur":0}
+CALL  uc_ai__run_code          <- a program that only prints the shapes
+  RESULT {"shipment_sample":[{"shipment_id":1,"shipment_no":"SHP-2041", ...
+CALL  uc_ai__run_code
+  RESULT {"brokenShipments":[{"shipment_no":"SHP-2047", ... "claimEur":720}, ...
+```
+
+1. The first program assumed `CC_GET_READINGS` returns an array. It returns an
+   object with a `readings` key, so the loop failed.
+2. The second program ran and found nothing. **No error, and a wrong answer.**
+3. The third program is the model debugging itself. It called the tools and
+   returned a sample of each result, to find out what the fields are called.
+4. The fourth program was right.
+
+The model paid for four programs to discover the shape of your data. Nothing told
+it, and lesson 4 is about why.
+
+<Aside type="note" title="The count is not fixed">
+This run took 4 tool calls and the recorded one above took 5. Retries are not
+deterministic, so your number will differ. What repeats is the reason: the first
+program guesses the field names.
+</Aside>
+
+<Aside type="tip" title="Code mode did not save time on this run">
+46.6 seconds against 48. Code mode saves tool calls and tokens. It does not always
+save time. On this run it did not save round trips either. The model wrote about 60
+lines of JavaScript, and writing tokens takes time. Lesson 4 wins on both, because
+the program gets shorter and the run needs two round trips.
+</Aside>
+
+## What the model received, and what stayed in the database
+
+The program ran inside the database. It called `CC_GET_READINGS` 24 times, and it
+received all 1176 readings. Not one of them went to Anthropic.
+
+What went back to the model was the value of one variable:
+
+```json
+{ "brokenShipments": [ ... 3 rows ... ], "totalClaimEur": 1920 }
+```
+
+The intermediate data stays where the data is. Only the conclusion travels.
+
+## Which providers this works on
+
+Code mode is not tied to one provider. UC AI builds `uc_ai__run_code` in the shape
+that each provider expects, so the meta-tool appears for every provider constant,
+next to your normal tools.
+
+What differs is the quality of the JavaScript the model writes. These are runs of
+the question above, on the same database and the same three tools:
+
+| Provider and model | Program | Calls | Input | Secs | Answer |
+| --- | --- | --- | --- | --- | --- |
+| `openai` gpt-5.6-terra | yes | 8 | 4 910 | 24.1 | correct |
+| `xai` grok-4.6 | yes | 4 | 7 120 | 39.4 | correct |
+| `openrouter` openai/gpt-5.6-terra | yes | 3 | 2 841 | 11.8 | correct |
+| `anthropic` claude-sonnet-4-6 | yes | 4 | 13 309 | 32.2 | correct |
+| `mistral` mistral-large-latest | yes | 1 | 2 331 | 7.4 | **wrong** |
+
+<Aside type="caution" title="A wrong program can look like a cheap, healthy run">
+The Mistral run wrote a program, the program ran, nothing raised, and it
+cost less than every correct run. The answer was `NONE | 0`.
+
+The program read `temp_limit_c` from the limits row. That field is called
+`max_temp_c`. So every comparison was `reading.temp_c > undefined`, which is false,
+so no shipment ever broke the cold chain. The model then reported zero. It
+failed the same way on a second run.
+
+Lesson 3 shows how to see this, and lesson 4 removes the cause.
+</Aside>
+
+Three providers are not in that table. There is no measurement for `google`: the
+API answered with an HTTP 503 and then a transfer timeout, which says nothing about
+code mode. `oci` had no key in this database. `ollama` was not measured from the
+database. None of the three is known to fail.
+
+<Aside type="note" title="A run can decline the program">
+Code mode is an offer. On a first attempt, `claude-sonnet-4-6` chose to call
+`CC_GET_READINGS` one shipment at a time instead of writing a program, and the run
+stopped with `ORA-20301` at the default budget of 10. The second attempt wrote a
+program and answered correctly.
+
+So do not treat "fits inside the default budget" as a guarantee. A run that
+declines the program needs the budget of lesson 1.
+</Aside>
+
+## Code mode does not change your tools
+
+Three things stay exactly as they were, and each one matters later:
+
+- **Your tools are the same rows.** Lesson 1 registered them, and this lesson
+  changed none of them.
+- **The tools run in the transaction of the caller.** A tool that a program calls
+  behaves the same as a tool the model calls directly. A tool that commits,
+  commits.
+- **The tool set is the same.** A program can call the tools of this run, and no
+  other tool in your schema.
+
+<Aside type="caution" title="The sandbox limits the program, not the tools">
+Code mode makes the generated JavaScript powerless. It does not make your tools
+safe. A program can call any read tool you gave the run, as many times as the
+budget allows. Lesson 5 is about the two controls for this.
+</Aside>
+
+## If the sandbox is not installed
+
+Code mode has no fallback without the sandbox. If it is not installed, the run
+stops with a message that names the fix:
+
+```
+ORA-20502: Code mode requires the MLE sandbox, which is not installed for this
+schema (no valid UC_AI_PTC_RUNNER synonym). Run scripts/install_ptc_sandbox.sql
+as a DBA to enable code mode.
+```
+
+Check 4 of `00_precheck.sql` finds this before you spend a token on it.
+
+## Verification
+
+Two things must be true after this lesson.
+
+First, the meta-tool is in the list. The section `What the model was offered` in
+`02_code_mode.sql` prints the names of the tools the model got. Run it, and read the
+four names.
+
+Second, the answer still matches the database:
+
+```sql
+select s.shipment_no
+     , cc_analyst_pkg.minutes_over(s.id) as minutes_over
+  from cc_shipments s
+ where cc_analyst_pkg.minutes_over(s.id) > 0
+ order by s.shipment_no;
+```
+
+```
+SHIPMENT_NO   MINUTES_OVER
+SHP-2047               150
+SHP-2052                90
+SHP-2061               210
+```
+
+A code-mode run that gives a different answer is not a reason to distrust code
+mode. It is a reason to read the program, which is the next lesson.
+
+## Key takeaways
+
+- `uc_ai.g_enable_programmatic_tools := true` adds one tool, `uc_ai__run_code`,
+  and changes nothing else.
+- The meta-tool appears only when at least one tool is code-callable. When it is
+  absent, there is no error to read.
+- Code mode is an offer. The model can still call tools directly, and it does.
+- The saving comes from the data that stays in the database. A direct call to a
+  bulk tool gives that saving back.
+- Code mode works on every provider that supports tool calling. The JavaScript the
+  model writes is what varies, and a wrong field name gives a plausible zero rather
+  than an error.
+
+**Full reference:** [Programmatic tool
+calling](/products/uc-ai/docs/guides/programmatic-tool-calling/) has the security
+model and every option.
+
+<LinkCard
+  title="Next lesson: Read the program the model wrote"
+  description="Print the JavaScript, then run six broken programs of your own and learn what each kind of mistake does."
+  href="/products/uc-ai/docs/tutorial/analyze-data-at-scale/03-read-the-program/"
+/>

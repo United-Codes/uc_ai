@@ -1,0 +1,243 @@
+---
+title: See what your agent did
+description: Read the trace of a run, find out why an agent called the wrong tool or no tool, and keep one diagnostic query you can paste anywhere.
+sidebar:
+  order: 4
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+
+<LessonHeader
+  lesson={4}
+  of={9}
+  minutes={15}
+  promise="you can answer “what did it actually do?” with a <code>select</code>."
+/>
+
+## The problem
+
+Lesson 3 gave the desk three tools and a good answer. One day the answer is wrong
+or slow. Then you need to know what happened, and the answer text does not tell
+you. It is the **output** of the run, not a record of it.
+
+**Without the trace,** you change the prompt and hope. **With the trace,** you can
+see which tool ran, what it returned, and what the model did next.
+
+This lesson comes before the harder lessons on purpose. You need it at lesson 5,
+not at lesson 9.
+
+## Every run writes its own history
+
+UC AI records two things for each run:
+
+- **`uc_ai_agent_executions`** — one row for each run. Who ran it, the status, the
+  tokens, and the run context that was in force.
+- **`uc_ai_agent_messages`** — one row for each message item, in order. This
+  includes a row for each tool call and each tool result.
+
+Read the second one for the run of lesson 3:
+
+```sql
+select seq
+     , role
+     , tool_name
+     , substr(coalesce(tool_input, content), 1, 60) as detail
+  from uc_ai_agent_messages
+ where session_id = :session_id
+ order by seq;
+```
+
+```
+SEQ  ROLE         TOOL_NAME           DETAIL
+1    user         -                   How much can I still credit on INV-1003, and is th
+2    reasoning    -
+3    tool_call    SC_LIST_INVOICES    {"max_rows":20}
+4    tool_call    SC_LIST_CALLS       {"max_rows":20}
+5    tool_result  SC_LIST_INVOICES
+6    tool_result  SC_LIST_CALLS
+7    assistant    -                   INV-1003 has $0 still available to credit; its full
+```
+
+Three facts you can read straight off that list:
+
+- The model asked for two tools **in one round** (`seq` 3 and 4), then read both
+  results. A round can hold more than one call.
+- The arguments were `{"max_rows":20}`. There is no contract in them, because no
+  tool declares one. The trace is where you confirm that.
+- The answer at `seq` 7 came after the results at 5 and 6.
+
+<Aside type="tip" title="Where is the contract?">
+`tool_input` shows what the **model** sent. UC AI adds `_ctx` to the arguments
+after that point, so the run context is not in this column. Read it from the
+execution row instead, as the next query does.
+</Aside>
+
+## The one query to keep
+
+Save this. It answers "what did the last run of this agent do", and it drops
+straight into an APEX report region:
+
+```sql
+select e.id            as execution_id
+     , e.status
+     , e.created_by
+     , e.audience
+     , e.tool_calls_count
+     , e.total_input_tokens
+     , e.total_output_tokens
+     , e.run_context
+     , e.error_message
+  from uc_ai_agent_executions e
+ where e.agent_id = ( select id from uc_ai_agents where code = 'SC_DESK' )
+ order by e.started_at desc
+ fetch first 5 rows only;
+```
+
+For the lesson 3 run it returns:
+
+```
+STATUS      CREATED_BY   AUDIENCE   TOOL_CALLS_COUNT   IN     OUT   RUN_CONTEXT
+completed   UC_AI        db                        2   1027    48   {"contract_id":"88"}
+```
+
+`run_context` is the column that proves which contract the run was bound to. When
+somebody asks "why did the agent see contract 88?", this row is the answer.
+
+## Three faults, and how the trace shows each one
+
+### The model called no tool
+
+You ask for a number and get prose with no `tool_call` row anywhere. Check these
+three things, in this order:
+
+<Aside type="caution" title="Check the profile, not the globals">
+The most common cause is the first one, and it is invisible from your code: the
+tool tag lives in the **model configuration of the prompt profile**, not in the
+package globals, when you run through an agent.
+</Aside>
+
+1. **The tag did not reach the profile.** Read it back:
+
+   ```sql
+   select model_config_json from uc_ai_prompt_profiles
+    where code = 'SC_DESK_PROFILE' and version = 1;
+   ```
+
+   You must see `"g_enable_tools": true` and your tag in `"g_tool_tags"`. Lesson 3
+   wrote both.
+
+2. **The tag matches no active tool.** A tag with no tool behind it gives the model
+   nothing, and no error:
+
+   ```sql
+   select t.code, t.active, g.tag
+     from uc_ai_tools t join uc_ai_tool_tags g on g.tool_id = t.id
+    where g.tag = 'scdesk';
+   ```
+
+3. **The description does not say when to use the tool.** The model reads only the
+   description. "Lists invoices" tells it what the tool is. "Use this before you
+   raise a credit note" tells it when to call it. Weaker models need the second
+   kind.
+
+### The tool ran and the model ignored it
+
+This one wastes the most time, because the trace looks healthy. There is a
+`tool_call`, a `tool_result`, and then an answer that does not use the result.
+
+Read `tool_output` before you blame the model:
+
+```sql
+select seq, tool_name, substr(tool_output, 1, 200) as tool_output
+  from uc_ai_agent_messages
+ where session_id = :session_id
+   and role = 'tool_result'
+ order by seq;
+```
+
+A handler that returns a refusal instead of data is the usual answer. The desk's
+handlers return a `status` of `refused` and a `reason` when they decline, so the
+cause is in that column. The model then reports what it was told, and the answer is
+about your data access, not about your data.
+
+### The run stopped early
+
+`g_max_tool_calls` bounds how far the tool loop goes. Read what really happened
+from `tool_calls_count` and from the count of `tool_call` rows, and do not assume
+the configured number:
+
+```sql
+select count(*) as tool_calls
+  from uc_ai_agent_messages
+ where session_id = :session_id
+   and role = 'tool_call';
+```
+
+<Aside type="caution" title="The limit is checked between rounds">
+UC AI tests the limit before each new round of tool calls, and one round can hold
+several calls. So the number of calls that actually run can pass the configured
+number by the size of the last round. A recorded run with `g_max_tool_calls` set to
+`1` executed **three** calls, because the model asked for three at once. Treat the
+value as a bound on rounds, and read the trace for the true count.
+</Aside>
+
+## What a failed run records
+
+A run that raises does **not** record tokens or tool calls. The framework has no
+result object to read them from, so both stay `0`:
+
+```sql
+select status, error_message, total_input_tokens, tool_calls_count
+  from uc_ai_agent_executions
+ where status = 'failed'
+ order by started_at desc
+ fetch first 3 rows only;
+```
+
+So `tool_calls_count = 0` on a failed row does not mean "no tool ran". Count the
+`tool_call` rows in `uc_ai_agent_messages` instead. On a **completed** row the
+column is true.
+
+## Regression-test your own agent
+
+The trace is also how you test an agent without paying for tokens. Two rules carry
+most of the value:
+
+- **Test the handler, not the model.** A tool handler is a PL/SQL function that
+  takes JSON and returns JSON. Call it directly, with a `_ctx` you build yourself,
+  and assert the result. No provider call, no cost, and the same answer every time.
+  Lesson 3 already did this to prove the isolation.
+- **For a live run, assert properties and never prose.** Assert that the expected
+  row appeared, that the tool-call set holds the codes you expect, and that
+  `finish_reason` is `stop`. Never assert the wording of an answer: it changes with
+  the model, and a passing text match proves nothing about the data.
+
+## Verification
+
+Run the diagnostic query above against your own last run. Two columns must be
+right:
+
+- `run_context` holds `{"contract_id":"88"}`. If it is empty, the run was not
+  bound, and every tool refused.
+- `tool_calls_count` is `2` for the lesson 3 question, and the trace holds two
+  `tool_call` rows to match.
+
+
+## Key takeaways
+
+- The answer is the output of a run. The trace is the record of it. Debug from the
+  trace.
+- `tool_output` is the first column to read when a tool ran and the answer ignored
+  it. A refusal from your handler reads like a failure of the model.
+- `select seq, role, tool_name, tool_input from uc_ai_agent_messages where session_id = :s order by seq;`
+
+**Full reference:** [Conversation message
+log](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) has
+every column and the attribution rules for multi-agent patterns.
+
+<LinkCard
+  title="Next lesson: Tools that write, rules in the database"
+  description="Let the desk raise a credit note, and make the database decide whether it is allowed."
+  href="/products/uc-ai/docs/tutorial/build-an-agent/05-tools-that-write/"
+/>

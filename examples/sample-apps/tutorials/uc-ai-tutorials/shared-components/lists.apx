@@ -62,6 +62,44 @@ list navigation-bar (
 list navigation-menu (
     name: Navigation Menu
 
+    entry analyze-data-at-scale (
+        label: Analyze Data at Scale
+        icon {
+            imageIconCssClasses: fa-bar-chart
+        }
+        layout {
+            sequence: 50
+        }
+        isCurrent {
+            type: pages
+            pages: 40
+        }
+        link {
+            target: {
+                page: 40
+            }
+        }
+    )
+
+    entry give-an-agent-a-memory (
+        label: Give an Agent a Memory
+        icon {
+            imageIconCssClasses: fa-lightbulb-o
+        }
+        layout {
+            sequence: 30
+        }
+        isCurrent {
+            type: pages
+            pages: 20
+        }
+        link {
+            target: {
+                page: 20
+            }
+        }
+    )
+
     entry home (
         label: Home
         icon {
@@ -77,10 +115,10 @@ list navigation-menu (
         }
     )
 
-    entry uc-ai-chat (
-        label: UC AI Chat
+    entry put-an-agent-in-apex (
+        label: Put an Agent in APEX
         icon {
-            imageIconCssClasses: fa-file-o
+            imageIconCssClasses: fa-comments-o
         }
         layout {
             sequence: 20
@@ -92,6 +130,25 @@ list navigation-menu (
         link {
             target: {
                 page: 10
+            }
+        }
+    )
+
+    entry secure-an-agent (
+        label: Secure an Agent
+        icon {
+            imageIconCssClasses: fa-shield
+        }
+        layout {
+            sequence: 40
+        }
+        isCurrent {
+            type: pages
+            pages: 30
+        }
+        link {
+            target: {
+                page: 30
             }
         }
     )

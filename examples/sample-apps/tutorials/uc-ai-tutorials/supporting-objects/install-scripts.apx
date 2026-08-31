@@ -1,0 +1,45 @@
+installScript ai_tables.sql (
+    execution {
+        sequence: 10
+    }
+    script {
+        contentFile: ai_tables.sql
+    }
+)
+
+installScript uc_ai_chat.pkb (
+    execution {
+        sequence: 30
+    }
+    script {
+        contentFile: uc_ai_chat.pkb
+    }
+)
+
+installScript uc_ai_chat.pks (
+    execution {
+        sequence: 20
+    }
+    script {
+        contentFile: uc_ai_chat.pks
+    }
+)
+
+installScript uc_ai_chat_hook.pkb (
+    execution {
+        sequence: 50
+    }
+    script {
+        contentFile: uc_ai_chat_hook.pkb
+    }
+)
+
+installScript uc_ai_chat_hook.pks (
+    execution {
+        sequence: 40
+    }
+    script {
+        contentFile: uc_ai_chat_hook.pks
+    }
+)
+

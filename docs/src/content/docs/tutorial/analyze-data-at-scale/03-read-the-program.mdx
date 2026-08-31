@@ -1,0 +1,241 @@
+---
+title: Read the program the model wrote
+description: Pull the generated JavaScript out of the result, then run seven programs through the sandbox with no model and learn what every kind of mistake does.
+sidebar:
+  order: 3
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={3}
+  of={6}
+  minutes={20}
+  promise="you can print the JavaScript your model wrote, and you know what happens to every kind of mistake in it."
+  scripts={["03_inspect_program.sql"]}
+  course="analyze-data-at-scale"
+/>
+
+## The problem
+
+Lesson 2 gave a correct answer through code that you did not write and did not
+see. One day that answer is wrong. The prompt looks fine, the tools look fine, and
+there is no error anywhere.
+
+**Without the program,** you change the prompt and hope. **With the program,** you
+read the JavaScript that produced the number.
+
+Lesson 4 needs what this lesson teaches, so it comes before the harder ones.
+
+## The program is an ordinary tool call
+
+`generate_text` returns a `messages` array. That array is the whole conversation,
+and each message holds a `content` array of items. A tool call is one of those
+items. This is the shape:
+
+```
+messages[]                       the conversation, in order
+  └─ content[]                   the parts of one message
+       └─ { "type": "tool_call"
+          , "toolName": "uc_ai__run_code"
+          , "args": "{\"code\": \"...the JavaScript...\"}" }
+```
+
+A code-mode call is a tool call like any other. So to read the program, find the
+content item whose `type` is `tool_call` and whose `toolName` is
+`uc_ai__run_code`, then read the `code` key of its `args`.
+
+`cc_analyst_pkg.program_source` reads the array that way. Condensed from the two
+functions in the package:
+
+```sql
+if l_item.get_string('type') = 'tool_call'
+   and l_item.get_string('toolName') = uc_ai_tools_api.c_code_mode_tool_code
+then
+  -- get_clob, not get_string: a generated program passes 32k easily.
+  return json_object_t.parse(l_item.get_clob('args')).get_clob('code');
+end if;
+```
+
+<Aside type="caution" title="Read it as a CLOB">
+`args` is a JSON **string** inside the content item, and a generated program goes
+past the 32767-byte limit of `varchar2` without trying. Use `get_clob` on the
+arguments and `get_clob` on the `code` key. `get_string` cannot return more than
+32767 bytes, and it raises `ORA-06502` on a longer program.
+</Aside>
+
+## What the model wrote
+
+This is the program behind the lesson 2 answer, with the middle removed:
+
+```js
+// Step 1: Fetch all shipments and limits in parallel
+const [shipments, limits] = await Promise.all([
+  callTool("CC_LIST_SHIPMENTS", {}),
+  callTool("CC_GET_LIMITS", {})
+]);
+
+// Step 2: Fetch readings for all shipments in parallel
+const readingsArr = await Promise.all(
+  shipments.map(s => callTool("CC_GET_READINGS", { shipment_id: s.shipment_id }))
+);
+
+// ... the run-length rule, then:
+result = { brokenShipments, totalClaimEur };
+```
+
+Read three things off this program.
+
+- **`await callTool(code, args)` is the only channel.** The program has no SQL, no
+  network and no modules. Lesson 5 proves it.
+- **The result is a top-level variable named `result`.** Only its value goes back
+  to the model.
+- **The program can hold 24 calls in one tool call.** That is where the 26-to-1
+  ratio comes from.
+
+## A program that was wrong and reported no error
+
+An earlier recorded run of the same question produced this instead:
+
+```js
+const { temp_limit_celsius, max_minutes_above, sample_minutes, claim_per_hour_eur } = limit;
+
+for (const reading of readings) {
+  if (reading.temperature_celsius > temp_limit_celsius) {
+```
+
+`temp_limit_celsius` and `temperature_celsius` do not exist. The real names are
+`max_temp_c` and `temp_c`. Every comparison was `undefined > undefined`, which is
+false, so the program found no broken shipment and reported a total of zero.
+
+Nothing raised. The tool call succeeded, the program ran, and it returned a
+well-formed wrong answer.
+
+The model guessed those names because nothing told it the real ones. That is the
+subject of lesson 4.
+
+## Seven programs you run yourself
+
+Part 1 of `03_inspect_program.sql` makes one model call, so it costs tokens. Part 2
+makes none, and you can run it as often as you like.
+
+`execute_agent_tool` is the same entry point a provider uses when the model asks for
+`uc_ai__run_code`. You can call it yourself:
+
+```sql
+l_settings := uc_ai_settings.build_from_globals;
+l_args.put('code', p_code);
+l_out := uc_ai_tools_api.execute_agent_tool(
+           uc_ai_tools_api.c_code_mode_tool_code, l_args, l_settings);
+```
+
+This is the cheapest way to learn the sandbox. No provider, no tokens, and the
+same behavior. Part 2 of `03_inspect_program.sql` runs seven programs through it.
+
+<AiOutput label="Output of the seven programs, no model called">
+<div>
+
+```
+1 correct              -> {"classes":2,"frozen":-15}
+
+2 forgotten await      -> {"classes":2}
+
+3 aliased call         -> {"error":"code execution failed: callTool() is asynchronous - write: await callTool(...)","hint":"Fix the program and call the code tool again. ..."}
+
+4 no result            -> {"error":"the program finished without assigning a value to `result`","hint":"..."}
+
+5 log then throw       -> {"error":"code execution failed: l.product_class.toUpperCase(...).nope is not a function","hint":"...","console":"fetched the limits"}
+
+6 unknown tool         -> {"error":"code execution failed: ORA-20504: Tool not found: CC_DELETE_EVERYTHING","hint":"..."}
+
+7 syntax error         -> {"error":"code execution failed: syntax error: <function>:2:0 Expected comma but found ; ...","hint":"..."}
+```
+
+</div>
+</AiOutput>
+
+Five of the seven come back as errors. **None of them raised.** Program 1 is
+correct and program 2 is repaired, so both return a result.
+
+## A program that fails does not stop the run
+
+A code-mode failure is **data**. UC AI returns it to the model as a JSON object
+with an `error` and a `hint`, and the run continues. The model reads the error and
+writes a better program on its next turn.
+
+UC AI does this deliberately.
+
+<Aside type="caution" title="A run that does not raise can still be wrong">
+Your PL/SQL call succeeds when the program failed. `generate_text` returns
+normally, `finish_reason` is `stop`, and the answer is whatever the model made of
+an error message. Never read "it did not raise" as "it worked". Read the answer,
+or read the program.
+</Aside>
+
+## What each mistake does
+
+**Program 2 — the missing `await`.** It worked. UC AI inserts the missing `await`
+before the program runs.
+
+**Program 3 — the same mistake behind an alias.** `const fetchIt = callTool;`
+cannot be repaired by a text rewrite. So UC AI raises an error instead of letting
+the program use an unfinished call as if it were data.
+
+**Program 4 — no `result`.** The program ran and assigned nothing. UC AI has
+nothing to send back and says so in those words.
+
+**Program 5 — the console.** `console.log` is the only debugging channel a
+program has. UC AI captures up to 50 lines and gives them back **when the program
+fails**, in a `console` field beside the error. A program that assigns `result`
+drops its log, so you cannot use `console.log` to carry data out.
+
+**Program 6 — a tool that does not exist.** The allow-list answers, not the
+database. The same error comes back for a tool that exists but is not part of this
+run.
+
+**Program 7 — a syntax error.** The program never runs. The message names the line
+and the column, and the model corrects it.
+
+## Verification
+
+Two checks after this lesson.
+
+First, the seven programs raised nothing. Prove that the session is healthy and
+that no program wrote anything:
+
+```sql
+select count(*) as claims_filed from cc_claims;
+```
+
+```
+CLAIMS_FILED
+           0
+```
+
+Second, print the program of your own lesson 2 run and read it. The one question
+to answer: does it read the fields that your tools really return? Compare its
+field names against the JSON your handler builds.
+
+## Key takeaways
+
+- The program is in `messages[].content[]`, in the `tool_call` item whose
+  `toolName` is `uc_ai__run_code`. Read `args` and `code` as CLOBs.
+- A code-mode failure comes back to the model as data, not as an exception. Your
+  PL/SQL call succeeds either way.
+- `execute_agent_tool` runs a program with no model and no cost. Use it to learn
+  the sandbox and to test a tool that a program will call.
+- A forgotten `await` is repaired. An aliased `callTool` is not, and it raises
+  rather than returning a promise as data.
+- `console.log` comes back only when the program fails. A program that assigns
+  `result` drops its log.
+
+**Full reference:** [How the program calls your
+tools](/products/uc-ai/docs/guides/programmatic-tool-calling/#how-the-program-calls-your-tools).
+
+<LinkCard
+  title="Next lesson: Tell the program what your tools return"
+  description="Print what the program is really told about your tools, then correct it and watch the same question cost 3981 tokens."
+  href="/products/uc-ai/docs/tutorial/analyze-data-at-scale/04-the-catalog-is-the-api/"
+/>

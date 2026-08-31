@@ -1,0 +1,550 @@
+---
+title: Make it an agent
+description: Move the prompt and the schema onto a versioned profile, run it as an agent, and read the trace and the cost that UC AI keeps for every run.
+sidebar:
+  order: 5
+---
+
+import { Aside, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={5}
+  of={5}
+  minutes={15}
+  promise="one call reads every new document in the inbox, and UC AI can tell you what each run did and what it cost."
+  scripts={["05_inbox.sql", "06_model_matrix.sql", "00_teardown.sql"]}
+  course="extract-structured-data"
+/>
+
+## The problem
+
+Two things are still missing, and you need both before anybody else depends on
+this.
+
+**The prompt is a constant in a package body.** A better prompt means a compile and
+a deployment, and you cannot tell afterwards which prompt read which invoice.
+
+**Nothing keeps a record of a run.** `inv_extractions` has the token counts because
+*you* wrote that code. If you had not, every run would be gone.
+
+One move solves both: put the prompt on a **prompt profile**, and put an **agent**
+in front of it.
+
+## Step 1: the prompt becomes a row
+
+A prompt profile holds the system prompt, the response schema, the provider and the
+model, as a row you can version.
+
+```sql
+l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+  p_code                   => 'INV_EXTRACT'
+, p_description            => c_description
+, p_system_prompt_template => c_system_prompt
+, p_user_prompt_template   => 'Extract this document.'
+, p_provider               => uc_ai.c_provider_openai
+, p_model                  => uc_ai_openai.c_model_gpt_5_6_terra
+, p_response_schema        => c_schema
+);
+
+uc_ai_prompt_profiles_api.change_status(
+  p_id     => l_profile_id
+, p_status => uc_ai_prompt_profiles_api.c_status_active
+);
+```
+
+A new version of your extraction prompt is now an insert and a status change, not a
+deployment.
+
+<Aside type="caution" title="A new profile is a draft">
+`create_prompt_profile` makes a **draft**, and a call that does not name a version
+resolves the latest **active** one. Without the `change_status` call the profile
+cannot be found at all.
+</Aside>
+
+## Step 2: the agent that records every run
+
+An agent of type `profile` is a name in front of a prompt profile. It does not make
+the model any smarter. What it adds is a record:
+
+- one row in `uc_ai_agent_executions` for every run,
+- the messages of every run in `uc_ai_agent_messages`,
+- the tokens of every run counted and stored for you.
+
+```sql
+l_agent_id := uc_ai_agents_api.create_agent(
+  p_code                => 'INV_EXTRACT_AGENT'
+, p_description         => 'Reads one supplier document and returns its data.'
+, p_agent_type          => uc_ai_agents_api.c_type_profile
+, p_prompt_profile_code => 'INV_EXTRACT'
+, p_timeout_seconds     => 120
+);
+
+uc_ai_agents_api.change_status(
+  p_code    => 'INV_EXTRACT_AGENT'
+, p_version => 1
+, p_status  => uc_ai_agents_api.c_status_active
+);
+
+commit;
+```
+
+Three things about that block:
+
+- **The same draft trap as the profile.** `create_agent` makes a draft too.
+- **The `commit` is not optional.** UC AI writes the execution row in a transaction
+  of its own. An uncommitted agent row makes that write wait for a lock it never
+  gets, so the run hangs.
+- **The profile is named by code, and nothing checks that it exists.** A typo in
+  `p_prompt_profile_code` creates and activates happily, and fails on the first run.
+
+## Step 3: run it
+
+The agent takes its files as a `t_files` collection. Every entry needs the same
+three values you gave `create_file_content` in lesson 1: a media type, the BLOB,
+and a filename.
+
+```sql
+l_files := uc_ai_message_api.t_files();
+l_files.extend;
+l_files(1).media_type := 'application/pdf';
+l_files(1).data_blob  := l_blob;
+l_files(1).filename   := 'halvorsen.pdf';
+
+l_result := uc_ai_agents_api.execute_agent(
+  p_agent_code => 'INV_EXTRACT_AGENT'
+, p_files      => l_files
+, p_session_id => l_session
+);
+```
+
+The same schema and the same prompt, this time on `halvorsen.pdf`. **One line of
+your own code changes**, and it is the line that reads the answer:
+
+```
+get_object   -> an object
+get_clob len -> -1
+```
+
+That is the exact opposite of lesson 2. The profile carries the response schema, so
+`execute_agent` parses the answer for you. `final_message` is a JSON object, and
+`get_clob` gives you nothing:
+
+```sql
+-- lesson 2, with generate_text
+l_invoice := json_object_t(l_result.get_clob('final_message'));
+
+-- here, with execute_agent
+l_invoice := l_result.get_object('final_message');
+```
+
+The three shapes:
+
+| You call | `final_message` is | How to read it |
+| --- | --- | --- |
+| `uc_ai.generate_text` with a schema | text holding JSON | `json_object_t(get_clob(...))` |
+| `uc_ai_prompt_profiles_api.execute_profile` | text holding JSON | `json_object_t(get_clob(...))` |
+| `uc_ai_agents_api.execute_agent`, profile agent with a schema | a JSON object | `get_object(...)` |
+
+The result also carries three values the plain call never had:
+
+```
+execution_id: 5429
+session_id:   59DD7E8FF910A37BE0630201590A5514
+status:       completed
+```
+
+Store `execution_id` on your own row and you can always answer "which run produced
+this invoice?". `inv_extractions` has a column for it.
+
+## Step 4: the whole inbox
+
+`run_inbox` now calls `extract_with_agent`, and it is short, because lessons 2, 3
+and 4 did the work:
+
+```sql
+<<document_loop>>
+for doc in ( select id, filename from inv_documents
+              where status = 'NEW' order by id )
+loop
+  begin
+    l_extraction_id := extract_with_agent(doc.id);
+    l_extraction_id := post_extraction(l_extraction_id);
+    commit;
+    l_handled := l_handled + 1;
+  exception
+    when others then
+      ...
+  end;
+end loop document_loop;
+```
+
+The commit is inside the loop on purpose. One document is one unit of work, and a
+bad PDF at the end of a run of a hundred must not undo the ninety-nine before it.
+
+The handler is longer than it looks like it needs to be. `extract_with_agent`
+records its own failures. A failure while **writing the rows** does not. A short
+handler then leaves that document at `EXTRACTED`. That status is not `NEW`, so the
+next run skips it, and not `FAILED`, so no list of problems shows it. The document
+is then in no list at all. So the handler sets the status and writes the message
+itself, and only then commits.
+
+```
+Documents handled: 4.
+```
+
+## What the runs cost
+
+```sql
+select d.filename, x.seconds, x.prompt_tokens, x.completion_tokens, x.total_tokens
+  from inv_extractions x
+  join inv_documents d on d.id = x.document_id
+ order by x.id;
+```
+
+```
+FILENAME                      SECONDS  PROMPT_TOKENS  COMPLETION_TOKENS  TOTAL_TOKENS
+ferrotek.pdf                      3.3           2711                360          3071
+nordwind.pdf                      3.8           1040                403          1443
+halvorsen.pdf                     4.7           4055                475          4530
+ferrotek-delivery-note.pdf        3.3           2763                297          3060
+```
+
+```
+DOCUMENTS  TOTAL_TOKENS  SECONDS
+        4         12104     15.1
+```
+
+Your `prompt_tokens` will be very close to this column, because the document and
+the prompt are the same every time. Your `completion_tokens` will not: the model
+writes the answer again on every run, and a description that comes back one word
+longer changes the count.
+
+Two things in that table:
+
+- **A PDF does not cost by its size on disk.** `ferrotek.pdf` and `nordwind.pdf`
+  are within 100 bytes of each other, both one page, and one costs 2,711 prompt
+  tokens while the other costs 1,040. The prompt-token count for one document
+  repeats across runs, so this is not noise. It is also not the same between
+  models: `gpt-5.4-nano` charges 1,209 prompt tokens for `halvorsen.pdf` where
+  `gpt-5.6-terra` charges 4,055, for the same file. How a provider counts a document
+  is its own business, so store the number for every run.
+- **A second page costs about half again**, not double. `halvorsen.pdf` is 4,055
+  prompt tokens against ferrotek's 2,711. It is also the longer document: eight
+  line items to six, and a block of payment and returns text.
+
+A scanned invoice works too, because the provider renders every page as an image
+anyway. The same FerroTek invoice as an image-only PDF with no text layer at all is
+48,694 bytes instead of 3,838, and it costs 3,494 prompt tokens instead of 2,711.
+It returned the same net amount, the same total and the same six lines.
+
+## Which model, and does it need reasoning?
+
+`06_model_matrix.sql` holds the whole experiment: the schema and the system prompt
+are held fixed, and only the model and the reasoning level move. It scores every
+run in PL/SQL against amounts typed in by hand from the paper, so nothing marks its
+own work.
+
+<Aside type="caution" title="This script costs more than the rest of the course">
+`06_model_matrix.sql` makes about 30 calls to the provider, roughly 70,000 tokens.
+It is optional, and the course works without it. Run it when you want these
+numbers for your own documents.
+</Aside>
+
+Part 1, one run of each model over the four documents:
+
+<AiOutput model="four OpenAI models" date="2026-08-25" label="Recorded run of 06_model_matrix.sql">
+```
+=== 1. Model tiers, one run per document ===
+gpt-5.6-terra                   4 of 4       12088 tokens
+gpt-5.6-sol                     4 of 4       12236 tokens
+gpt-5.6-luna                    4 of 4       12667 tokens
+gpt-5.4-nano                    4 of 4        5703 tokens
+```
+</AiOutput>
+
+"4 of 4" means the document type, all three amounts, the line count and the sum of
+the lines were right on every document.
+
+Every tier got everything right, and the cheapest one did it at **less than half
+the tokens**.
+
+Do not take that as settled. An earlier run of the same script scored
+`gpt-5.4-nano` at **3 of 4**: on `ferrotek.pdf` it returned `2091.50` as the net
+amount, the subtotal printed on the page, instead of `2136.50` which includes the
+delivery charge. So four documents and one pass is an indication, not a
+measurement. Run it a few times.
+
+### The cheap model on a scanned invoice
+
+Part 3 runs the hardest case three times per tier. It is the same FerroTek invoice,
+rasterized to an image-only PDF with no text layer at all — a scan:
+
+<AiOutput model="gpt-5.4-nano and gpt-5.6-terra" date="2026-08-25" label="Recorded run, three passes each" quiet>
+```
+=== 3. A scan, three runs per tier ===
+  nano  run 1  net=2091.5
+  terra run 1  OK
+  nano  run 2  net=2091.5
+  terra run 2  OK
+  nano  run 3  net=2091.5
+  terra run 3  OK
+```
+</AiOutput>
+
+Three failures out of three, and the larger model right three times out of three.
+
+The small model returned `net=2091.5`, the **same** mistake it made intermittently
+on the text version. It did not misread a digit. It stopped applying a rule from
+the system prompt, and it did so every time once the input got harder. One pass
+would not have shown that.
+
+### Reasoning on the cheapest model
+
+Part 2 turns reasoning on, on the **cheapest** model, because that is where it has
+the best chance of helping:
+
+<AiOutput model="gpt-5.4-nano" date="2026-08-25" label="Recorded run, reasoning low and high" quiet>
+```
+=== 2. Reasoning, on the cheapest model ===
+gpt-5.4-nano, reasoning low     4 of 4        6186 tokens
+gpt-5.4-nano, reasoning high    4 of 4        8086 tokens
+```
+</AiOutput>
+
+Reasoning scored 4 of 4 at both levels, in both runs of the script. It never made
+an answer worse. But the model without reasoning also scored 4 of 4 in this run, so
+**these four documents cannot show that reasoning fixed anything.** What they do
+show is the price: 8% more tokens at low, and 42% more at high.
+
+The provider guidance says the same thing. Reasoning effort buys a model room to
+**combine several parts of a page**, not sharper eyes. The rule is about the shape
+of the question:
+
+- **Reading a value that is printed** — leave reasoning off.
+- **Combining several parts of the page into one answer** — turn reasoning on. A
+  document with totals on page 2 and adjustments on page 1 is the case to try it
+  on.
+
+### Which model to choose
+
+- **Start with the cheapest tier in the family**, and prove it on ten of your own
+  documents, more than once each. That is an afternoon of work.
+- **Move up a tier for scans and photos**, for hand-filled forms and checkboxes,
+  and for scripts other than Latin. Published benchmarks put the largest small-model
+  gaps in exactly those places, and much smaller gaps on multi-column layouts.
+- **Try reasoning before a bigger model** when the failure is a rule not applied
+  rather than a value misread. It is usually the cheaper of the two, and this
+  script is how you find out whether it helps on your documents.
+- **Keep the checks either way.** They tell you which of these cases you have.
+
+<Aside type="note" title="Models will make your numbers add up for you">
+Published work on 10,656 real receipts found that models sometimes **change a line
+item's price, or invent a tax line, so that the details match the total** — and that
+the frontier model did this more often than the small one, not less.
+
+That is the same behaviour this course hit in lesson 3, where allowing `TAX` as a
+line kind made two runs in three add a tax line that was not a line on the page.
+
+The sum check in lesson 3 catches more than bad reading. It also catches the model
+reconciling the numbers on your behalf.
+</Aside>
+
+<Aside type="tip" title="The sum check is what caught the small model">
+One check from lesson 3 found the failure above. It compared the sum of the line
+items with the net amount, they did not agree, and `validate_extraction` returned
+`SUM_MISMATCH`.
+
+With the checks, choosing a cheaper model is a **cost** decision, because you find
+out when it was not good enough. Without them it is a risk nobody can see.
+</Aside>
+
+## The trace UC AI kept for you
+
+UC AI records every run: what the agent was sent, what came back, and what it used.
+That record is the **trace**. None of the queries below read a table you created,
+and UC AI writes all of it whether or not `inv_extractions` exists.
+
+**Every run of the agent:**
+
+```sql
+select e.id as execution_id
+     , e.status
+     , e.total_input_tokens as in_tokens
+     , e.total_output_tokens as out_tokens
+     , round(extract(second from (e.completed_at - e.started_at))
+             + extract(minute from (e.completed_at - e.started_at)) * 60, 1) as seconds
+  from uc_ai_agent_executions e
+ where e.agent_id = ( select a.id from uc_ai_agents a
+                       where a.code = 'INV_EXTRACT_AGENT' )
+ order by e.started_at desc
+ fetch first 6 rows only;
+```
+
+```
+EXECUTION_ID  STATUS      IN_TOKENS  OUT_TOKENS  SECONDS
+        5433  completed        2763         297      3.6
+        5432  completed        4055         475      4.1
+        5431  completed        1040         468      4.3
+        5430  completed        2711         360        6
+        5429  completed        4055         475      4.1
+```
+
+Five runs: the four documents of the inbox, and the single run from step 3. Runs
+`5429` and `5432` are both `halvorsen.pdf`, so their input tokens match exactly.
+
+**What one run did**, without needing to know its session id:
+
+```sql
+select m.seq
+     , m.role
+     , m.tool_name
+     , length(coalesce(m.tool_input, m.tool_output, m.content)) as chars
+  from uc_ai_agent_messages m
+ where m.session_id = ( select e.session_id
+                          from uc_ai_agent_executions e
+                         where e.agent_id = ( select a.id from uc_ai_agents a
+                                               where a.code = 'INV_EXTRACT_AGENT' )
+                         order by e.started_at desc
+                         fetch first 1 row only )
+ order by m.seq;
+```
+
+```
+SEQ  ROLE         TOOL_NAME    CHARS
+  1  user                         22
+  2  assistant                   956
+```
+
+Two rows:
+
+- `seq 1`, 22 characters, is your user prompt: `Extract this document.`
+- `seq 2`, 956 characters, is the extraction JSON.
+
+A third row with the role `reasoning` turns up on some runs and not others,
+depending on what the model did. That is normal.
+
+There is no `tool_call` row, because this agent has no tools. One glance at this
+table tells you whether a run did what you expected.
+
+<Aside type="note" title="The PDF is not in this table">
+A file is not written to `uc_ai_agent_messages`, so the trace does not show that a
+document was attached. The base64 file **is** inside
+`uc_ai_agent_executions.output_result`, which is why no query here selects that
+column. For a scanned document it is a 65 kB CLOB for every run.
+</Aside>
+
+**From an invoice back to the run that produced it:**
+
+```sql
+select i.invoice_no
+     , x.execution_id
+     , e.status
+     , e.total_input_tokens + e.total_output_tokens as tokens
+  from inv_invoices i
+  join inv_extractions x on x.id = i.extraction_id
+  join uc_ai_agent_executions e on e.id = x.execution_id
+ order by i.invoice_no;
+```
+
+```
+INVOICE_NO       EXECUTION_ID  STATUS      TOKENS
+FT-2026-04417            5430  completed     3071
+HB-88214                 5432  completed     4530
+NW-2026-1188             5431  completed     1508
+```
+
+That join is why `inv_extractions` stores `execution_id`. It answers where the
+values on an invoice row came from.
+
+## Verification
+
+Three checks on the finished inbox.
+
+1. Every invoice adds up. This must return no rows:
+
+   ```sql
+   select i.invoice_no
+     from inv_invoices i
+     join inv_invoice_lines l on l.invoice_id = i.id
+    group by i.invoice_no, i.net_amount, i.tax_amount, i.total_amount
+   having abs(sum(l.line_total) - i.net_amount) > 0.005
+       or abs(i.net_amount + i.tax_amount - i.total_amount) > 0.005;
+   ```
+
+2. Nothing was written that is not an invoice:
+
+   ```sql
+   select count(*) as should_be_three from inv_invoices;
+   ```
+
+3. Every document reached a final status:
+
+   ```sql
+   select status, count(*) from inv_documents group by status;
+   ```
+
+   One `POSTED` and three `REVIEW`. No `NEW`, and no `FAILED`.
+
+## Key takeaways
+
+- Put the prompt and the schema on a prompt profile, then put an agent in front of
+  it. A new prompt is then a row, and every run leaves a record you did not write.
+- `execute_agent` on a profile with a schema gives you `final_message` as a JSON
+  object. `generate_text` and `execute_profile` give you text. Read the one you
+  called.
+- `l_invoice := l_result.get_object('final_message');`
+
+**Full reference:** [Prompt
+profiles](/products/uc-ai/docs/guides/prompt-profiles/) covers versions and status,
+and [Agentic AI](/products/uc-ai/docs/guides/agentic-ai/) covers agents.
+
+## Where to go next
+
+You have a pipeline. A document arrives, an agent reads it, your database decides,
+a person sees only what needs a person, and every run is on the record.
+
+Three directions from here:
+
+- **Put it behind a page.** A run takes about four seconds, and a page submit cannot
+  wait that long. [Lesson 8 of the agent
+  course](/products/uc-ai/docs/tutorial/build-an-agent/08-apex-page/) queues
+  the work in a background job and polls the row.
+- **Give the agent tools.** This agent has none, which is why its trace has no
+  `tool_call` rows. An agent with a tool can look the supplier up while it reads.
+- **Cap what it can spend.** A pipeline that runs on every incoming mail needs a
+  budget before it needs anything else.
+
+<CardGrid>
+
+<LinkCard
+  title="Build an Agent"
+  description="Nine lessons. Tools, the run context, memory, the trace, and a business rule the database owns."
+  href="/products/uc-ai/docs/tutorial/build-an-agent/01-the-scenario/"
+/>
+
+<LinkCard
+  title="File analysis"
+  description="The message-building recipe for every provider, and which provider reads which file type."
+  href="/products/uc-ai/docs/guides/file_analysis/"
+/>
+
+<LinkCard
+  title="Structured output"
+  description="Schema rules, strict mode, and what each provider does with your schema."
+  href="/products/uc-ai/docs/guides/structured_output/"
+/>
+
+<LinkCard
+  title="Guardrails"
+  description="Budgets and rate limits around every agent run."
+  href="/products/uc-ai/docs/guides/guardrails/"
+/>
+
+</CardGrid>
+
+<Aside type="tip" title="Remove the course">
+`00_teardown.sql` purges the agent and its history, deletes the profile, drops the
+five tables and the package, and leaves UC AI and your API keys alone.
+</Aside>

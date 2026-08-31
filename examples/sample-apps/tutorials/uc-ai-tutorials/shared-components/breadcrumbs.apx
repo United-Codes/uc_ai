@@ -1,6 +1,32 @@
 breadcrumb breadcrumb (
     name: Breadcrumb
 
+    entry analyze-data-at-scale (
+        name: Analyze Data at Scale
+        pageNumber: 40
+        execution {
+            sequence: 10
+        }
+        link {
+            target: {
+                page: 40
+            }
+        }
+    )
+
+    entry give-an-agent-a-memory (
+        name: Give an Agent a Memory
+        pageNumber: 20
+        execution {
+            sequence: 10
+        }
+        link {
+            target: {
+                page: 20
+            }
+        }
+    )
+
     entry home (
         name: Home
         pageNumber: 1
@@ -14,8 +40,8 @@ breadcrumb breadcrumb (
         }
     )
 
-    entry uc-ai-chat (
-        name: UC AI Chat
+    entry put-an-agent-in-apex (
+        name: Put an Agent in APEX
         pageNumber: 10
         execution {
             sequence: 10
@@ -23,6 +49,19 @@ breadcrumb breadcrumb (
         link {
             target: {
                 page: 10
+            }
+        }
+    )
+
+    entry secure-an-agent (
+        name: Secure an Agent
+        pageNumber: 30
+        execution {
+            sequence: 10
+        }
+        link {
+            target: {
+                page: 30
             }
         }
     )

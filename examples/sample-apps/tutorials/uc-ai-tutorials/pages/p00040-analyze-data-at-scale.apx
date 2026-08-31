@@ -1,0 +1,157 @@
+page 40 (
+    name: Analyze Data at Scale
+    alias: ANALYZE-DATA-AT-SCALE
+    title: Analyze Data at Scale
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region about (
+        name: About
+        type: staticContent
+        source {
+            htmlCode: <p>The chat region on this page runs the agent <code>CC_ANALYST</code>, a cold-chain analyst for a pharmaceutical logistics operator: 24 shipments, one temperature logger for each one, and 1176 readings.</p><p>Asked which shipments broke the cold chain, the ordinary agent makes 26 tool calls. This one makes one, because code mode lets the model write a JavaScript program that loops inside the database and returns only the answer. The tool calls in the debug panel are the evidence.</p><p>Setup scripts: <code>examples/analyze-data-at-scale/00_setup.sql</code> for the data, then <code>06_agent_measure.sql</code> for the agent. Code mode needs Oracle 23ai and a sandbox schema that only a DBA can install, so run <code>00_precheck.sql</code> first. It also needs a provider that supports code mode, so a model changed on the home page can switch this page off.</p><p>The course this page comes from: <a href="https://www.united-codes.com/products/uc-ai/docs/tutorial/analyze-data-at-scale/01-twenty-six-tool-calls/">Analyze Data at Scale</a>.</p>
+        }
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/collapsible
+            templateOptions: [
+                #DEFAULT#
+                is-collapsed
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region breadcrumb (
+        name: Breadcrumb
+        type: breadcrumb
+        source {
+            breadcrumb: @breadcrumb
+        }
+        layout {
+            sequence: 10
+            slot: breadcrumbBar
+        }
+        appearance {
+            template: @/title-bar
+            templateOptions: [
+                #DEFAULT#
+                t-BreadcrumbRegion--useBreadcrumbTitle
+            ]
+        }
+        componentAppearance {
+            breadcrumbTemplate: @/breadcrumb
+            templateOptions: #DEFAULT#
+        }
+    )
+
+    region chat (
+        name: Chat
+        type: plugin/ucAiChat
+        layout {
+            sequence: 20
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--noPadding
+                t-Region--removeHeader js-removeLandmark
+                t-Region--scrollBody
+            ]
+        }
+        plugin-agent {
+            agentCode: CC_ANALYST
+            agentInputMapping:
+                ```
+                {
+                  "analyst_name": "&APP_USER.",
+                  "today": "&P40_TODAY.",
+                  "question": "#USER_MESSAGE#"
+                }
+                ```
+            sessionInitCode:
+                ```plsql
+                apex_session.attach(
+                  p_app_id     => :APP_ID,
+                  p_page_id    => :APP_PAGE_ID,
+                  p_session_id => :APP_SESSION
+                );
+                ```
+        }
+        plugin-conversation {
+            sessionItem: P40_SESSION_ID
+            autoGenerateTitle: true
+            collectFeedback: true
+            suggestedPrompts:
+                ```
+                Which shipments broke the cold chain, and what do we claim?
+                Audit every shipment and file a claim for each breach.
+                How many readings did you read for the worst shipment?
+                ```
+        }
+        plugin-appearance {
+            headerTitle: Analyze Data at Scale
+            welcomeMessage: Ask about the shipments and their temperature readings.
+            minHeight: 450px
+            avatarIcon: fa-thermometer-half
+            thinkingAnimation: matrix
+        }
+        plugin-developer {
+            debugConfig:
+                ```plsql
+                return q'!{
+                  "show_reasoning": true,
+                  "show_tools": true,
+                  "show_metadata": true,
+                  "show_debug": true
+                }!';
+                ```
+        }
+    )
+
+    pageItem P40_SESSION_ID (
+        type: hidden
+        layout {
+            sequence: 30
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    pageItem P40_TODAY (
+        type: hidden
+        layout {
+            sequence: 20
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    computation today (
+        itemName: P40_TODAY
+        execution {
+            sequence: 10
+            point: beforeHeader
+        }
+        computation {
+            type: expression
+            plsqlExpression: to_char(sysdate, 'YYYY-MM-DD')
+        }
+    )
+
+)
+

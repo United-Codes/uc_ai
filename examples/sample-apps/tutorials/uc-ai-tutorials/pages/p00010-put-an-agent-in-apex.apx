@@ -1,0 +1,187 @@
+page 10 (
+    name: Put an Agent in APEX
+    alias: PUT-AN-AGENT-IN-APEX
+    title: Put an Agent in APEX
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region about (
+        name: About
+        type: staticContent
+        source {
+            htmlCode: <p>The chat region on this page runs the agent <code>SC_DESK</code>, the service-contract desk of a field-service company. The page binds the conversation to one contract through the run context, so the tools read that contract and no other. The tools have no contract parameter at all, which is why a question about another customer cannot reach one.</p><p>Ask which invoices still have an uncredited amount, or ask for a credit note. Four conditions in PL/SQL decide whether the credit note is allowed. The model asks; it cannot argue.</p><p>Setup script: <code>examples/put-an-agent-in-apex/00_setup.sql</code>. It creates the tables, the tools, the prompt profile and the agent.</p><p>The course this page comes from: <a href="https://www.united-codes.com/products/uc-ai/docs/tutorial/put-an-agent-in-apex/01-a-chat-region/">Put an Agent in APEX</a>.</p>
+        }
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/collapsible
+            templateOptions: [
+                #DEFAULT#
+                is-collapsed
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region breadcrumb (
+        name: Breadcrumb
+        type: breadcrumb
+        source {
+            breadcrumb: @breadcrumb
+        }
+        layout {
+            sequence: 10
+            slot: breadcrumbBar
+        }
+        appearance {
+            template: @/title-bar
+            templateOptions: [
+                #DEFAULT#
+                t-BreadcrumbRegion--useBreadcrumbTitle
+            ]
+        }
+        componentAppearance {
+            breadcrumbTemplate: @/breadcrumb
+            templateOptions: #DEFAULT#
+        }
+    )
+
+    region chat (
+        name: Chat
+        type: plugin/ucAiChat
+        layout {
+            sequence: 20
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--noPadding
+                t-Region--removeHeader js-removeLandmark
+                t-Region--scrollBody
+            ]
+        }
+        plugin-agent {
+            agentCode: SC_DESK
+            agentInputMapping:
+                ```
+                {
+                  "engineer_name": "&APP_USER.",
+                  "today": "&P10_TODAY.",
+                  "question": "#USER_MESSAGE#"
+                }
+                ```
+            sessionInitCode:
+                ```plsql
+                apex_session.attach(
+                  p_app_id     => :APP_ID,
+                  p_page_id    => :APP_PAGE_ID,
+                  p_session_id => :APP_SESSION
+                );
+                ```
+        }
+        plugin-runContext {
+            agentRunContext:
+                ```
+                {
+                  "contract_id": "&P10_CONTRACT_ID.",
+                  "engineer": "&APP_USER."
+                }
+                ```
+            runContextDrift: error
+        }
+        plugin-conversation {
+            sessionItem: P10_SESSION_ID
+            autoGenerateTitle: true
+            collectFeedback: true
+            suggestedPrompts:
+                ```
+                Which invoices on this contract still have an uncredited amount?
+                Can I credit 350 on INV-1002? Check it properly.
+                What do you remember about this customer?
+                ```
+        }
+        plugin-appearance {
+            headerTitle: Service Contract Desk
+            welcomeMessage: Ask about the contract this page is on.
+            minHeight: 450px
+            avatarIcon: fa-headphones
+        }
+        plugin-developer {
+            debugConfig:
+                ```plsql
+                return q'!{
+                  "show_reasoning": true,
+                  "show_tools": true,
+                  "show_metadata": true,
+                  "show_debug": true
+                }!';
+                ```
+        }
+    )
+
+    pageItem P10_CONTRACT_ID (
+        type: hidden
+        layout {
+            sequence: 30
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    pageItem P10_SESSION_ID (
+        type: hidden
+        layout {
+            sequence: 40
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    pageItem P10_TODAY (
+        type: hidden
+        layout {
+            sequence: 20
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    computation contract (
+        itemName: P10_CONTRACT_ID
+        execution {
+            sequence: 20
+            point: beforeHeader
+        }
+        computation {
+            type: staticValue
+            staticValue: 88
+        }
+    )
+
+    computation today (
+        itemName: P10_TODAY
+        execution {
+            sequence: 10
+            point: beforeHeader
+        }
+        computation {
+            type: expression
+            plsqlExpression: to_char(sysdate, 'YYYY-MM-DD')
+        }
+    )
+
+)
+

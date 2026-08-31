@@ -1,0 +1,262 @@
+---
+title: Two conversations, a week apart
+description: Two conversations about the same machine, a week apart. One call gives the desk a memory, and the second conversation knows what the first one recorded.
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={1}
+  of={4}
+  minutes={15}
+  promise="one conversation can read what an earlier conversation recorded, and you can say which facts belong in a memory and which belong in a column."
+  scripts={["00_setup.sql", "00_precheck.sql", "01_recall.sql"]}
+  course="give-an-agent-a-memory"
+/>
+
+## What you build in this course
+
+You build the **maintenance desk** of a beverage plant. One bottling line, six
+machines. A technician stands at one machine and asks the desk about it. The desk
+reads the machine and its repair history through two tools, and answers.
+
+A plant runs three shifts. The technician who records a fact at 03:00 is not the
+technician who opens the same machine next week.
+
+Two words from this domain, because the lessons use them:
+
+- An **asset** is one machine, with a number like `AS-14`.
+- A **work order** is one repair job: the symptom that was reported, the cause that
+  was found, and what was done.
+
+This course is short, and it is only about memory. It does not teach tools, the run
+context, prompt profiles or agents. `00_setup.sql` builds those for you. If you did
+[Build an Agent](/products/uc-ai/docs/tutorial/build-an-agent/01-the-scenario/),
+run the setup anyway: every object it creates has the `mx_` prefix, and it changes
+nothing that course made.
+
+## Before you start
+
+You need a UC AI installation that can reach a model. If a call fails with
+`ORA-24247` or `ORA-29024`, the [network setup
+guide](/products/uc-ai/docs/guides/network-setup/) has the grants a DBA must give.
+
+<Steps>
+
+1. Run `00_setup.sql`. It creates four tables, seeds 6 assets and 18 work orders,
+   compiles the tool handlers, and makes the agent `MX_DESK` active. It ends with
+   `Setup OK`.
+
+2. Run `00_precheck.sql`. It reports four lines. The last one calls a model.
+
+</Steps>
+
+```
+1. UC AI is installed. Version 26.3.
+2. The demo schema is in place (6 assets, 18 work orders).
+3. The MEMORY tool is registered and MX_DESK is active.
+4. A model answered: ready (2.09 seconds).
+```
+
+`00_teardown.sql` removes everything this course creates, at any point.
+
+## The problem
+
+Run the first block of `01_recall.sql`. It holds two conversations about the pump
+`AS-14`, and each one gets a **new** session id.
+
+Petra, on nights, says:
+
+> The vibration at the drive end is back. I traced it to the coupling again. The
+> reliability engineer wants the alignment measured COLD, before start-up, not
+> after a run — the warm reading has been lying to us. Make sure the next shift
+> knows that.
+
+Sam opens the same pump later, in a different conversation:
+
+> I am about to work on the vibration at the drive end of this pump. Is there
+> anything the last shift worked out that I should know before I start?
+
+<AiOutput model="gpt-5.6-terra" date="2026-08-25" label="Sam's answer, with no memory">
+Yes. The last two drive-end vibration events were both **worn coupling elastomers**:
+
+- **14 Aug:** elastomer replaced; alignment was within limits. Reliability is
+  reviewing why it is wearing again.
+- **21 Jul:** same finding and repair.
+
+Before starting, inspect the coupling element closely and check for abnormal repeat
+wear or damage.
+</AiOutput>
+
+The desk read the work orders and told Sam about both coupling repairs.
+
+What it does **not** say is "measure the alignment cold". That instruction is the
+one thing Petra added, and it is in no table on this site. The conversation ended,
+and it went with it.
+
+## Turn the memory on
+
+One call:
+
+```sql
+begin
+  uc_ai_memory.enable_for_agent(p_agent_code => 'MX_DESK');
+  commit;
+end;
+/
+```
+
+No scope is named, so this takes the default: **one store for the agent**. That is
+deliberate, and [lesson 2](/products/uc-ai/docs/tutorial/give-an-agent-a-memory/02-one-store-or-many/)
+is about when it is the wrong choice.
+
+## What the call changed
+
+Two rows, and you can read both. First the prompt profile:
+
+```
+MODEL_CONFIG_JSON
+{"g_max_tool_calls":12,"g_tool_tags":["mxdesk","memory"],"g_enable_tools":true}
+```
+
+The tag `memory` is new. The tag `mxdesk` that the two read tools carry is still
+there. That is how the `MEMORY` tool reaches the model.
+
+Then the configuration row the call created:
+
+```
+AGENT_CODE    SCOPE    CONTEXT_KEY    ENABLED    MAX_FILES    MAX_FILE_CHARS
+MX_DESK       agent                   Y               1000            100000
+```
+
+The memory itself is a virtual filesystem in Oracle tables, rooted at `/memories`.
+The desk reaches it through one `MEMORY` tool that the UC AI installer already
+created. There is nothing for you to register.
+
+## The same two conversations
+
+Run block 3. Same two questions, two **new** sessions, so nothing carries over
+except the memory.
+
+<AiOutput model="gpt-5.6-terra" date="2026-08-25" label="Sam's answer, with memory">
+Yes. Last work found the **drive-end coupling elastomer worn again** and replaced it
+(WO-31502, 14 Aug). This is a repeat failure — the elastomer was also replaced 21 Jul
+— so its wear rate is under Reliability review.
+
+**Before accepting alignment:** measure and record it **cold, before start-up**. Do
+**not** accept a post-run or warm alignment reading; it has been misleading.
+</AiOutput>
+
+Sam's conversation was told nothing. It read its memory.
+
+## What the desk wrote
+
+Nothing in your code told the desk to write a file, or what to call it:
+
+```sql
+select f.store_key
+     , f.path
+     , f.char_count
+  from uc_ai_v_memory_files f
+ where f.agent_code = 'MX_DESK'
+ order by f.path;
+```
+
+```
+STORE_KEY        PATH                            CHAR_COUNT
+agent:MX_DESK    /memories/as-14-handover.txt           832
+```
+
+The view carries no content column, so the script reads the file through the API
+and prints it:
+
+```
+# AS-14 shift handover
+
+2026-08-25 — Petra reports recurring drive-end vibration traced to the coupling.
+Reliability engineering instruction: for the next alignment check, measure and record
+alignment COLD before start-up; do not use the post-run/warm reading for acceptance
+because it has been misleading. Recent work orders: coupling elastomer replaced
+2026-08-14 (WO-31502) and 2026-07-21 (WO-31455); wear rate is under review.
+```
+
+The desk chose the file name, the headline and the wording. A `MEMORY PROTOCOL`
+block in its system prompt told it to record what it learns.
+[Lesson 3](/products/uc-ai/docs/tutorial/give-an-agent-a-memory/03-decide-what-it-writes/)
+reads that block and takes the naming decision back.
+
+## Which facts belong in a memory, and which belong in a column
+
+This is the question to answer before you use this feature, and the answer is not
+"memory replaces your tables".
+
+The work orders in this course **are** a table, and a tool reads them. The desk got
+both coupling repairs from `mx_work_orders`, and that is correct. What has no table
+is what the conversation produced: the instruction Petra got from the reliability
+engineer.
+
+Every maintenance system has a free-text notes field for that kind of fact. Almost
+nobody fills it in, because filling it in is a second job after the repair. A memory
+is that field, written as a by-product of asking for help.
+
+Three lines draw the border:
+
+- **If you know the question in advance, use a column.** `downtime_minutes` is a
+  column, because somebody reports on it every month.
+- **If the fact must be enforced, use a table and a rule.** A model that reads a
+  note can decide to leave it out of an answer. A check constraint cannot.
+- **If the fact only has to reach a model as prose, a memory is the cheapest place
+  it can live.** No DDL, no screen, and nobody to fill it in.
+
+<Aside type="note" title="Why not put it in the system prompt?">
+A system prompt is the same text for every machine and every run. It needs a new
+profile version to change. And the run that learns the fact cannot write it. A
+memory is per machine, and the run itself writes it.
+</Aside>
+
+The last question is what happens when a remembered fact matters enough that
+somebody wants to count it. At that point it wants a column, and a memory is where
+you found out that the column was worth building.
+
+## What the memory costs on every run
+
+Block 5 reports the four runs of this lesson. The `MEMORY` tool is a tool, so it
+spends tool calls and tokens like any other.
+
+```
+     ID STATUS          CALLS    MEMORY_CALLS    IN_TOK    OUT_TOK
+   5458 completed           2               0       857        115
+   5459 completed           2               0       807        122
+   5460 completed           4               2      1839        109
+   5461 completed           5               3      2071        117
+```
+
+Two runs without a memory, two with one. The memory adds **two or three tool calls**
+and it roughly doubles the input tokens. `g_max_tool_calls` on this profile is 12,
+so there is room. On the default of 8 there is much less. The framework counts a
+`MEMORY` call against the same budget as a call that does the job.
+
+That is why the setup script of this course sets 12. Count the `MEMORY` calls in
+your own traces before you trust a budget.
+
+## Key takeaways
+
+- A session keeps one conversation together. A memory carries knowledge between
+  conversations. The recorded answers above differ by one fact, and that fact
+  existed in no table.
+- Use a column for what you will report on. Use a table and a rule for what must be
+  enforced. Use a memory for what only has to reach a model as prose.
+- `uc_ai_memory.enable_for_agent(p_agent_code => 'MX_DESK');`
+
+**Full reference:** [Agent memory](/products/uc-ai/docs/guides/agent-memory/) covers
+every scope, the size caps and the housekeeping calls.
+
+<LinkCard
+  title="Next lesson: One store for the desk, or one for each machine"
+  description="The default gives every machine the same memory. A note about a pump reaches a conversation about a compressor. Prove the separation without asking the model."
+  href="/products/uc-ai/docs/tutorial/give-an-agent-a-memory/02-one-store-or-many/"
+/>

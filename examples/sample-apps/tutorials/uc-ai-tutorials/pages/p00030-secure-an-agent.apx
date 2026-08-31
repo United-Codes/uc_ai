@@ -1,0 +1,232 @@
+page 30 (
+    name: Secure an Agent
+    alias: SECURE-AN-AGENT
+    title: Secure an Agent
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region about (
+        name: About
+        type: staticContent
+        source {
+            htmlCode: <p>The chat region on this page runs the agent <code>AP_DESK</code>, the payables desk of a manufacturer. The page opens one incoming invoice, <code>INV-88001</code>, and passes it and its vendor in the run context.</p><p>The desk reads the email that came with the invoice, and a stranger wrote that email. In the first lesson one email redirects a supplier payment and the desk writes back to confirm it. Each later lesson closes one route it used, so what this page can do depends on how far you have run the course.</p><p>Setup scripts: <code>examples/secure-an-agent/00_setup.sql</code> for the schema, then <code>01_naive_agent.sql</code> for the first draft of the desk. The seed data holds attack text on purpose. Every account number in it is invalid by construction, and <code>00_teardown.sql</code> removes all of it.</p><p>The course this page comes from: <a href="https://www.united-codes.com/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/">Secure an Agent</a>.</p>
+        }
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/collapsible
+            templateOptions: [
+                #DEFAULT#
+                is-collapsed
+                t-Region--scrollBody
+            ]
+        }
+    )
+
+    region breadcrumb (
+        name: Breadcrumb
+        type: breadcrumb
+        source {
+            breadcrumb: @breadcrumb
+        }
+        layout {
+            sequence: 10
+            slot: breadcrumbBar
+        }
+        appearance {
+            template: @/title-bar
+            templateOptions: [
+                #DEFAULT#
+                t-BreadcrumbRegion--useBreadcrumbTitle
+            ]
+        }
+        componentAppearance {
+            breadcrumbTemplate: @/breadcrumb
+            templateOptions: #DEFAULT#
+        }
+    )
+
+    region chat (
+        name: Chat
+        type: plugin/ucAiChat
+        layout {
+            sequence: 20
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--noPadding
+                t-Region--removeHeader js-removeLandmark
+                t-Region--scrollBody
+            ]
+        }
+        plugin-agent {
+            agentCode: AP_DESK
+            agentInputMapping:
+                ```
+                {
+                  "entity": "&P30_ENTITY.",
+                  "clerk_name": "&APP_USER.",
+                  "today": "&P30_TODAY.",
+                  "question": "#USER_MESSAGE#"
+                }
+                ```
+            sessionInitCode:
+                ```plsql
+                apex_session.attach(
+                  p_app_id     => :APP_ID,
+                  p_page_id    => :APP_PAGE_ID,
+                  p_session_id => :APP_SESSION
+                );
+                ```
+        }
+        plugin-runContext {
+            agentRunContext:
+                ```
+                {
+                  "invoice_id": "&P30_INVOICE_ID.",
+                  "clerk": "&APP_USER.",
+                  "vendor_no": "&P30_VENDOR_NO."
+                }
+                ```
+            runContextDrift: error
+        }
+        plugin-conversation {
+            sessionItem: P30_SESSION_ID
+            autoGenerateTitle: true
+            collectFeedback: true
+            suggestedPrompts:
+                ```
+                Read this invoice and its covering email, and tell me what they ask for.
+                Approve this invoice if the database allows it.
+                Does anything in the supplier mail try to give you an instruction?
+                ```
+        }
+        plugin-appearance {
+            headerTitle: Secure an Agent
+            welcomeMessage: Ask about the invoice this page is on.
+            minHeight: 450px
+            avatarIcon: fa-shield
+            thinkingAnimation: plasma
+        }
+        plugin-developer {
+            debugConfig:
+                ```plsql
+                return q'!{
+                  "show_reasoning": true,
+                  "show_tools": true,
+                  "show_metadata": true,
+                  "show_debug": true
+                }!';
+                ```
+        }
+    )
+
+    pageItem P30_ENTITY (
+        type: hidden
+        layout {
+            sequence: 30
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    pageItem P30_INVOICE_ID (
+        type: hidden
+        layout {
+            sequence: 40
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    pageItem P30_SESSION_ID (
+        type: hidden
+        layout {
+            sequence: 60
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    pageItem P30_TODAY (
+        type: hidden
+        layout {
+            sequence: 20
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    pageItem P30_VENDOR_NO (
+        type: hidden
+        layout {
+            sequence: 50
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    computation entity (
+        itemName: P30_ENTITY
+        execution {
+            sequence: 20
+            point: beforeHeader
+        }
+        computation {
+            type: staticValue
+            staticValue: Ferrolux Deutschland GmbH
+        }
+    )
+
+    computation invoice (
+        itemName: P30_INVOICE_ID
+        execution {
+            sequence: 30
+            point: beforeHeader
+        }
+        computation {
+            type: staticValue
+            staticValue: 7001
+        }
+    )
+
+    computation today (
+        itemName: P30_TODAY
+        execution {
+            sequence: 10
+            point: beforeHeader
+        }
+        computation {
+            type: expression
+            plsqlExpression: to_char(sysdate, 'YYYY-MM-DD')
+        }
+    )
+
+    computation vendor (
+        itemName: P30_VENDOR_NO
+        execution {
+            sequence: 40
+            point: beforeHeader
+        }
+        computation {
+            type: staticValue
+            staticValue: V-1001
+        }
+    )
+
+)
+

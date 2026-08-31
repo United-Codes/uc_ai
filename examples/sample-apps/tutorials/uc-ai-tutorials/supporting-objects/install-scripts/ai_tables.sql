@@ -1,0 +1,1 @@
+../../../../../../../apex-chat/src/ddl/ai_tables.sql

@@ -1,0 +1,241 @@
+---
+title: A memory note that is out of date
+description: A note that was true in February is wrong by June, and nothing revisits it. Rank your tables above the memory in the prompt. The desk then corrects its own file.
+sidebar:
+  order: 4
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={4}
+  of={4}
+  minutes={15}
+  promise="the desk treats your tables as the record, tells the technician when a remembered fact is out of date, and deletes it."
+  scripts={["04_stale.sql"]}
+  course="give-an-agent-a-memory"
+/>
+
+## The problem
+
+A memory has one property that a table does not: **nothing goes back to correct it
+when the world changes.** A technician writes down what is true today, the
+conversation ends, and the note stays exactly as it was written while the machine
+moves on.
+
+The pump `AS-14` in this demo has that history. Read its work orders in date order:
+
+```
+WO_NO       OPENED_ON     CAUSE
+WO-31007    2025-03-14    Suction strainer clogged with label pulp
+WO-31119    2025-07-02    Suction strainer clogged with label pulp
+WO-31240    2025-11-19    Suction strainer clogged with label pulp
+WO-31388    2026-06-08    Modification, not a failure
+WO-31455    2026-07-21    Shaft coupling elastomer worn
+WO-31502    2026-08-14    Shaft coupling elastomer worn again
+```
+
+Three failures in 2025, the same cause every time. Then `WO-31388` in June 2026
+replaced that strainer with a self-cleaning unit and took the manual cleaning off the
+plan. The two failures since then were the shaft coupling.
+
+So this note, which any desk would have written in February 2026, was correct then
+and is wrong now:
+
+```
+2026-02-10 - Flow drops on this pump are almost always the suction strainer
+  clogging with label pulp. Check and clean the strainer FIRST, before anything
+  else. Three occurrences in the last twelve months, the same cause every time.
+```
+
+`04_stale.sql` writes that note with `put_file`. Every fact that contradicts it is
+in `mx_work_orders`, and none of it is in the note.
+
+## Ask the question the stale note answers
+
+> Flow is dropping on this pump again and I can hear cavitation. Where do I start?
+
+<AiOutput model="gpt-5.6-terra" date="2026-08-25" label="Before the fix">
+Start on the **suction side** — the open **PRS-LOW** alarm supports it.
+
+1. **Protect the pump:** reduce demand or stop it per operating procedure if
+   cavitation is sustained.
+2. Check the **self-cleaning suction strainer SCS-80**: confirm its flush cycle is
+   operating and that the reject path is not blocked.
+3. Verify suction isolation valves are fully open and check suction pressure upstream.
+
+Do **not** start with coupling work.
+</AiOutput>
+
+The desk read the work orders as well as the note. It named the `SCS-80`, and it
+did not send anybody to clean a strainer that no longer exists.
+
+Two things still went wrong:
+
+- **It never said the note was out of date.** The technician has no way to know that
+  the desk is working from a February assumption.
+- **The note is still there.** The run read it, used it, and left it in the store for
+  the next conversation and the one after that.
+
+A wrong answer is one bad shift. A wrong note is every shift until somebody finds
+it.
+
+## Rank your tables above the memory
+
+The fix is four sentences in the system prompt:
+
+```sql
+WHAT TO TRUST
+The tools are the record of this machine. Your memory is not: it holds what one
+conversation told another, and nobody goes back to correct it when the machine
+changes. So:
+  - Always read the work orders before you act on anything your memory says
+    about a cause, a part, or a procedure.
+  - If your memory disagrees with a work order, the WORK ORDER wins.
+  - When you find such a disagreement, say so in your answer, and correct the
+    memory in the same run.
+  - A note with no date, or a note older than the newest work order that
+    contradicts it, is a suspect note.
+```
+
+Three of those four sentences do this:
+
+- **"The work order wins"** gives the model a rule to apply, instead of leaving it to
+  decide which of two sources it likes.
+- **"Say so in your answer"** turns a silent correction into something a person can
+  see and argue with.
+- **"Correct the memory in the same run"** is what stops the note surviving.
+
+The script puts the February note back before it asks again, so the two runs differ
+in one thing only: the prompt.
+
+## Ask again
+
+<AiOutput model="gpt-5.6-terra" date="2026-08-25" label="After the fix">
+Start on the **suction side** — the low-suction-pressure alarm supports it.
+
+1. Check syrup supply level and suction valve lineup.
+2. Check the **SCS-80 self-cleaning strainer**: confirm its flush cycle is operating
+   and the flush discharge is clear.
+3. Check for suction-side air ingress: loose fittings, leaking seals, or a restricted
+   hose.
+4. Once suction pressure and flow recover, reassess noise and vibration.
+
+**Record correction:** the old note saying to manually clean a basket strainer was
+stale; it was replaced by the self-cleaning SCS-80 on 2026-06-08.
+</AiOutput>
+
+The last paragraph is new. It states that the note was out of date.
+
+## The check that does not depend on the wording
+
+Do not judge this on the prose. Read the file:
+
+```sql
+declare
+  l_store_id number;
+begin
+  l_store_id := uc_ai_memory.resolve_store_id(
+    p_scope         => uc_ai_memory.c_scope_context
+  , p_agent_code    => 'MX_DESK'
+  , p_context_key   => 'asset_no'
+  , p_context_value => 'AS-14'
+  );
+  sys.dbms_output.put_line(uc_ai_memory.get_file(l_store_id, '/memories/history.txt'));
+end;
+/
+```
+
+```
+2026-06-08 - Suction side uses self-cleaning strainer SCS-80; basket strainer was
+removed and weekly manual cleaning is no longer planned.
+2026-08-14 - Recurrent drive-end vibration: coupling elastomer replaced; wear rate
+remains under Reliability review. Alignment was within limits at that repair.
+```
+
+The February line is gone. The desk deleted it and wrote the June work order in its
+place, with the work-order date and not today's date.
+
+The run before the fix left the stale note in the store. The run after it deleted
+the note. The answers look similar. The file shows which run you want.
+
+## Housekeeping, and what it cannot do
+
+`expire_files` deletes what nobody has touched:
+
+```sql
+begin
+  uc_ai_memory.expire_files(p_days => 180);
+  commit;
+end;
+/
+```
+
+Run it from a scheduler job. It is hygiene, and it is worth having.
+
+It is not an answer to a stale note. `expire_files` works on
+`greatest(last_accessed_at, updated_at)`, and **reading a file counts as touching
+it**. So the note that the desk opens on every run is the one note that never
+expires. Only the precedence rule and a person deal with that.
+
+## The closing run, and its trace
+
+The last run of the course did the whole job, and the trace says what it did:
+
+```
+   SEQ ROLE           TOOL_NAME              MEMORY_COMMAND    MEMORY_PATH
+     3 tool_call      MEMORY                 view              /memories
+     5 tool_call      MEMORY                 view              /memories/handover.txt
+     6 tool_call      MEMORY                 view              /memories/history.txt
+     7 tool_call      MEMORY                 view              /memories/site_rules.txt
+     8 tool_call      MX_GET_ASSET           -                 -
+     9 tool_call      MX_LIST_WORK_ORDERS    -                 -
+    16 tool_call      MEMORY                 create            /memories/history.txt
+    18 assistant      -                      -                 -
+```
+
+Read it in order: it opened its memory, read all three files, then read the machine
+and its work orders, then rewrote `history.txt`, then answered. That is the
+precedence rule happening.
+
+```
+STATUS       CALLS    IN_TOK    OUT_TOK    RUN_CONTEXT
+completed        7      2936        179    {"asset_no":"AS-14","technician":"sam.o"}
+```
+
+Seven tool calls, and **five of them were `MEMORY`**. Two did the job. The run
+context is on the row, so you can tell which machine this was, and the store key
+follows from it.
+
+A memory is cheap to turn on and it is not free to run: it spends tool calls that
+belong to the work, and on a profile with the default budget of 8 calls a run like
+this one has almost no room left. Count the `MEMORY` calls in your own traces, and
+raise `g_max_tool_calls` before you need it.
+
+## Key takeaways
+
+- A memory has no mechanism that corrects it when the world changes. Assume every
+  note in it is as old as its date.
+- Rank your tables above the memory in the prompt, and tell the desk to correct the
+  file in the same run. Then check the file, not the answer.
+- `expire_files` cannot delete a stale note that the model keeps reading, because
+  reading counts as touching.
+- `select store_key, path, char_count from uc_ai_v_memory_files where agent_code = 'MX_DESK';`
+
+**Full reference:** [Behavior
+notes](/products/uc-ai/docs/guides/agent-memory/#behavior-notes) covers transactions,
+path safety and what happens to an open conversation when you change a memory.
+
+<Aside type="note" title="What to read next">
+[Agent memory](/products/uc-ai/docs/guides/agent-memory/) is the reference for every
+scope and every call. If your agent reads text that somebody outside your company
+wrote, read [Secure an
+Agent](/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/) next: it
+covers what a stranger can do with a memory, which is a different problem from the
+one this course solved.
+
+Run `00_teardown.sql` when you are finished. It removes the memory with its files,
+the agent with its runs, the profile, the tools, the package and the four tables.
+</Aside>
