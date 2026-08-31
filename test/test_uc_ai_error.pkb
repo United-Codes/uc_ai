@@ -1,4 +1,6 @@
 create or replace package body test_uc_ai_error as
+  -- @dblinter ignore(g-5040): the tests assert THAT an error is raised; sqlcode/sqlerrm are the assertion
+  -- @dblinter ignore(g-5080): the tests assert on sqlerrm itself; a backtrace would only add noise to the test log
 
   procedure reset_status_code
   as

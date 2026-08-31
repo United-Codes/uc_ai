@@ -326,6 +326,7 @@ create or replace package body uc_ai_tools_api as
         l_obj_required := json_array_t();
         <<nested_parameters>>
         for sub_param in (
+          -- @dblinter ignore(G-3145): the loop record is passed to a uc_ai_tool_parameters%rowtype parameter, so the full row is required
           select *
             from uc_ai_tool_parameters
            where parent_param_id = p_row.id
@@ -538,6 +539,7 @@ create or replace package body uc_ai_tools_api as
       -- Multiple top-level parameters: wrap them into a "parameters" object
       <<multiple_params>>
       for param_rec in (
+        -- @dblinter ignore(G-3145): the loop record is passed to a uc_ai_tool_parameters%rowtype parameter, so the full row is required
         SELECT *
         FROM uc_ai_tool_parameters
         WHERE tool_id = p_tool_id

@@ -1,4 +1,5 @@
 create or replace package body test_uc_ai_message_api as
+  -- @dblinter ignore(g-2160): allow initializing variables in declare in test packages
 
   function big_clob (
     p_length in pls_integer
@@ -9,10 +10,11 @@ create or replace package body test_uc_ai_message_api as
     l_len   pls_integer := 0;
   begin
     sys.dbms_lob.createtemporary(l_clob, true);
+    <<fill_clob>>
     while l_len < p_length loop
       sys.dbms_lob.append(l_clob, substr(l_chunk, 1, least(4000, p_length - l_len)));
       l_len := l_len + least(4000, p_length - l_len);
-    end loop;
+    end loop fill_clob;
     return l_clob;
   end big_clob;
 
@@ -92,7 +94,7 @@ create or replace package body test_uc_ai_message_api as
     l_content json_object_t;
     l_decoded blob;
   begin
-    l_source := to_blob(utl_raw.cast_to_raw('Hello UC AI file content'));
+    l_source := to_blob(sys.utl_raw.cast_to_raw('Hello UC AI file content'));
 
     l_content := uc_ai_message_api.create_file_content(
       p_media_type => 'application/pdf'
@@ -251,7 +253,7 @@ create or replace package body test_uc_ai_message_api as
     l_decoded blob;
     l_source  blob;
   begin
-    l_source := to_blob(utl_raw.cast_to_raw('PDF bytes here'));
+    l_source := to_blob(sys.utl_raw.cast_to_raw('PDF bytes here'));
 
     l_files := uc_ai_message_api.t_files();
     l_files.extend;
@@ -309,7 +311,7 @@ create or replace package body test_uc_ai_message_api as
     l_files := uc_ai_message_api.t_files();
     l_files.extend;
     l_files(1).media_type := 'image/png';
-    l_files(1).data_blob  := to_blob(utl_raw.cast_to_raw('png'));
+    l_files(1).data_blob  := to_blob(sys.utl_raw.cast_to_raw('png'));
 
     -- null text -> only the file block, no empty text block
     l_message := uc_ai_message_api.create_user_message(null, l_files);

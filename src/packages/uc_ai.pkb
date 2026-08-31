@@ -133,13 +133,14 @@ create or replace package body uc_ai as
   as
     -- Snapshot the config globals once; thread the record to the provider so a
     -- nested agent execution cannot corrupt this call's in-flight configuration.
-    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals(
-                                              p_run_context => case
-                                                                 when p_run_context is not null
-                                                                 then p_run_context.to_clob
-                                                               end
-                                            );
+    l_settings uc_ai_settings.t_settings;
   begin
+    l_settings := uc_ai_settings.build_from_globals(
+                    p_run_context => case
+                                       when p_run_context is not null
+                                       then p_run_context.to_clob
+                                     end
+                  );
     return dispatch_generate_text(
       p_messages             => p_messages
     , p_provider             => p_provider
@@ -162,15 +163,16 @@ create or replace package body uc_ai as
   as
     -- Derive this call's configuration straight from the JSON config, without
     -- reading or mutating any global.
-    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_config(
-                                              p_config      => p_config
-                                            , p_provider    => p_provider
-                                            , p_run_context => case
-                                                                 when p_run_context is not null
-                                                                 then p_run_context.to_clob
-                                                               end
-                                            );
+    l_settings uc_ai_settings.t_settings;
   begin
+    l_settings := uc_ai_settings.build_from_config(
+                    p_config      => p_config
+                  , p_provider    => p_provider
+                  , p_run_context => case
+                                       when p_run_context is not null
+                                       then p_run_context.to_clob
+                                     end
+                  );
     return dispatch_generate_text(
       p_messages             => p_messages
     , p_provider             => p_provider
@@ -338,8 +340,9 @@ create or replace package body uc_ai as
   , p_config in json_object_t
   ) return json_array_t
   as
-    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_config(p_config, p_provider);
+    l_settings uc_ai_settings.t_settings;
   begin
+    l_settings := uc_ai_settings.build_from_config(p_config, p_provider);
     return dispatch_generate_embeddings(
       p_input    => p_input
     , p_provider => p_provider

@@ -1,4 +1,6 @@
 create or replace package body test_uc_ai_agent_validation as
+  -- @dblinter ignore(g-5040): the tests assert THAT an error is raised; sqlcode/sqlerrm are the assertion
+  -- @dblinter ignore(g-5080): the tests assert on sqlerrm itself; a backtrace would only add noise to the test log
 
   gc_profile_code  constant varchar2(50 char) := 'TEST_VALIDATION_PROFILE';
   gc_agent_a       constant varchar2(50 char) := 'TEST_VAL_AGENT_A';

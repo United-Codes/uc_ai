@@ -54,8 +54,9 @@ create or replace package body uc_ai_responses_api as
     -- CLOB: the accumulated system prompt is not bounded by 32 KB.
     l_system_instructions clob;
     l_media_type varchar2(4000 char);
-    l_store_responses boolean := nvl(p_settings.ra_store_responses, false);
+    l_store_responses     boolean;
   begin
+    l_store_responses := nvl(p_settings.ra_store_responses, false);
     uc_ai_logger.log('Converting ' || p_lm_messages.get_size || ' LM messages to Responses API items', l_scope);
 
     <<message_loop>>
@@ -180,16 +181,18 @@ create or replace package body uc_ai_responses_api as
                 -- when empty - omitting it fails with
                 --   Missing required parameter: 'input[N].summary'.
                 declare
-                  l_reasoning_text clob := l_content_item.get_clob('text');
+                  l_reasoning_text    clob;
                   l_reasoning_id varchar2(4000 char);
                   l_encrypted_content clob;
                   l_summary json_array_t := json_array_t();
-                  l_summary_item json_object_t;
+                  l_summary_item      json_object_t;
                 begin
+                  l_reasoning_text    := l_content_item.get_clob('text');
                   if l_content_item.has('providerOptions') and not l_content_item.get('providerOptions').is_null then
                     declare
-                      l_provider_options json_object_t := l_content_item.get_object('providerOptions');
+                      l_provider_options json_object_t;
                     begin
+                      l_provider_options := l_content_item.get_object('providerOptions');
                       if l_provider_options.has('id') and not l_provider_options.get('id').is_null then
                         l_reasoning_id := l_provider_options.get_string('id');
                       end if;
@@ -258,8 +261,9 @@ create or replace package body uc_ai_responses_api as
 
               if l_content_item.has('result') then
                 declare
-                  l_result_value json_element_t := l_content_item.get('result');
+                  l_result_value json_element_t;
                 begin
+                  l_result_value := l_content_item.get('result');
                   -- get_clob, not get_string: get_string returns a varchar2 and
                   -- raises ORA-06502 above 32767 bytes. This branch is taken for
                   -- every tool result UC AI itself produced, because
@@ -328,8 +332,9 @@ create or replace package body uc_ai_responses_api as
       for i in 0 .. l_summary_arr.get_size - 1
       loop
         declare
-          l_summary_item json_object_t := treat(l_summary_arr.get(i) as json_object_t);
+          l_summary_item json_object_t;
         begin
+          l_summary_item := treat(l_summary_arr.get(i) as json_object_t);
           if l_summary_text is not null then
             l_summary_text := l_summary_text || chr(10);
           end if;
@@ -1022,9 +1027,10 @@ create or replace package body uc_ai_responses_api as
           for i in 0 .. l_current_output.get_size - 1
           loop
             declare
-              l_item json_object_t := treat(l_current_output.get(i) as json_object_t);
+              l_item json_object_t;
               l_skip boolean := false;
             begin
+              l_item := treat(l_current_output.get(i) as json_object_t);
               if l_item.get_string('type') = 'reasoning'
                  and not nvl(l_settings.ra_store_responses, false)
                  and (not l_item.has('encrypted_content')

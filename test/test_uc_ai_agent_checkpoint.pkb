@@ -17,6 +17,7 @@ create or replace package body test_uc_ai_agent_checkpoint as
     uc_ai_test_agent_utils.create_math_profile;
 
     uc_ai_test_agent_utils.delete_agents_cascade(gc_math_agent_code);
+    -- @dblinter ignore(g-2135): create_agent is a function; the new id is not needed by the test
     l_id := uc_ai_agents_api.create_agent(
       p_code                => gc_math_agent_code,
       p_description         => 'Math step agent for checkpoint tests',

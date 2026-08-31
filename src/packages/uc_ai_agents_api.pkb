@@ -1,4 +1,5 @@
 create or replace package body uc_ai_agents_api as
+  -- @dblinter ignore(G-7210): agent CRUD, validation and versioning share one private state and helper set; splitting them would need a new public package, which is a spec change
 
   gc_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
 
@@ -1278,11 +1279,12 @@ create or replace package body uc_ai_agents_api as
         -- v1: transfer tools are injected via the profile execution path, so the
         -- initial agent and every handoff target must be an ACTIVE profile agent
         declare
-          l_config  json_object_t := json_object_t.parse(p_orchestration_config);
+          l_config  json_object_t;
           l_targets json_array_t;
           l_codes   apex_t_varchar2 := apex_t_varchar2();
           l_bad     varchar2(4000 char);
         begin
+          l_config  := json_object_t.parse(p_orchestration_config);
           l_targets := l_config.get_array('handoff_agents');
           l_codes.extend;
           l_codes(l_codes.count) := l_config.get_string('initial_agent_code');
@@ -2051,9 +2053,10 @@ create or replace package body uc_ai_agents_api as
     <<step_loop>>
     for i in 0 .. l_steps.get_size - 1 loop
       declare
-        l_step      json_object_t := treat(l_steps.get(i) as json_object_t);
+        l_step      json_object_t;
         l_step_type varchar2(20 char);
       begin
+        l_step      := treat(l_steps.get(i) as json_object_t);
         l_step_type := coalesce(l_step.get_string('step_type'), uc_ai_agent_exec_api.c_step_agent);
 
         case l_step_type
@@ -2162,13 +2165,14 @@ create or replace package body uc_ai_agents_api as
           return l_result;
         end if;
         declare
-          l_handoff_agents json_array_t := l_json.get_array('handoff_agents');
+          l_handoff_agents json_array_t;
           l_target         json_object_t;
           l_transfer_to    json_array_t;
           l_edge           varchar2(255 char);
           type t_code_set is table of boolean index by varchar2(255 char);
           l_codes          t_code_set; -- @dblinter ignore(g-9105): set of entry codes for edge validation, not a local array
         begin
+          l_handoff_agents := l_json.get_array('handoff_agents');
           if l_handoff_agents.get_size = 0 then
             l_result.is_valid := false;
             l_result.error_reason := 'Handoff config handoff_agents must not be empty';

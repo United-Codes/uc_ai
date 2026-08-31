@@ -267,10 +267,12 @@ as
         when 'g_extra_headers' then
           if l_value.is_object then
             declare
-              l_hdr_obj  json_object_t := treat(p_config.get(l_key) as json_object_t);
-              l_hdr_keys json_key_list := l_hdr_obj.get_keys;
+              l_hdr_obj  json_object_t;
+              l_hdr_keys json_key_list;
               l_headers  uc_ai.t_extra_headers;
             begin
+              l_hdr_obj  := treat(p_config.get(l_key) as json_object_t);
+              l_hdr_keys := l_hdr_obj.get_keys;
               <<extra_headers_keys>>
               for j in 1 .. l_hdr_keys.count loop
                 l_headers(l_hdr_keys(j)) := l_hdr_obj.get_string(l_hdr_keys(j));

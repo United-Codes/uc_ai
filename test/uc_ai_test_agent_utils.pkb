@@ -25,12 +25,13 @@ create or replace package body uc_ai_test_agent_utils as
 
   procedure create_math_profile
   as
+    l_ddl     varchar2(32767 char);
     l_id      number;
     l_tool_id number;
     l_schema  json_object_t;
   begin
     -- Create the calculator function via execute immediate
-    execute immediate q'!
+    l_ddl := q'!
       create or replace function test_demo_calculate(
         p_arguments in json_object_t
       ) return clob
@@ -56,6 +57,7 @@ create or replace package body uc_ai_test_agent_utils as
           return 'Error evaluating expression: ' || sqlerrm;
       end test_demo_calculate;
     !';
+    execute immediate l_ddl;
 
     -- Register the calculator tool
     l_schema := json_object_t('{
@@ -95,12 +97,13 @@ create or replace package body uc_ai_test_agent_utils as
 
   procedure create_support_profiles
   as
+    l_ddl     varchar2(32767 char);
     l_id      number;
     l_tool_id number;
     l_schema  json_object_t;
   begin
     -- Product lookup function: canned catalog data for handoff tests
-    execute immediate q'!
+    l_ddl := q'!
       create or replace function test_get_product_details(
         p_arguments in json_object_t
       ) return clob
@@ -125,6 +128,7 @@ create or replace package body uc_ai_test_agent_utils as
         end if;
       end test_get_product_details;
     !';
+    execute immediate l_ddl;
 
     l_schema := json_object_t('{
       "type": "object",
@@ -763,6 +767,7 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
 
   procedure cleanup_test_data
   as
+    l_ddl varchar2(200 char);
   begin
     -- Delete test agents (with their committed execution telemetry)
     delete_agents_cascade('TEST_%');
@@ -778,14 +783,16 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
 
     -- Drop test calculator function
     begin
-      execute immediate 'drop function test_demo_calculate';
+      l_ddl := 'drop function test_demo_calculate';
+      execute immediate l_ddl;
     exception
       when others then null;
     end;
 
     -- Drop test product lookup function
     begin
-      execute immediate 'drop function test_get_product_details';
+      l_ddl := 'drop function test_get_product_details';
+      execute immediate l_ddl;
     exception
       when others then null;
     end;

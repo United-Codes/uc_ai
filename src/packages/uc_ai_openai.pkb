@@ -387,8 +387,9 @@ create or replace package body uc_ai_openai as
       -- Extract reasoning tokens from completion_tokens_details if available
       if l_usage.has('completion_tokens_details') and not l_usage.get('completion_tokens_details').is_null then
         declare
-          l_completion_details json_object_t := l_usage.get_object('completion_tokens_details');
+          l_completion_details json_object_t;
         begin
+          l_completion_details := l_usage.get_object('completion_tokens_details');
           pio_state.reasoning_tokens := pio_state.reasoning_tokens + nvl(l_completion_details.get_number('reasoning_tokens'), 0);
         end;
       end if;

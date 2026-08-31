@@ -653,9 +653,10 @@ create or replace package body uc_ai_ollama as
 
     if l_settings.ol_use_responses_api then
       declare
-        l_base varchar2(500 char) := coalesce(l_settings.base_url, c_api_url);
+        l_base          varchar2(500 char);
         l_resp_settings uc_ai_settings.t_settings := l_settings;
       begin
+        l_base := coalesce(l_settings.base_url, c_api_url);
         if l_base is null then
           uc_ai_error.raise_error(
             p_error_code => uc_ai_error.c_err_missing_config

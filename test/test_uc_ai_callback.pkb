@@ -2,6 +2,7 @@ create or replace package body test_uc_ai_callback as
   -- @dblinter ignore(g-5010): allow logger in test packages
   -- @dblinter ignore(g-2160): allow initializing variables in declare in test packages
   -- @dblinter ignore(g-7230): allow package state in test helper
+  -- @dblinter ignore(g-5040): the tests assert THAT an error is raised; sqlcode/sqlerrm are the assertion
 
   c_sink_proc    constant varchar2(64 char) := 'TEST_UC_AI_CALLBACK.SINK_ON_EV';
   c_raising_proc constant varchar2(64 char) := 'TEST_UC_AI_CALLBACK.SINK_RAISING';
@@ -13,7 +14,7 @@ create or replace package body test_uc_ai_callback as
     payload clob
   );
   type t_event_tab is table of t_event_rec index by pls_integer;
-  g_events t_event_tab;
+  g_events t_event_tab; -- @dblinter ignore(g-9105): package-global event log, g_ prefix is intended (not a local var)
   g_idx    pls_integer := 0;
 
   procedure sink_on_ev(
@@ -51,11 +52,12 @@ create or replace package body test_uc_ai_callback as
   as
     l_n pls_integer := 0;
   begin
+    <<count_events>>
     for i in 1 .. g_idx loop
       if g_events(i).ev = p_event_type then
         l_n := l_n + 1;
       end if;
-    end loop;
+    end loop count_events;
     return l_n;
   end count_by;
 
@@ -64,19 +66,21 @@ create or replace package body test_uc_ai_callback as
     l_seen sys.odcivarchar2list := sys.odcivarchar2list();
     l_known boolean;
   begin
+    <<each_event>>
     for i in 1 .. g_idx loop
       l_known := false;
+      <<seen_ids>>
       for j in 1 .. l_seen.count loop
         if l_seen(j) = g_events(i).req_id then
           l_known := true;
           exit;
         end if;
-      end loop;
+      end loop seen_ids;
       if not l_known then
         l_seen.extend;
         l_seen(l_seen.count) := g_events(i).req_id;
       end if;
-    end loop;
+    end loop each_event;
     return l_seen.count;
   end distinct_req_ids;
 
@@ -227,11 +231,12 @@ create or replace package body test_uc_ai_callback as
     declare
       l_last_payload clob;
     begin
+      <<find_last_complete>>
       for i in 1 .. g_idx loop
         if g_events(i).ev = uc_ai.c_event_response_complete then
           l_last_payload := g_events(i).payload;
         end if;
-      end loop;
+      end loop find_last_complete;
       ut.expect(lower(l_last_payload)).to_be_like('%"provider":"openai"%');
       ut.expect(lower(l_last_payload)).to_be_like('%finish_reason%');
     end;
@@ -240,10 +245,10 @@ create or replace package body test_uc_ai_callback as
   procedure fires_tool_events
   as
     l_result json_object_t;
-    l_text_idx pls_integer := null;
-    l_call_idx pls_integer := null;
-    l_result_idx pls_integer := null;
-    l_complete_idx pls_integer := null;
+    l_text_idx pls_integer;
+    l_call_idx pls_integer;
+    l_result_idx pls_integer;
+    l_complete_idx pls_integer;
   begin
     delete from uc_ai_tools where 1 = 1;
     uc_ai_test_utils.add_get_users_tool;
@@ -257,9 +262,10 @@ create or replace package body test_uc_ai_callback as
     );
 
     sys.dbms_output.put_line('Event count: ' || g_idx);
+    <<dump_events>>
     for i in 1 .. g_idx loop
       sys.dbms_output.put_line(i || ': ' || g_events(i).ev);
-    end loop;
+    end loop dump_events;
 
     ut.expect(count_by(uc_ai.c_event_tool_call)).to_be_greater_or_equal(1);
     ut.expect(count_by(uc_ai.c_event_tool_result)).to_be_greater_or_equal(1);
@@ -268,6 +274,7 @@ create or replace package body test_uc_ai_callback as
     ut.expect(distinct_req_ids).to_equal(1);
 
     -- order: tool_call appears before its matching tool_result, and before the final response_complete
+    <<find_event_indexes>>
     for i in 1 .. g_idx loop
       if l_call_idx is null and g_events(i).ev = uc_ai.c_event_tool_call then
         l_call_idx := i;
@@ -281,7 +288,7 @@ create or replace package body test_uc_ai_callback as
       if g_events(i).ev = uc_ai.c_event_assistant_text then
         l_text_idx := i;
       end if;
-    end loop;
+    end loop find_event_indexes;
 
     ut.expect(l_call_idx).to_be_not_null();
     ut.expect(l_result_idx).to_be_not_null();
@@ -306,6 +313,8 @@ create or replace package body test_uc_ai_callback as
     , p_model       => uc_ai_openai.c_model_gpt_4o_mini
     );
 
+    ut.expect(l_r1.get_string('final_message')).to_be_not_null();
+    ut.expect(l_r2.get_string('final_message')).to_be_not_null();
     ut.expect(distinct_req_ids).to_be_greater_or_equal(2);
     ut.expect(count_by(uc_ai.c_event_response_complete)).to_equal(2);
   end request_id_is_per_call;

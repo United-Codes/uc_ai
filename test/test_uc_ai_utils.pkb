@@ -91,11 +91,12 @@ create or replace package body test_uc_ai_utils as
     select count(*) into l_unfiltered
       from table(uc_ai_utils.get_models);
 
+    <<per_provider>>
     for prov in (select provider_id from table(uc_ai_utils.get_providers)) loop
       select count(*) into l_count
         from table(uc_ai_utils.get_models(p_provider => prov.provider_id));
       l_partition := l_partition + l_count;
-    end loop;
+    end loop per_provider;
 
     -- every model row must belong to exactly one known provider filter
     ut.expect(l_partition).to_equal(l_unfiltered);

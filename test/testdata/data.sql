@@ -2,20 +2,20 @@
 ALTER SESSION SET CONSTRAINTS = DEFERRED;
 
 -- Drop tables if they exist (in reverse order due to foreign key constraints)
+-- @dblinter ignore(g-5010): setup script run by hand; dbms_output is its progress log
 DECLARE
     procedure drop_table_if_exists(p_table_name in varchar2) is
+        e_table_not_exists exception;
+        pragma exception_init(e_table_not_exists, -942);
         l_sql varchar2(1000 char);
     begin
         l_sql := 'DROP TABLE ' || sys.dbms_assert.SQL_OBJECT_NAME(p_table_name) || ' CASCADE CONSTRAINTS';
         EXECUTE IMMEDIATE l_sql;
         SYS.DBMS_OUTPUT.PUT_LINE('Dropped table: ' || p_table_name);
     exception
-        when others then
-            if sqlcode != -942 then -- ORA-00942: table or view does not exist
-                raise;
-            end if;
+        when e_table_not_exists then
             SYS.DBMS_OUTPUT.PUT_LINE('Table ' || p_table_name || ' does not exist, skipping drop.');
-    end;
+    end drop_table_if_exists;
 BEGIN
     drop_table_if_exists('TT_TIME_ENTRIES');
     drop_table_if_exists('TT_PROJECTS');
@@ -70,8 +70,9 @@ CREATE TABLE TT_TIME_ENTRIES (
 -- Define a base timestamp for the current month.
 -- This will be the first day of the current month at midnight, in the local session timezone.
 DECLARE
-    L_BASE_TIMESTAMP TIMESTAMP WITH LOCAL TIME ZONE := TRUNC(SYSTIMESTAMP, 'MM');
+    L_BASE_TIMESTAMP TIMESTAMP WITH LOCAL TIME ZONE;
 BEGIN
+    L_BASE_TIMESTAMP := TRUNC(SYSTIMESTAMP, 'MM');
 
     -- TT_USERS Data (5 users) - Hire dates will be recent years, not specifically current month
     INSERT INTO TT_USERS (FIRST_NAME, LAST_NAME, EMAIL, HIRE_DATE, IS_ACTIVE)

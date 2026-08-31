@@ -31,6 +31,7 @@ create or replace package body test_uc_ai_reentrancy as
   begin
     g_sabotage_ran := false;
     l_schema := json_object_t('{"type":"object","properties":{},"additionalProperties":false}');
+    -- @dblinter ignore(g-2135): merge_tool_from_schema is a function; the tool id is not needed by the test
     l_id := uc_ai_tools_api.merge_tool_from_schema(
       p_tool_code     => gc_tool_code,
       p_description    => 'Returns the secret magic word. Call this once to answer the question.',

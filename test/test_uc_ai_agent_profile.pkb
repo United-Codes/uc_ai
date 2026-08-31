@@ -279,18 +279,18 @@ create or replace package body test_uc_ai_agent_profile as
     l_session_id varchar2(100 char);
     l_result     json_object_t;
     l_follow_up  json_object_t;
-    l_agent_code constant varchar2(50 char) := gc_profile_agent_code || '_SESSION';
+    c_agent_code constant varchar2(50 char) := gc_profile_agent_code || '_SESSION';
   begin
     -- Create profile agent
     begin
       select id into l_agent_id
         from uc_ai_agents
-       where code = l_agent_code
+       where code = c_agent_code
          and status = 'active';
     exception
       when no_data_found then
         l_agent_id := uc_ai_agents_api.create_agent(
-          p_code                => l_agent_code,
+          p_code                => c_agent_code,
           p_description         => 'Test profile agent for session aggregation',
           p_agent_type          => uc_ai_agents_api.c_type_profile,
           p_prompt_profile_code => 'TEST_AGENT_MATH',
@@ -302,14 +302,14 @@ create or replace package body test_uc_ai_agent_profile as
     -- Two turns in one session
     l_session_id := uc_ai_agents_api.generate_session_id;
     l_result := uc_ai_agents_api.execute_agent(
-      p_agent_code       => l_agent_code,
+      p_agent_code       => c_agent_code,
       p_input_parameters => json_object_t('{"question": "What is 15 + 27?"}'),
       p_session_id       => l_session_id
     );
     uc_ai_test_agent_utils.validate_agent_result(l_result, 'Session initial call');
 
     l_follow_up := uc_ai_agents_api.execute_agent(
-      p_agent_code        => l_agent_code,
+      p_agent_code        => c_agent_code,
       p_follow_up_message => 'Now multiply that result by 2',
       p_session_id        => l_session_id
     );

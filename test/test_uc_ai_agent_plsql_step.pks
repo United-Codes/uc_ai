@@ -1,5 +1,6 @@
 create or replace package test_uc_ai_agent_plsql_step as
   -- @dblinter ignore(g-5010): allow logger in test packages
+  -- @dblinter ignore(g-7230): the inline PL/SQL steps write to these counters, which the tests read back
 
   --%suite(Workflow PL/SQL Step Tests)
   --%suitepath(uc_ai.agents)

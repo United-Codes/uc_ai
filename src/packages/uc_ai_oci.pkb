@@ -245,12 +245,15 @@ create or replace package body uc_ai_oci as
                 --   DOCUMENT -> { documentUrl: { url: "data:application/pdf;base64,..", detail } }  (PDF)
                 -- data URI encoding matches the other providers; see uc_ai_openai.pkb 'file' branch.
                 declare
-                  l_data      clob := l_content_item.get_clob('data');
-                  l_mime_type varchar2(4000 char) := l_content_item.get_string('mediaType');
+                  l_data      clob;
+                  l_mime_type varchar2(4000 char);
                   l_url_obj   json_object_t;
                   l_detail    varchar2(20 char);
-                  l_opts      json_object_t := l_content_item.get_object('providerOptions');
+                  l_opts      json_object_t;
                 begin
+                  l_data      := l_content_item.get_clob('data');
+                  l_mime_type := l_content_item.get_string('mediaType');
+                  l_opts      := l_content_item.get_object('providerOptions');
                   l_oci_content_item := json_object_t();
                   l_url_obj := json_object_t();
                   -- optional per-file detail via providerOptions => {"detail":"HIGH"}; default AUTO

@@ -70,9 +70,10 @@ create or replace package body uc_ai_agent_exec_api as
   )
   as
     l_scope   uc_ai_logger.scope := gc_scope_prefix || 'record_transfer_request';
-    l_key     varchar2(40 char) := to_char(p_handoff_exec_id);
+    l_key     varchar2(40 char);
     l_request json_object_t := json_object_t();
   begin
+    l_key     := to_char(p_handoff_exec_id);
     if g_transfer_requests.exists(l_key) then
       uc_ai_logger.log_warn(
         'Multiple transfer requests in one turn for handoff execution ' || l_key
@@ -95,9 +96,10 @@ create or replace package body uc_ai_agent_exec_api as
     p_handoff_exec_id in uc_ai_agent_executions.id%type
   ) return json_object_t
   as
-    l_key     varchar2(40 char) := to_char(p_handoff_exec_id);
+    l_key     varchar2(40 char);
     l_request json_object_t;
   begin
+    l_key     := to_char(p_handoff_exec_id);
     if g_transfer_requests.exists(l_key) then
       l_request := g_transfer_requests(l_key);
       g_transfer_requests.delete(l_key);
@@ -110,8 +112,9 @@ create or replace package body uc_ai_agent_exec_api as
     p_handoff_exec_id in uc_ai_agent_executions.id%type
   )
   as
-    l_key varchar2(40 char) := to_char(p_handoff_exec_id);
+    l_key varchar2(40 char);
   begin
+    l_key := to_char(p_handoff_exec_id);
     if g_transfer_requests.exists(l_key) then
       g_transfer_requests.delete(l_key);
     end if;
@@ -883,8 +886,9 @@ create or replace package body uc_ai_agent_exec_api as
     l_agent           uc_ai_agents%rowtype;
     -- the code is baked into the generated PL/SQL body as a single-quoted
     -- literal; double any embedded quote so it cannot break out of the literal
-    l_safe_agent_code varchar2(4000 char) := replace(p_agent_code, '''', '''''');
+    l_safe_agent_code varchar2(4000 char);
   begin
+    l_safe_agent_code := replace(p_agent_code, '''', '''''');
     uc_ai_logger.log('Registering agent as tool: ' || p_agent_code, l_scope);
     
     -- Get the agent to check for input schema
@@ -951,8 +955,9 @@ create or replace package body uc_ai_agent_exec_api as
     l_schema        json_object_t;
     -- values are baked into the generated PL/SQL body as single-quoted literals;
     -- double any embedded quote so they cannot break out of the literal
-    l_safe_target   varchar2(4000 char) := replace(p_target_code, '''', '''''');
+    l_safe_target varchar2(4000 char);
   begin
+    l_safe_target := replace(p_target_code, '''', '''''');
     uc_ai_logger.log('Registering transfer tool for agent: ' || p_target_code, l_scope);
 
     l_function_call := q'!
@@ -1908,9 +1913,10 @@ end;!';
         -- closing summary (produced after the loop, so not in l_conversation),
         -- attributed to the moderator agent.
         declare
-          l_msgs    json_array_t := conversation_to_messages(l_conversation);
+          l_msgs    json_array_t;
           l_summary json_object_t := json_object_t();
         begin
+          l_msgs    := conversation_to_messages(l_conversation);
           l_summary.put('role', 'assistant');
           l_summary.put('agentCode', l_moderator_code);
           l_summary.put('content', l_mod_result.get_string('final_message'));

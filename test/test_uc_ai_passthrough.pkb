@@ -1,4 +1,5 @@
 create or replace package body test_uc_ai_passthrough as
+  -- @dblinter ignore(g-2160): allow initializing variables in declare in test packages
 
   procedure reset_globals
   as

@@ -1,4 +1,6 @@
 create or replace package body test_uc_ai_workflow_mapping as
+  -- @dblinter ignore(g-2160): allow initializing variables in declare in test packages
+  -- @dblinter ignore(g-5040): the tests assert THAT an error is raised; sqlcode/sqlerrm are the assertion
 
   function big_clob (
     p_length in pls_integer
@@ -9,10 +11,11 @@ create or replace package body test_uc_ai_workflow_mapping as
     l_len   pls_integer := 0;
   begin
     sys.dbms_lob.createtemporary(l_clob, true);
+    <<fill_clob>>
     while l_len < p_length loop
       sys.dbms_lob.append(l_clob, substr(l_chunk, 1, least(4000, p_length - l_len)));
       l_len := l_len + least(4000, p_length - l_len);
-    end loop;
+    end loop fill_clob;
     return l_clob;
   end big_clob;
 
@@ -197,6 +200,7 @@ create or replace package body test_uc_ai_workflow_mapping as
     l_history json_array_t := json_array_t();
     l_msg     json_object_t;
   begin
+    <<build_history>>
     for i in 1 .. p_count loop
       l_msg := json_object_t();
       if i = 1 and p_with_system then
@@ -206,7 +210,7 @@ create or replace package body test_uc_ai_workflow_mapping as
       end if;
       l_msg.put('content', 'msg ' || i);
       l_history.append(l_msg);
-    end loop;
+    end loop build_history;
     return l_history;
   end make_history;
 

@@ -394,10 +394,11 @@ create or replace package body test_uc_ai_agent_integration as
     l_first   json_object_t;
     l_summary varchar2(32767 char);
     c_prefix  constant varchar2(50 char) := 'Previous conversation summary: ';
+    c_msg_count constant pls_integer := 5;
   begin
     -- 5 tiny messages; summarize_after=3 -> older 2 get summarized, last 3 kept
     <<build_history>>
-    for i in 1 .. 5 loop
+    for i in 1 .. c_msg_count loop
       l_msg := json_object_t();
       l_msg.put('role', 'user');
       l_msg.put('content', 'msg ' || i);

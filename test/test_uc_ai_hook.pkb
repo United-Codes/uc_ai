@@ -13,17 +13,17 @@ create or replace package body test_uc_ai_hook as
   procedure delete_test_rows
   as
   begin
-    delete from uc_ai_agent_messages
-     where execution_id in (
-       select id from uc_ai_agent_executions
-        where agent_id in (select id from uc_ai_agents where code like 'TEST_HOOK_%'))
-        or session_id in (
-       select session_id from uc_ai_agent_sessions
-        where root_agent_id in (select id from uc_ai_agents where code like 'TEST_HOOK_%'));
-    delete from uc_ai_agent_executions
-     where agent_id in (select id from uc_ai_agents where code like 'TEST_HOOK_%');
-    delete from uc_ai_agent_sessions
-     where root_agent_id in (select id from uc_ai_agents where code like 'TEST_HOOK_%');
+    delete from uc_ai_agent_messages m
+     where m.execution_id in (
+       select e.id from uc_ai_agent_executions e
+        where e.agent_id in (select a.id from uc_ai_agents a where a.code like 'TEST_HOOK_%'))
+        or m.session_id in (
+       select s.session_id from uc_ai_agent_sessions s
+        where s.root_agent_id in (select a.id from uc_ai_agents a where a.code like 'TEST_HOOK_%'));
+    delete from uc_ai_agent_executions e
+     where e.agent_id in (select a.id from uc_ai_agents a where a.code like 'TEST_HOOK_%');
+    delete from uc_ai_agent_sessions s
+     where s.root_agent_id in (select a.id from uc_ai_agents a where a.code like 'TEST_HOOK_%');
     delete from uc_ai_agents where code like 'TEST_HOOK_%';
     commit;
   end delete_test_rows;
@@ -35,8 +35,8 @@ create or replace package body test_uc_ai_hook as
   begin
     select count(*)
       into l_count
-      from uc_ai_agent_executions
-     where agent_id in (select id from uc_ai_agents where code = gc_agent_code);
+      from uc_ai_agent_executions e
+     where e.agent_id in (select a.id from uc_ai_agents a where a.code = gc_agent_code);
     return l_count;
   end agent_exec_count;
 
@@ -50,6 +50,7 @@ create or replace package body test_uc_ai_hook as
     uc_ai.g_enable_tools := false;
     uc_ai.g_enable_reasoning := false;
 
+    -- @dblinter ignore(g-2135): create_agent is a function; the new id is not needed by the test
     l_id := uc_ai_agents_api.create_agent(
       p_code                => gc_agent_code,
       p_description         => 'Hook test profile agent (dangling profile)',
@@ -77,14 +78,14 @@ create or replace package body test_uc_ai_hook as
     test_uc_ai_hook_stub.reset;
     uc_ai_agents_api.set_execution_hook(null);
     -- start from a clean execution history for row-count assertions
-    delete from uc_ai_agent_messages
-     where execution_id in (
-       select id from uc_ai_agent_executions
-        where agent_id in (select id from uc_ai_agents where code = gc_agent_code));
-    delete from uc_ai_agent_executions
-     where agent_id in (select id from uc_ai_agents where code = gc_agent_code);
-    delete from uc_ai_agent_sessions
-     where root_agent_id in (select id from uc_ai_agents where code = gc_agent_code);
+    delete from uc_ai_agent_messages m
+     where m.execution_id in (
+       select e.id from uc_ai_agent_executions e
+        where e.agent_id in (select a.id from uc_ai_agents a where a.code = gc_agent_code));
+    delete from uc_ai_agent_executions e
+     where e.agent_id in (select a.id from uc_ai_agents a where a.code = gc_agent_code);
+    delete from uc_ai_agent_sessions s
+     where s.root_agent_id in (select a.id from uc_ai_agents a where a.code = gc_agent_code);
     commit;
   end before_each;
 
@@ -296,9 +297,9 @@ create or replace package body test_uc_ai_hook as
 
     ut.expect(test_uc_ai_hook_stub.g_prompt_count).to_equal(1);
     -- the stub received the original prompt and its change was applied
-    ut.expect(dbms_lob.substr(test_uc_ai_hook_stub.g_last_prompt_in, 4000, 1))
+    ut.expect(sys.dbms_lob.substr(test_uc_ai_hook_stub.g_last_prompt_in, 4000, 1))
       .to_equal('You are a helpful assistant.');
-    ut.expect(dbms_lob.substr(l_prompt, 4000, 1))
+    ut.expect(sys.dbms_lob.substr(l_prompt, 4000, 1))
       .to_equal('You are a helpful assistant. MEMORY PROTOCOL BLOCK');
   end prompt_hook_appends;
 
@@ -313,7 +314,7 @@ create or replace package body test_uc_ai_hook as
     uc_ai_agents_api.fire_augment_prompt_hook(l_prompt);
 
     ut.expect(test_uc_ai_hook_stub.g_prompt_count).to_equal(1);
-    ut.expect(dbms_lob.substr(l_prompt, 4000, 1)).to_equal('INJECTED PROMPT');
+    ut.expect(sys.dbms_lob.substr(l_prompt, 4000, 1)).to_equal('INJECTED PROMPT');
   end prompt_hook_on_null_prompt;
 
 
@@ -330,7 +331,7 @@ create or replace package body test_uc_ai_hook as
     uc_ai_agents_api.fire_augment_prompt_hook(l_prompt);
 
     ut.expect(test_uc_ai_hook_stub.g_prompt_count).to_equal(1);
-    ut.expect(dbms_lob.substr(l_prompt, 4000, 1)).to_equal('ORIGINAL PROMPT');
+    ut.expect(sys.dbms_lob.substr(l_prompt, 4000, 1)).to_equal('ORIGINAL PROMPT');
   end prompt_hook_error_swallowed;
 
 
@@ -346,7 +347,7 @@ create or replace package body test_uc_ai_hook as
     uc_ai_agents_api.fire_augment_prompt_hook(l_prompt);
 
     ut.expect(test_uc_ai_hook_stub.g_prompt_count).to_equal(0);
-    ut.expect(dbms_lob.substr(l_prompt, 4000, 1)).to_equal('ORIGINAL PROMPT');
+    ut.expect(sys.dbms_lob.substr(l_prompt, 4000, 1)).to_equal('ORIGINAL PROMPT');
   end prompt_hook_optional_when_absent;
 
 end test_uc_ai_hook;

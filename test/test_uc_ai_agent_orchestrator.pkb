@@ -409,6 +409,7 @@ create or replace package body test_uc_ai_agent_orchestrator as
       sys.dbms_output.put_line('Follow-up message count: ' || l_messages.get_size);
       ut.expect(l_messages.get_size, 'Follow-up should have full conversation history').to_be_greater_than(4);
 
+      <<history_roles>>
       for i in 0 .. l_messages.get_size - 1 loop
         l_msg := treat(l_messages.get(i) as json_object_t);
         case l_msg.get_string('role')
@@ -416,7 +417,7 @@ create or replace package body test_uc_ai_agent_orchestrator as
           when 'user' then l_user_count := l_user_count + 1;
           else null;
         end case;
-      end loop;
+      end loop history_roles;
 
       ut.expect(l_has_system, 'Should preserve system message').to_be_true();
       ut.expect(l_user_count, 'Should have 2 user messages (initial + follow-up)').to_equal(2);
@@ -450,22 +451,22 @@ create or replace package body test_uc_ai_agent_orchestrator as
 
       -- Get token usage for each parent execution (ordered by time)
       declare
-        cursor c_parents is
+        cursor l_parents_cur is
           select total_input_tokens, total_output_tokens
             from uc_ai_agent_executions
            where session_id = l_session_id
              and parent_execution_id is null
            order by started_at;
-        l_rec c_parents%rowtype;
+        l_rec l_parents_cur%rowtype;
       begin
-        open c_parents;
-        fetch c_parents into l_rec;
+        open l_parents_cur;
+        fetch l_parents_cur into l_rec;
         l_parent_input := l_rec.total_input_tokens;
         l_parent_output := l_rec.total_output_tokens;
-        fetch c_parents into l_rec;
+        fetch l_parents_cur into l_rec;
         l_followup_input := l_rec.total_input_tokens;
         l_followup_output := l_rec.total_output_tokens;
-        close c_parents;
+        close l_parents_cur;
       end;
 
       ut.expect(l_parent_input, 'Initial: input tokens > 0').to_be_greater_than(0);

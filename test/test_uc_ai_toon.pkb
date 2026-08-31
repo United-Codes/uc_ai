@@ -205,6 +205,7 @@ create or replace package body test_uc_ai_toon as
     l_json json_object_t;
     l_result clob;
     l_expected clob;
+    -- @dblinter ignore(g-2330): json_object_t.put stores a zero-length string as JSON "", a null variable as JSON null; the test needs the former
     l_empty_str varchar2(1 char) := '';
   begin
     -- Original JSON: {"empty": "", "space": " ", "tab": "\t"}
@@ -271,12 +272,12 @@ create or replace package body test_uc_ai_toon as
     l_result clob;
     l_expected clob;
     l_expected_values varchar2(32767 char);
-    l_max_num constant pls_integer := 99;
+    c_max_num constant pls_integer := 99;
   begin
     -- Original JSON: {"items": [0,1,2,...,99]}
     l_arr := json_array_t();
     <<array_loop>>
-    for i in 0 .. l_max_num loop
+    for i in 0 .. c_max_num loop
       l_arr.append(i);
     end loop array_loop;
     
@@ -288,7 +289,7 @@ create or replace package body test_uc_ai_toon as
     -- Build expected comma-separated values
     l_expected_values := '0';
     <<expected_loop>>
-    for i in 1 .. l_max_num loop
+    for i in 1 .. c_max_num loop
       l_expected_values := l_expected_values || ',' || i;
     end loop expected_loop;
     

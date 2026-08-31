@@ -312,8 +312,9 @@ create or replace package body uc_ai_google as
                 -- part replayed without it breaks multi-turn function calling.
                 if l_content_item.has('providerOptions') and not l_content_item.get('providerOptions').is_null then
                   declare
-                    l_provider_options json_object_t := l_content_item.get_object('providerOptions');
+                    l_provider_options json_object_t;
                   begin
+                    l_provider_options := l_content_item.get_object('providerOptions');
                     if l_provider_options.has('thoughtSignature')
                        and not l_provider_options.get('thoughtSignature').is_null then
                       l_part.put('thoughtSignature', l_provider_options.get_clob('thoughtSignature'));
@@ -332,8 +333,9 @@ create or replace package body uc_ai_google as
                 begin
                   if l_content_item.has('providerOptions') and not l_content_item.get('providerOptions').is_null then
                     declare
-                      l_provider_options json_object_t := l_content_item.get_object('providerOptions');
+                      l_provider_options json_object_t;
                     begin
+                      l_provider_options := l_content_item.get_object('providerOptions');
                       if l_provider_options.has('thoughtSignature')
                          and not l_provider_options.get('thoughtSignature').is_null then
                         l_signature := l_provider_options.get_clob('thoughtSignature');

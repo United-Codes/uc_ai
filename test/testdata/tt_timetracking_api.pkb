@@ -81,15 +81,16 @@ BEGIN
         RETURN FALSE;
     END IF;
     
-    SELECT COUNT(*)
+    SELECT 1
     INTO l_count
     FROM tt_users
     WHERE user_id = l_user_id
-    AND is_active = 'Y';
+    AND is_active = 'Y'
+    AND ROWNUM = 1;
     
-    RETURN l_count > 0;
+    RETURN TRUE;
 EXCEPTION
-    WHEN OTHERS THEN
+    WHEN NO_DATA_FOUND THEN
         RETURN FALSE;
 END is_user_valid;
 
@@ -108,15 +109,16 @@ BEGIN
         RETURN FALSE;
     END IF;
     
-    SELECT COUNT(*)
+    SELECT 1
     INTO l_count
     FROM tt_projects
     WHERE project_id = l_project_id
-    AND status IN ('Active', 'On Hold');
+    AND status IN ('Active', 'On Hold')
+    AND ROWNUM = 1;
     
-    RETURN l_count > 0;
+    RETURN TRUE;
 EXCEPTION
-    WHEN OTHERS THEN
+    WHEN NO_DATA_FOUND THEN
         RETURN FALSE;
 END is_project_valid;
 
@@ -210,7 +212,6 @@ PROCEDURE update_user_status(
     p_user_id IN NUMBER,
     p_is_active IN VARCHAR2
 ) IS
-    l_count NUMBER;
 BEGIN
     -- Validate status
     IF p_is_active NOT IN ('Y', 'N') THEN
@@ -395,11 +396,14 @@ BEGIN
     END IF;
     
     -- Check if user is already clocked in
-    SELECT COUNT(*)
+    SELECT CASE WHEN EXISTS (
+               SELECT 1
+               FROM tt_time_entries
+               WHERE user_id = l_user_id
+               AND clock_out_time IS NULL
+           ) THEN 1 ELSE 0 END
     INTO l_active_count
-    FROM tt_time_entries
-    WHERE user_id = l_user_id
-    AND clock_out_time IS NULL;
+    FROM sys.dual;
     
     IF l_active_count > 0 THEN
         RAISE_APPLICATION_ERROR(gc_already_clocked_in_err, 'User is already clocked in to a project');
@@ -450,6 +454,7 @@ begin
             p_notes => l_notes
         );
     exception
+        -- @dblinter ignore(g-5040): JSON tool wrapper; every error is returned to the model as text
         when others then
             return 'Error: ' || sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace;
     end;
@@ -463,8 +468,6 @@ FUNCTIOn clock_out(
     p_notes IN VARCHAR2 DEFAULT NULL
 ) RETURN CLOB IS
     l_user_id NUMBER;
-    l_entry_id NUMBER;
-    l_count NUMBER;
 BEGIN
     IF p_entry_id IS NOT NULL THEN
         -- Clock out specific entry

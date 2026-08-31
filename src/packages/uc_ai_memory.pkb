@@ -44,8 +44,9 @@ create or replace package body uc_ai_memory as
    */
   function format_size(p_chars in number) return varchar2
   as
-    l_chars number := nvl(p_chars, 0);
+    l_chars number;
   begin
+    l_chars := nvl(p_chars, 0);
     if l_chars < 1024 then
       return trim(to_char(l_chars, 'fm999999990'));
     elsif l_chars < 1048576 then
@@ -132,8 +133,9 @@ create or replace package body uc_ai_memory as
     l_lines_arr t_lines := t_lines();
     l_start     pls_integer := 1;
     l_pos       pls_integer;
-    l_len       pls_integer := nvl(length(p_content), 0);
+    l_len       pls_integer;
   begin
+    l_len := nvl(length(p_content), 0);
     if l_len = 0 then
       l_lines_arr.extend;
       return l_lines_arr;
@@ -752,8 +754,9 @@ create or replace package body uc_ai_memory as
     p_content in clob
   )
   as
-    l_user varchar2(255 char) := current_user_id();
+    l_user varchar2(255 char);
   begin
+    l_user := current_user_id();
     update uc_ai_memory_files
        set content          = coalesce(p_content, empty_clob()),
            last_accessed_at = systimestamp,
@@ -1038,8 +1041,9 @@ create or replace package body uc_ai_memory as
     l_new      path_type;
     l_cnt      pls_integer;
     l_moved    pls_integer := 0;
-    l_user     varchar2(255 char) := current_user_id();
+    l_user     varchar2(255 char);
   begin
+    l_user     := current_user_id();
     l_old_path := p_arguments.get_string('old_path');
     if l_old_path is null then
       return param_required_msg('old_path', 'rename');
@@ -1227,10 +1231,10 @@ create or replace package body uc_ai_memory as
     l_has_tag boolean := false;
     l_others  varchar2(4000 char);
   begin
-    select *
-      into l_agent
+    select agent_type, prompt_profile_code, prompt_profile_version
+      into l_agent.agent_type, l_agent.prompt_profile_code, l_agent.prompt_profile_version
       from (
-        select *
+        select agent_type, prompt_profile_code, prompt_profile_version
           from uc_ai_agents
          where code = p_agent_code
          order by case when status = uc_ai_agents_api.c_status_active then 0 else 1 end, version desc
@@ -1312,10 +1316,10 @@ create or replace package body uc_ai_memory as
     l_new     json_array_t := json_array_t();
     l_cnt     pls_integer;
   begin
-    select *
-      into l_agent
+    select agent_type, prompt_profile_code, prompt_profile_version
+      into l_agent.agent_type, l_agent.prompt_profile_code, l_agent.prompt_profile_version
       from (
-        select *
+        select agent_type, prompt_profile_code, prompt_profile_version
           from uc_ai_agents
          where code = p_agent_code
          order by case when status = uc_ai_agents_api.c_status_active then 0 else 1 end, version desc
@@ -1386,10 +1390,12 @@ create or replace package body uc_ai_memory as
     p_max_files       in number   default null
   )
   as
-    l_scope_lc varchar2(50 char) := lower(trim(p_scope));
+    l_scope_lc varchar2(50 char);
     l_cnt      pls_integer;
-    l_user     varchar2(255 char) := current_user_id();
+    l_user     varchar2(255 char);
   begin
+    l_scope_lc := lower(trim(p_scope));
+    l_user     := current_user_id();
     if l_scope_lc not in (c_scope_agent, c_scope_user, c_scope_session, c_scope_shared, c_scope_global,
                           c_scope_context) then
       raise_application_error(c_err_invalid_scope,
@@ -1446,10 +1452,12 @@ create or replace package body uc_ai_memory as
     p_drop_store      in boolean default false
   )
   as
-    l_user varchar2(255 char) := current_user_id();
+    l_user      varchar2(255 char);
     -- The agent code goes into a LIKE pattern below, so its wildcards are escaped.
-    l_like_code varchar2(1000 char) := like_literal(p_agent_code);
+    l_like_code varchar2(1000 char);
   begin
+    l_user      := current_user_id();
+    l_like_code := like_literal(p_agent_code);
     update uc_ai_memory_config
        set enabled    = 'N',
            updated_by = l_user,
@@ -1602,10 +1610,11 @@ create or replace package body uc_ai_memory as
     p_context_value in varchar2 default null
   ) return number
   as
-    l_scope_lc varchar2(50 char) := lower(trim(p_scope));
+    l_scope_lc varchar2(50 char);
     l_key      uc_ai_memory_stores.store_key%type;
     l_id       number;
   begin
+    l_scope_lc := lower(trim(p_scope));
     case l_scope_lc
       when c_scope_agent   then l_key := 'agent:' || p_agent_code;
       when c_scope_user    then l_key := 'user:' || p_agent_code || ':' || p_username;
@@ -1659,8 +1668,9 @@ create or replace package body uc_ai_memory as
   ) return clob
   as
     l_content clob;
-    l_norm    path_type := normalize_path(p_path);
+    l_norm    path_type;
   begin
+    l_norm := normalize_path(p_path);
     select content
       into l_content
       from uc_ai_memory_files
@@ -1680,10 +1690,11 @@ create or replace package body uc_ai_memory as
     p_content  in clob
   )
   as
-    l_norm    path_type := normalize_path(p_path);
+    l_norm    path_type;
     l_file_id number;
     l_old     clob;
   begin
+    l_norm    := normalize_path(p_path);
     if l_norm is null or l_norm = c_root then
       raise_application_error(c_err_config_invalid,
         'Invalid memory path "' || p_path || '": must be a file path under ' || c_root || '.');
@@ -1703,8 +1714,9 @@ create or replace package body uc_ai_memory as
     p_path     in varchar2
   )
   as
-    l_norm path_type := normalize_path(p_path);
+    l_norm path_type;
   begin
+    l_norm := normalize_path(p_path);
     delete from uc_ai_memory_files
      where store_id = p_store_id
        and path = coalesce(l_norm, p_path);

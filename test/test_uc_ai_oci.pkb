@@ -1,6 +1,8 @@
 create or replace package body test_uc_ai_oci as
 -- @dblinter ignore(g-5010): allow dbms_output in test packages
 -- @dblinter ignore(g-2160): allow initialzing variables in declare in test packages
+-- @dblinter ignore(g-5040): the tests assert THAT an error is raised; sqlcode/sqlerrm are the assertion
+-- @dblinter ignore(g-5080): the tests assert on sqlerrm itself; a backtrace would only add noise to the test log
 
   procedure basic_recipe_generic
   as

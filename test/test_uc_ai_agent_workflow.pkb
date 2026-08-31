@@ -265,7 +265,6 @@ create or replace package body test_uc_ai_agent_workflow as
     l_status      varchar2(50 char);
     l_exec_count  number;
     l_workflow_def clob;
-    l_agent_data json;
   begin
     -- Create sequential workflow definition
     l_workflow_def := '{
