@@ -1,0 +1,40 @@
+attributeGroup agent (
+    name: Agent
+    sequence: 10
+    advanced {
+        staticId: agent
+    }
+)
+
+attributeGroup appearance (
+    name: Appearance
+    sequence: 40
+    advanced {
+        staticId: appearance
+    }
+)
+
+attributeGroup conversation (
+    name: Conversation
+    sequence: 30
+    advanced {
+        staticId: conversation
+    }
+)
+
+attributeGroup developer (
+    name: Developer
+    sequence: 50
+    advanced {
+        staticId: developer
+    }
+)
+
+attributeGroup runContext (
+    name: Run Context
+    sequence: 20
+    advanced {
+        staticId: run-context
+    }
+)
+

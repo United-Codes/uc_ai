@@ -1,0 +1,158 @@
+page 10 (
+    name: UC AI Chat
+    alias: UC-AI-CHAT
+    title: UC AI Chat
+    appearance {
+        pageTemplate: @/standard
+        templateOptions: #DEFAULT#
+    }
+    navigation {
+        cursorFocus: doNotFocusCursor
+    }
+    security {
+        pageAccessProtection: argumentsMustHaveChecksum
+        formAutoComplete: false
+    }
+
+    region breadcrumb (
+        name: Breadcrumb
+        type: breadcrumb
+        source {
+            breadcrumb: @breadcrumb
+        }
+        layout {
+            sequence: 10
+            slot: breadcrumbBar
+        }
+        appearance {
+            template: @/title-bar
+            templateOptions: [
+                #DEFAULT#
+                t-BreadcrumbRegion--useBreadcrumbTitle
+            ]
+        }
+        componentAppearance {
+            breadcrumbTemplate: @/breadcrumb
+            templateOptions: #DEFAULT#
+        }
+    )
+
+    region chat (
+        name: Chat
+        type: plugin/ucAiChat
+        layout {
+            sequence: 10
+            slot: body
+        }
+        appearance {
+            template: @/standard
+            templateOptions: [
+                #DEFAULT#
+                t-Region--noPadding
+                t-Region--removeHeader js-removeLandmark
+                t-Region--scrollBody
+            ]
+        }
+        plugin-agent {
+            agentCode: SC_DESK
+            agentInputMapping:
+                ```
+                {
+                  "engineer_name": "&APP_USER.",
+                  "today": "&P10_TODAY.",
+                  "question": "#USER_MESSAGE#"
+                }
+                ```
+            sessionInitCode:
+                ```plsql
+                apex_session.attach(
+                  p_app_id     => :APP_ID,
+                  p_page_id    => :APP_PAGE_ID,
+                  p_session_id => :APP_SESSION
+                );
+                ```
+        }
+        plugin-runContext {
+            agentRunContext:
+                ```
+                {
+                  "contract_id": "&P10_CONTRACT_ID.",
+                  "engineer": "&APP_USER."
+                }
+                ```
+            runContextDrift: error
+        }
+        plugin-conversation {
+            sessionItem: P10_SESSION_ID
+            autoGenerateTitle: true
+            collectFeedback: true
+            suggestedPrompts: Change me
+        }
+        plugin-appearance {
+            minHeight: 450px
+        }
+        plugin-developer {
+            debugConfig:
+                ```plsql
+                return q'!{
+                  "show_reasoning": true,
+                  "show_tools": true,
+                  "show_metadata": true
+                }!';
+                ```
+        }
+    )
+
+    pageItem P10_CONTRACT_ID (
+        type: hidden
+        layout {
+            sequence: 30
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    pageItem P10_SESSION_ID (
+        type: hidden
+        layout {
+            sequence: 40
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    pageItem P10_TODAY (
+        type: hidden
+        layout {
+            sequence: 20
+            region: @chat
+            slot: regionBody
+        }
+    )
+
+    computation contract (
+        itemName: P10_CONTRACT_ID
+        execution {
+            sequence: 20
+            point: beforeHeader
+        }
+        computation {
+            type: staticValue
+            staticValue: 88
+        }
+    )
+
+    computation today (
+        itemName: P10_TODAY
+        execution {
+            sequence: 10
+            point: beforeHeader
+        }
+        computation {
+            type: expression
+            plsqlExpression: to_char(sysdate, 'YYYY-MM-DD')
+        }
+    )
+
+)
+

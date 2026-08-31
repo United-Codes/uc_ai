@@ -1,0 +1,600 @@
+customAttribute agent_code (
+    apexlangName: agentCode
+    attribute: 1
+    name: Agent Code
+    validation {
+        required: true
+    }
+    appearance {
+        attributeGroup: @agent
+        sequence: 10
+    }
+    help {
+        helpText:
+            ```
+            <p>The <strong>code</strong> of the UC AI agent that powers this chat region. Must match an existing active agent registered in the UC AI framework.</p>
+            <p>The agent defines the model, system prompt, available tools, and input parameter schema. If the agent does not exist or is not active, requests will fail at runtime.</p>
+            <p>See <a href="https://www.united-codes.com/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/">this documentation</a> on details on how to create an agent in UC AI</p>
+            ```
+    }
+    examples {
+        examples: <code>SUPPORT_BOT</code>
+    }
+)
+
+customAttribute agent_input_mapping (
+    apexlangName: agentInputMapping
+    attribute: 5
+    name: Agent Input Mapping
+    type: textarea
+    appearance {
+        attributeGroup: @agent
+        sequence: 50
+    }
+    default {
+        value:
+            ```
+            {
+              "message": "#USER_MESSAGE#"
+            }
+            ```
+    }
+    help {
+        helpText:
+            ```
+            <p>Optional. A JSON template that maps APEX values into the agent's input parameters for the <strong>first</strong> message of a session. Subsequent messages in the same session reuse the conversation context and ignore this template.</p>
+            <p>Inside the template you can use:</p>
+            <ul>
+              <li><code>&APEX_ITEM.</code>: substituted with the value of any APEX page or application item.</li>
+              <li><code>#USER_MESSAGE#</code>: placeholder for the message text the user typed. Automatically JSON-escaped &mdash; safe against injection.</li>
+            </ul>
+            <p>If left blank, the user's message is passed as <code>{ "message": "{{text}}" }</code>.</p>
+            
+            <p>The keys must match the input parameter names defined on the agent.</p>
+            ```
+    }
+    examples {
+        examples:
+            ```
+            <pre>
+            {
+              "message": "#USER_MESSAGE#",
+              "username": "&APP_USER.",
+              "country": "&P1_COUNTRY_NAME."
+            }
+            </pre>
+            ```
+    }
+)
+
+customAttribute agent_run_context (
+    apexlangName: agentRunContext
+    attribute: 19
+    name: Agent Run Context
+    type: textarea
+    appearance {
+        attributeGroup: @runContext
+        sequence: 190
+    }
+    help {
+        helpText:
+            ```
+            <p>A JSON object of name/value pairs that <strong>bind the conversation to specific data</strong> &mdash; one contract, one case, one tenant. UC AI passes them to every tool of the run under the reserved key <code>_ctx</code>.</p>
+            
+            <p>This is the difference between a tool that reads the contract the run is about and a tool that reads the contract the <em>model asked for</em>. The AI can neither see these values nor choose them, so leave the scoped value out of the tool&rsquo;s parameter schema and read it from <code>_ctx</code> in the handler &mdash; then there is exactly one place the value can come from.</p>
+            
+            <p>Values also fill prompt-profile placeholders that the input parameters do not supply, and the UC AI Pro memory layer can scope a store by one of the keys.</p>
+            
+            <p>Use <code>&amp;APEX_ITEM.</code> for any page or application item. Values are substituted after the JSON is parsed, so a value containing a quote or a backslash is escaped rather than breaking the object.</p>
+            
+            <p><code>#USER_MESSAGE#</code> is <strong>not</strong> supported here (it is removed if present) &mdash; a run context scopes the run, it does not carry the prompt. Use <strong>Agent Input Mapping</strong> for that.</p>
+            
+            <p>Unlike Agent Input Mapping, this is re-sent on <em>every</em> turn, not just the first. A later turn may add a key but may not change one &mdash; see <strong>Run Context Change</strong>.</p>
+            
+            <p>Leave blank to run unbound.</p>
+            ```
+    }
+    examples {
+        examples: <pre>{ "contract_id": "&P10_CONTRACT_ID.", "tenant_id": "&APP_USER." }</pre>
+    }
+)
+
+customAttribute agent_version (
+    apexlangName: agentVersion
+    attribute: 2
+    name: Agent Version
+    type: number
+    appearance {
+        attributeGroup: @agent
+        sequence: 20
+    }
+    help {
+        helpText:
+            ```
+            <p>Optional. Pins this region to a specific agent version. Leave blank to always use the currently active version of the agent.</p>
+            <p>Use this to lock a chat region to a known-good version while you iterate on a newer draft. Once the new version is validated, clear this attribute (or update it) to roll out.</p>
+            ```
+    }
+    examples {
+        examples: <code>3</code>
+    }
+)
+
+customAttribute auto_title (
+    apexlangName: autoGenerateTitle
+    attribute: 15
+    name: Auto Generate Title
+    type: yesNo
+    appearance {
+        attributeGroup: @conversation
+        sequence: 150
+    }
+    help {
+        helpText:
+            ```
+            <p>Names each conversation automatically after the first answer, using the
+            language model built into the user's browser.</p>
+            
+            <p>The title replaces the <strong>Header Title</strong> in the chat header and is
+            stored in <code>UC_AI_CHAT_MESSAGES.TITLE</code>, so you can use it in
+            your own reports. It is written once per conversation and never overwritten.</p>
+            
+            <p>Requires a browser with a built-in on-device model (Chrome 148 or later) that
+            has already downloaded it. Nothing is sent to a server, no AI tokens are spent,
+            and the model download is never started on the user's behalf. Where the model is
+            unavailable the chat simply keeps its configured <strong>Header Title</strong> —
+            no error is shown.</p>
+            
+            <p>Requires the <code>SESSION_TITLE</code> column on
+            <code>UC_AI_CHAT_MESSAGES</code>. Default: <strong>No</strong>.</p>
+            ```
+    }
+)
+
+customAttribute avatar_icon (
+    apexlangName: avatarIcon
+    attribute: 13
+    name: Avatar Icon
+    type: icon
+    validation {
+        required: true
+    }
+    appearance {
+        attributeGroup: @appearance
+        sequence: 130
+    }
+    default {
+        value: fa-robot
+    }
+)
+
+customAttribute collect_feedback (
+    apexlangName: collectFeedback
+    attribute: 17
+    name: Collect Feedback
+    type: yesNo
+    appearance {
+        attributeGroup: @conversation
+        sequence: 170
+    }
+    help {
+        helpText:
+            ```
+            <p>Lets the user rate the conversation with a thumbs up or thumbs down. On a thumbs down they can also leave an optional comment.</p>
+            
+            <p>The buttons sit quietly under the newest answer and appear on hover, so nothing is blocked and nobody is prompted. Expect only a small share of users to answer &ndash; that is the intent.</p>
+            
+            <p>One rating is stored per conversation, in <code>UC_AI_AGENT_SESSIONS.FEEDBACK_RATING</code> (with <code>FEEDBACK_COMMENT</code> and <code>FEEDBACK_AT</code>), so you can report on it &mdash; for example to list the conversations people were unhappy with. <code>UC_AI_AGENTS_API.LIST_SESSIONS</code> returns all three columns.</p>
+            
+            <p>The user can change or withdraw their rating at any time; withdrawing also clears the comment.</p>
+            
+            <p>Requires UC AI 26.3 or later. Default: <strong>No</strong>.</p>
+            ```
+    }
+)
+
+customAttribute debug_config (
+    apexlangName: debugConfig
+    attribute: 8
+    name: Debug Config
+    type: plsqlFunctionBodyReturningVarchar2
+    appearance {
+        attributeGroup: @developer
+        sequence: 80
+    }
+    default {
+        value:
+            ```
+            return q'!{
+              "show_reasoning": true,
+              "show_tools": true,
+              "show_metadata": true
+            }!';
+            ```
+    }
+    help {
+        helpText:
+            ```
+            <p>Optional. A <strong>PL/SQL function body</strong> that returns a JSON string controlling which debug sections are visible to the end user. All three flags default to <code>false</code> (hidden) when this attribute is empty, the function raises an error, or the JSON is invalid.</p>
+            <p>The JSON object recognizes three boolean keys:</p>
+            <ul>
+              <li><code>show_reasoning</code> – show the assistant's internal reasoning / chain-of-thought as a collapsible block above each answer.</li>
+              <li><code>show_tools</code> – show each tool call the agent makes (tool name, arguments, result, status).</li>
+              <li><code>show_metadata</code> – show token usage (input / output tokens) next to each assistant message.</li>
+              <li><code>show_debug</code> – show debug panel with advanced details.</li>
+            </ul>
+            <p>Because this is a PL/SQL function, you can return different configurations based on session state &mdash; e.g. show debug only to admins.</p>
+            <p><strong>Server-side filtering:</strong> when a flag is <code>false</code>, the corresponding rows/fields are removed from the AJAX response on the server. Hidden content never reaches the browser, so a tampered client cannot reveal it.</p>
+            ```
+    }
+    examples {
+        examples:
+            ```
+            <p><strong>Static example – everything on:</strong></p>
+            
+            <pre>return q'!{
+              "show_reasoning": true,
+              "show_tools": true,
+              "show_metadata": true,
+              "show_debug": true
+            }!';
+            </pre>
+            
+            <p><strong>Conditional example – admins only:</strong></p>
+            <pre>if apex_authorization.is_authorized('ADMIN_AUTH') or apex_application.g_edit_cookie_session_id is not null then
+              return '{ "show_reasoning": true, "show_tools": true, "show_metadata": true, "show_debug": true }';
+            else
+              return '{}';
+            end if;</pre>
+            ```
+    }
+)
+
+customAttribute display_mode (
+    apexlangName: displayMode
+    attribute: 4
+    name: Display Mode
+    type: selectList
+    validation {
+        required: true
+    }
+    appearance {
+        attributeGroup: @appearance
+        sequence: 40
+    }
+    default {
+        value: region
+    }
+    help {
+        helpText:
+            ```
+            <p>Controls how the chat region is rendered on the page.</p>
+            <ul>
+              <li><strong>Region</strong>: renders the chat inline as part of the page layout. Use <em>Max Height</em> to constrain the chat's vertical size.</li>
+              <li><strong>Dialog</strong>:renders a small chat icon button. Clicking it opens the chat in a modal dialog overlay. Best for chat assistants that should be available everywhere without consuming page real estate.</li>
+            </ul>
+            <p>Defaults to <strong>Region</strong>.</p>
+            ```
+    }
+
+    entry dialog (
+        sequence: 20
+        display: Dialog
+        return: dialog
+        advanced {
+            quickPick: true
+        }
+    )
+
+    entry region (
+        sequence: 10
+        display: Region
+        return: region
+        advanced {
+            quickPick: true
+        }
+    )
+
+)
+
+customAttribute header_title (
+    apexlangName: headerTitle
+    attribute: 9
+    name: Header Title
+    validation {
+        required: true
+    }
+    appearance {
+        attributeGroup: @appearance
+        sequence: 90
+    }
+    default {
+        value: UC AI Chat
+    }
+)
+
+customAttribute min_height (
+    apexlangName: minHeight
+    attribute: 12
+    name: Min Height
+    appearance {
+        attributeGroup: @appearance
+        sequence: 120
+    }
+    default {
+        value: 450px
+    }
+)
+
+customAttribute run_context_drift (
+    apexlangName: runContextDrift
+    attribute: 20
+    name: Run Context Drift
+    type: selectList
+    appearance {
+        attributeGroup: @runContext
+        sequence: 200
+    }
+    default {
+        value: ignore
+    }
+    dependingOn {
+        attribute: @agent_run_context/component
+        conditionType: isNotNull
+    }
+    help {
+        helpText:
+            ```
+            <p>What to do when <strong>Agent Run Context</strong> resolves to different values than the ones this conversation is already bound to &mdash; typically because the user navigated to another record while the chat was open.</p>
+            
+            <p>UC AI binds the context on a conversation&rsquo;s first turn. A later turn may add a key, but changing one is refused: the persisted messages, and any memory files, were written under the original binding, so silently re-targeting them would expose one record&rsquo;s conversation to another.</p>
+            
+            <ul>
+              <li><strong>Refuse the turn and explain why</strong> (default) &mdash; nothing is sent, and a notice above the composer tells the user the conversation is tied to different data. Safe: nothing is lost without the user choosing it.</li>
+              <li><strong>Start a new conversation</strong> &mdash; the region silently opens a fresh conversation bound to the new values and sends the message there. Right for &ldquo;talk to this record&rdquo; pages; the visible history of the old conversation is gone, and there is no history UI to get it back.</li>
+              <li><strong>Keep the original binding</strong> &mdash; the change is ignored and the conversation keeps answering under what its first turn bound. Matches how Agent Input Mapping stops applying after the first message.</li>
+            </ul>
+            
+            <p>Only relevant when Agent Run Context is set. Adding a <em>new</em> key is never a conflict and is always allowed.</p>
+            ```
+    }
+
+    entry error (
+        sequence: 10
+        display: error
+        return: error
+        help {
+            helpText: Turn refused, red banner above the composer, optimistic bubble left standing
+        }
+    )
+
+    entry ignore (
+        sequence: 30
+        display: ignore
+        return: ignore
+        help {
+            helpText: Original binding frozen, exactly like agent_input_mapping after turn one
+        }
+    )
+
+    entry newSession (
+        sequence: 20
+        display: new_session
+        return: new_session
+        help {
+            helpText: Fresh conversation opened and bound to the new values; session_item updated
+        }
+    )
+
+)
+
+customAttribute session_init_code (
+    apexlangName: sessionInitCode
+    attribute: 7
+    name: Session Init Code
+    type: plsqlCode
+    appearance {
+        attributeGroup: @agent
+        sequence: 70
+    }
+    help {
+        helpText:
+            ```
+            <p>Optional. A PL/SQL block that runs <strong>inside the background scheduler job</strong> just before the agent executes, in the job's session.</p>
+            <p>The scheduler job runs without an APEX session, so any context the agent depends on (e.g. <code>APP_USER</code>, workspace ID, custom application contexts) must be re-established here.</p>
+            <p>Item references are resolved <strong>at request time</strong> (when the APEX session is still live) and inlined into the code before it's stored. Supported syntaxes:</p>
+            <ul>
+              <li><code>&APEX_ITEM.</code>: substituted natively by APEX.</li>
+              <li><code>:APEX_ITEM</code>: substituted with a quoted SQL literal of the item's value. <em>Caveat:</em> matches anywhere, including inside string literals; prefer <code>&ITEM.</code> if your code embeds <code>:</code> inside strings.</li>
+            </ul>
+            ```
+    }
+    examples {
+        examples:
+            ```
+            <pre>apex_session.attach(
+              p_app_id      => :APP_ID,
+              p_page_id     => :APP_PAGE_ID,
+              p_session_id  => :APP_SESSION
+            );
+            
+            -- or
+            my_ctx_package.login(&APP_USER.)
+            </pre>
+            ```
+    }
+)
+
+customAttribute session_item (
+    apexlangName: sessionItem
+    attribute: 3
+    name: Session Item
+    type: pageItem
+    appearance {
+        attributeGroup: @conversation
+        sequence: 30
+    }
+    help {
+        helpText:
+            ```
+            <p>Optional. The name of an APEX page item that should hold the AI chat <strong>session ID</strong>.</p>
+            <p>When set:</p>
+            <ul>
+              <li>On region render, the chat will resume the session whose ID is stored in this item (if any).</li>
+              <li>When the user starts a new conversation, the new session ID is written back to this item so it survives page submissions.</li>
+            </ul>
+            <p>Leave blank for ephemeral, in-memory-only sessions that reset on every page load.</p>
+            ```
+    }
+    examples {
+        examples: <code>P10_AI_SESSION_ID</code>
+    }
+)
+
+customAttribute suggested_prompts (
+    apexlangName: suggestedPrompts
+    attribute: 18
+    name: Suggested Prompts
+    type: textarea
+    appearance {
+        attributeGroup: @conversation
+        sequence: 180
+    }
+    help {
+        helpText:
+            ```
+            <p>Example questions offered as clickable chips while the conversation is still empty. Clicking one sends it immediately, so a first-time user has something to try instead of a blank box.</p>
+            
+            <p>Enter <strong>one prompt per line</strong>. Surrounding spaces are trimmed and blank lines are ignored; commas and quotes are safe. Leave the attribute empty to show no chips.</p>
+            
+            <p>The chips show only while the transcript is empty and vanish as soon as the first message is sent &mdash; they are a starting point, not a menu. <strong>New chat</strong> empties the conversation, so they come back for the next one.</p>
+            
+            <p>Keep them short enough to read at a glance; long lines are still sent in full but wrap awkwardly in a narrow region.</p>
+            ```
+    }
+    examples {
+        examples:
+            ```
+            <pre>What is Oracle APEX?
+            Write a SQL query example
+            How do I debug a slow page?</pre>
+            ```
+    }
+)
+
+customAttribute thinking_animation (
+    apexlangName: thinkingAnimation
+    attribute: 14
+    name: Thinking Animation
+    type: selectList
+    validation {
+        required: true
+    }
+    appearance {
+        attributeGroup: @appearance
+        sequence: 140
+    }
+    default {
+        value: dots
+    }
+
+    entry braille (
+        sequence: 20
+        display: Braille
+        return: braille
+        help {
+            helpText: Single line of braille cells tracing a travelling wave
+        }
+    )
+
+    entry dots (
+        sequence: 10
+        display: Dots
+        return: dots
+        help {
+            helpText: Bouncing dots
+        }
+    )
+
+    entry matrix (
+        sequence: 40
+        display: Matrix
+        return: matrix
+        help {
+            helpText: 6 × 18 glyph cascade, columns desynced by a hash of the column index
+        }
+    )
+
+    entry plasma (
+        sequence: 30
+        display: Plasma
+        return: plasma
+        help {
+            helpText: 3 × 28 density-ramp field from summed sines — a band of energy flowing left→right
+        }
+    )
+
+)
+
+customAttribute thinking_detail (
+    apexlangName: thinkingDetail
+    attribute: 16
+    name: Thinking Detail
+    type: selectList
+    validation {
+        required: true
+    }
+    appearance {
+        attributeGroup: @appearance
+        sequence: 160
+    }
+    default {
+        value: status
+    }
+
+    entry off (
+        sequence: 20
+        display: off
+        return: off
+        help {
+            helpText: Nothing — the animation alone
+        }
+    )
+
+    entry status (
+        sequence: 10
+        display: status
+        return: status
+        help {
+            helpText: `Thinking…` plus elapsed seconds
+        }
+    )
+
+    entry tools (
+        sequence: 30
+        display: tools
+        return: tools
+        help {
+            helpText: Also names the tool currently running: `Calling get_orders…`
+        }
+    )
+
+)
+
+customAttribute welcome_message (
+    apexlangName: welcomeMessage
+    attribute: 11
+    name: Welcome Message
+    type: textarea
+    validation {
+        required: true
+    }
+    appearance {
+        attributeGroup: @appearance
+        sequence: 110
+    }
+    default {
+        value: Ask me anything...
+    }
+)
+

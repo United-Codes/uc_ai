@@ -1,0 +1,20 @@
+plugin ucAiChat (
+    name: UC AI Chat
+    staticId: COM.UNITED_CODES.UC_AI_CHAT
+    type: region
+    callbacks {
+        renderProcedureName: uc_ai_chat.render_region
+        ajaxProcedureName: uc_ai_chat.ajax_region
+    }
+    css {
+        fileUrls: #PLUGIN_FILES#bundle.css
+    }
+    javaScript {
+        fileUrls: #PLUGIN_FILES#bundle#MIN#.js
+    }
+    information {
+        version: 26.3
+        aboutUrl: https://www.united-codes.com/
+    }
+)
+

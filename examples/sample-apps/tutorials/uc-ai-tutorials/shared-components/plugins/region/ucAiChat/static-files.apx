@@ -1,0 +1,15 @@
+file bundle.css (
+    mimeType: text/css
+    charSet: utf-8
+)
+
+file bundle.js (
+    mimeType: text/javascript
+    charSet: utf-8
+)
+
+file bundle.min.js (
+    mimeType: text/javascript
+    charSet: utf-8
+)
+
