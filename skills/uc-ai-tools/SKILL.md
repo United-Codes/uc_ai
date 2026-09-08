@@ -1,6 +1,6 @@
 ---
 name: uc-ai-tools
-description: Use when giving an AI/LLM access to database data or actions (tools / function calling) from Oracle PL/SQL with UC AI — registering tools with uc_ai_tools_api.create_tool_from_schema or merge_tool_from_schema, describing parameters with a JSON schema, enabling tools via uc_ai.g_enable_tools, restricting them with uc_ai.g_tool_tags, limiting p_max_tool_calls, testing with execute_tool, writing robust CLOB-in/CLOB-out tool functions, enabling code mode (programmatic tool calling) with uc_ai.g_enable_programmatic_tools, or adding provider server-side tools with uc_ai.g_provider_tools.
+description: Use when giving an AI/LLM access to database data or actions (tools / function calling) from Oracle PL/SQL with UC AI — registering tools with uc_ai_tools_api.create_tool_from_schema or merge_tool_from_schema, describing parameters with a JSON schema, enabling tools via uc_ai.g_enable_tools, restricting them with uc_ai.g_tool_tags, limiting p_max_tool_calls, testing with execute_tool, writing robust CLOB-in/CLOB-out tool functions, enabling code mode (programmatic tool calling) with uc_ai.g_enable_programmatic_tools, adding provider server-side tools with uc_ai.g_provider_tools, or reading a caller-bound value from the reserved run-context argument _ctx.
 ---
 
 # UC AI Tools — Let the AI Call Your PL/SQL
@@ -13,6 +13,7 @@ A tool is a PL/SQL function with these attributes:
 
 - Takes **at most one parameter**: a `clob` containing a JSON object with all arguments (the model "speaks JSON", so multiple logical arguments travel in one object).
 - Returns a `clob` — the text the model gets to read.
+- Receives one argument it did not declare: UC AI adds the run context of the call under the reserved key `_ctx` (see [The run context](#the-run-context)). A handler that reads named keys is unaffected. A handler that walks all keys must skip it, and no tool can declare a parameter named `_ctx`.
 - The registered `p_function_call` snippet is a function body like `return my_pkg.get_weather(:parameters);`. It may contain **exactly one bind variable** (conventionally `:parameters`), which receives the arguments JSON as a CLOB. More than one bind is rejected for security.
 - Parameterless tools: pass `p_json_schema => null` and use no bind at all, e.g. `return my_pkg.get_all_users_json();`.
 
@@ -158,6 +159,61 @@ l_result := uc_ai.generate_text(
 );
 ```
 
+## The run context
+
+Some values must not come from the model. In a "talk to this document" agent the
+tool must read document 7 because the run is bound to document 7, not because the
+model asked for document 42.
+
+The caller binds such values with `p_run_context`, on `uc_ai.generate_text` and on
+`uc_ai_agents_api.execute_agent`:
+
+```sql
+l_result := uc_ai.generate_text(
+  p_user_prompt => 'What are the payment terms?'
+, p_provider    => uc_ai.c_provider_openai
+, p_model       => uc_ai_openai.c_model_gpt_5_6_sol
+, p_run_context => json_object_t('{"document_id": "7", "tenant_id": "ACME"}')
+);
+```
+
+UC AI adds the bag to the arguments of every tool in that run, under the reserved
+key `_ctx` (`uc_ai.c_run_context_key`). No model sees the key and no model can set
+it. The handler receives:
+
+```json
+{ "query": "invoice terms", "_ctx": { "document_id": "7", "tenant_id": "ACME" } }
+```
+
+**Leave the bound value out of the tool schema.** Declare only what the model may
+choose. The value then has one source:
+
+```sql
+create or replace function doc_search (
+  p_parameters in clob
+) return clob
+as
+  l_args json_object_t := json_object_t(p_parameters);
+  l_ctx  json_object_t := l_args.get_object(uc_ai.c_run_context_key);
+  l_doc  varchar2(255 char) := case when l_ctx is not null then l_ctx.get_string('document_id') end;
+begin
+  if l_doc is null then
+    return 'Error: no document is bound to this run';
+  end if;
+  return doc_pkg.search_chunks(to_number(l_doc), l_args.get_string('query'));
+end doc_search;
+/
+```
+
+Rules that matter for a handler:
+
+- `_ctx` is always present. It holds an empty object when the run carries no context.
+- Return error text when a needed key is missing, as with any other bad input. A raise aborts the whole call.
+- The run context also fills `{placeholder}` names in a prompt profile. An input parameter of the same name wins.
+- A nested run inherits the context: a workflow step, an orchestrator delegate, and a handoff target all run under the same binding, and none of them can drop it. A `p_run_context` passed to a `generate_text` call inside an agent run is ignored.
+- A session binds the context on its first turn. A later turn can add a key but cannot change one. A change raises `ORA-20507`.
+- `uc_ai.run_context_value(p_run_context, p_key)` reads one key out of a serialized bag. It is pure — pass the bag, there is no ambient getter.
+
 ## Code mode (programmatic tool calling)
 
 Instead of one LLM round-trip per tool call, the model can write **one** JavaScript program that calls many tools in-database and returns only the final result. Big token savings on loops and large intermediate data.
@@ -276,10 +332,12 @@ For larger result sets, TOON encoding cuts token usage substantially compared to
 - **Don't raise from tool functions** — return the error text so the model can recover. Raising aborts the entire `generate_text` call.
 - **Commit after registering.** `create_tool_from_schema`/`merge_tool_from_schema` do not commit.
 - **`create_tool_from_schema` fails on re-run** (duplicate code). Use `merge_tool_from_schema` in scripts that run more than once.
+- **`_ctx` is reserved.** A tool cannot declare a parameter with that name, and a handler that iterates over all argument keys sees it.
 
 ## Full documentation
 
 - Tools guide: https://www.united-codes.com/products/uc-ai/docs/guides/tools/
+- The run context: https://www.united-codes.com/products/uc-ai/docs/guides/tools/#the-run-context
 - Programmatic tool calling (code mode): https://www.united-codes.com/products/uc-ai/docs/guides/programmatic-tool-calling/
 - Interactive JSON schema builder: https://www.united-codes.com/products/uc-ai/docs/other/json-schema/
 - Reasoning (better tool planning): https://www.united-codes.com/products/uc-ai/docs/guides/reasoning/

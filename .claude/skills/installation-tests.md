@@ -42,7 +42,7 @@ exit;
 EOF
 ```
 
-Expected counts for UC_AI* objects (verified against a fresh v26.4 install):
+Expected counts for UC_AI* objects (verified against a fresh v26.3 install):
 
 | Object type | Count | Notes |
 |---|---|---|

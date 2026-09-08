@@ -5,50 +5,6 @@ sidebar:
   order: 3
 ---
 
-## v26.4
-
-To upgrade first run `v26.3_to_v26.4.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.4).
-
-For new installations follow [this guide](https://www.united-codes.com/products/uc-ai/docs/guides/installation/).
-
-**Behavior note**:
-
-- **An agent that another agent starts is now a child run.** A run started from inside a tool handler, or from a PL/SQL workflow step, joins the session of the run it started from and records that run in `uc_ai_agent_executions.parent_execution_id`. It is no longer counted as a turn of the conversation: `turn_index` stays empty and `turn_count` on the session header counts the turns of the caller only. A report that read such a run as a turn shows one turn less for each delegation. An explicit `p_session_id` or `p_parent_exec_id` still wins.
-- **`uc_ai_agent_exec_api.register_agent_as_tool` lost two parameters.** The signature is now `register_agent_as_tool(p_agent_code, p_tool_tag)`. The session and the parent execution come from the context of the orchestrator run. Code that calls this internal registration function must drop `p_exec_id` and `p_session_id`.
-- **`iteration_count` and `tool_calls_count` hold their real values.** Both columns of `uc_ai_agent_executions` were always 0. A profile or orchestrator run now records the number of tool calls it made, and a workflow run records the number of steps it ran.
-- **Every tool call now carries one more argument.** UC AI adds the run context to the arguments JSON of every tool, under the reserved key `_ctx`. It holds an empty object when the run carries no context. A handler that reads named keys is not affected. A handler that walks all keys, or that refuses an unknown key, sees the new one. A tool can no longer declare a parameter with the name `_ctx`.
-
-**Features**:
-
-Run context:
-
-- **[Run context](/products/uc-ai/docs/guides/tools/#the-run-context)**: `execute_agent` and `generate_text` take a new `p_run_context` parameter, a JSON object of name/value pairs bound to the run, for example `{"document_id":"7"}`. UC AI hands these values to every tool in the run under `_ctx`, so a tool handler can read a value that the model can neither see nor choose. Use it for an agent that must stay bound to one document, one case, or one tenant.
-- **The run context fills prompt placeholders**: a `{document_id}` placeholder resolves from the run context when the input parameters do not supply it. An input parameter of the same name wins.
-- **Nested runs inherit the context**: a workflow step, an orchestrator delegate, and a handoff target all run under the same binding, and none of them can drop it.
-- **A session keeps its binding**: the first turn binds the context to the session, so a follow-up turn does not have to pass it again. A later turn can add a key but cannot change one. A change raises the new error `-20507`.
-- **New columns**: `uc_ai_agent_executions.run_context` and `uc_ai_agent_sessions.run_context` record the effective context.
-- **Config-driven calls keep their execution context**: `uc_ai_settings.build_from_config` now snapshots the execution context, as `build_from_globals` does. A `generate_text` call with `p_config` inside an agent run therefore keeps its hook attribution and its run context.
-
-Agents:
-
-- **[Remove an agent and its history](/products/uc-ai/docs/guides/multi-agent-systems/#removing-an-agent)**: `uc_ai_agents_api.purge_agent` deletes every version of an agent, its runs, the runs started from them, its sessions, the messages of both, and the memory that is only this agent's. Until now an agent that had run could not be deleted at all, because its history referenced it. A shared or global memory store, a session of another agent, and the prompt profile stay. To keep the history, archive the agent instead.
-- **`check_agent_not_referenced` sees two more references**: an orchestrator delegate and the first agent of a handoff are now found. Deleting or purging such an agent is refused, as it always was for a workflow step.
-- **[Agent as tool](/products/uc-ai/docs/guides/multi-agent-systems/agent-as-tool/)**: the new function `uc_ai_agents_api.run_agent_as_tool` is the whole handler of a tool that runs another agent. Register the tool with `p_function_call => 'return uc_ai_agents_api.run_agent_as_tool(''my_agent'', :parameters);'` and every agent, workflow step, and `generate_text` call can reach that agent as a normal tool. The function gives the tool arguments to the agent, hands it the run context of the caller, joins the session of the caller, and returns a failed run as text for the calling model.
-- **The orchestrator uses the same handler**: a delegate tool is now the same one-line handler, so both patterns behave alike.
-
-Agent memory:
-
-- **[Agent memory](/products/uc-ai/docs/guides/agent-memory/)**: an agent can store and read knowledge across conversations. It gets a private virtual filesystem with the root `/memories`. Three new tables hold the stores and the files.
-- **The new `MEMORY` tool works on every provider**: it follows the command set of the [Anthropic memory tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool), as a normal UC AI function tool. The installer creates the tool row.
-- **One call enables memory for an agent**: `uc_ai_memory.enable_for_agent` writes the configuration row and adds the tool tag to the prompt profile of the agent. UC AI then appends the MEMORY PROTOCOL block to the system prompt of each new session.
-- **A scope decides which agents and users share one memory**: `agent`, `user`, `session`, `shared`, `global`, or `context`. With the scope `context` an agent keeps one store per run-context value, for example one memory per document. Set `p_scope => 'context'` and `p_context_key => 'document_id'`. Name a `p_store_code` to let several agents share one store per value.
-- **Caps and housekeeping**: `max_file_chars`, `max_files`, and the optional `max_store_chars` bound the growth of a store. `uc_ai_memory.expire_files` deletes the files that nobody used for a number of days. The view `uc_ai_v_memory_files` shows what a store holds.
-
-Prompt profiles:
-
-- **[Update a profile from its row](/products/uc-ai/docs/guides/prompt-profiles/#updating-profiles)**: `uc_ai_prompt_profiles_api.update_prompt_profile` now takes a `uc_ai_prompt_profiles%rowtype`. Read the row with `get_prompt_profile`, change the columns that you need, and pass the row back. The columns that you do not touch keep their values.
-- **The two `update_prompt_profile` overloads that take every column are deprecated.** They still work. An omitted optional parameter sets its column to null, so a call that passes only a new system prompt deletes the model configuration and the schemas without an error. The package spec marks both overloads with `pragma deprecate`.
-
 ## v26.3
 
 To upgrade first run `v26.2_to_v26.3.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.3).
@@ -64,6 +20,17 @@ For new installations follow [this guide](https://www.united-codes.com/products/
 
 - **Commit an agent before you execute it in the same session transaction.** Execution telemetry is now written in autonomous transactions, so `execute_agent` cannot see an agent row that the calling transaction has not committed. Earlier, this combination produced a cryptic `ORA-00060` self-deadlock. It now raises a clear error that names the cause. Add a `COMMIT` after `create_agent` (and after `change_status`) before the first `execute_agent` call.
 
+**Behavior notes**:
+
+- **An agent that another agent starts is now a child run.** A run started from inside a tool handler, or from a PL/SQL workflow step, joins the session of the run it started from and records that run in `uc_ai_agent_executions.parent_execution_id`. It is no longer counted as a turn of the conversation: `turn_index` stays empty and `turn_count` on the session header counts the turns of the caller only. A report that read such a run as a turn shows one turn less for each delegation. An explicit `p_session_id` or `p_parent_exec_id` still wins.
+- **`uc_ai_agent_exec_api.register_agent_as_tool` lost two parameters.** The signature is now `register_agent_as_tool(p_agent_code, p_tool_tag)`. The session and the parent execution come from the context of the orchestrator run. Code that calls this internal registration function must drop `p_exec_id` and `p_session_id`.
+- **`iteration_count` and `tool_calls_count` hold their real values.** Both columns of `uc_ai_agent_executions` were always 0. A profile or orchestrator run now records the number of tool calls it made, and a workflow run records the number of steps it ran.
+- **Every tool call now carries one more argument.** UC AI adds the run context to the arguments JSON of every tool, under the reserved key `_ctx`. It holds an empty object when the run carries no context. A handler that reads named keys is not affected. A handler that walks all keys, or that refuses an unknown key, sees the new one. A tool can no longer declare a parameter with the name `_ctx`.
+- **`finish_reason` has the new value `unknown`.** A provider reason that UC AI does not map came through raw before, and matched none of the documented values. It is now `unknown`, and the new `provider_finish_reason` holds the word the provider sent.
+- **xAI reads the reasoning effort now.** UC AI sent `reasoning_level`, a parameter xAI does not have and ignored without an error. It now sends `reasoning_effort`. xAI validates that key, so an effort outside the accepted values returns HTTP 400.
+- **A tool handler gets one argument shape on every provider.** Some providers unwrap the declared object parameter and some do not. UC AI now unwraps it once, in the tools layer, for every provider. A handler that reads the wrapper object must read the parameters directly.
+- **`DEDICATED` serving mode on OCI needs the OCID of the endpoint.** Set `uc_ai_oci.g_endpoint_id`. Without it the mode raises `ORA-20502`. Before, UC AI sent a request that Oracle's own SDK types reject.
+
 **Features**:
 
 New provider:
@@ -78,6 +45,19 @@ Request customization:
 - **Custom HTTP request headers** (`uc_ai.g_extra_headers`): send additional headers with every provider request, for example a tenant or trace ID. Set them with the name-indexed global (`uc_ai.g_extra_headers('X-Tenant-Id') := 'acme';`) or with the `g_extra_headers` config key. UC AI appends them after its own headers, so avoid names the framework already sets. See [generate_text](/products/uc-ai/docs/api/generate_text/#custom-http-headers).
 - **Config-driven overloads**: `uc_ai.generate_text` and `uc_ai.generate_embeddings` now have overloads that take a `p_config` JSON object. These overloads neither read nor change the package globals, so a library can call UC AI with a self-contained configuration and never touch shared session state. Omitted keys fall back to the framework defaults, not to the current global values.
 
+Results:
+
+- **Three new result properties of `generate_text`**: `block_reason` holds the Google reason for a blocked prompt, `provider_finish_reason` holds the word the provider sent when UC AI maps none of its own, and `error_message` holds the message OCI Cohere reports in place of an answer. Each property appears only in the condition that produces it. See [the properties reference](/products/uc-ai/docs/api/generate_text/#properties-reference).
+
+Run context:
+
+- **[Run context](/products/uc-ai/docs/guides/tools/#the-run-context)**: `execute_agent` and `generate_text` take a new `p_run_context` parameter, a JSON object of name/value pairs bound to the run, for example `{"document_id":"7"}`. UC AI hands these values to every tool in the run under `_ctx`, so a tool handler can read a value that the model can neither see nor choose. Use it for an agent that must stay bound to one document, one case, or one tenant.
+- **The run context fills prompt placeholders**: a `{document_id}` placeholder resolves from the run context when the input parameters do not supply it. An input parameter of the same name wins.
+- **Nested runs inherit the context**: a workflow step, an orchestrator delegate, and a handoff target all run under the same binding, and none of them can drop it.
+- **A session keeps its binding**: the first turn binds the context to the session, so a follow-up turn does not have to pass it again. A later turn can add a key but cannot change one. A change raises the new error `-20507`.
+- **New columns**: `uc_ai_agent_executions.run_context` and `uc_ai_agent_sessions.run_context` record the effective context.
+- **Config-driven calls keep their execution context**: `uc_ai_settings.build_from_config` now snapshots the execution context, as `build_from_globals` does. A `generate_text` call with `p_config` inside an agent run therefore keeps its hook attribution and its run context.
+
 Conversations:
 
 - **Conversation titles** (`uc_ai_agents_api.set_session_title`): name a conversation on its session header (`uc_ai_agent_sessions.title`). Front ends decide how a title is produced — an LLM summary of the first exchange, or the user typing one — the engine never sets it itself. Setting an existing title overwrites it, so this doubles as "rename"; pass `p_created_by` to restrict the update to the user who opened the session. `list_sessions` now returns `title`, making that cursor directly usable as a conversation list.
@@ -86,6 +66,14 @@ Conversations:
   Note on `p_created_by` (both setters): a session opened from a background job has no APEX session, so its header records the **DB user**, not the end user. If you pass `APP_USER` against such a session, no row matches and the setter does not write. The setter writes a warning to the log, so you can find the cause. If you authorized the user yourself, pass `null`.
 - **Conversation sessions** (`uc_ai_agent_sessions`): a header row for each conversation, above the execution rows. It holds the root agent, the status of the latest turn, maintained `turn_count` and `message_count`, and the summed token usage. Each execution records only the tokens of the LLM calls it made itself, so the session totals never double count a nested sub-agent run. Read the headers with `uc_ai_agents_api.list_sessions`. See [multi-agent systems](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-sessions).
 - **Full conversation transcript with per-message attribution** (`uc_ai_agent_messages`): one row for each message content item, in `seq` order, written per turn as the delta of new messages. History-window trimming only governs what UC AI sends to the LLM, so the persisted record of each new turn stays complete. Each row carries `agent_code`, the agent that produced the message — the sub-agent for wrapper turns, the turn's own agent otherwise. Read it with `uc_ai_agents_api.get_session_messages`.
+
+Agent memory:
+
+- **[Agent memory](/products/uc-ai/docs/guides/agent-memory/)**: an agent can store and read knowledge across conversations. It gets a private virtual filesystem with the root `/memories`. Three new tables hold the stores and the files.
+- **The new `MEMORY` tool works on every provider**: it follows the command set of the [Anthropic memory tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/memory-tool), as a normal UC AI function tool. The installer creates the tool row.
+- **One call enables memory for an agent**: `uc_ai_memory.enable_for_agent` writes the configuration row and adds the tool tag to the prompt profile of the agent. UC AI then appends the MEMORY PROTOCOL block to the system prompt of each new session.
+- **A scope decides which agents and users share one memory**: `agent`, `user`, `session`, `shared`, `global`, or `context`. With the scope `context` an agent keeps one store per run-context value, for example one memory per document. Set `p_scope => 'context'` and `p_context_key => 'document_id'`. Name a `p_store_code` to let several agents share one store per value.
+- **Caps and housekeeping**: `max_file_chars`, `max_files`, and the optional `max_store_chars` bound the growth of a store. `uc_ai_memory.expire_files` deletes the files that nobody used for a number of days. The view `uc_ai_v_memory_files` shows what a store holds.
 
 Multi-Agent Systems:
 
@@ -102,6 +90,16 @@ Multi-Agent Systems:
 - **Caller class** (`audience`): each run and each session also records the class of the caller — `public` for an anonymous APEX visitor, `authenticated` for a logged-in APEX user, and `db` for a database or job session. A username cannot express this distinction, because every anonymous visitor of a public page shares one identity. Session headers that the migration backfills carry no `audience` value.
 - **Recursion guard**: agent delegation now has a maximum nesting depth. A circular reference — an agent that delegates back to itself — raises `ORA-20405` with a message that names the limit, instead of running until it exhausts a resource.
 
+- **[Remove an agent and its history](/products/uc-ai/docs/guides/multi-agent-systems/#removing-an-agent)**: `uc_ai_agents_api.purge_agent` deletes every version of an agent, its runs, the runs started from them, its sessions, the messages of both, and the memory that is only this agent's. Until now an agent that had run could not be deleted at all, because its history referenced it. A shared or global memory store, a session of another agent, and the prompt profile stay. To keep the history, archive the agent instead.
+- **`check_agent_not_referenced` sees two more references**: an orchestrator delegate and the first agent of a handoff are now found. Deleting or purging such an agent is refused, as it always was for a workflow step.
+- **[Agent as tool](/products/uc-ai/docs/guides/multi-agent-systems/agent-as-tool/)**: the new function `uc_ai_agents_api.run_agent_as_tool` is the whole handler of a tool that runs another agent. Register the tool with `p_function_call => 'return uc_ai_agents_api.run_agent_as_tool(''my_agent'', :parameters);'` and every agent, workflow step, and `generate_text` call can reach that agent as a normal tool. The function gives the tool arguments to the agent, hands it the run context of the caller, joins the session of the caller, and returns a failed run as text for the calling model.
+- **The orchestrator uses the same handler**: a delegate tool is now the same one-line handler, so both patterns behave alike.
+
+Prompt profiles:
+
+- **[Update a profile from its row](/products/uc-ai/docs/guides/prompt-profiles/#updating-profiles)**: `uc_ai_prompt_profiles_api.update_prompt_profile` now takes a `uc_ai_prompt_profiles%rowtype`. Read the row with `get_prompt_profile`, change the columns that you need, and pass the row back. The columns that you do not touch keep their values.
+- **The two `update_prompt_profile` overloads that take every column are deprecated.** They still work. An omitted optional parameter sets its column to null, so a call that passes only a new system prompt deletes the model configuration and the schemas without an error. The package spec marks both overloads with `pragma deprecate`.
+
 Extension points:
 
 - **[Execution hooks](/products/uc-ai/docs/guides/execution-hooks/)** around an agent run: an optional hook package can implement `before_execution` and `after_execution`. `before_execution` runs before any execution row or token spend and can raise to veto the run (fail-closed). `after_execution` is best-effort — UC AI logs an error there and continues.
@@ -112,6 +110,7 @@ Providers:
 
 - **[OCI](/products/uc-ai/docs/providers/oci/): configurable output length and detectable truncation** (`uc_ai_oci.g_max_tokens`, default 4096). The adapter used a hardcoded `maxTokens` of 600 and always reported `finish_reason` as `stop`, so a truncated answer looked complete. Truncation is now reported. Also settable with the `g_max_tokens` OCI config key.
 - **[OCI](/products/uc-ai/docs/providers/oci/): image and PDF input** for the GENERIC chat format.
+- **[OCI](/products/uc-ai/docs/providers/oci/): reach a dedicated AI cluster** (`uc_ai_oci.g_endpoint_id`). `DEDICATED` serving mode now sends the OCID of the endpoint and no model id, on the chat path and on the embeddings path. `ON_DEMAND` is unchanged and stays the default. Also settable with the `g_endpoint_id` OCI config key and on a prompt profile.
 
 Internal:
 
@@ -121,7 +120,7 @@ Internal:
 
 Other:
 
-- **[Claude Code skills for consumers](https://github.com/United-Codes/uc_ai/tree/main/skills)**: the repository now ships agent skills that teach Claude Code (and other agents that read the skill format) how to call UC AI — quickstart, tools, reasoning, structured output, prompt profiles, multi-agent, file analysis, and event callbacks. Copy the ones you need into your project's `.claude/skills/` directory.
+- **[Claude Code skills for consumers](https://github.com/United-Codes/uc_ai/tree/main/skills)**: the repository now ships agent skills that teach Claude Code (and other agents that read the skill format) how to call UC AI — quickstart, tools, reasoning, structured output, prompt profiles, multi-agent, agent memory, file analysis, and event callbacks. Copy the ones you need into your project's `.claude/skills/` directory.
 - New [Oracle network setup guide](/products/uc-ai/docs/guides/network-setup/) covering the ACL and wallet configuration that HTTPS calls need.
 - New [glossary](/products/uc-ai/docs/other/glossary/) and [API cheatsheet](/products/uc-ai/docs/api/cheatsheet/).
 
@@ -145,9 +144,79 @@ Other:
 - OpenRouter and xAI web credential usage is corrected.
 - The default Ollama port is corrected to 11434.
 
+Anthropic:
+
+- Reasoning failed on most of the models UC AI ships. The request always sent `thinking: {"type": "enabled"}`, and `claude-opus-5`, `claude-opus-4-8`, `claude-opus-4-7`, `claude-sonnet-5` and `claude-fable-5` reject that shape with HTTP 400. These models now get the adaptive shape with an effort, and pre-4.6 models keep the budget path with the documented minimum of 1024.
+- Reasoning with neither a budget nor a level sent `budget_tokens` as null, which returned `Input should be a valid integer`.
+- A `tool_use` whose input was JSON null raised `ORA-30625`.
+- A turn with several text blocks kept only the last block as `final_message`, and a turn with no text left the answer of the previous turn standing.
+- Only the last of several system messages reached the request.
+
+Google:
+
+- Two response shapes that arrive with HTTP 200 crashed the parser with `ORA-30625`: a blocked prompt, which carries no candidates, and a candidate with no content. A blocked prompt now reports `content_filter` with the reason in `block_reason`.
+- Gemini 3 takes `thinkingLevel` and not `thinkingBudget`, and the package had no model branch, so a reasoning level had no effect there. An explicit budget stays authoritative and wins.
+- A reasoning level outside `low`, `medium` and `high` raised `ORA-06502`.
+- A multi-part answer kept only its last part as `final_message`, and an empty trailing part could blank it.
+
+OpenAI and xAI:
+
+- OpenAI Chat Completions received its tool schemas under `input_schema`, the Anthropic key. The model never saw the parameters of a tool and called it with no arguments. Measured after the fix, all eight reachable provider routes call a flat two-parameter tool with both arguments filled in.
+- A flat argument object became null on the xAI route, so the tool ran with no arguments. The built-in `MEMORY` tool has flat parameters and was affected.
+- Tool-call arguments above 32767 bytes raised `ORA-06502`.
+- The text the assistant writes next to a tool call was dropped from the returned history, which the agent layer reloads as its conversation.
+- A null `usage`, a null `completion_tokens_details` and a missing `choices` array each raised `ORA-30625`. A response with no choices now raises a provider error that carries the body.
+
+OpenAI Responses API:
+
+- `finish_reason` was read from a key the Responses API has never sent, so every run reported `stop`. The values `length`, `content_filter` and `max_tool_calls_exceeded` were unreachable.
+- A conversation that hit the tool-call budget could not be resumed. The normalized history held Anthropic shapes, which the replay converter does not read. Both sides now go through the `uc_ai_message_api` builders, which also makes the `tool_call` event fire.
+- A tool result above 32 KB broke replay, because four reads took the 32767-byte string path.
+- Reasoning with `store => false` dropped the chain of thought on every tool turn. UC AI now asks for `reasoning.encrypted_content`.
+- A system prompt above 32 KB raised `ORA-06502`. The value is a CLOB on its whole path now, and a 40176-character prompt arrives complete.
+- A response with no usable output returned a null `final_message`. It raises now.
+
+OCI:
+
+- A plain llama answer carries `"toolCalls": []`, and UC AI read the presence of that key as a tool turn. Every plain answer triggered one more request, and `max_tool_calls` counted no call, so it did not stop the loop.
+- The replay converters degraded a history that a caller passes back, which is what an agent continuation does. GENERIC turned a tool call into the prose `Tool call: X` and a tool result into a user message. Cohere sent the arguments as a JSON null, `toolCalls.parameters` as a JSON-encoded string, and one `CHATBOT` message per content item.
+- Parallel tool calls shared one content array, so message n carried the results of calls 1 to n.
+- The Cohere finish reasons `ERROR_TOXIC`, `ERROR`, `ERROR_LIMIT` and `USER_CANCEL` all reported as a clean stop. The message the provider sends with them now arrives as `error_message`.
+- `parameterDefinitions` was `{}` for every flat-schema tool on the Cohere format, so the model saw no parameters.
+- An empty Cohere history raised `ORA-30625`.
+
+Ollama:
+
+- Local tool calling did not work on the native `/api/chat` route. A tool-call turn arrives with an empty content, and the content guard fired before the tool calls were read, so the run ended with `ORA-20304`.
+- A user message that carries only files was dropped, so the image never reached the model. On `gemma4:26b` the same call went from 23 to 79 prompt tokens after the fix.
+- Any file was appended to `images` without a check of its media type, so a PDF was sent as an image. An unsupported media type raises now, as it does on the OpenAI path.
+- A null message object, a JSON-null `tool_calls`, and missing or null arguments each raised `ORA-30625` or carried over the arguments of the previous loop iteration.
+
+Tools:
+
+- `get_tools_object_param_name` raised `TOO_MANY_ROWS` for a tool with two top-level parameters, one of them an object.
+- A tool argument above 32 KB failed in the bind, because `apex_plugin_util` cannot carry a CLOB. An oversized payload takes the `DBMS_SQL` branch now.
+- `$schema` and `additionalProperties` are no longer sent to OCI. A `google.*` model on the OCI route returned HTTP 400 for `$schema`, and neither keyword tells a model anything.
+
+Structured output:
+
+- The converter removed the descriptions, the titles and the author's `required` list from every schema. A description is an instruction the model obeys, so the answer changed. UC AI now removes a keyword only where the provider rejects it, and writes the removed constraint into the description of the node.
+- The Google conversion dropped `oneOf`, `allOf`, `not`, `if`/`then`/`else`, `contains` and `prefixItems`. A nested Pydantic model converted to its description alone, and `gemini-2.5-flash` answered with a string where the schema meant an object. `oneOf` becomes `anyOf`, `allOf` is flattened into the parent, and a node that the proto cannot express is refused rather than emitted empty.
+- The `additionalProperties` gate did not fire for `{"type": ["object", "null"]}`, while the required-list logic did, so OpenAI strict mode rejected the schema.
+- Tuple-form `items` was ignored, because it was read as an object. A tuple is now rewritten to one `items` node that holds an `anyOf`. No decoder can express per-position typing, and the guide records that limit.
+- A recursive `$ref` had no visited set and counted every descent against the depth limit, so a small self-referencing tree inflated to thousands of empty nodes. A cycle raises now, and the keys next to the `$ref` are merged instead of dropped.
+- `const` was dropped, a JSON null enum member became the four-character string `null`, and an enum-only node carried no type.
+- `$defs`, `definitions` and the combinator arrays were not recursed into, so an unclosed object went out and the provider returned HTTP 400.
+- Anthropic and OpenAI return HTTP 400 for `not`, `contains`, `if`, `propertyNames` and some `format` values. UC AI strips them against a measured whitelist and folds the removed rule into the description, which the model obeys.
+
 **New models**:
 
 - Mistral, in `uc_ai_mistral`: `c_model_mistral_large`, `c_model_mistral_medium`, `c_model_mistral_small`, `c_model_magistral_medium`, `c_model_magistral_small`, `c_model_codestral`, `c_model_devstral_medium`, `c_model_devstral_small`, `c_model_ministral_8b`, `c_model_ministral_3b`, `c_model_pixtral_large`, plus the embedding models `c_model_mistral_embed` and `c_model_codestral_embed`. See [Mistral](/products/uc-ai/docs/providers/mistral/).
+- Anthropic, in `uc_ai_anthropic`: `c_model_claude_5_fable`, `c_model_claude_5_opus`, `c_model_claude_5_sonnet` and `c_model_claude_4_8_opus`.
+- OpenAI, in `uc_ai_openai`: `c_model_gpt_5_6_sol`, `c_model_gpt_5_6_terra`, `c_model_gpt_5_6_luna`, `c_model_gpt_5_5` and `c_model_gpt_5_5_pro`.
+- Google, in `uc_ai_google`: `c_model_gemini_3_7_flash`, `c_model_gemini_3_6_flash`, `c_model_gemini_3_5_flash` and `c_model_gemini_3_5_flash_lite`. `c_model_gemini_3_1_flash_lite` now holds the GA id `gemini-3.1-flash-lite`, because Google shut the preview id down.
+- xAI, in `uc_ai_xai`: `c_model_grok_4_6`, `c_model_grok_4_5`, `c_model_grok_4_3` and `c_model_grok_build_0_1`. OCI reaches Grok 4.3 as `uc_ai_oci.c_model_grok_4_3`.
+- A retired constant stays in its package, under a comment that says a request with that model fails. The provider pages and the consumer skills name only current models.
 
 ## v26.2
 

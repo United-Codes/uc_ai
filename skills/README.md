@@ -21,11 +21,12 @@ Claude Code discovers them automatically; each skill loads when a task matches i
 | Skill | Use it for |
 |-------|-----------|
 | [`uc-ai-quickstart`](./uc-ai-quickstart/SKILL.md) | First `generate_text` call, provider/model constants, API key setup, parsing results, conversations, embeddings |
-| [`uc-ai-tools`](./uc-ai-tools/SKILL.md) | Function calling — letting the AI execute your PL/SQL functions |
+| [`uc-ai-tools`](./uc-ai-tools/SKILL.md) | Function calling — letting the AI execute your PL/SQL functions, and the run context a tool reads under `_ctx` |
 | [`uc-ai-reasoning`](./uc-ai-reasoning/SKILL.md) | Enabling and tuning extended thinking / reasoning |
 | [`uc-ai-structured-output`](./uc-ai-structured-output/SKILL.md) | Getting schema-validated JSON back; TOON encoding for token-efficient input |
 | [`uc-ai-prompt-profiles`](./uc-ai-prompt-profiles/SKILL.md) | Versioned, reusable prompt templates stored in the database |
-| [`uc-ai-multi-agent`](./uc-ai-multi-agent/SKILL.md) | Agents, workflows, orchestrators, and agent conversations |
+| [`uc-ai-multi-agent`](./uc-ai-multi-agent/SKILL.md) | Agents, workflows, orchestrators, agent conversations, and reaching an agent as a tool |
+| [`uc-ai-agent-memory`](./uc-ai-agent-memory/SKILL.md) | Persistent agent memory: the MEMORY tool, store scopes, size caps and housekeeping |
 | [`uc-ai-file-analysis`](./uc-ai-file-analysis/SKILL.md) | Sending PDFs and images (BLOBs) to multimodal models |
 | [`uc-ai-event-callbacks`](./uc-ai-event-callbacks/SKILL.md) | Observing AI activity: streaming-style UIs, audit logging of tool calls |
 

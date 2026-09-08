@@ -43,7 +43,7 @@ lists as attributes.
 
 You need these three things:
 
-- **UC AI 26.4 or later** in the database schema. The package of the plug-in
+- **UC AI 26.3 or later** in the database schema. The package of the plug-in
   calls `execute_agent` with the parameter `p_run_context`, which is new in this
   version. On an older version the package body does not compile.
 - An agent with the status `active`. See
@@ -314,14 +314,13 @@ enforcer. The notices give no figure, no percentage, and no name of a limit.
 
 ## Version history
 
-The current plug-in needs UC AI 26.4, because the package body calls
+The current plug-in needs UC AI 26.3, because the package body calls
 `p_run_context`. This table gives the version that introduced each feature:
 
 | Feature | UC AI version |
 | --- | --- |
 | Chat region, tools, reasoning | 26.1 |
-| Auto Generate Title, Collect Feedback | 26.3 |
-| Agent Run Context, Run Context Drift | 26.4 |
+| Auto Generate Title, Collect Feedback, Agent Run Context, Run Context Drift | 26.3 |
 
 <LinkCard
   title="The run context"

@@ -25,10 +25,18 @@
 |----------|------|-------------|
 | `final_message` | CLOB | Final assistant message — read with `get_clob('final_message')` |
 | `messages` | JSON_ARRAY_T | Complete conversation history (system, user, assistant, tool messages) |
-| `finish_reason` | VARCHAR2 | `stop`, `tool_calls`, `length`, `content_filter`, `max_tool_calls_exceeded` |
+| `finish_reason` | VARCHAR2 | `stop`, `tool_calls`, `length`, `content_filter`, `max_tool_calls_exceeded`, `unknown` |
 | `usage` | JSON_OBJECT_T | `prompt_tokens`, `completion_tokens`, `reasoning_tokens`, `total_tokens` |
 | `tool_calls_count` | NUMBER | Number of tool executions during the call |
 | `model` / `provider` | VARCHAR2 | What actually served the request |
+
+Three properties are present only in the condition that produces them:
+
+| Property | Type | Present when |
+|----------|------|--------------|
+| `block_reason` | VARCHAR2 | Google blocked the prompt. `finish_reason` is `content_filter`, `final_message` is null, and this holds the reason, e.g. `PROHIBITED_CONTENT` |
+| `provider_finish_reason` | VARCHAR2 | The provider ended the run for a reason UC AI maps to none of its own. `finish_reason` is then `unknown` and this holds the word the provider sent |
+| `error_message` | VARCHAR2 | OCI Cohere reported an error instead of an answer (`ERROR_TOXIC`, `ERROR`, `ERROR_LIMIT`, `USER_CANCEL`) |
 
 ## Message structure
 
@@ -51,6 +59,8 @@ case l_result.get_string('finish_reason')
     dbms_output.put_line('Tool budget exhausted: raise p_max_tool_calls');
   when 'content_filter' then
     dbms_output.put_line('Blocked by provider content policy');
+  when 'unknown' then
+    dbms_output.put_line('Unmapped provider reason: ' || l_result.get_string('provider_finish_reason'));
   else
     dbms_output.put_line('Unexpected: ' || l_result.get_string('finish_reason'));
 end case;

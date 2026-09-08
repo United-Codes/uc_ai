@@ -1,6 +1,6 @@
 ---
 name: uc-ai-multi-agent
-description: Use when building multi-agent AI systems in Oracle PL/SQL with UC AI — creating agents with uc_ai_agents_api.create_agent, running them via execute_agent with session IDs, sequential/loop/conditional workflow definitions, orchestrator agents that delegate to sub-agents as tools, round-robin or AI-moderated agent conversations, handoff agents with transfer tools and can_transfer_to graphs, input mapping ({$.input.*}, {$.steps.*}), follow-up messages, conversation sessions with titles and feedback, and debugging via uc_ai_agent_executions, uc_ai_agent_sessions and uc_ai_agent_messages.
+description: Use when building multi-agent AI systems in Oracle PL/SQL with UC AI — creating agents with uc_ai_agents_api.create_agent, running them via execute_agent with session IDs, sequential/loop/conditional workflow definitions, orchestrator agents that delegate to sub-agents as tools, round-robin or AI-moderated agent conversations, handoff agents with transfer tools and can_transfer_to graphs, input mapping ({$.input.*}, {$.steps.*}), follow-up messages, conversation sessions with titles and feedback, binding a run to values with p_run_context, reaching an agent as a tool with run_agent_as_tool, removing an agent and its history with purge_agent, and debugging via uc_ai_agent_executions, uc_ai_agent_sessions and uc_ai_agent_messages.
 ---
 
 # UC AI Multi-Agent Systems
@@ -22,6 +22,8 @@ UC AI lets you compose specialized AI agents into workflows, orchestrators, and 
 | **AI-driven conversation** | A moderator should dynamically decide who speaks next | Panel discussion where the moderator picks the most relevant expert |
 
 Deep dives sit next to this file: **workflows.md** (sequential/conditional/loop JSON), **orchestrator.md** (delegation config), **conversations.md** (round-robin and AI-driven dialogue).
+
+An agent that must remember across conversations gets a memory store — see the `uc-ai-agent-memory` skill.
 
 ## The building block: profile agents
 
@@ -82,6 +84,16 @@ end;
 
 The agent uses the latest active version of the profile unless pinned with `p_prompt_profile_version`. Agents are versioned too: `create_new_version(p_code, p_source_version)` copies an agent, `change_status(...)` activates or archives.
 
+**Removing an agent.** `delete_agent` only works while an agent has no history.
+`uc_ai_agents_api.purge_agent(p_code)` removes every version of an agent, its
+runs, the runs started from them, its sessions, the messages of both, and the
+memory that belongs only to this agent. It keeps what other things also use: a
+shared or global memory store, a session another agent opened, and the prompt
+profile. It raises when another agent references this one (an orchestrator
+delegate, a workflow step), and it does not commit. To keep the history, archive
+the agent instead: `change_status(p_code, p_version, uc_ai_agents_api.c_status_archived)`.
+A tool whose PL/SQL text names the agent stays — delete that tool yourself.
+
 ## Executing agents
 
 All agent types share the same API:
@@ -94,7 +106,10 @@ function execute_agent(
   p_follow_up_message in clob default null,
   p_session_id        in varchar2 default null,
   p_parent_exec_id    in uc_ai_agent_executions.id%type default null,
-  p_response_schema   in json_object_t default null
+  p_response_schema   in json_object_t default null,
+  p_files             in uc_ai_message_api.t_files default null,
+  p_extra_tool_tag    in varchar2 default null,
+  p_run_context       in json_object_t default null
 ) return json_object_t;
 ```
 
@@ -122,6 +137,8 @@ end;
 - `p_input_parameters` keys map to `{placeholder}` names in the prompt profile templates (for workflows/conversations, they feed `{$.input.*}` mappings).
 - `p_session_id` groups related executions — one workflow run with three steps produces multiple rows in `uc_ai_agent_executions` under the same session. Generate one with `uc_ai_agents_api.generate_session_id` (SYS_GUID-based).
 - The result is a `json_object_t` in the `generate_text` shape: `final_message` (clob), `messages`, `usage`, `finish_reason` — plus pattern-specific keys (workflows add `_workflow_iterations`, orchestrators expose `tool_calls_count`, handoffs add `handoff_count` and `conversation_history`).
+- `p_files` sends documents and images along with the text (profile and orchestrator agents). The files attach to the first user message, or to the follow-up message. See the `uc-ai-file-analysis` skill.
+- `p_run_context` binds name/value pairs to the run — see [Run context](#run-context).
 - `p_response_schema` validates the response against a JSON schema (profile agents only).
 
 ### Follow-up messages (multi-turn)
@@ -190,6 +207,63 @@ Without `can_transfer_to`, every agent may transfer to every other one (full mes
 **Multi-turn (sticky agent).** Handoff agents accept `p_follow_up_message`. The follow-up turn resumes with the agent that answered the previous turn and continues its history. It keeps its transfer tools, so it can hand off again when the topic changes.
 
 **Results.** The result object carries `final_agent_code`, `handoff_count`, `handoff_trail`, and `max_handoffs_reached`. The hop at `max_handoffs` runs without transfer tools and must answer — a graceful cap, not an error. Transfer tool calls are persisted in the session message log.
+
+## Run context
+
+`p_run_context` binds name/value pairs to a run, for example the document the
+conversation is about. UC AI hands them to every tool of the run under the
+reserved key `_ctx`, so a tool reads a value the model can neither see nor
+choose. Use it whenever an agent must stay inside one document, one case, or one
+tenant.
+
+```sql
+l_result := uc_ai_agents_api.execute_agent(
+  p_agent_code       => 'doc_agent'
+, p_input_parameters => json_object_t('{"question": "What are the payment terms?"}')
+, p_session_id       => l_session_id
+, p_run_context      => json_object_t('{"document_id": "7", "tenant_id": "ACME"}')
+);
+```
+
+- **Nested runs inherit it.** A workflow step, an orchestrator delegate and a handoff target all run under the same binding, and none of them can drop it. A `p_run_context` on a `generate_text` call inside the run is ignored.
+- **A session keeps its binding.** The first turn binds the context to the session, so a follow-up turn does not pass it again. A later turn can add a key but cannot change one — a change raises `ORA-20507`.
+- **It fills prompt placeholders.** A `{document_id}` placeholder in the profile template resolves from the run context when `p_input_parameters` does not supply it. An input parameter of the same name wins.
+- **It is recorded.** `uc_ai_agent_executions.run_context` and `uc_ai_agent_sessions.run_context` hold the effective bag.
+- Tool-handler side and the `_ctx` shape: see the `uc-ai-tools` skill.
+
+## An agent as a tool
+
+`uc_ai_agents_api.run_agent_as_tool` is the whole handler of a tool that runs
+another agent. Register the tool, and every agent, workflow step and
+`generate_text` call reaches that agent like any other tool:
+
+```sql
+l_schema := json_object_t('{
+  "type": "object",
+  "properties": {
+    "question": { "type": "string", "description": "The geography question to answer" }
+  },
+  "required": ["question"]
+}');
+
+l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
+  p_tool_code     => 'ASK_GEO_AGENT'
+, p_description   => 'Answers a geography question. Example parameters: {"question": "Capital of France?"}'
+, p_function_call => 'return uc_ai_agents_api.run_agent_as_tool(''geo_agent'', :parameters);'
+, p_json_schema   => l_schema
+, p_tags          => apex_t_varchar2('geo')
+);
+```
+
+The function takes the tool arguments as the input parameters of the agent, hands
+it the run context of the caller, joins the session of the caller, records the run
+as a child of the calling run, and returns the final message as text. A failed run
+comes back as text instead of raising, so the calling model reads the error and
+can react to it. The orchestrator pattern uses the same handler for its delegate
+tools.
+
+Outside an agent run there is no session to join. A `session_id` key in the run
+context is then read as the session to group the run with.
 
 ## Input mapping cheat sheet
 
@@ -282,4 +356,7 @@ A second call overwrites, so these also rename and change a verdict. A null rati
 - Orchestrator: https://www.united-codes.com/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/
 - Conversations: https://www.united-codes.com/products/uc-ai/docs/guides/multi-agent-systems/conversations/
 - Handoff: https://www.united-codes.com/products/uc-ai/docs/guides/multi-agent-systems/handoff/
+- Agent as tool: https://www.united-codes.com/products/uc-ai/docs/guides/multi-agent-systems/agent-as-tool/
+- The run context: https://www.united-codes.com/products/uc-ai/docs/guides/tools/#the-run-context
+- Agent memory: https://www.united-codes.com/products/uc-ai/docs/guides/agent-memory/
 - Agentic AI concepts: https://www.united-codes.com/products/uc-ai/docs/guides/agentic-ai/

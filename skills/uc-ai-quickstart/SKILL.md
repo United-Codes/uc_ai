@@ -1,6 +1,6 @@
 ---
 name: uc-ai-quickstart
-description: Use when calling an AI/LLM (OpenAI, Anthropic Claude, Google Gemini, Ollama, OCI, xAI, Mistral, OpenRouter) from Oracle PL/SQL with the UC AI library — first uc_ai.generate_text call, choosing provider/model constants, setting up API keys (uc_ai_get_key or APEX web credentials), parsing the result object, continuing conversations, or generating embeddings.
+description: Use when calling an AI/LLM (OpenAI, Anthropic Claude, Google Gemini, Ollama, OCI, xAI, Mistral, OpenRouter) from Oracle PL/SQL with the UC AI library — first uc_ai.generate_text call, choosing provider/model constants, setting up API keys (uc_ai_get_key or APEX web credentials), parsing the result object, binding values to a call with p_run_context, continuing conversations, or generating embeddings.
 ---
 
 # UC AI Quickstart — Calling AI Models from PL/SQL
@@ -73,6 +73,7 @@ function generate_text (
 , p_model                 in model_type
 , p_max_tool_calls        in pls_integer default null   -- default 10
 , p_response_json_schema  in json_object_t default null -- structured output
+, p_run_context           in json_object_t default null -- values bound to this call
 ) return json_object_t;
 
 -- 2) message-array (continue a conversation / full control)
@@ -82,6 +83,7 @@ function generate_text (
 , p_model                 in model_type
 , p_max_tool_calls        in pls_integer default null
 , p_response_json_schema  in json_object_t default null
+, p_run_context           in json_object_t default null
 ) return json_object_t;
 
 -- 3) + 4) config-driven variants: same shapes with an extra
@@ -106,14 +108,26 @@ l_result := uc_ai.generate_text(
 
 Unknown config keys raise ORA-20503; an unknown provider key raises ORA-20306.
 
+`p_run_context` binds name/value pairs to the call, for example
+`json_object_t('{"document_id": "7"}')`. UC AI adds them to the arguments of every
+tool under the reserved key `_ctx`, so a tool handler reads a value the model can
+neither see nor choose, and they also fill `{placeholder}` names in a prompt
+profile. See the `uc-ai-tools` skill. Inside an agent run the context of that run
+wins, so a nested call cannot widen the binding.
+
 ## Reading the result
 
 ```sql
 l_text   := l_result.get_clob('final_message');            -- the answer
-l_reason := l_result.get_string('finish_reason');          -- stop | length | tool_calls | content_filter | max_tool_calls_exceeded
+l_reason := l_result.get_string('finish_reason');          -- stop | length | tool_calls | content_filter | max_tool_calls_exceeded | unknown
 l_usage  := l_result.get_object('usage');                  -- prompt_tokens, completion_tokens, reasoning_tokens, total_tokens
 l_msgs   := l_result.get_array('messages');                -- full conversation history
 ```
+
+Three properties appear only in the condition that produces them: `block_reason`
+(Google blocked the prompt), `provider_finish_reason` (the provider ended the run
+for a reason UC AI maps to none of its own, so `finish_reason` is `unknown`), and
+`error_message` (OCI Cohere reported an error instead of an answer).
 
 Full return-object reference: see `reference.md` in this skill.
 
@@ -157,7 +171,7 @@ A config-driven overload `generate_embeddings(p_input, p_provider, p_model, p_co
 ## Pitfalls
 
 - **Globals are session-scoped.** Call `uc_ai.reset_globals;` before configuring a call so settings from earlier activity in the session don't leak in. Exception: the event callback registration (`g_event_callback`) intentionally survives resets.
-- **Check `finish_reason`.** `length` means the response was truncated; `max_tool_calls_exceeded` means the tool budget ran out.
+- **Check `finish_reason`, and give the `case` an `else` branch.** `length` means the response was truncated, `max_tool_calls_exceeded` means the tool budget ran out, and `unknown` means the provider sent a reason UC AI does not map — `provider_finish_reason` then holds its word.
 - **Errors raise exceptions** ORA-20301..20305 (`uc_ai.e_max_calls_exceeded`, `e_error_response`, `e_unhandled_format`, `e_format_processing_error`, `e_model_not_found_error`). Provider API errors surface as `e_error_response` with details in the log.
 - **Feature support varies by provider** (tools, structured output, reasoning, file input). Check the provider page: https://www.united-codes.com/products/uc-ai/docs/guides/providers/
 

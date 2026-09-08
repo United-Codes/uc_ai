@@ -1,6 +1,6 @@
 ---
 name: uc-ai-prompt-profiles
-description: Use when managing reusable, versioned AI prompt templates in Oracle PL/SQL with UC AI — uc_ai_prompt_profiles_api.create_prompt_profile, execute_profile with {placeholder} parameters, model_config_json settings, runtime overrides (p_provider_override, p_model_override, p_config_override), create_new_version, and change_status with draft/active/archived lifecycle.
+description: Use when managing reusable, versioned AI prompt templates in Oracle PL/SQL with UC AI — uc_ai_prompt_profiles_api.create_prompt_profile, execute_profile with {placeholder} parameters, model_config_json settings, runtime overrides (p_provider_override, p_model_override, p_config_override), create_new_version, updating a profile from its uc_ai_prompt_profiles%rowtype, and change_status with draft/active/archived lifecycle.
 ---
 
 # UC AI Prompt Profiles — Versioned Prompt Templates in the Database
@@ -159,6 +159,34 @@ Store call configuration with the prompt. Root-level keys mirror `uc_ai` globals
 
 The config is applied when the profile is executed (globals are reset to defaults first, then the config is applied). Unknown keys raise ORA-20503; an unknown provider raises ORA-20306. Full key reference with a complete example: see `reference.md` in this skill.
 
+## Updating a profile
+
+Read the row, change the columns you need, and pass the row back. The columns you
+do not touch keep their values:
+
+```sql
+declare
+  l_profile uc_ai_prompt_profiles%rowtype;
+begin
+  l_profile := uc_ai_prompt_profiles_api.get_prompt_profile(p_code => 'CLASSIFY_ISSUE');
+  -- or: get_prompt_profile(p_code => 'CLASSIFY_ISSUE', p_version => 2), or by p_id
+
+  l_profile.system_prompt_template := 'You classify support issues. Answer with one label.';
+
+  uc_ai_prompt_profiles_api.update_prompt_profile(l_profile);
+  commit;
+end;
+/
+```
+
+`get_prompt_profile` without `p_version` returns the latest active version.
+
+The two older `update_prompt_profile` overloads that take every column are
+**deprecated** (`pragma deprecate`). They still work, but an omitted optional
+parameter sets its column to null — a call that passes only a new system prompt
+therefore deletes the model configuration and the schemas without an error. Use
+the row form.
+
 ## Lifecycle: versions and status
 
 Status constants (verbatim from the spec):
@@ -214,6 +242,7 @@ Executing by code without `p_version` uses the **latest active version** (highes
 - **Missing placeholder parameters raise ORA-20506** before any tokens are spent; extra parameters are silently ignored.
 - **Structured output**: set `p_response_schema` on the profile; parse `final_message` with `json_object_t(...)`. See the `uc-ai-structured-output` skill or https://www.united-codes.com/products/uc-ai/docs/guides/structured_output/
 - **Don't edit live versions.** `update_prompt_profile` changes a version in place — for production profiles, `create_new_version` and switch statuses instead.
+- **Never use the all-column `update_prompt_profile` overloads.** They are deprecated, and every optional parameter you omit becomes null — the model configuration, the tool tags, and the schemas are gone. Pass a `uc_ai_prompt_profiles%rowtype` from `get_prompt_profile` instead.
 
 ## Full documentation
 
