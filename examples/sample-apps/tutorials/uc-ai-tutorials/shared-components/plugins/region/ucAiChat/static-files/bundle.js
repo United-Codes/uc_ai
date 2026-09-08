@@ -5732,13 +5732,13 @@ var UcApexChat = (function() {
 	//#endregion
 	//#region src/Spinner.svelte
 	var root$20 = /* @__PURE__ */ from_html(`<div class="uc-chat-message-loader svelte-gp4vwo" role="status" aria-label="Loading"><div class="margin-right-sm" style="height: 1em; width: 1em;" aria-hidden="true"></div> <div>Loading</div></div>`);
-	var $$css$23 = {
+	var $$css$24 = {
 		hash: "svelte-gp4vwo",
 		code: ".uc-chat-message-loader.svelte-gp4vwo {margin:var(--uc-chat-space-2) 0;display:flex;place-content:center;gap:var(--uc-chat-space-1);font-size:0.85em;color:var(--uc-chat-component-text-muted-color);}.uc-chat-message-loader .u-Processing {scale:0.6;}.uc-chat-message-loader .u-Processing.rendered {margin-top:0.6em;}"
 	};
 	function Spinner($$anchor, $$props) {
 		push($$props, true);
-		append_styles$1($$anchor, $$css$23);
+		append_styles$1($$anchor, $$css$24);
 		let spinnerTarget = /* @__PURE__ */ state(void 0);
 		let lSpinner;
 		onMount(() => {
@@ -5758,25 +5758,25 @@ var UcApexChat = (function() {
 	create_custom_element(Spinner, {}, [], [], { mode: "open" });
 	//#endregion
 	//#region src/AiDebugDialog.svelte
-	var root_2$20 = /* @__PURE__ */ from_html(`<div class="uc-ai-debug-error svelte-w40hu0" role="alert"><span aria-hidden="true" class="fa fa-exclamation-triangle"></span> <p>Could not load debug details.</p> <button type="button" class="t-Button t-Button--small">Retry</button></div>`);
-	var root_3$14 = /* @__PURE__ */ from_html(`<p class="uc-ai-debug-muted svelte-w40hu0">Debug details are disabled for this region.</p>`);
+	var root_2$21 = /* @__PURE__ */ from_html(`<div class="uc-ai-debug-error svelte-w40hu0" role="alert"><span aria-hidden="true" class="fa fa-exclamation-triangle"></span> <p>Could not load debug details.</p> <button type="button" class="t-Button t-Button--small">Retry</button></div>`);
+	var root_3$15 = /* @__PURE__ */ from_html(`<p class="uc-ai-debug-muted svelte-w40hu0">Debug details are disabled for this region.</p>`);
 	var root_5$7 = /* @__PURE__ */ from_html(`<div class="uc-ai-debug-error-box svelte-w40hu0" role="alert"><div class="uc-ai-debug-error-title svelte-w40hu0"><span aria-hidden="true" class="fa fa-exclamation-triangle"></span> Turn failed</div> <pre class="svelte-w40hu0"> </pre></div>`);
 	var root_6$5 = /* @__PURE__ */ from_html(`<section class="uc-ai-debug-section svelte-w40hu0"><h3 class="svelte-w40hu0">Session</h3> <dl class="uc-ai-debug-grid svelte-w40hu0"><dt class="svelte-w40hu0">Session ID</dt><dd class="uc-ai-debug-mono svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Status</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Turns</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Messages</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Tokens</dt> <dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Started</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Last activity</dt><dd class="svelte-w40hu0"> </dd></dl></section>`);
 	var root_8$2 = /* @__PURE__ */ from_html(`<dt class="svelte-w40hu0">Duration</dt><dd class="svelte-w40hu0"> </dd>`, 1);
 	var root_9$1 = /* @__PURE__ */ from_html(`<dt class="svelte-w40hu0">Error</dt><dd class="uc-ai-debug-err svelte-w40hu0"> </dd>`, 1);
-	var root_7$4 = /* @__PURE__ */ from_html(`<dl class="uc-ai-debug-grid svelte-w40hu0"><dt class="svelte-w40hu0">Execution ID</dt><dd class="uc-ai-debug-mono svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Status</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Iterations</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Tool calls</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Tokens</dt> <dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Started</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Completed</dt><dd class="svelte-w40hu0"> </dd> <!> <!></dl>`);
+	var root_7$3 = /* @__PURE__ */ from_html(`<dl class="uc-ai-debug-grid svelte-w40hu0"><dt class="svelte-w40hu0">Execution ID</dt><dd class="uc-ai-debug-mono svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Status</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Iterations</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Tool calls</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Tokens</dt> <dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Started</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Completed</dt><dd class="svelte-w40hu0"> </dd> <!> <!></dl>`);
 	var root_10$2 = /* @__PURE__ */ from_html(`<p class="uc-ai-debug-muted svelte-w40hu0">No completed turn yet.</p>`);
 	var root_13$1 = /* @__PURE__ */ from_html(`<details class="uc-ai-debug-raw svelte-w40hu0"><summary class="svelte-w40hu0"><span class="svelte-w40hu0"> </span> <button type="button" class="uc-ai-debug-copy svelte-w40hu0"><span aria-hidden="true"></span></button></summary> <pre class="svelte-w40hu0"><code> </code></pre></details>`);
 	var root_11$1 = /* @__PURE__ */ from_html(`<section class="uc-ai-debug-section svelte-w40hu0"><h3 class="svelte-w40hu0">Raw</h3> <!></section>`);
 	var root_4$8 = /* @__PURE__ */ from_html(`<!> <section class="uc-ai-debug-section svelte-w40hu0"><h3 class="svelte-w40hu0">Agent</h3> <dl class="uc-ai-debug-grid svelte-w40hu0"><dt class="svelte-w40hu0">Code</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Version</dt><dd class="svelte-w40hu0"> </dd> <dt class="svelte-w40hu0">Type</dt><dd class="svelte-w40hu0"> </dd></dl></section> <!> <section class="uc-ai-debug-section svelte-w40hu0"><h3 class="svelte-w40hu0">Latest execution</h3> <!></section> <!>`, 1);
 	var root$19 = /* @__PURE__ */ from_html(`<dialog class="uc-ai-debug-dialog svelte-w40hu0"><div class="uc-ai-debug-header svelte-w40hu0"><h2 class="uc-ai-debug-title svelte-w40hu0"><span aria-hidden="true" class="fa fa-bug"></span> Debug info</h2> <button type="button" class="t-Button t-Button--noLabel t-Button--icon t-Button--simple" title="Close" aria-label="Close"><span aria-hidden="true" class="t-Icon fa fa-close"></span></button></div> <div class="uc-ai-debug-body svelte-w40hu0"><!></div></dialog>`);
-	var $$css$22 = {
+	var $$css$23 = {
 		hash: "svelte-w40hu0",
 		code: ".uc-ai-debug-dialog.svelte-w40hu0 {padding:0;border:1px solid var(--uc-chat-component-border-color);width:90vw;max-width:34em;max-height:80vh;background:var(--uc-chat-component-background-color);color:var(--uc-chat-component-text-title-color);border-radius:var(--uc-chat-component-border-radius);box-shadow:var(--uc-chat-shadow-md), var(--uc-chat-shadow-sm);outline:none;font-family:var(--uc-chat-font-base);overflow:hidden;}.uc-ai-debug-dialog.svelte-w40hu0::backdrop {background-color:var(--jui-overlay-background-color, rgba(0, 0, 0, 0.25));}.uc-ai-debug-dialog.svelte-w40hu0,\n  .uc-ai-debug-dialog.svelte-w40hu0::backdrop {transition:display 0.2s allow-discrete,\n      overlay 0.2s allow-discrete,\n      opacity 0.2s;opacity:0;}.uc-ai-debug-dialog[open].svelte-w40hu0 {opacity:1;display:flex;flex-direction:column;&::backdrop {opacity:1;}}\n\n  @starting-style {.uc-ai-debug-dialog[open].svelte-w40hu0,\n    .uc-ai-debug-dialog[open].svelte-w40hu0::backdrop {opacity:0;}\n  }\n\n  @media (prefers-reduced-motion) {.uc-ai-debug-dialog.svelte-w40hu0,\n    .uc-ai-debug-dialog.svelte-w40hu0::backdrop {transition:none;}\n  }.uc-ai-debug-header.svelte-w40hu0 {display:flex;align-items:center;justify-content:space-between;padding:0.5em 0.75em;border-bottom:1px solid var(--uc-chat-component-border-color);flex:0 0 auto;}.uc-ai-debug-title.svelte-w40hu0 {margin:0;font-size:1.05em;font-weight:500;display:flex;align-items:center;gap:0.5em;color:var(--uc-chat-component-text-title-color);}.uc-ai-debug-body.svelte-w40hu0 {padding:0.75em;overflow-y:auto;min-height:0;}.uc-ai-debug-section.svelte-w40hu0 {margin-bottom:1em;}.uc-ai-debug-section.svelte-w40hu0:last-child {margin-bottom:0;}.uc-ai-debug-section.svelte-w40hu0 > h3:where(.svelte-w40hu0) {margin:0 0 0.4em;font-size:0.75em;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--uc-chat-component-text-muted-color);}.uc-ai-debug-grid.svelte-w40hu0 {display:grid;grid-template-columns:minmax(6em, auto) 1fr;gap:0.25em 0.75em;margin:0;font-size:0.85em;}.uc-ai-debug-grid.svelte-w40hu0 > dt:where(.svelte-w40hu0) {color:var(--uc-chat-component-text-muted-color);font-weight:400;}.uc-ai-debug-grid.svelte-w40hu0 > dd:where(.svelte-w40hu0) {margin:0;word-break:break-word;color:var(--uc-chat-component-text-title-color);}.uc-ai-debug-mono.svelte-w40hu0 {font-family:ui-monospace, \"SF Mono\", Menlo, Consolas, monospace;font-size:0.95em;}.uc-ai-debug-err.svelte-w40hu0 {color:var(--uc-chat-danger-color, #c62828);}.uc-ai-debug-error-box.svelte-w40hu0 {margin-bottom:1em;border:1px solid var(--uc-chat-danger-color, #c62828);border-left:3px solid var(--uc-chat-danger-color, #c62828);border-radius:0.4em;background-color:rgba(198, 40, 40, 0.06);}.uc-ai-debug-error-title.svelte-w40hu0 {display:flex;align-items:center;gap:0.4em;padding:0.4em 0.6em;font-weight:600;font-size:0.85em;color:var(--uc-chat-danger-color, #c62828);}.uc-ai-debug-error-box.svelte-w40hu0 pre:where(.svelte-w40hu0) {margin:0;padding:0 0.6em 0.6em;white-space:pre-wrap;word-break:break-word;font-size:0.85em;line-height:1.45;color:var(--uc-chat-component-text-title-color);}.uc-ai-debug-muted.svelte-w40hu0 {margin:0;font-size:0.85em;color:var(--uc-chat-component-text-muted-color);}.uc-ai-debug-error.svelte-w40hu0 {display:flex;flex-direction:column;align-items:center;gap:0.5em;padding:1em;color:var(--uc-chat-component-text-muted-color);}.uc-ai-debug-raw.svelte-w40hu0 {border:1px solid var(--uc-chat-component-border-color);border-radius:0.4em;margin-bottom:0.4em;font-size:0.85em;}.uc-ai-debug-raw.svelte-w40hu0 > summary:where(.svelte-w40hu0) {display:flex;align-items:center;justify-content:space-between;gap:0.5em;cursor:pointer;padding:0.4em 0.6em;list-style:none;user-select:none;color:var(--uc-chat-component-text-muted-color);font-weight:500;}.uc-ai-debug-raw.svelte-w40hu0 > summary:where(.svelte-w40hu0)::-webkit-details-marker {display:none;}.uc-ai-debug-raw.svelte-w40hu0 > summary:where(.svelte-w40hu0)::before {content:\"\\25B6\";font-size:0.7em;transition:transform 0.15s;flex-shrink:0;margin-right:0.25em;}.uc-ai-debug-raw[open].svelte-w40hu0 > summary:where(.svelte-w40hu0)::before {transform:rotate(90deg);}.uc-ai-debug-raw.svelte-w40hu0 > summary:where(.svelte-w40hu0) > span:where(.svelte-w40hu0):first-of-type {flex:1;}.uc-ai-debug-copy.svelte-w40hu0 {border:none;background:transparent;color:var(--uc-chat-component-text-muted-color);cursor:pointer;padding:0 0.25em;font-size:1em;}.uc-ai-debug-raw.svelte-w40hu0 pre:where(.svelte-w40hu0) {margin:0;padding:0.5em 0.6em;background-color:var(--uc-chat-footer-background-color);overflow-x:auto;font-size:0.95em;line-height:1.45;border-top:1px solid var(--uc-chat-component-border-color);}"
 	};
 	function AiDebugDialog($$anchor, $$props) {
 		push($$props, true);
-		append_styles$1($$anchor, $$css$22);
+		append_styles$1($$anchor, $$css$23);
 		let regionId = prop($$props, "regionId", 7), sessionId = prop($$props, "sessionId", 7), agentCode = prop($$props, "agentCode", 7), agentVersion = prop($$props, "agentVersion", 7);
 		let dialog = /* @__PURE__ */ state(void 0);
 		let loading = /* @__PURE__ */ state(false);
@@ -5918,14 +5918,14 @@ var UcApexChat = (function() {
 			Spinner($$anchor, {});
 		};
 		var consequent_1 = ($$anchor) => {
-			var div_2 = root_2$20();
+			var div_2 = root_2$21();
 			var button_1 = sibling(child(div_2), 4);
 			reset(div_2);
 			delegated("click", button_1, retry);
 			append($$anchor, div_2);
 		};
 		var consequent_2 = ($$anchor) => {
-			append($$anchor, root_3$14());
+			append($$anchor, root_3$15());
 		};
 		var consequent_10 = ($$anchor) => {
 			var fragment_1 = root_4$8();
@@ -6008,7 +6008,7 @@ var UcApexChat = (function() {
 			var section_2 = sibling(node_2, 2);
 			var node_3 = sibling(child(section_2), 2);
 			var consequent_7 = ($$anchor) => {
-				var dl_2 = root_7$4();
+				var dl_2 = root_7$3();
 				var dd_10 = sibling(child(dl_2));
 				var text_11 = child(dd_10, true);
 				reset(dd_10);
@@ -6222,6 +6222,7 @@ var UcApexChat = (function() {
 	];
 	var FEEDBACK_RATING_DOWN = "down";
 	var FEEDBACK_COMMENT_MAX = 2e3;
+	var FEEDBACK_ASK = "Was this helpful?";
 	var FEEDBACK_UP_LABEL = "Good response";
 	var FEEDBACK_DOWN_LABEL = "Bad response";
 	var FEEDBACK_UP_LABEL_ACTIVE = "Good response — click to undo";
@@ -6234,13 +6235,13 @@ var UcApexChat = (function() {
 	//#endregion
 	//#region src/AiGuardrailBanner.svelte
 	var root$18 = /* @__PURE__ */ from_html(`<div><span aria-hidden="true"></span> <span class="uc-ai-guardrail-text svelte-s7otyc"> </span> <button type="button" class="t-Button t-Button--noLabel t-Button--icon t-Button--simple uc-ai-guardrail-close svelte-s7otyc" title="Dismiss" aria-label="Dismiss notice"><span aria-hidden="true" class="t-Icon fa fa-close"></span></button></div>`);
-	var $$css$21 = {
+	var $$css$22 = {
 		hash: "svelte-s7otyc",
 		code: "\n  /* A coloured left rail is now unique to notices. It used to be shared with the\n     tool card, where it meant nothing in particular — so severity and \"this is a\n     tool\" looked like the same thing. */.uc-ai-guardrail.svelte-s7otyc {display:flex;align-items:center;gap:var(--uc-chat-space-2);flex:0 0 auto;padding:var(--uc-chat-space-2) var(--uc-chat-space-2)\n      var(--uc-chat-space-2) var(--uc-chat-space-3);font-size:0.85em;line-height:1.35;\n    /* Tint the theme's own warning colour into the surface rather than shipping\n       a hand-picked amber. The old #fff8e1 / #7a4f00 pair stayed cream-on-brown\n       in dark mode, where it was the brightest thing on the screen. Text keeps\n       the theme's text colour: --ut-palette-warning is #ffc628 in Vita and\n       would fail contrast as a foreground. */color:var(--uc-chat-component-text-title-color);background-color:color-mix(\n      in srgb,\n      var(--uc-chat-warning-color) 14%,\n      var(--uc-chat-surface-background-color)\n    );border-left:3px solid var(--uc-chat-warning-color);z-index:1;}.uc-ai-guardrail.svelte-s7otyc > .t-Icon:where(.svelte-s7otyc) {color:var(--uc-chat-warning-color);flex:0 0 auto;}\n\n  /* A hit is a refusal, not a caution — reuse the error colour already used for\n     failed turns so the two read as the same severity. */.uc-ai-guardrail.is-hit.svelte-s7otyc {background-color:color-mix(\n      in srgb,\n      var(--uc-chat-danger-color) 10%,\n      var(--uc-chat-surface-background-color)\n    );border-left-color:var(--uc-chat-danger-color);}.uc-ai-guardrail.is-hit.svelte-s7otyc > .t-Icon:where(.svelte-s7otyc) {color:var(--uc-chat-danger-color);}.uc-ai-guardrail-text.svelte-s7otyc {flex:1;min-width:0;}\n\n  /* An inline dismiss inside a tinted strip, not a toolbar button: t-Button--simple\n     still paints a border and a background, which read as a boxed X floating on\n     the tint. Strip the chrome, keep the hit area and the focus ring. */.uc-ai-guardrail-close.svelte-s7otyc {flex:0 0 auto;color:inherit;background-color:transparent;border-color:transparent;box-shadow:none;}.uc-ai-guardrail-close.svelte-s7otyc:hover {background-color:color-mix(\n      in srgb,\n      var(--uc-chat-component-text-title-color) 8%,\n      transparent\n    );border-color:transparent;}"
 	};
 	function AiGuardrailBanner($$anchor, $$props) {
 		push($$props, true);
-		append_styles$1($$anchor, $$css$21);
+		append_styles$1($$anchor, $$css$22);
 		/**
 		* Guardrail notice strip, shown between the transcript and the composer.
 		*
@@ -6322,16 +6323,17 @@ var UcApexChat = (function() {
 	}, [], [], { mode: "open" });
 	//#endregion
 	//#region src/AiFeedbackControl.svelte
-	var root_1$15 = /* @__PURE__ */ from_html(`<span class="uc-ai-feedback-thanks svelte-1ramda1" role="status"> </span>`);
-	var root_2$19 = /* @__PURE__ */ from_html(`<div class="uc-ai-feedback-panel svelte-1ramda1" role="none"><label class="uc-ai-feedback-label svelte-1ramda1"> </label> <textarea class="apex-item-textarea uc-ai-feedback-input svelte-1ramda1" rows="2"></textarea> <div class="uc-ai-feedback-panel-footer svelte-1ramda1"><span class="uc-ai-feedback-hint svelte-1ramda1"> </span> <button type="button" class="t-Button t-Button--small"> </button> <button type="button" class="t-Button t-Button--small t-Button--hot"> </button></div></div>`);
-	var root$17 = /* @__PURE__ */ from_html(`<div class="uc-ai-feedback svelte-1ramda1"><span><button type="button"><span aria-hidden="true"></span></button> <button type="button"><span aria-hidden="true"></span></button> <!></span> <!></div>`);
-	var $$css$20 = {
+	var root_1$16 = /* @__PURE__ */ from_html(`<span class="uc-ai-feedback-ask svelte-1ramda1"> </span>`);
+	var root_2$20 = /* @__PURE__ */ from_html(`<span class="uc-ai-feedback-thanks svelte-1ramda1" role="status"> </span>`);
+	var root_3$14 = /* @__PURE__ */ from_html(`<div class="uc-ai-feedback-panel svelte-1ramda1" role="none"><label class="uc-ai-feedback-label svelte-1ramda1"> </label> <textarea class="apex-item-textarea uc-ai-feedback-input svelte-1ramda1" rows="2"></textarea> <div class="uc-ai-feedback-panel-footer svelte-1ramda1"><span class="uc-ai-feedback-hint svelte-1ramda1"> </span> <button type="button" class="t-Button t-Button--small"> </button> <button type="button" class="t-Button t-Button--small t-Button--hot"> </button></div></div>`);
+	var root$17 = /* @__PURE__ */ from_html(`<div class="uc-ai-feedback svelte-1ramda1"><div class="uc-ai-feedback-actions svelte-1ramda1"><!> <button type="button"><span aria-hidden="true"></span></button> <button type="button"><span aria-hidden="true"></span></button> <!></div> <!></div>`);
+	var $$css$21 = {
 		hash: "svelte-1ramda1",
-		code: "\n  /* The buttons belong to the meta row's flex layout and the panel needs a line\n     of its own, so the wrapper must not become a box between them. */.uc-ai-feedback.svelte-1ramda1 {display:contents;}.uc-ai-feedback-actions.svelte-1ramda1 {display:inline-flex;align-items:center;gap:0.15em;margin-left:calc(-1 * var(--uc-chat-space-1));\n    /* Hidden until the message is hovered, exactly like the copy button. */opacity:0;transition:opacity 0.15s;}\n\n  /* The hover trigger is the parent bubble, so the ancestor half of the selector\n     has to be :global — the parent's scope class is not on our elements. Every\n     reveal rule is kept here, and each is at least as specific as the base rule\n     above, so which component's stylesheet comes first cannot decide the outcome.\n     A verdict already given stays visible on mouse-out: a chosen state that\n     vanishes reads as a lost click. */.uc-ai-msg-assistant:hover .uc-ai-feedback-actions.svelte-1ramda1,\n  .uc-ai-feedback-actions.is-voted.svelte-1ramda1,\n  .uc-ai-feedback-actions.svelte-1ramda1:focus-within {opacity:1;}\n\n  /* Nothing hovers on a touch screen, and feedback nobody can see collects\n     nothing. */\n  @media (hover: none) {.uc-ai-feedback-actions.svelte-1ramda1 {opacity:1;}\n  }.uc-ai-feedback-btn.svelte-1ramda1 {display:inline-flex;align-items:center;border:none;\n    /* Same radius step and padding as the copy button beside it — the two used\n       to differ by an invisible amount that still made the row look uneven. */border-radius:var(--uc-chat-radius-sm);background:transparent;color:var(--uc-chat-component-text-muted-color);cursor:pointer;padding:0.15em 0.3em;font-size:1em;line-height:1;}.uc-ai-feedback-btn.svelte-1ramda1:hover:not(:disabled) {background-color:var(--uc-chat-hover-background-color);color:var(--uc-chat-component-text-title-color);}.uc-ai-feedback-btn.svelte-1ramda1:disabled {cursor:default;opacity:0.6;}\n\n  /* Same treatment an active reaction pill gets in channel mode, so \"selected\"\n     looks the same everywhere in the component. */.uc-ai-feedback-btn.is-active.svelte-1ramda1 {color:var(--uc-chat-accent-color);background-color:color-mix(\n      in srgb,\n      var(--uc-chat-accent-color) 12%,\n      transparent\n    );}.uc-ai-feedback-thanks.svelte-1ramda1 {color:var(--uc-chat-component-text-muted-color);}\n\n  /* Full-width so it wraps below the time/copy/thumbs line rather than squeezing\n     in beside them. */.uc-ai-feedback-panel.svelte-1ramda1 {flex:0 0 100%;display:flex;flex-direction:column;gap:var(--uc-chat-space-1);margin-top:var(--uc-chat-space-2);max-width:32em;\n    /* The meta row is 0.7em; scale back up so the box is readable on its own. */font-size:1.25em;}.uc-ai-feedback-label.svelte-1ramda1 {color:var(--uc-chat-component-text-muted-color);font-weight:400;}textarea.uc-ai-feedback-input.svelte-1ramda1 {width:100%;padding:0.4em 0.6em;resize:none;font-family:var(--uc-chat-font-base);font-size:1em;}.uc-ai-feedback-panel-footer.svelte-1ramda1 {display:flex;align-items:center;gap:var(--uc-chat-space-2);flex-wrap:wrap;}.uc-ai-feedback-hint.svelte-1ramda1 {flex:1;min-width:8em;color:var(--uc-chat-component-text-muted-color);font-size:0.85em;}"
+		code: "\n  /* The row and its comment panel stack; the parent gives the row its width. */.uc-ai-feedback.svelte-1ramda1 {display:flex;flex-direction:column;align-items:flex-start;}.uc-ai-feedback-actions.svelte-1ramda1 {display:flex;align-items:center;gap:0.15em;\n    /* Pull the first button's own padding back so the glyph — or the ask, when\n       it is showing — lines up with the timestamp above it. */margin-left:-0.3em;}.uc-ai-feedback-ask.svelte-1ramda1 {\n    /* Sits inside the button padding, so match it rather than the row gap. */padding:0 0.3em;}.uc-ai-feedback-btn.svelte-1ramda1 {display:inline-flex;align-items:center;border:none;\n    /* Same radius step and padding as the copy button beside it — the two used\n       to differ by an invisible amount that still made the row look uneven. */border-radius:var(--uc-chat-radius-sm);background:transparent;color:var(--uc-chat-component-text-muted-color);cursor:pointer;padding:0.15em 0.3em;font-size:1em;line-height:1;}.uc-ai-feedback-btn.svelte-1ramda1:hover:not(:disabled) {background-color:var(--uc-chat-hover-background-color);color:var(--uc-chat-component-text-title-color);}.uc-ai-feedback-btn.svelte-1ramda1:disabled {cursor:default;opacity:0.6;}\n\n  /* Same treatment an active reaction pill gets in channel mode, so \"selected\"\n     looks the same everywhere in the component. */.uc-ai-feedback-btn.is-active.svelte-1ramda1 {color:var(--uc-chat-accent-color);background-color:color-mix(\n      in srgb,\n      var(--uc-chat-accent-color) 12%,\n      transparent\n    );}.uc-ai-feedback-thanks.svelte-1ramda1 {color:var(--uc-chat-component-text-muted-color);}\n\n  /* Opens directly beneath the thumbs, on the full width of the row. */.uc-ai-feedback-panel.svelte-1ramda1 {align-self:stretch;display:flex;flex-direction:column;gap:var(--uc-chat-space-1);margin-top:var(--uc-chat-space-2);max-width:32em;\n    /* The row is 0.75em; scale back up so the box is readable on its own. */font-size:1.15em;}.uc-ai-feedback-label.svelte-1ramda1 {color:var(--uc-chat-component-text-muted-color);font-weight:400;}textarea.uc-ai-feedback-input.svelte-1ramda1 {width:100%;padding:0.4em 0.6em;resize:none;font-family:var(--uc-chat-font-base);font-size:1em;}.uc-ai-feedback-panel-footer.svelte-1ramda1 {display:flex;align-items:center;gap:var(--uc-chat-space-2);flex-wrap:wrap;}.uc-ai-feedback-hint.svelte-1ramda1 {flex:1;min-width:8em;color:var(--uc-chat-component-text-muted-color);font-size:0.85em;}"
 	};
 	function AiFeedbackControl($$anchor, $$props) {
 		push($$props, true);
-		append_styles$1($$anchor, $$css$20);
+		append_styles$1($$anchor, $$css$21);
 		/**
 		* Conversation feedback: a quiet thumbs-up / thumbs-down pair, plus an optional
 		* comment box on a thumbs-down.
@@ -6340,18 +6342,17 @@ var UcApexChat = (function() {
 		* the chosen one fills in. An unanswered ask must not draw the eye, and the fill
 		* is then what carries "this is your answer" rather than colour alone.
 		*
-		* Lives in the assistant message's action row next to the copy button, which is
-		* where every mainstream AI chat puts it — passive and never blocking, so it
-		* asks for nothing and interrupts nothing.
+		* Lives on a row of its own below the newest answer — not in the meta row next
+		* to the copy button, where it only appeared on hover. A one-verdict-per-
+		* conversation ask that is invisible until the pointer happens to land on the
+		* bubble collects almost nothing, and never reaches a keyboard or touch user at
+		* all. The row stays passive and never blocks: it asks once, quietly.
 		*
 		* Two deliberate behaviours:
 		* - The **vote is submitted on click**, before the comment. An abandoned comment
 		*   panel still leaves the rating behind, which is the signal that matters most.
 		* - Clicking the active thumb **withdraws** the vote. A mis-click must not be
 		*   permanent, and the stored comment goes with it (see set_session_feedback).
-		*
-		* The root is `display: contents` so the buttons become flex children of the
-		* meta row while the panel wraps onto its own full-width line.
 		*
 		* @typedef {Object} Props
 		* @property {aiFeedbackObject|null} [feedback] Verdict already given, or null when unrated
@@ -6440,78 +6441,87 @@ var UcApexChat = (function() {
 			}
 		};
 		var div = root$17();
-		var span = child(div);
+		var div_1 = child(div);
+		var node = child(div_1);
+		var consequent = ($$anchor) => {
+			var span = root_1$16();
+			var text = child(span, true);
+			reset(span);
+			template_effect(() => set_text(text, FEEDBACK_ASK));
+			append($$anchor, span);
+		};
+		if_block(node, ($$render) => {
+			if (get(rating) === null) $$render(consequent);
+		});
+		var button = sibling(node, 2);
 		let classes;
-		var button = child(span);
-		let classes_1;
 		var span_1 = child(button);
 		reset(button);
 		var button_1 = sibling(button, 2);
-		let classes_2;
+		let classes_1;
 		var span_2 = child(button_1);
 		reset(button_1);
-		var node = sibling(button_1, 2);
-		var consequent = ($$anchor) => {
-			var span_3 = root_1$15();
-			var text = child(span_3, true);
+		var node_1 = sibling(button_1, 2);
+		var consequent_1 = ($$anchor) => {
+			var span_3 = root_2$20();
+			var text_1 = child(span_3, true);
 			reset(span_3);
-			template_effect(() => set_text(text, FEEDBACK_THANKS));
+			template_effect(() => set_text(text_1, FEEDBACK_THANKS));
 			append($$anchor, span_3);
 		};
-		if_block(node, ($$render) => {
-			if (get(thanks)) $$render(consequent);
+		if_block(node_1, ($$render) => {
+			if (get(thanks)) $$render(consequent_1);
 		});
-		reset(span);
-		var node_1 = sibling(span, 2);
-		var consequent_1 = ($$anchor) => {
-			var div_1 = root_2$19();
-			var label = child(div_1);
-			var text_1 = child(label, true);
+		reset(div_1);
+		var node_2 = sibling(div_1, 2);
+		var consequent_2 = ($$anchor) => {
+			var div_2 = root_3$14();
+			var label = child(div_2);
+			var text_2 = child(label, true);
 			reset(label);
 			var textarea_1 = sibling(label, 2);
 			remove_textarea_child(textarea_1);
 			bind_this(textarea_1, ($$value) => set(textarea, $$value), () => get(textarea));
-			var div_2 = sibling(textarea_1, 2);
-			var span_4 = child(div_2);
-			var text_2 = child(span_4, true);
+			var div_3 = sibling(textarea_1, 2);
+			var span_4 = child(div_3);
+			var text_3 = child(span_4, true);
 			reset(span_4);
 			var button_2 = sibling(span_4, 2);
-			var text_3 = child(button_2, true);
+			var text_4 = child(button_2, true);
 			reset(button_2);
 			var button_3 = sibling(button_2, 2);
-			var text_4 = child(button_3, true);
+			var text_5 = child(button_3, true);
 			reset(button_3);
+			reset(div_3);
 			reset(div_2);
-			reset(div_1);
 			template_effect(() => {
 				set_attribute(label, "for", fieldId);
-				set_text(text_1, FEEDBACK_COMMENT_PROMPT);
+				set_text(text_2, FEEDBACK_COMMENT_PROMPT);
 				set_attribute(textarea_1, "id", fieldId);
 				set_attribute(textarea_1, "maxlength", FEEDBACK_COMMENT_MAX);
-				set_text(text_2, FEEDBACK_COMMENT_HINT);
-				set_text(text_3, FEEDBACK_COMMENT_SKIP);
+				set_text(text_3, FEEDBACK_COMMENT_HINT);
+				set_text(text_4, FEEDBACK_COMMENT_SKIP);
 				button_3.disabled = get(saving);
-				set_text(text_4, FEEDBACK_COMMENT_SEND);
+				set_text(text_5, FEEDBACK_COMMENT_SEND);
 			});
-			delegated("keydown", div_1, handleKeyDown);
+			delegated("keydown", div_2, handleKeyDown);
 			bind_value(textarea_1, () => get(commentText), ($$value) => set(commentText, $$value));
 			delegated("click", button_2, skipComment);
 			delegated("click", button_3, sendComment);
-			append($$anchor, div_1);
+			append($$anchor, div_2);
 		};
-		if_block(node_1, ($$render) => {
-			if (get(panelOpen)) $$render(consequent_1);
+		if_block(node_2, ($$render) => {
+			if (get(panelOpen)) $$render(consequent_2);
 		});
 		reset(div);
 		template_effect(() => {
-			classes = set_class(span, 1, "uc-ai-feedback-actions svelte-1ramda1", null, classes, { "is-voted": get(rating) !== null });
-			classes_1 = set_class(button, 1, "uc-ai-feedback-btn svelte-1ramda1", null, classes_1, { "is-active": get(isUp) });
+			classes = set_class(button, 1, "uc-ai-feedback-btn svelte-1ramda1", null, classes, { "is-active": get(isUp) });
 			set_attribute(button, "aria-pressed", get(isUp));
 			set_attribute(button, "aria-label", get(isUp) ? FEEDBACK_UP_LABEL_ACTIVE : FEEDBACK_UP_LABEL);
 			set_attribute(button, "title", get(isUp) ? FEEDBACK_UP_LABEL_ACTIVE : FEEDBACK_UP_LABEL);
 			button.disabled = get(saving);
 			set_class(span_1, 1, `fa ${get(isUp) ? "fa-thumbs-up" : "fa-thumbs-o-up"}`);
-			classes_2 = set_class(button_1, 1, "uc-ai-feedback-btn svelte-1ramda1", null, classes_2, { "is-active": get(isDown) });
+			classes_1 = set_class(button_1, 1, "uc-ai-feedback-btn svelte-1ramda1", null, classes_1, { "is-active": get(isDown) });
 			set_attribute(button_1, "aria-pressed", get(isDown));
 			set_attribute(button_1, "aria-label", get(isDown) ? FEEDBACK_DOWN_LABEL_ACTIVE : FEEDBACK_DOWN_LABEL);
 			set_attribute(button_1, "title", get(isDown) ? FEEDBACK_DOWN_LABEL_ACTIVE : FEEDBACK_DOWN_LABEL);
@@ -10255,25 +10265,26 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 	}
 	//#endregion
 	//#region src/AiMessageBubble.svelte
-	var root_1$14 = /* @__PURE__ */ from_html(`<div class="uc-ai-msg uc-ai-msg-user svelte-1ajl9q"><div class="uc-ai-msg-bubble uc-ai-msg-bubble-user svelte-1ajl9q"><span> </span></div> <div class="uc-ai-msg-meta svelte-1ajl9q"><span class="uc-ai-msg-time"> </span></div></div>`);
+	var root_1$15 = /* @__PURE__ */ from_html(`<div class="uc-ai-msg uc-ai-msg-user svelte-1ajl9q"><div class="uc-ai-msg-bubble uc-ai-msg-bubble-user svelte-1ajl9q"><span> </span></div> <div class="uc-ai-msg-meta svelte-1ajl9q"><span class="uc-ai-msg-time"> </span></div></div>`);
 	var root_3$13 = /* @__PURE__ */ from_html(`<details class="uc-ai-reasoning svelte-1ajl9q"><summary class="uc-ai-reasoning-summary svelte-1ajl9q"><span aria-hidden="true" class="fa fa-brain"></span> <span>Reasoning</span></summary> <div class="uc-ai-reasoning-body svelte-1ajl9q"> </div></details>`);
 	var root_4$7 = /* @__PURE__ */ from_html(`<span class="uc-ai-msg-tokens svelte-1ajl9q"><span aria-hidden="true" class="fa fa-dashboard"></span> </span>`);
 	var root_5$6 = /* @__PURE__ */ from_html(`<span class="uc-ai-copy-feedback svelte-1ajl9q">Copied</span>`);
-	var root_2$18 = /* @__PURE__ */ from_html(`<div class="uc-ai-msg uc-ai-msg-assistant svelte-1ajl9q"><!> <div class="uc-ai-msg-row svelte-1ajl9q"><div class="uc-ai-avatar svelte-1ajl9q" aria-hidden="true"><span></span></div> <div></div></div> <div class="uc-ai-msg-meta svelte-1ajl9q"><span class="uc-ai-msg-time"> </span> <!> <button type="button" class="uc-ai-copy-btn svelte-1ajl9q"><span aria-hidden="true"></span> <!></button> <!></div></div>`);
+	var root_6$4 = /* @__PURE__ */ from_html(`<div class="uc-ai-msg-feedback svelte-1ajl9q"><!></div>`);
+	var root_2$19 = /* @__PURE__ */ from_html(`<div class="uc-ai-msg uc-ai-msg-assistant svelte-1ajl9q"><!> <div class="uc-ai-msg-row svelte-1ajl9q"><div class="uc-ai-avatar svelte-1ajl9q" aria-hidden="true"><span></span></div> <div></div></div> <div class="uc-ai-msg-meta svelte-1ajl9q"><span class="uc-ai-msg-time"> </span> <!> <button type="button" class="uc-ai-copy-btn svelte-1ajl9q"><span aria-hidden="true"></span> <!></button></div> <!></div>`);
 	var root_8$1 = /* @__PURE__ */ from_html(`<span> </span>`);
 	var root_9 = /* @__PURE__ */ from_html(`<details class="uc-ai-tool-row svelte-1ajl9q"><summary class="svelte-1ajl9q"><span class="uc-ai-tool-label svelte-1ajl9q">Input</span> <span class="uc-ai-tool-preview svelte-1ajl9q"> </span></summary> <pre class="svelte-1ajl9q"><code> </code></pre></details>`);
 	var root_10$1 = /* @__PURE__ */ from_html(`<div class="uc-ai-tool-row uc-ai-tool-running svelte-1ajl9q"><span class="uc-ai-tool-label svelte-1ajl9q">Output</span> <span class="uc-ai-tool-preview uc-ai-tool-pending svelte-1ajl9q">running…</span></div>`);
 	var root_12 = /* @__PURE__ */ from_html(`<pre class="svelte-1ajl9q"><code> </code></pre>`);
 	var root_13 = /* @__PURE__ */ from_html(`<div class="uc-ai-tool-text-output svelte-1ajl9q"> </div>`);
 	var root_11 = /* @__PURE__ */ from_html(`<details class="uc-ai-tool-row svelte-1ajl9q"><summary class="svelte-1ajl9q"><span class="uc-ai-tool-label svelte-1ajl9q">Output</span> <span class="uc-ai-tool-preview svelte-1ajl9q"> </span></summary> <!></details>`);
-	var root_7$3 = /* @__PURE__ */ from_html(`<div class="uc-ai-msg uc-ai-tool-step-wrap svelte-1ajl9q"><div><div class="uc-ai-tool-step-header svelte-1ajl9q"><span aria-hidden="true"><span></span></span> <span class="uc-ai-tool-step-name svelte-1ajl9q"> </span> <!></div> <div class="uc-ai-tool-step-body svelte-1ajl9q"><!> <!></div></div></div>`);
-	var $$css$19 = {
+	var root_7$2 = /* @__PURE__ */ from_html(`<div class="uc-ai-msg uc-ai-tool-step-wrap svelte-1ajl9q"><div><div class="uc-ai-tool-step-header svelte-1ajl9q"><span aria-hidden="true"><span></span></span> <span class="uc-ai-tool-step-name svelte-1ajl9q"> </span> <!></div> <div class="uc-ai-tool-step-body svelte-1ajl9q"><!> <!></div></div></div>`);
+	var $$css$20 = {
 		hash: "svelte-1ajl9q",
-		code: "\n  /* ======================================================================\n     Layout\n     ----------------------------------------------------------------------\n     The assistant column used to have FOUR different left edges: the meta row\n     (2.6em at 0.7em font-size), the reasoning block (2.6em at 0.78em), the\n     bubble (avatar + gap) and the tool card (3.35em). Because `em` resolves\n     against each element's own font-size, none of those nominally-equal\n     indents produced the same pixel. The gutter is now owned by the COLUMN,\n     which is always at 1em, and the avatar hangs back into it — so every child\n     shares one edge no matter what it scales its text to.\n     ====================================================================== */.uc-ai-msg.svelte-1ajl9q {padding:var(--uc-chat-space-2) var(--uc-chat-space-3);}.uc-ai-msg-user.svelte-1ajl9q {display:flex;flex-direction:column;align-items:flex-end;}.uc-ai-msg-assistant.svelte-1ajl9q {display:flex;flex-direction:column;align-items:flex-start;padding-left:calc(var(--uc-chat-space-3) + var(--uc-chat-ai-gutter));}.uc-ai-msg-row.svelte-1ajl9q {display:flex;align-items:flex-start;gap:calc(var(--uc-chat-ai-gutter) - var(--uc-chat-ai-avatar-size));\n    /* Pull the avatar out into the gutter the column reserved for it. */margin-left:calc(-1 * var(--uc-chat-ai-gutter));max-width:calc(100% + var(--uc-chat-ai-gutter));}\n\n  /* ======================================================================\n     Avatar\n     ----------------------------------------------------------------------\n     Was a 135deg gradient between --uc-chat-color-31 and --uc-chat-color-41 —\n     a variable this component never defines, so the second stop fell back to\n     the first and the whole gradient painted a flat colour anyway. A drop\n     shadow on a 32px circle is decoration, not hierarchy. Both are gone; the\n     fill is the app's own primary, and the glyph its guaranteed contrast.\n     ====================================================================== */.uc-ai-avatar.svelte-1ajl9q {width:var(--uc-chat-ai-avatar-size);height:var(--uc-chat-ai-avatar-size);border-radius:50%;background-color:var(--uc-chat-accent-color);color:var(--uc-chat-accent-contrast-color);display:flex;align-items:center;justify-content:center;flex-shrink:0;\n    /* Must stay at 1em: `width: 2em` resolves against the element's OWN\n       font-size, so the old `font-size: 0.85em` quietly made the avatar 27px\n       wide while the column reserved a 32px gutter for it — which is how the\n       bubble ended up 5px left of everything below it. The glyph is scaled\n       instead. */font-size:1em;}.uc-ai-avatar.svelte-1ajl9q > span:where(.svelte-1ajl9q) {font-size:0.85em;line-height:1;}\n\n  /* ======================================================================\n     Bubbles\n     ----------------------------------------------------------------------\n     One radius for both sides. The old asymmetric \"tail\" corner (1em / 0.25em)\n     is the single most dated thing in the component and it made the two\n     speakers look like they came from different design systems.\n     ====================================================================== */.uc-ai-msg-bubble.svelte-1ajl9q {border-radius:var(--uc-chat-radius-lg);padding:var(--uc-chat-space-2) var(--uc-chat-space-3);line-height:1.5;font-size:0.9em;word-break:break-word;}.uc-ai-msg-bubble-user.svelte-1ajl9q {background-color:var(--uc-chat-accent-color);color:var(--uc-chat-accent-contrast-color);\n    /* Cap the measure so a pasted paragraph does not stretch edge to edge in a\n       wide region. */max-width:min(85%, 40em);}\n\n  /* Fill + hairline, and nothing else. It previously carried a fill AND a\n     border AND a shadow, so every message asked to be read as \"raised\" and the\n     transcript had no depth left to spend on anything that mattered. */.uc-ai-msg-bubble-assistant.svelte-1ajl9q {background-color:var(--uc-chat-surface-background-color);border:1px solid var(--uc-chat-component-border-color);max-width:min(100%, 48em);}\n\n  /* A failed turn is the one message that may shout: tinted fill plus a danger\n     outline, matching the guardrail strip's \"refusal\" treatment. The old\n     3px left rail is dropped — it was the same device the tool card used for\n     something entirely different. */.uc-ai-msg-bubble-error.svelte-1ajl9q {border-color:var(--uc-chat-danger-color);background-color:color-mix(\n      in srgb,\n      var(--uc-chat-danger-color) 8%,\n      var(--uc-chat-surface-background-color)\n    );}.uc-ai-msg-bubble-assistant p:first-child {margin-top:0;}.uc-ai-msg-bubble-assistant p:last-child {margin-bottom:0;}\n  /* Headings inside an answer were rendering at browser default sizes — an\n     `###` came out larger than the region title. Scale them to the bubble. */\n    .uc-ai-msg-bubble-assistant h1,\n    .uc-ai-msg-bubble-assistant h2,\n    .uc-ai-msg-bubble-assistant h3,\n    .uc-ai-msg-bubble-assistant h4\n   {font-size:1.05em;font-weight:600;line-height:1.35;margin:var(--uc-chat-space-3) 0 var(--uc-chat-space-1);}\n    .uc-ai-msg-bubble-assistant h1:first-child,\n    .uc-ai-msg-bubble-assistant h2:first-child,\n    .uc-ai-msg-bubble-assistant h3:first-child,\n    .uc-ai-msg-bubble-assistant h4:first-child\n   {margin-top:0;}\n  /* An inset payload is expressed by its fill alone — adding a border as well\n     made every code block look like a nested card. */.uc-ai-msg-bubble-assistant pre {background-color:var(--uc-chat-inset-background-color);padding:var(--uc-chat-space-2) var(--uc-chat-space-3);border-radius:var(--uc-chat-radius-md);overflow-x:auto;font-size:0.9em;font-family:var(--uc-chat-font-mono);}.uc-ai-msg-bubble-assistant code {font-size:0.9em;font-family:var(--uc-chat-font-mono);}.uc-ai-msg-bubble-assistant ul, .uc-ai-msg-bubble-assistant ol {padding-left:1.5em;margin:var(--uc-chat-space-2) 0;}.uc-ai-msg-bubble-assistant blockquote {border-left:2px solid var(--uc-chat-component-border-color);margin:var(--uc-chat-space-2) 0;padding:0.1em 0 0.1em var(--uc-chat-space-3);color:var(--uc-chat-component-text-muted-color);}\n\n  /* ======================================================================\n     Meta row\n     ====================================================================== */.uc-ai-msg-meta.svelte-1ajl9q {display:flex;gap:var(--uc-chat-space-2);margin-top:var(--uc-chat-space-1);\n    /* Aligned by the column, not by a hand-tuned indent that the 0.7em\n       font-size then silently shrank. */margin-left:0;font-size:0.7em;color:var(--uc-chat-component-text-muted-color);\n    /* Weight 200 exists in almost no UI font: it either snapped back to\n       regular or, in a theme with real light weights (Redwood), rendered\n       spindly. */font-weight:400;\n    /* The feedback comment box is a full-width child of this row, so it needs a\n       line to wrap onto rather than squeezing in beside the timestamp. */flex-wrap:wrap;align-items:center;min-height:1.6em;}.uc-ai-msg-tokens.svelte-1ajl9q {display:flex;align-items:center;gap:var(--uc-chat-space-1);}\n\n  /* Copy button: hover/focus-reveal but always in the tab order. */.uc-ai-copy-btn.svelte-1ajl9q {display:inline-flex;align-items:center;gap:var(--uc-chat-space-1);border:none;border-radius:var(--uc-chat-radius-sm);background:transparent;color:var(--uc-chat-component-text-muted-color);cursor:pointer;padding:0.15em 0.3em;font-size:1em;opacity:0;transition:opacity 0.15s;}.uc-ai-copy-btn.svelte-1ajl9q:hover {background-color:var(--uc-chat-hover-background-color);color:var(--uc-chat-component-text-title-color);}.uc-ai-msg-assistant.svelte-1ajl9q:hover .uc-ai-copy-btn:where(.svelte-1ajl9q),\n  .uc-ai-copy-btn.svelte-1ajl9q:focus-visible {opacity:1;}\n\n  /* Nothing hovers on a touch screen. */\n  @media (hover: none) {.uc-ai-copy-btn.svelte-1ajl9q {opacity:1;}\n  }.uc-ai-copy-feedback.svelte-1ajl9q {font-size:0.95em;}\n\n  /* ======================================================================\n     Reasoning (collapsible)\n     ====================================================================== */.uc-ai-reasoning.svelte-1ajl9q {margin:0 0 var(--uc-chat-space-1) 0;max-width:min(100%, 48em);font-size:0.78em;color:var(--uc-chat-component-text-muted-color);}.uc-ai-reasoning-summary.svelte-1ajl9q {display:inline-flex;align-items:center;gap:var(--uc-chat-space-1);cursor:pointer;user-select:none;padding:0.2em 0.5em;margin-left:-0.5em;border-radius:var(--uc-chat-radius-sm);list-style:none;font-style:italic;}.uc-ai-reasoning-summary.svelte-1ajl9q::-webkit-details-marker {display:none;}.uc-ai-reasoning-summary.svelte-1ajl9q::before {content:\"\\25B6\";font-size:0.65em;font-style:normal;transition:transform 0.15s;}.uc-ai-reasoning[open].svelte-1ajl9q .uc-ai-reasoning-summary:where(.svelte-1ajl9q)::before {transform:rotate(90deg);}.uc-ai-reasoning-summary.svelte-1ajl9q:hover {background-color:var(--uc-chat-hover-background-color);}\n\n  /* An inset panel, exactly like an expanded tool payload — both are \"the\n     detail behind the answer\", so they now look like one idea instead of two\n     (a quoted rule here, a filled panel there). */.uc-ai-reasoning-body.svelte-1ajl9q {margin-top:var(--uc-chat-space-1);padding:var(--uc-chat-space-2) var(--uc-chat-space-3);background-color:var(--uc-chat-inset-background-color);border-radius:var(--uc-chat-radius-md);font-style:italic;white-space:pre-wrap;line-height:1.5;max-height:14em;overflow-y:auto;}\n\n  @media (prefers-reduced-motion: reduce) {.uc-ai-reasoning-summary.svelte-1ajl9q::before {transition:none;}\n  }\n\n  /* ======================================================================\n     Tool step (combined call + result)\n     ----------------------------------------------------------------------\n     Was: white card, grey header bar, grey payloads, and a 3px coloured left\n     rail. The rail is generic \"AI product\" chrome that meant nothing (its\n     colour repeated what the status word already said), and the header grey\n     was literally the same token as the canvas behind the card. Now the card is\n     one surface divided by hairlines, and status lives in exactly one place:\n     the icon and the word next to it.\n     ====================================================================== */.uc-ai-tool-step-wrap.svelte-1ajl9q {display:flex;justify-content:flex-start;padding:var(--uc-chat-space-1) var(--uc-chat-space-3)\n      var(--uc-chat-space-1)\n      calc(var(--uc-chat-space-3) + var(--uc-chat-ai-gutter));}.uc-ai-tool-step.svelte-1ajl9q {width:100%;max-width:min(100%, 48em);\n    /* Deliberately unfilled. A tool call is supporting detail, so it must not\n       carry the same \"raised surface\" as the answer it supports — the two used\n       to be the identical white card and competed for the eye. */background-color:transparent;border:1px solid var(--uc-chat-component-border-color);border-radius:var(--uc-chat-radius-md);overflow:hidden;font-size:0.8em;line-height:1.4;}.uc-ai-tool-step.is-error.svelte-1ajl9q {border-color:color-mix(\n      in srgb,\n      var(--uc-chat-danger-color) 45%,\n      var(--uc-chat-component-border-color)\n    );}.uc-ai-tool-step-header.svelte-1ajl9q {display:flex;align-items:center;gap:var(--uc-chat-space-2);padding:var(--uc-chat-space-2) var(--uc-chat-space-3);border-bottom:1px solid var(--uc-chat-component-inner-border-color);}\n\n  /* A bare glyph. The circular chip it used to sit in was a third bordered box\n     inside an already bordered box inside a bordered card. */.uc-ai-tool-step-icon.svelte-1ajl9q {display:inline-flex;align-items:center;justify-content:center;color:var(--uc-chat-component-text-muted-color);flex-shrink:0;}.uc-ai-tool-step-icon.svelte-1ajl9q > .fa:where(.svelte-1ajl9q) {font-size:1em;line-height:1;}.uc-ai-tool-step-icon.is-success.svelte-1ajl9q {color:var(--uc-chat-success-color);}.uc-ai-tool-step-icon.is-error.svelte-1ajl9q {color:var(--uc-chat-danger-color);}.uc-ai-tool-step-icon.is-running.svelte-1ajl9q {color:var(--uc-chat-accent-color);}.uc-ai-tool-step-name.svelte-1ajl9q {font-family:var(--uc-chat-font-mono);font-weight:500;color:var(--uc-chat-component-text-title-color);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n\n  /* Plain text, not a pill. The pastel pills (#e8f5e9 / #fce4ec / #e3f2fd) came\n     from no palette at all and stayed pastel in dark mode, where they glowed. */.uc-ai-tool-step-status.svelte-1ajl9q {font-size:0.9em;font-weight:500;color:var(--uc-chat-component-text-muted-color);text-transform:lowercase;flex-shrink:0;}.uc-ai-tool-step-status.is-error.svelte-1ajl9q {color:var(--uc-chat-danger-color);}.uc-ai-tool-step-status.is-running.svelte-1ajl9q {color:var(--uc-chat-accent-color);}.uc-ai-tool-step-body.svelte-1ajl9q {display:flex;flex-direction:column;}.uc-ai-tool-row.svelte-1ajl9q {border-top:1px solid var(--uc-chat-component-inner-border-color);}.uc-ai-tool-row.svelte-1ajl9q:first-child {border-top:none;}.uc-ai-tool-row.svelte-1ajl9q > summary:where(.svelte-1ajl9q),\n  .uc-ai-tool-running.svelte-1ajl9q {display:flex;align-items:baseline;gap:var(--uc-chat-space-2);padding:var(--uc-chat-space-2) var(--uc-chat-space-3);cursor:pointer;list-style:none;user-select:none;}.uc-ai-tool-running.svelte-1ajl9q {cursor:default;}.uc-ai-tool-row.svelte-1ajl9q > summary:where(.svelte-1ajl9q)::-webkit-details-marker {display:none;}.uc-ai-tool-row.svelte-1ajl9q > summary:where(.svelte-1ajl9q)::before {content:\"\\25B6\";font-size:0.65em;color:var(--uc-chat-component-text-muted-color);transition:transform 0.15s;flex-shrink:0;}.uc-ai-tool-row[open].svelte-1ajl9q > summary:where(.svelte-1ajl9q)::before {transform:rotate(90deg);}.uc-ai-tool-row.svelte-1ajl9q > summary:where(.svelte-1ajl9q):hover {background-color:var(--uc-chat-hover-background-color);}\n\n  @media (prefers-reduced-motion: reduce) {.uc-ai-tool-row.svelte-1ajl9q > summary:where(.svelte-1ajl9q)::before {transition:none;}\n  }.uc-ai-tool-label.svelte-1ajl9q {font-weight:600;color:var(--uc-chat-component-text-muted-color);text-transform:uppercase;font-size:0.8em;letter-spacing:0.06em;flex-shrink:0;min-width:4.75em;}.uc-ai-tool-preview.svelte-1ajl9q {font-family:var(--uc-chat-font-mono);color:var(--uc-chat-component-text-muted-color);font-size:0.95em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;}.uc-ai-tool-pending.svelte-1ajl9q {font-style:italic;}\n\n  /* Full-bleed inset panels rather than blocks indented under the label: the\n     fill already says \"this is the expanded payload\", so the indent was doing\n     the same job a second time and left a ragged left edge. */.uc-ai-tool-row.svelte-1ajl9q pre:where(.svelte-1ajl9q) {margin:0;padding:var(--uc-chat-space-2) var(--uc-chat-space-3);background-color:var(--uc-chat-inset-background-color);overflow-x:auto;font-family:var(--uc-chat-font-mono);font-size:0.95em;line-height:1.45;}.uc-ai-tool-text-output.svelte-1ajl9q {padding:var(--uc-chat-space-2) var(--uc-chat-space-3);background-color:var(--uc-chat-inset-background-color);white-space:pre-wrap;line-height:1.45;font-size:0.95em;}"
+		code: "\n  /* ======================================================================\n     Layout\n     ----------------------------------------------------------------------\n     The assistant column used to have FOUR different left edges: the meta row\n     (2.6em at 0.7em font-size), the reasoning block (2.6em at 0.78em), the\n     bubble (avatar + gap) and the tool card (3.35em). Because `em` resolves\n     against each element's own font-size, none of those nominally-equal\n     indents produced the same pixel. The gutter is now owned by the COLUMN,\n     which is always at 1em, and the avatar hangs back into it — so every child\n     shares one edge no matter what it scales its text to.\n     ====================================================================== */.uc-ai-msg.svelte-1ajl9q {padding:var(--uc-chat-space-2) var(--uc-chat-space-3);}.uc-ai-msg-user.svelte-1ajl9q {display:flex;flex-direction:column;align-items:flex-end;}.uc-ai-msg-assistant.svelte-1ajl9q {display:flex;flex-direction:column;align-items:flex-start;padding-left:calc(var(--uc-chat-space-3) + var(--uc-chat-ai-gutter));}.uc-ai-msg-row.svelte-1ajl9q {display:flex;align-items:flex-start;gap:calc(var(--uc-chat-ai-gutter) - var(--uc-chat-ai-avatar-size));\n    /* Pull the avatar out into the gutter the column reserved for it. */margin-left:calc(-1 * var(--uc-chat-ai-gutter));max-width:calc(100% + var(--uc-chat-ai-gutter));}\n\n  /* ======================================================================\n     Avatar\n     ----------------------------------------------------------------------\n     Was a 135deg gradient between --uc-chat-color-31 and --uc-chat-color-41 —\n     a variable this component never defines, so the second stop fell back to\n     the first and the whole gradient painted a flat colour anyway. A drop\n     shadow on a 32px circle is decoration, not hierarchy. Both are gone; the\n     fill is the app's own primary, and the glyph its guaranteed contrast.\n     ====================================================================== */.uc-ai-avatar.svelte-1ajl9q {width:var(--uc-chat-ai-avatar-size);height:var(--uc-chat-ai-avatar-size);border-radius:50%;background-color:var(--uc-chat-accent-color);color:var(--uc-chat-accent-contrast-color);display:flex;align-items:center;justify-content:center;flex-shrink:0;\n    /* Must stay at 1em: `width: 2em` resolves against the element's OWN\n       font-size, so the old `font-size: 0.85em` quietly made the avatar 27px\n       wide while the column reserved a 32px gutter for it — which is how the\n       bubble ended up 5px left of everything below it. The glyph is scaled\n       instead. */font-size:1em;}.uc-ai-avatar.svelte-1ajl9q > span:where(.svelte-1ajl9q) {font-size:0.85em;line-height:1;}\n\n  /* ======================================================================\n     Bubbles\n     ----------------------------------------------------------------------\n     One radius for both sides. The old asymmetric \"tail\" corner (1em / 0.25em)\n     is the single most dated thing in the component and it made the two\n     speakers look like they came from different design systems.\n     ====================================================================== */.uc-ai-msg-bubble.svelte-1ajl9q {border-radius:var(--uc-chat-radius-lg);padding:var(--uc-chat-space-2) var(--uc-chat-space-3);line-height:1.5;font-size:0.9em;word-break:break-word;}.uc-ai-msg-bubble-user.svelte-1ajl9q {background-color:var(--uc-chat-accent-color);color:var(--uc-chat-accent-contrast-color);\n    /* Cap the measure so a pasted paragraph does not stretch edge to edge in a\n       wide region. */max-width:min(85%, 40em);}\n\n  /* Fill + hairline, and nothing else. It previously carried a fill AND a\n     border AND a shadow, so every message asked to be read as \"raised\" and the\n     transcript had no depth left to spend on anything that mattered. */.uc-ai-msg-bubble-assistant.svelte-1ajl9q {background-color:var(--uc-chat-surface-background-color);border:1px solid var(--uc-chat-component-border-color);max-width:min(100%, 48em);}\n\n  /* A failed turn is the one message that may shout: tinted fill plus a danger\n     outline, matching the guardrail strip's \"refusal\" treatment. The old\n     3px left rail is dropped — it was the same device the tool card used for\n     something entirely different. */.uc-ai-msg-bubble-error.svelte-1ajl9q {border-color:var(--uc-chat-danger-color);background-color:color-mix(\n      in srgb,\n      var(--uc-chat-danger-color) 8%,\n      var(--uc-chat-surface-background-color)\n    );}.uc-ai-msg-bubble-assistant p:first-child {margin-top:0;}.uc-ai-msg-bubble-assistant p:last-child {margin-bottom:0;}\n  /* Headings inside an answer were rendering at browser default sizes — an\n     `###` came out larger than the region title. Scale them to the bubble. */\n    .uc-ai-msg-bubble-assistant h1,\n    .uc-ai-msg-bubble-assistant h2,\n    .uc-ai-msg-bubble-assistant h3,\n    .uc-ai-msg-bubble-assistant h4\n   {font-size:1.05em;font-weight:600;line-height:1.35;margin:var(--uc-chat-space-3) 0 var(--uc-chat-space-1);}\n    .uc-ai-msg-bubble-assistant h1:first-child,\n    .uc-ai-msg-bubble-assistant h2:first-child,\n    .uc-ai-msg-bubble-assistant h3:first-child,\n    .uc-ai-msg-bubble-assistant h4:first-child\n   {margin-top:0;}\n  /* An inset payload is expressed by its fill alone — adding a border as well\n     made every code block look like a nested card. */.uc-ai-msg-bubble-assistant pre {background-color:var(--uc-chat-inset-background-color);padding:var(--uc-chat-space-2) var(--uc-chat-space-3);border-radius:var(--uc-chat-radius-md);overflow-x:auto;font-size:0.9em;font-family:var(--uc-chat-font-mono);}.uc-ai-msg-bubble-assistant code {font-size:0.9em;font-family:var(--uc-chat-font-mono);}.uc-ai-msg-bubble-assistant ul, .uc-ai-msg-bubble-assistant ol {padding-left:1.5em;margin:var(--uc-chat-space-2) 0;}.uc-ai-msg-bubble-assistant blockquote {border-left:2px solid var(--uc-chat-component-border-color);margin:var(--uc-chat-space-2) 0;padding:0.1em 0 0.1em var(--uc-chat-space-3);color:var(--uc-chat-component-text-muted-color);}\n\n  /* ======================================================================\n     Meta row\n     ====================================================================== */.uc-ai-msg-meta.svelte-1ajl9q {display:flex;gap:var(--uc-chat-space-2);margin-top:var(--uc-chat-space-1);\n    /* Aligned by the column, not by a hand-tuned indent that the 0.7em\n       font-size then silently shrank. */margin-left:0;font-size:0.7em;color:var(--uc-chat-component-text-muted-color);\n    /* Weight 200 exists in almost no UI font: it either snapped back to\n       regular or, in a theme with real light weights (Redwood), rendered\n       spindly. */font-weight:400;flex-wrap:wrap;align-items:center;min-height:1.6em;}\n\n  /* Feedback sits on its own line below the meta row, aligned with the bubble\n     column. Full width so the comment box has room to open beneath it. */.uc-ai-msg-feedback.svelte-1ajl9q {align-self:stretch;max-width:min(100%, 48em);margin-top:var(--uc-chat-space-1);font-size:0.75em;color:var(--uc-chat-component-text-muted-color);}.uc-ai-msg-tokens.svelte-1ajl9q {display:flex;align-items:center;gap:var(--uc-chat-space-1);}\n\n  /* Copy button: hover/focus-reveal but always in the tab order. */.uc-ai-copy-btn.svelte-1ajl9q {display:inline-flex;align-items:center;gap:var(--uc-chat-space-1);border:none;border-radius:var(--uc-chat-radius-sm);background:transparent;color:var(--uc-chat-component-text-muted-color);cursor:pointer;padding:0.15em 0.3em;font-size:1em;opacity:0;transition:opacity 0.15s;}.uc-ai-copy-btn.svelte-1ajl9q:hover {background-color:var(--uc-chat-hover-background-color);color:var(--uc-chat-component-text-title-color);}.uc-ai-msg-assistant.svelte-1ajl9q:hover .uc-ai-copy-btn:where(.svelte-1ajl9q),\n  .uc-ai-copy-btn.svelte-1ajl9q:focus-visible {opacity:1;}\n\n  /* Nothing hovers on a touch screen. */\n  @media (hover: none) {.uc-ai-copy-btn.svelte-1ajl9q {opacity:1;}\n  }.uc-ai-copy-feedback.svelte-1ajl9q {font-size:0.95em;}\n\n  /* ======================================================================\n     Reasoning (collapsible)\n     ====================================================================== */.uc-ai-reasoning.svelte-1ajl9q {margin:0 0 var(--uc-chat-space-1) 0;max-width:min(100%, 48em);font-size:0.78em;color:var(--uc-chat-component-text-muted-color);}.uc-ai-reasoning-summary.svelte-1ajl9q {display:inline-flex;align-items:center;gap:var(--uc-chat-space-1);cursor:pointer;user-select:none;padding:0.2em 0.5em;margin-left:-0.5em;border-radius:var(--uc-chat-radius-sm);list-style:none;font-style:italic;}.uc-ai-reasoning-summary.svelte-1ajl9q::-webkit-details-marker {display:none;}.uc-ai-reasoning-summary.svelte-1ajl9q::before {content:\"\\25B6\";font-size:0.65em;font-style:normal;transition:transform 0.15s;}.uc-ai-reasoning[open].svelte-1ajl9q .uc-ai-reasoning-summary:where(.svelte-1ajl9q)::before {transform:rotate(90deg);}.uc-ai-reasoning-summary.svelte-1ajl9q:hover {background-color:var(--uc-chat-hover-background-color);}\n\n  /* An inset panel, exactly like an expanded tool payload — both are \"the\n     detail behind the answer\", so they now look like one idea instead of two\n     (a quoted rule here, a filled panel there). */.uc-ai-reasoning-body.svelte-1ajl9q {margin-top:var(--uc-chat-space-1);padding:var(--uc-chat-space-2) var(--uc-chat-space-3);background-color:var(--uc-chat-inset-background-color);border-radius:var(--uc-chat-radius-md);font-style:italic;white-space:pre-wrap;line-height:1.5;max-height:14em;overflow-y:auto;}\n\n  @media (prefers-reduced-motion: reduce) {.uc-ai-reasoning-summary.svelte-1ajl9q::before {transition:none;}\n  }\n\n  /* ======================================================================\n     Tool step (combined call + result)\n     ----------------------------------------------------------------------\n     Was: white card, grey header bar, grey payloads, and a 3px coloured left\n     rail. The rail is generic \"AI product\" chrome that meant nothing (its\n     colour repeated what the status word already said), and the header grey\n     was literally the same token as the canvas behind the card. Now the card is\n     one surface divided by hairlines, and status lives in exactly one place:\n     the icon and the word next to it.\n     ====================================================================== */.uc-ai-tool-step-wrap.svelte-1ajl9q {display:flex;justify-content:flex-start;padding:var(--uc-chat-space-1) var(--uc-chat-space-3)\n      var(--uc-chat-space-1)\n      calc(var(--uc-chat-space-3) + var(--uc-chat-ai-gutter));}.uc-ai-tool-step.svelte-1ajl9q {width:100%;max-width:min(100%, 48em);\n    /* Deliberately unfilled. A tool call is supporting detail, so it must not\n       carry the same \"raised surface\" as the answer it supports — the two used\n       to be the identical white card and competed for the eye. */background-color:transparent;border:1px solid var(--uc-chat-component-border-color);border-radius:var(--uc-chat-radius-md);overflow:hidden;font-size:0.8em;line-height:1.4;}.uc-ai-tool-step.is-error.svelte-1ajl9q {border-color:color-mix(\n      in srgb,\n      var(--uc-chat-danger-color) 45%,\n      var(--uc-chat-component-border-color)\n    );}.uc-ai-tool-step-header.svelte-1ajl9q {display:flex;align-items:center;gap:var(--uc-chat-space-2);padding:var(--uc-chat-space-2) var(--uc-chat-space-3);border-bottom:1px solid var(--uc-chat-component-inner-border-color);}\n\n  /* A bare glyph. The circular chip it used to sit in was a third bordered box\n     inside an already bordered box inside a bordered card. */.uc-ai-tool-step-icon.svelte-1ajl9q {display:inline-flex;align-items:center;justify-content:center;color:var(--uc-chat-component-text-muted-color);flex-shrink:0;}.uc-ai-tool-step-icon.svelte-1ajl9q > .fa:where(.svelte-1ajl9q) {font-size:1em;line-height:1;}.uc-ai-tool-step-icon.is-success.svelte-1ajl9q {color:var(--uc-chat-success-color);}.uc-ai-tool-step-icon.is-error.svelte-1ajl9q {color:var(--uc-chat-danger-color);}.uc-ai-tool-step-icon.is-running.svelte-1ajl9q {color:var(--uc-chat-accent-color);}.uc-ai-tool-step-name.svelte-1ajl9q {font-family:var(--uc-chat-font-mono);font-weight:500;color:var(--uc-chat-component-text-title-color);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}\n\n  /* Plain text, not a pill. The pastel pills (#e8f5e9 / #fce4ec / #e3f2fd) came\n     from no palette at all and stayed pastel in dark mode, where they glowed. */.uc-ai-tool-step-status.svelte-1ajl9q {font-size:0.9em;font-weight:500;color:var(--uc-chat-component-text-muted-color);text-transform:lowercase;flex-shrink:0;}.uc-ai-tool-step-status.is-error.svelte-1ajl9q {color:var(--uc-chat-danger-color);}.uc-ai-tool-step-status.is-running.svelte-1ajl9q {color:var(--uc-chat-accent-color);}.uc-ai-tool-step-body.svelte-1ajl9q {display:flex;flex-direction:column;}.uc-ai-tool-row.svelte-1ajl9q {border-top:1px solid var(--uc-chat-component-inner-border-color);}.uc-ai-tool-row.svelte-1ajl9q:first-child {border-top:none;}.uc-ai-tool-row.svelte-1ajl9q > summary:where(.svelte-1ajl9q),\n  .uc-ai-tool-running.svelte-1ajl9q {display:flex;align-items:baseline;gap:var(--uc-chat-space-2);padding:var(--uc-chat-space-2) var(--uc-chat-space-3);cursor:pointer;list-style:none;user-select:none;}.uc-ai-tool-running.svelte-1ajl9q {cursor:default;}.uc-ai-tool-row.svelte-1ajl9q > summary:where(.svelte-1ajl9q)::-webkit-details-marker {display:none;}.uc-ai-tool-row.svelte-1ajl9q > summary:where(.svelte-1ajl9q)::before {content:\"\\25B6\";font-size:0.65em;color:var(--uc-chat-component-text-muted-color);transition:transform 0.15s;flex-shrink:0;}.uc-ai-tool-row[open].svelte-1ajl9q > summary:where(.svelte-1ajl9q)::before {transform:rotate(90deg);}.uc-ai-tool-row.svelte-1ajl9q > summary:where(.svelte-1ajl9q):hover {background-color:var(--uc-chat-hover-background-color);}\n\n  @media (prefers-reduced-motion: reduce) {.uc-ai-tool-row.svelte-1ajl9q > summary:where(.svelte-1ajl9q)::before {transition:none;}\n  }.uc-ai-tool-label.svelte-1ajl9q {font-weight:600;color:var(--uc-chat-component-text-muted-color);text-transform:uppercase;font-size:0.8em;letter-spacing:0.06em;flex-shrink:0;min-width:4.75em;}.uc-ai-tool-preview.svelte-1ajl9q {font-family:var(--uc-chat-font-mono);color:var(--uc-chat-component-text-muted-color);font-size:0.95em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;}.uc-ai-tool-pending.svelte-1ajl9q {font-style:italic;}\n\n  /* Full-bleed inset panels rather than blocks indented under the label: the\n     fill already says \"this is the expanded payload\", so the indent was doing\n     the same job a second time and left a ragged left edge. */.uc-ai-tool-row.svelte-1ajl9q pre:where(.svelte-1ajl9q) {margin:0;padding:var(--uc-chat-space-2) var(--uc-chat-space-3);background-color:var(--uc-chat-inset-background-color);overflow-x:auto;font-family:var(--uc-chat-font-mono);font-size:0.95em;line-height:1.45;}.uc-ai-tool-text-output.svelte-1ajl9q {padding:var(--uc-chat-space-2) var(--uc-chat-space-3);background-color:var(--uc-chat-inset-background-color);white-space:pre-wrap;line-height:1.45;font-size:0.95em;}"
 	};
 	function AiMessageBubble($$anchor, $$props) {
 		push($$props, true);
-		append_styles$1($$anchor, $$css$19);
+		append_styles$1($$anchor, $$css$20);
 		let message = prop($$props, "message", 7), showReasoning = prop($$props, "showReasoning", 7, false), showTools = prop($$props, "showTools", 7, false), showMetadata = prop($$props, "showMetadata", 7, false), avatarIcon = prop($$props, "avatarIcon", 7, "fa fa-robot"), feedbackEnabled = prop($$props, "feedbackEnabled", 7, false), feedback = prop($$props, "feedback", 7, null), onFeedback = prop($$props, "onFeedback", 7, void 0);
 		let formattedTime = /* @__PURE__ */ user_derived(() => formatTimeString(message().messageDate));
 		let copied = /* @__PURE__ */ state(false);
@@ -10382,7 +10393,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 		var fragment = comment();
 		var node = first_child(fragment);
 		var consequent = ($$anchor) => {
-			var div = root_1$14();
+			var div = root_1$15();
 			var div_1 = child(div);
 			var span = child(div_1);
 			var text = child(span, true);
@@ -10401,7 +10412,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			append($$anchor, div);
 		};
 		var consequent_5 = ($$anchor) => {
-			var div_3 = root_2$18();
+			var div_3 = root_2$19();
 			var node_1 = child(div_3);
 			var consequent_1 = ($$anchor) => {
 				var details = root_3$13();
@@ -10450,9 +10461,11 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				if (get(copied)) $$render(consequent_3);
 			});
 			reset(button);
-			var node_4 = sibling(button, 2);
+			reset(div_8);
+			var node_4 = sibling(div_8, 2);
 			var consequent_4 = ($$anchor) => {
-				AiFeedbackControl($$anchor, {
+				var div_9 = root_6$4();
+				AiFeedbackControl(child(div_9), {
 					get feedback() {
 						return feedback();
 					},
@@ -10460,11 +10473,12 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 						return onFeedback();
 					}
 				});
+				reset(div_9);
+				append($$anchor, div_9);
 			};
 			if_block(node_4, ($$render) => {
 				if (feedbackEnabled() && onFeedback()) $$render(consequent_4);
 			});
-			reset(div_8);
 			reset(div_3);
 			template_effect(() => {
 				set_class(span_2, 1, clsx(avatarIcon()), "svelte-1ajl9q");
@@ -10482,11 +10496,11 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			append($$anchor, div_3);
 		};
 		var consequent_11 = ($$anchor) => {
-			var div_9 = root_7$3();
-			var div_10 = child(div_9);
-			let classes_2;
+			var div_10 = root_7$2();
 			var div_11 = child(div_10);
-			var span_7 = child(div_11);
+			let classes_2;
+			var div_12 = child(div_11);
+			var span_7 = child(div_12);
 			let classes_3;
 			var span_8 = child(span_7);
 			let classes_4;
@@ -10494,7 +10508,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			var span_9 = sibling(span_7, 2);
 			var text_5 = child(span_9, true);
 			reset(span_9);
-			var node_5 = sibling(span_9, 2);
+			var node_6 = sibling(span_9, 2);
 			var consequent_6 = ($$anchor) => {
 				var span_10 = root_8$1();
 				let classes_5;
@@ -10510,12 +10524,12 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				});
 				append($$anchor, span_10);
 			};
-			if_block(node_5, ($$render) => {
+			if_block(node_6, ($$render) => {
 				if (message().toolStatus) $$render(consequent_6);
 			});
-			reset(div_11);
-			var div_12 = sibling(div_11, 2);
-			var node_6 = child(div_12);
+			reset(div_12);
+			var div_13 = sibling(div_12, 2);
+			var node_7 = child(div_13);
 			var consequent_7 = ($$anchor) => {
 				var details_1 = root_9();
 				var summary = child(details_1);
@@ -10535,10 +10549,10 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				}, [() => previewText(message().toolInput), () => formatJson(message().toolInput)]);
 				append($$anchor, details_1);
 			};
-			if_block(node_6, ($$render) => {
+			if_block(node_7, ($$render) => {
 				if (message().toolInput) $$render(consequent_7);
 			});
-			var node_7 = sibling(node_6, 2);
+			var node_8 = sibling(node_7, 2);
 			var consequent_8 = ($$anchor) => {
 				append($$anchor, root_10$1());
 			};
@@ -10549,7 +10563,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				var text_9 = child(span_12, true);
 				reset(span_12);
 				reset(summary_1);
-				var node_8 = sibling(summary_1, 2);
+				var node_9 = sibling(summary_1, 2);
 				var consequent_9 = ($$anchor) => {
 					var pre_1 = root_12();
 					var code_1 = child(pre_1);
@@ -10561,13 +10575,13 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				};
 				var d = /* @__PURE__ */ user_derived(() => isJson(message().toolOutput));
 				var alternate = ($$anchor) => {
-					var div_14 = root_13();
-					var text_11 = child(div_14, true);
-					reset(div_14);
+					var div_15 = root_13();
+					var text_11 = child(div_15, true);
+					reset(div_15);
 					template_effect(() => set_text(text_11, message().toolOutput));
-					append($$anchor, div_14);
+					append($$anchor, div_15);
 				};
-				if_block(node_8, ($$render) => {
+				if_block(node_9, ($$render) => {
 					if (get(d)) $$render(consequent_9);
 					else $$render(alternate, -1);
 				});
@@ -10575,15 +10589,15 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				template_effect(($0) => set_text(text_9, $0), [() => previewText(message().toolOutput)]);
 				append($$anchor, details_2);
 			};
-			if_block(node_7, ($$render) => {
+			if_block(node_8, ($$render) => {
 				if (message().toolStatus === "running") $$render(consequent_8);
 				else if (message().toolOutput) $$render(consequent_10, 1);
 			});
-			reset(div_12);
+			reset(div_13);
+			reset(div_11);
 			reset(div_10);
-			reset(div_9);
 			template_effect(() => {
-				classes_2 = set_class(div_10, 1, "uc-ai-tool-step svelte-1ajl9q", null, classes_2, {
+				classes_2 = set_class(div_11, 1, "uc-ai-tool-step svelte-1ajl9q", null, classes_2, {
 					"is-running": message().toolStatus === "running",
 					"is-error": message().toolStatus === "error"
 				});
@@ -10599,7 +10613,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				});
 				set_text(text_5, message().toolName ?? "tool");
 			});
-			append($$anchor, div_9);
+			append($$anchor, div_10);
 		};
 		if_block(node, ($$render) => {
 			if (message().role === "user") $$render(consequent);
@@ -10796,18 +10810,18 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 	}
 	//#endregion
 	//#region src/AiThinkingIndicator.svelte
-	var root_1$13 = /* @__PURE__ */ from_html(`<div class="uc-ai-typing-dots svelte-1wtb16" aria-hidden="true"><span class="svelte-1wtb16"></span><span class="svelte-1wtb16"></span><span class="svelte-1wtb16"></span></div>`);
-	var root_2$17 = /* @__PURE__ */ from_html(`<pre aria-hidden="true"> </pre>`);
+	var root_1$14 = /* @__PURE__ */ from_html(`<div class="uc-ai-typing-dots svelte-1wtb16" aria-hidden="true"><span class="svelte-1wtb16"></span><span class="svelte-1wtb16"></span><span class="svelte-1wtb16"></span></div>`);
+	var root_2$18 = /* @__PURE__ */ from_html(`<pre aria-hidden="true"> </pre>`);
 	var root_4$6 = /* @__PURE__ */ from_html(`<span class="uc-ai-typing-elapsed svelte-1wtb16"> </span>`);
 	var root_3$12 = /* @__PURE__ */ from_html(`<div class="uc-ai-typing-phase svelte-1wtb16" aria-hidden="true"><span class="svelte-1wtb16"> </span> <!></div>`);
 	var root$16 = /* @__PURE__ */ from_html(`<div class="uc-ai-typing svelte-1wtb16"><div class="uc-ai-avatar svelte-1wtb16" aria-hidden="true"><span></span></div> <div class="uc-ai-typing-bubble svelte-1wtb16"><!> <!></div> <span class="uc-visually-hidden svelte-1wtb16" role="status"> </span></div>`);
-	var $$css$18 = {
+	var $$css$19 = {
 		hash: "svelte-1wtb16",
 		code: "\n  /* Sits on the same assistant gutter as a real message, so a turn starting\n     does not shift the column. */.uc-ai-typing.svelte-1wtb16 {display:flex;align-items:center;gap:calc(var(--uc-chat-ai-gutter) - var(--uc-chat-ai-avatar-size));padding:var(--uc-chat-space-2) var(--uc-chat-space-3);}\n\n  /* Matches the assistant avatar in AiMessageBubble — flat accent fill, no\n     no-op gradient, no shadow. */.uc-ai-avatar.svelte-1wtb16 {width:var(--uc-chat-ai-avatar-size);height:var(--uc-chat-ai-avatar-size);border-radius:50%;background-color:var(--uc-chat-accent-color);color:var(--uc-chat-accent-contrast-color);display:flex;align-items:center;justify-content:center;flex-shrink:0;\n    /* See AiMessageBubble: the box must be measured at 1em or it drifts out of\n       the gutter the column reserved for it. */font-size:1em;}.uc-ai-avatar.svelte-1wtb16 > span:where(.svelte-1wtb16) {font-size:0.85em;line-height:1;}\n\n  /* Same fill, border and radius as an assistant bubble: this IS the answer,\n     just not written yet. It previously had a 0.5px border (a sub-pixel width\n     that renders inconsistently), a different radius and a shadow. */.uc-ai-typing-bubble.svelte-1wtb16 {padding:var(--uc-chat-space-2) var(--uc-chat-space-3);background-color:var(--uc-chat-surface-background-color);border:1px solid var(--uc-chat-component-border-color);border-radius:var(--uc-chat-radius-lg);max-width:100%;overflow:hidden;}.uc-ai-typing-dots.svelte-1wtb16 {display:flex;gap:var(--uc-chat-space-1);padding-block:0.2em;}.uc-ai-typing-dots.svelte-1wtb16 > span:where(.svelte-1wtb16) {width:0.45em;height:0.45em;border-radius:50%;background-color:var(--uc-chat-component-text-muted-color);\n    animation: svelte-1wtb16-uc-ai-dot-bounce 1.4s infinite ease-in-out both;}.uc-ai-typing-dots.svelte-1wtb16 > span:where(.svelte-1wtb16):nth-child(1) {animation-delay:-0.32s;}.uc-ai-typing-dots.svelte-1wtb16 > span:where(.svelte-1wtb16):nth-child(2) {animation-delay:-0.16s;}\n\n  @keyframes svelte-1wtb16-uc-ai-dot-bounce {\n    0%, 80%, 100% {\n      transform: scale(0.6);\n      opacity: 0.4;\n    }\n    40% {\n      transform: scale(1);\n      opacity: 1;\n    }\n  }\n\n  /* The art is decorative: never wrap it (a wrapped frame is nonsense), clip in\n     narrow containers, and keep it out of text selections. */.uc-ai-ascii.svelte-1wtb16 {margin:0;font-family:var(--uc-chat-font-mono);font-size:0.7em;line-height:1.05;letter-spacing:0.02em;white-space:pre;overflow:hidden;color:var(--uc-chat-accent-color);user-select:none;}\n\n  /* Braille glyphs carry their own internal padding and read as too small at\n     the density-ramp size. */.uc-ai-ascii.is-braille.svelte-1wtb16 {font-size:1em;line-height:1.2;letter-spacing:0;}.uc-ai-typing-phase.svelte-1wtb16 {display:flex;align-items:baseline;gap:var(--uc-chat-space-2);margin-top:var(--uc-chat-space-1);font-size:0.75em;color:var(--uc-chat-component-text-muted-color);}.uc-ai-typing-elapsed.svelte-1wtb16 {opacity:0.7;font-variant-numeric:tabular-nums;}.uc-visually-hidden.svelte-1wtb16 {position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0;}\n\n  @media (prefers-reduced-motion: reduce) {.uc-ai-typing-dots.svelte-1wtb16 > span:where(.svelte-1wtb16) {\n      animation: none;opacity:0.55;}\n  }"
 	};
 	function AiThinkingIndicator($$anchor, $$props) {
 		push($$props, true);
-		append_styles$1($$anchor, $$css$18);
+		append_styles$1($$anchor, $$css$19);
 		let variant = prop($$props, "variant", 7, AI_ANIM_DOTS), detail = prop($$props, "detail", 7, AI_DETAIL_TOOLS), avatarIcon = prop($$props, "avatarIcon", 7, "fa fa-robot"), toolName = prop($$props, "toolName", 7, "");
 		let animVariant = /* @__PURE__ */ user_derived(() => normalizeVariant(variant(), AI_ANIM_DOTS));
 		let detailLevel = /* @__PURE__ */ user_derived(() => normalizeEnum(detail(), AI_DETAIL_LEVELS, AI_DETAIL_TOOLS));
@@ -10874,10 +10888,10 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 		var div_2 = sibling(div_1, 2);
 		var node = child(div_2);
 		var consequent = ($$anchor) => {
-			append($$anchor, root_1$13());
+			append($$anchor, root_1$14());
 		};
 		var alternate = ($$anchor) => {
-			var pre = root_2$17();
+			var pre = root_2$18();
 			let classes;
 			var text = child(pre, true);
 			reset(pre);
@@ -10978,6 +10992,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			sessionTitle: null,
 			feedback: null,
 			guardrail: null,
+			hasMessages: false,
+			showWelcome: false,
 			contextConflict: false
 		});
 		setContext(AI_STATE_KEY, state);
@@ -11017,21 +11033,19 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 	}
 	//#endregion
 	//#region src/AiMessageList.svelte
-	var root_2$16 = /* @__PURE__ */ from_html(`<div class="uc-ai-empty-state svelte-1mci0g4" role="alert"><span aria-hidden="true" class="fa fa-exclamation-triangle uc-ai-empty-icon svelte-1mci0g4"></span> <p class="svelte-1mci0g4">Could not load the conversation.</p> <button type="button" class="t-Button t-Button--small">Retry</button></div>`);
-	var root_5$5 = /* @__PURE__ */ from_html(`<button type="button" class="uc-ai-suggested-prompt svelte-1mci0g4"> </button>`);
-	var root_4$5 = /* @__PURE__ */ from_html(`<div class="uc-ai-suggested-prompts svelte-1mci0g4"></div>`);
-	var root_3$11 = /* @__PURE__ */ from_html(`<div class="uc-ai-welcome svelte-1mci0g4"><!> <!></div>`);
-	var root_7$2 = /* @__PURE__ */ from_html(`<div class="uc-ai-day-info svelte-1mci0g4"><span class="uc-ai-day-info-text svelte-1mci0g4"> </span></div>`);
-	var root_6$4 = /* @__PURE__ */ from_html(`<!> <!>`, 1);
+	var root_2$17 = /* @__PURE__ */ from_html(`<div class="uc-ai-empty-state svelte-1mci0g4" role="alert"><span aria-hidden="true" class="fa fa-exclamation-triangle uc-ai-empty-icon svelte-1mci0g4"></span> <p class="svelte-1mci0g4">Could not load the conversation.</p> <button type="button" class="t-Button t-Button--small">Retry</button></div>`);
+	var root_3$11 = /* @__PURE__ */ from_html(`<div class="uc-ai-welcome svelte-1mci0g4"><!></div>`);
+	var root_5$5 = /* @__PURE__ */ from_html(`<div class="uc-ai-day-info svelte-1mci0g4"><span class="uc-ai-day-info-text svelte-1mci0g4"> </span></div>`);
+	var root_4$5 = /* @__PURE__ */ from_html(`<!> <!>`, 1);
 	var root$15 = /* @__PURE__ */ from_html(`<div class="uc-ai-message-list svelte-1mci0g4"><!> <!> <!> <!></div>`);
-	var $$css$17 = {
+	var $$css$18 = {
 		hash: "svelte-1mci0g4",
-		code: ".uc-ai-message-list.svelte-1mci0g4 {height:100%;overflow-y:auto;display:flex;flex-direction:column;padding-block:var(--uc-chat-space-2);}.uc-ai-empty-state.svelte-1mci0g4 {flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--uc-chat-component-text-muted-color);gap:var(--uc-chat-space-2);}.uc-ai-empty-icon.svelte-1mci0g4 {font-size:2.5em;opacity:0.4;}.uc-ai-empty-state.svelte-1mci0g4 > p:where(.svelte-1mci0g4) {font-size:1em;\n    /* Weight 300 is a light face most UI stacks do not ship, so this either\n       snapped to regular or rendered spindly depending on the theme font. */font-weight:400;margin:0;}\n\n  /* Welcome greeting: top-aligned so it reads like the first chat message. */.uc-ai-welcome.svelte-1mci0g4 {display:flex;flex-direction:column;}\n\n  /* The greeting is canned copy, not something that was said at a moment: the\n     meta row was stamping it with the page-load time and offering to copy it.\n     Hidden here rather than in the bubble, so real messages are untouched. */.uc-ai-welcome.svelte-1mci0g4 .uc-ai-msg-meta {display:none;}\n\n  /* Aligned to the same assistant gutter as every bubble, reasoning block and\n     tool card — the chips used to sit on a fourth, hand-tuned left edge. */.uc-ai-suggested-prompts.svelte-1mci0g4 {display:flex;flex-wrap:wrap;justify-content:flex-start;gap:var(--uc-chat-space-2);padding:var(--uc-chat-space-1) var(--uc-chat-space-3) 0\n      calc(var(--uc-chat-space-3) + var(--uc-chat-ai-gutter));max-width:48em;}\n\n  /* Border + fill and nothing else. The shadow made a chip look like a raised\n     card competing with the answer next to it. */.uc-ai-suggested-prompt.svelte-1mci0g4 {border:1px solid var(--uc-chat-component-border-color);background-color:var(--uc-chat-surface-background-color);color:var(--uc-chat-component-text-title-color);border-radius:var(--uc-chat-radius-pill);padding:0.4em 0.9em;font-size:0.85em;line-height:1.35;font-family:var(--uc-chat-font-base);cursor:pointer;transition:border-color 0.15s,\n      background-color 0.15s;}\n\n  /* Hovering a chip is an invitation to send it, so the accent belongs here —\n     it was previously the only hover in the pane that did not react at all. */.uc-ai-suggested-prompt.svelte-1mci0g4:hover {border-color:var(--uc-chat-accent-color);color:var(--uc-chat-accent-color);}.uc-ai-suggested-prompt.svelte-1mci0g4:focus-visible {outline:2px solid var(--uc-chat-accent-color);outline-offset:1px;}\n\n  @media (prefers-reduced-motion: reduce) {.uc-ai-suggested-prompt.svelte-1mci0g4 {transition:none;}\n  }\n\n  /* A centred date chip rather than text notched out of a horizontal rule. The\n     notch trick needs an opaque backdrop to paint over the line, and the canvas\n     is now a translucent tint — repainting it would have shown as a lighter\n     patch. A chip also matches the pill language the prompt chips already use. */.uc-ai-day-info.svelte-1mci0g4 {text-align:center;margin:var(--uc-chat-space-3) var(--uc-chat-space-3)\n      var(--uc-chat-space-2);}.uc-ai-day-info-text.svelte-1mci0g4 {display:inline-block;padding:0.2em 0.7em;font-size:0.7em;line-height:1.4;color:var(--uc-chat-component-text-muted-color);background-color:var(--uc-chat-surface-background-color);border:1px solid var(--uc-chat-component-border-color);border-radius:var(--uc-chat-radius-pill);font-weight:400;}\n\n  /* The thinking indicator owns its own styles — see AiThinkingIndicator.svelte. */"
+		code: ".uc-ai-message-list.svelte-1mci0g4 {height:100%;overflow-y:auto;display:flex;flex-direction:column;padding-block:var(--uc-chat-space-2);}.uc-ai-empty-state.svelte-1mci0g4 {flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--uc-chat-component-text-muted-color);gap:var(--uc-chat-space-2);}.uc-ai-empty-icon.svelte-1mci0g4 {font-size:2.5em;opacity:0.4;}.uc-ai-empty-state.svelte-1mci0g4 > p:where(.svelte-1mci0g4) {font-size:1em;\n    /* Weight 300 is a light face most UI stacks do not ship, so this either\n       snapped to regular or rendered spindly depending on the theme font. */font-weight:400;margin:0;}\n\n  /* Welcome greeting: top-aligned so it reads like the first chat message. */.uc-ai-welcome.svelte-1mci0g4 {display:flex;flex-direction:column;}\n\n  /* The greeting is canned copy, not something that was said at a moment: the\n     meta row was stamping it with the page-load time and offering to copy it.\n     Hidden here rather than in the bubble, so real messages are untouched. */.uc-ai-welcome.svelte-1mci0g4 .uc-ai-msg-meta {display:none;}\n\n  /* A centred date chip rather than text notched out of a horizontal rule. The\n     notch trick needs an opaque backdrop to paint over the line, and the canvas\n     is now a translucent tint — repainting it would have shown as a lighter\n     patch. A chip also matches the pill language the prompt chips already use. */.uc-ai-day-info.svelte-1mci0g4 {text-align:center;margin:var(--uc-chat-space-3) var(--uc-chat-space-3)\n      var(--uc-chat-space-2);}.uc-ai-day-info-text.svelte-1mci0g4 {display:inline-block;padding:0.2em 0.7em;font-size:0.7em;line-height:1.4;color:var(--uc-chat-component-text-muted-color);background-color:var(--uc-chat-surface-background-color);border:1px solid var(--uc-chat-component-border-color);border-radius:var(--uc-chat-radius-pill);font-weight:400;}\n\n  /* The thinking indicator owns its own styles — see AiThinkingIndicator.svelte. */"
 	};
 	function AiMessageList($$anchor, $$props) {
 		push($$props, true);
-		append_styles$1($$anchor, $$css$17);
-		let regionId = prop($$props, "regionId", 7), showReasoning = prop($$props, "showReasoning", 7, false), showTools = prop($$props, "showTools", 7, false), showMetadata = prop($$props, "showMetadata", 7, false), avatarIcon = prop($$props, "avatarIcon", 7, "fa fa-robot"), suggestedPrompts = prop($$props, "suggestedPrompts", 23, () => []), onPromptClick = prop($$props, "onPromptClick", 7, void 0), welcomeMessage = prop($$props, "welcomeMessage", 7, ""), thinkingAnimation = prop($$props, "thinkingAnimation", 7, AI_ANIM_DOTS), thinkingDetail = prop($$props, "thinkingDetail", 7, AI_DETAIL_TOOLS), onGuardrail = prop($$props, "onGuardrail", 7, void 0), collectFeedback = prop($$props, "collectFeedback", 7, false), onFeedback = prop($$props, "onFeedback", 7, void 0);
+		append_styles$1($$anchor, $$css$18);
+		let regionId = prop($$props, "regionId", 7), showReasoning = prop($$props, "showReasoning", 7, false), showTools = prop($$props, "showTools", 7, false), showMetadata = prop($$props, "showMetadata", 7, false), avatarIcon = prop($$props, "avatarIcon", 7, "fa fa-robot"), welcomeMessage = prop($$props, "welcomeMessage", 7, ""), thinkingAnimation = prop($$props, "thinkingAnimation", 7, AI_ANIM_DOTS), thinkingDetail = prop($$props, "thinkingDetail", 7, AI_DETAIL_TOOLS), onGuardrail = prop($$props, "onGuardrail", 7, void 0), collectFeedback = prop($$props, "collectFeedback", 7, false), onFeedback = prop($$props, "onFeedback", 7, void 0);
 		let welcomeText = /* @__PURE__ */ user_derived(() => welcomeMessage()?.trim() || "Ask me anything...");
 		let welcomeDate = (/* @__PURE__ */ new Date()).toISOString();
 		let welcomeItem = /* @__PURE__ */ user_derived(() => ({
@@ -11242,9 +11256,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			set(loadError, false);
 			_prevSessionId = sessionId;
 		}
-		function hasMessages() {
-			return get(items).length > 0;
-		}
 		function getFirstExchange() {
 			let user = get(items).find((m) => m.role === AI_ROLE_USER);
 			let assistant = get(items).find((m) => m.role === "assistant" && !m.isError);
@@ -11283,6 +11294,10 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			if (processing && !_wasProcessing && isNearBottom()) scrollToBottom();
 			_wasProcessing = processing;
 		});
+		user_effect(() => {
+			aiState.hasMessages = get(items).length > 0;
+			aiState.showWelcome = get(items).length === 0 && !get(loading) && !get(loadError);
+		});
 		async function loadSession() {
 			set(items, [], true);
 			set(allFetched, false);
@@ -11298,7 +11313,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			confirmMessage,
 			removeRunningPlaceholders,
 			adoptNewSession,
-			hasMessages,
 			getFirstExchange,
 			get regionId() {
 				return regionId();
@@ -11333,20 +11347,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			},
 			set avatarIcon($$value = "fa fa-robot") {
 				avatarIcon($$value);
-				flushSync();
-			},
-			get suggestedPrompts() {
-				return suggestedPrompts();
-			},
-			set suggestedPrompts($$value = []) {
-				suggestedPrompts($$value);
-				flushSync();
-			},
-			get onPromptClick() {
-				return onPromptClick();
-			},
-			set onPromptClick($$value = void 0) {
-				onPromptClick($$value);
 				flushSync();
 			},
 			get welcomeMessage() {
@@ -11402,16 +11402,15 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 		});
 		var node_1 = sibling(node, 2);
 		var consequent_1 = ($$anchor) => {
-			var div_1 = root_2$16();
+			var div_1 = root_2$17();
 			var button = sibling(child(div_1), 4);
 			reset(div_1);
 			delegated("click", button, retryLoad);
 			append($$anchor, div_1);
 		};
-		var consequent_3 = ($$anchor) => {
+		var consequent_2 = ($$anchor) => {
 			var div_2 = root_3$11();
-			var node_2 = child(div_2);
-			AiMessageBubble(node_2, {
+			AiMessageBubble(child(div_2), {
 				get message() {
 					return get(welcomeItem);
 				},
@@ -11428,50 +11427,33 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 					return avatarIcon();
 				}
 			});
-			var node_3 = sibling(node_2, 2);
-			var consequent_2 = ($$anchor) => {
-				var div_3 = root_4$5();
-				each(div_3, 21, suggestedPrompts, index, ($$anchor, prompt) => {
-					var button_1 = root_5$5();
-					var text = child(button_1, true);
-					reset(button_1);
-					template_effect(() => set_text(text, get(prompt)));
-					delegated("click", button_1, () => onPromptClick()?.(get(prompt)));
-					append($$anchor, button_1);
-				});
-				reset(div_3);
-				append($$anchor, div_3);
-			};
-			if_block(node_3, ($$render) => {
-				if (suggestedPrompts().length > 0) $$render(consequent_2);
-			});
 			reset(div_2);
 			append($$anchor, div_2);
 		};
 		if_block(node_1, ($$render) => {
 			if (get(loadError) && get(items).length === 0) $$render(consequent_1);
-			else if (get(items).length === 0 && !get(loading)) $$render(consequent_3, 1);
+			else if (get(items).length === 0 && !get(loading)) $$render(consequent_2, 1);
 		});
-		var node_4 = sibling(node_1, 2);
-		each(node_4, 17, () => get(displayItems), (message) => message.messageId, ($$anchor, message) => {
-			var fragment_1 = root_6$4();
-			var node_5 = first_child(fragment_1);
-			var consequent_4 = ($$anchor) => {
-				var div_4 = root_7$2();
-				var span = child(div_4);
-				var text_1 = child(span, true);
+		var node_3 = sibling(node_1, 2);
+		each(node_3, 17, () => get(displayItems), (message) => message.messageId, ($$anchor, message) => {
+			var fragment_1 = root_4$5();
+			var node_4 = first_child(fragment_1);
+			var consequent_3 = ($$anchor) => {
+				var div_3 = root_5$5();
+				var span = child(div_3);
+				var text = child(span, true);
 				reset(span);
-				reset(div_4);
-				template_effect(($0) => set_text(text_1, $0), [() => formatDateString(get(message).messageDate)]);
-				append($$anchor, div_4);
+				reset(div_3);
+				template_effect(($0) => set_text(text, $0), [() => formatDateString(get(message).messageDate)]);
+				append($$anchor, div_3);
 			};
-			if_block(node_5, ($$render) => {
-				if (get(message).isDifferentDay) $$render(consequent_4);
+			if_block(node_4, ($$render) => {
+				if (get(message).isDifferentDay) $$render(consequent_3);
 			});
-			var node_6 = sibling(node_5, 2);
+			var node_5 = sibling(node_4, 2);
 			{
 				let $0 = /* @__PURE__ */ user_derived(() => collectFeedback() && get(message).messageId === get(lastAssistantId));
-				AiMessageBubble(node_6, {
+				AiMessageBubble(node_5, {
 					get message() {
 						return get(message);
 					},
@@ -11500,8 +11482,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			}
 			append($$anchor, fragment_1);
 		});
-		var node_7 = sibling(node_4, 2);
-		var consequent_5 = ($$anchor) => {
+		var node_6 = sibling(node_3, 2);
+		var consequent_4 = ($$anchor) => {
 			AiThinkingIndicator($$anchor, {
 				get variant() {
 					return thinkingAnimation();
@@ -11517,8 +11499,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				}
 			});
 		};
-		if_block(node_7, ($$render) => {
-			if (aiState.isProcessing) $$render(consequent_5);
+		if_block(node_6, ($$render) => {
+			if (aiState.isProcessing) $$render(consequent_4);
 		});
 		reset(div);
 		bind_this(div, ($$value) => set(scrollContainer, $$value), () => get(scrollContainer));
@@ -11533,8 +11515,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 		showTools: {},
 		showMetadata: {},
 		avatarIcon: {},
-		suggestedPrompts: {},
-		onPromptClick: {},
 		welcomeMessage: {},
 		thinkingAnimation: {},
 		thinkingDetail: {},
@@ -11546,9 +11526,88 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 		"confirmMessage",
 		"removeRunningPlaceholders",
 		"adoptNewSession",
-		"hasMessages",
 		"getFirstExchange"
 	], { mode: "open" });
+	//#endregion
+	//#region src/AiSuggestedPrompts.svelte
+	var root_2$16 = /* @__PURE__ */ from_html(`<button type="button" class="uc-ai-prompt-chip svelte-1p9ca4j"> </button>`);
+	var root_1$13 = /* @__PURE__ */ from_html(`<div class="uc-ai-prompt-suggestions svelte-1p9ca4j"><span class="uc-ai-prompt-suggestions-label svelte-1p9ca4j"><span aria-hidden="true" class="fa fa-lightbulb-o"></span> Try asking</span> <div class="uc-ai-prompt-chips svelte-1p9ca4j" role="group" aria-label="Suggested questions"></div></div>`);
+	var $$css$17 = {
+		hash: "svelte-1p9ca4j",
+		code: ".uc-ai-prompt-suggestions.svelte-1p9ca4j {display:flex;align-items:baseline;gap:var(--uc-chat-space-2);\n    /* Flush with the composer's own horizontal padding so the chips and the\n       textarea share a left edge. No bottom padding: the composer supplies it. */padding:var(--uc-chat-space-2) var(--uc-chat-space-3) 0;}\n\n  /* Naming the row is the cheapest fix for \"it is not obvious what they do\" —\n     bare buttons above a text field could equally be filters or tabs. The label\n     does that job, so the chips themselves stay quiet. */.uc-ai-prompt-suggestions-label.svelte-1p9ca4j {flex:0 0 auto;font-size:0.75em;line-height:1.6;color:var(--uc-chat-component-text-muted-color);white-space:nowrap;}.uc-ai-prompt-chips.svelte-1p9ca4j {display:flex;flex-wrap:wrap;gap:var(--uc-chat-space-2);min-width:0;}\n\n  /* Border and surface only. An accent fill turned four suggestions into the\n     loudest thing in an otherwise empty region, competing with the send button\n     it sits above; the accent is kept for hover, where it confirms the chip is\n     clickable at the moment the user is asking that question. */.uc-ai-prompt-chip.svelte-1p9ca4j {\n    /* A wordy prompt wraps inside the chip instead of being cut off — the whole\n       question has to be readable, or the user cannot tell what clicking sends.\n       The cap only stops one chip from claiming an entire line. */max-width:34em;text-align:left;border:1px solid var(--uc-chat-component-border-color);background-color:var(--uc-chat-surface-background-color);color:var(--uc-chat-component-text-title-color);\n    /* Not the pill radius: a pill only reads as one on a single line, and these\n       are allowed to wrap onto two. */border-radius:var(--uc-chat-radius-md);padding:0.35em 0.7em;font-size:0.8em;line-height:1.4;font-family:var(--uc-chat-font-base);cursor:pointer;transition:background-color 0.15s,\n      border-color 0.15s,\n      color 0.15s;}.uc-ai-prompt-chip.svelte-1p9ca4j:hover:not(:disabled) {border-color:var(--uc-chat-accent-color);color:var(--uc-chat-accent-color);}.uc-ai-prompt-chip.svelte-1p9ca4j:focus-visible {outline:2px solid var(--uc-chat-accent-color);outline-offset:1px;}.uc-ai-prompt-chip.svelte-1p9ca4j:disabled {cursor:default;opacity:0.6;}\n\n  /* Narrow regions: the label takes its own line so the chips get the full\n     width, and each chip may use all of it rather than shrinking its text. */\n  @container uc-ai-pane (max-width: 34em) {.uc-ai-prompt-suggestions.svelte-1p9ca4j {flex-direction:column;align-items:stretch;gap:var(--uc-chat-space-1);}.uc-ai-prompt-chip.svelte-1p9ca4j {max-width:100%;}\n  }\n\n  @media (prefers-reduced-motion: reduce) {.uc-ai-prompt-chip.svelte-1p9ca4j {transition:none;}\n  }"
+	};
+	function AiSuggestedPrompts($$anchor, $$props) {
+		push($$props, true);
+		append_styles$1($$anchor, $$css$17);
+		/**
+		* Starter questions for an empty conversation, rendered directly above the
+		* composer rather than floating under the welcome bubble. Sitting on the footer
+		* surface next to the input is what says "these go into the box" — as loose
+		* outlined pills in the transcript they read as messages the assistant had
+		* already sent, which is the opposite of a call to action.
+		*
+		* @typedef {object} Props
+		* @property {string[]} prompts - Prompts to offer, already parsed and capped.
+		* @property {(prompt: string) => void} [onSelect] - Called with the clicked prompt.
+		* @property {boolean} [disabled] - Suppresses clicks while a turn is running.
+		*/
+		/** @type {Props} */
+		let prompts = prop($$props, "prompts", 23, () => []), onSelect = prop($$props, "onSelect", 7, void 0), disabled = prop($$props, "disabled", 7, false);
+		var $$exports = {
+			get prompts() {
+				return prompts();
+			},
+			set prompts($$value = []) {
+				prompts($$value);
+				flushSync();
+			},
+			get onSelect() {
+				return onSelect();
+			},
+			set onSelect($$value = void 0) {
+				onSelect($$value);
+				flushSync();
+			},
+			get disabled() {
+				return disabled();
+			},
+			set disabled($$value = false) {
+				disabled($$value);
+				flushSync();
+			}
+		};
+		var fragment = comment();
+		var node = first_child(fragment);
+		var consequent = ($$anchor) => {
+			var div = root_1$13();
+			var div_1 = sibling(child(div), 2);
+			each(div_1, 21, prompts, index, ($$anchor, prompt) => {
+				var button = root_2$16();
+				var text = child(button, true);
+				reset(button);
+				template_effect(() => {
+					button.disabled = disabled();
+					set_text(text, get(prompt));
+				});
+				delegated("click", button, () => onSelect()?.(get(prompt)));
+				append($$anchor, button);
+			});
+			reset(div_1);
+			reset(div);
+			append($$anchor, div);
+		};
+		if_block(node, ($$render) => {
+			if (prompts().length > 0) $$render(consequent);
+		});
+		append($$anchor, fragment);
+		return pop($$exports);
+	}
+	delegate(["click"]);
+	create_custom_element(AiSuggestedPrompts, {
+		prompts: {},
+		onSelect: {},
+		disabled: {}
+	}, [], [], { mode: "open" });
 	//#endregion
 	//#region src/localModel.js
 	/**
@@ -11888,7 +11947,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 	//#region src/AiChatPane.svelte
 	var root_1$11 = /* @__PURE__ */ from_html(`<button type="button" class="t-Button t-Button--small t-Button--noLabel t-Button--icon t-Button--simple" title="Debug info" aria-label="Debug info"><span aria-hidden="true" class="t-Icon fa fa-bug"></span></button>`);
 	var root_2$14 = /* @__PURE__ */ from_html(`<button type="button" class="t-Button t-Button--small t-Button--noLabel t-Button--icon t-Button--simple" title="Close" aria-label="Close"><span aria-hidden="true" class="t-Icon fa fa-close"></span></button>`);
-	var root$13 = /* @__PURE__ */ from_html(`<div class="uc-ai-chat-pane svelte-1gp8sdx"><div class="uc-visually-hidden svelte-1gp8sdx" aria-live="polite" aria-atomic="true"> </div> <div class="uc-ai-chat-header svelte-1gp8sdx"><div class="uc-ai-chat-header-left svelte-1gp8sdx"><h2 class="uc-ai-chat-title svelte-1gp8sdx"> </h2></div> <div class="uc-ai-chat-header-right svelte-1gp8sdx"><!> <button type="button" class="t-Button t-Button--small t-Button--simple uc-ai-new-chat svelte-1gp8sdx" title="New chat"><span aria-hidden="true" class="t-Icon fa fa-plus"></span> <span class="uc-ai-new-chat-label svelte-1gp8sdx">New chat</span></button> <!></div></div> <div class="uc-ai-chat-body svelte-1gp8sdx"><!></div> <!> <!> <div class="uc-ai-chat-footer svelte-1gp8sdx"><!></div> <!></div>`);
+	var root$13 = /* @__PURE__ */ from_html(`<div class="uc-ai-chat-pane svelte-1gp8sdx"><div class="uc-visually-hidden svelte-1gp8sdx" aria-live="polite" aria-atomic="true"> </div> <div class="uc-ai-chat-header svelte-1gp8sdx"><div class="uc-ai-chat-header-left svelte-1gp8sdx"><h2 class="uc-ai-chat-title svelte-1gp8sdx"> </h2></div> <div class="uc-ai-chat-header-right svelte-1gp8sdx"><!> <button type="button" class="t-Button t-Button--small t-Button--simple uc-ai-new-chat svelte-1gp8sdx" title="New chat"><span aria-hidden="true" class="t-Icon fa fa-plus"></span> <span class="uc-ai-new-chat-label svelte-1gp8sdx">New chat</span></button> <!></div></div> <div class="uc-ai-chat-body svelte-1gp8sdx"><!></div> <!> <!> <div class="uc-ai-chat-footer svelte-1gp8sdx"><!> <!></div> <!></div>`);
 	var $$css$15 = {
 		hash: "svelte-1gp8sdx",
 		code: ".uc-ai-chat-pane.svelte-1gp8sdx {display:flex;flex-direction:column;height:100%;max-height:100%;\n    /* Floor height so an embedded region doesn't collapse to the composer.\n       Overridden by the inline min-height from the `minHeight` prop. */min-height:var(--uc-chat-ai-min-height, 25em);overflow:hidden;\n    /* The pane owns its surface so the translucent canvas tint below has\n       something predictable to composite over. */background-color:var(--uc-chat-surface-background-color);\n    /* Lets the header adapt to the region's own width rather than the viewport. */container-type:inline-size;container-name:uc-ai-pane;}.uc-visually-hidden.svelte-1gp8sdx {position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0;}\n\n  /* Header and footer are chrome: they sit on the plain surface and are divided\n     from the transcript by a hairline, the way an APEX region header is. The\n     old drop shadows smudged onto the canvas and read as a rendering artefact\n     rather than a boundary. */.uc-ai-chat-header.svelte-1gp8sdx {background-color:var(--uc-chat-surface-background-color);\n    /* Was a raw 48px in an em-only codebase, and 2px taller than the footer for\n       no reason. Both bars now derive from the same measure. */min-height:var(--uc-chat-ai-bar-height, 3em);border-bottom:1px solid var(--uc-chat-component-border-color);display:flex;align-items:center;justify-content:space-between;gap:var(--uc-chat-space-2);padding:var(--uc-chat-space-1) var(--uc-chat-space-3);flex:0 0 auto;z-index:1;}.uc-ai-chat-header-left.svelte-1gp8sdx {display:flex;align-items:center;gap:var(--uc-chat-space-2);\n    /* Let the title shrink instead of pushing the buttons off the header. */min-width:0;}.uc-ai-chat-header-right.svelte-1gp8sdx {display:flex;align-items:center;gap:var(--uc-chat-space-1);flex:0 0 auto;}.uc-ai-chat-title.svelte-1gp8sdx {margin:0;padding:0;font-weight:600;color:var(--uc-chat-component-text-title-color);\n    /* Region titles in the Universal Theme are barely larger than body text;\n       1.1em on top of a bold weight was pulling focus from the conversation. */font-size:1em;letter-spacing:0.01em;\n    /* Generated titles are free-form; keep them on one line. */overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.uc-ai-new-chat.svelte-1gp8sdx {display:inline-flex;align-items:center;gap:var(--uc-chat-space-1);white-space:nowrap;}\n\n  /* Only genuinely narrow regions fall back to the icon alone; the button keeps\n     its tooltip and accessible name from the title attribute. */\n  @container uc-ai-pane (max-width: 22em) {.uc-ai-new-chat-label.svelte-1gp8sdx {display:none;}\n  }.uc-ai-chat-body.svelte-1gp8sdx {flex:1;min-height:0;overflow:hidden;\n    /* Translucent, so it composites over the pane's own surface into a faint\n       recess. The old value was --uc-chat-footer-background-color (#f2f2f2),\n       the very same grey the tool card painted its header with — which is why\n       the card looked like it had a hole punched in it. */background-color:var(--uc-chat-canvas-background-color);}.uc-ai-chat-footer.svelte-1gp8sdx {display:flex;flex-direction:column;justify-content:center;background-color:var(--uc-chat-surface-background-color);border-top:1px solid var(--uc-chat-component-border-color);flex:0 0 auto;z-index:1;\n    /* Was a fixed 50px, which clipped the composer as soon as the textarea grew\n       past one line (it is allowed to reach 10em). */min-height:var(--uc-chat-ai-bar-height, 3em);}"
@@ -12191,7 +12250,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			}
 		}
 		function handleNewConversation() {
-			if (!get(messageList)?.hasMessages()) {
+			if (!aiState.hasMessages) {
 				startNewConversation();
 				return;
 			}
@@ -12411,10 +12470,6 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			get avatarIcon() {
 				return get(avatarIconClass);
 			},
-			get suggestedPrompts() {
-				return get(promptList);
-			},
-			onPromptClick: handleSend,
 			get welcomeMessage() {
 				return welcomeMessage();
 			},
@@ -12462,7 +12517,22 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			if (aiState.contextConflict) $$render(consequent_3);
 		});
 		var div_6 = sibling(node_4, 2);
-		MessageComposer(child(div_6), {
+		var node_5 = child(div_6);
+		var consequent_4 = ($$anchor) => {
+			AiSuggestedPrompts($$anchor, {
+				get prompts() {
+					return get(promptList);
+				},
+				onSelect: handleSend,
+				get disabled() {
+					return aiState.isProcessing;
+				}
+			});
+		};
+		if_block(node_5, ($$render) => {
+			if (aiState.showWelcome) $$render(consequent_4);
+		});
+		MessageComposer(sibling(node_5, 2), {
 			onSend: handleSend,
 			placeholder: "Ask the AI...",
 			get disabled() {
@@ -12471,8 +12541,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 			onStop: handleStop
 		});
 		reset(div_6);
-		var node_6 = sibling(div_6, 2);
-		var consequent_4 = ($$anchor) => {
+		var node_7 = sibling(div_6, 2);
+		var consequent_5 = ($$anchor) => {
 			bind_this(AiDebugDialog($$anchor, {
 				get regionId() {
 					return regionId();
@@ -12488,8 +12558,8 @@ Please report this to https://github.com/markedjs/marked.`, e) {
 				}
 			}), ($$value) => set(debugDialog, $$value, true), () => get(debugDialog));
 		};
-		if_block(node_6, ($$render) => {
-			if (showDebug()) $$render(consequent_4);
+		if_block(node_7, ($$render) => {
+			if (showDebug()) $$render(consequent_5);
 		});
 		reset(div);
 		template_effect(() => {

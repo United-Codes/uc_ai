@@ -8,3 +8,4 @@ install_uc_ai_complete_with_logger_noop.sql
 .dblinter/
 .env
 uc_ai_uninstall.log
+reference
