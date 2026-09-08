@@ -5,41 +5,50 @@ sidebar:
   order: 3
 ---
 
-import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import { Aside, LinkCard } from "@astrojs/starlight/components";
 import LessonHeader from "../../../../components/LessonHeader.astro";
 import AiOutput from "../../../../components/AiOutput.astro";
 
 <LessonHeader
   lesson={3}
-  of={9}
+  of={7}
   minutes={15}
   promise="the desk answers from your tables, and it cannot read a contract other than the one you bound the run to."
   scripts={["03_tools_read.sql"]}
 />
 
-<Aside type="tip" title="New to tools?">
-This lesson registers your first tool. If you have never done that, the
-[Quickstart](/products/uc-ai/docs/guides/quickstart/) registers a small one in five
-minutes. Read that first, then come back.
-</Aside>
-
 ## The problem
 
 The desk of lesson 2 has a name and a version, and it still says "I can't access
-the contract records". A **tool** is a PL/SQL function that the model can call. The
-model does not read your tables. It asks your function, and your function reads
-your tables.
+the contract records". It has no way to reach your tables.
 
-If the model chooses the arguments, and one argument is the contract, then the
-model chooses the contract. An engineer on contract 88 must never get an answer
-about contract 99.
+A **tool** is a PL/SQL function that a model can ask you to run. You register it
+one time, with three things: a code, a description, and a JSON schema that names
+the arguments it takes. UC AI then offers it to the model on every run of that
+agent.
+
+One run then works like this. The model reads the descriptions, decides that it
+needs `SC_LIST_INVOICES`, and returns the arguments for it instead of an answer.
+UC AI calls your function with those arguments as JSON, sends what the function
+returned back to the model, and the model carries on. Your function is ordinary
+PL/SQL, and it runs in your schema with your privileges.
+
+Two facts follow, and the rest of this lesson is about the second one:
+
+- The model never reads your tables. It asks your function, and your function
+  reads your tables.
+- The model chooses the **arguments**, out of the schema you wrote for them.
+
+If one of those arguments is the contract, then the model chooses the contract. An
+engineer on contract 88 must never get an answer about contract 99.
 
 **Without the run context,** you have to trust the model to name the right
 contract. **With the run context,** the model cannot name a contract at all.
 
-## The three tools declare no contract
+## Register the three read tools
 
-Look at what is missing from these schemas:
+`03_tools_read.sql` registers `SC_GET_CONTRACT`, `SC_LIST_CALLS` and
+`SC_LIST_INVOICES`. This is one of them:
 
 ```sql
 declare
@@ -64,51 +73,64 @@ end;
 /
 ```
 
-There is no `contract_id`. The full script registers `SC_GET_CONTRACT`,
-`SC_LIST_CALLS` and `SC_LIST_INVOICES` the same way, and none of them takes a
-contract.
+There is no `contract_id` in that schema, and there is none in the other two. The
+model cannot ask for a contract, because the arguments have nowhere to put one.
 
-The contract arrives another way. When you start the run, you pass a **run
-context**. UC AI adds it to the arguments of every tool in that run, under the
-reserved key `_ctx`, **after** the model produced them. No model sees that key, and
-no model can set it.
+## The contract comes from the run context
+
+When you start the run, you pass a **run context**. UC AI adds it to the arguments
+of every tool in that run, under the reserved key `_ctx`, **after** the model
+produced them. No model sees that key, and no model can set it.
 
 ```sql
 l_result := uc_ai_agents_api.execute_agent(
   p_agent_code       => 'SC_DESK'
 , p_input_parameters => json_object_t('{"engineer_name":"Petra","today":"2026-08-24",
       "question":"How much can I still credit on INV-1003, and is the call inside the coverage window?"}')
-, p_session_id       => l_session
 , p_run_context      => json_object_t('{"contract_id":"88"}')
 );
 ```
 
-The handler reads the contract from `_ctx`, never from the model:
+The handler reads the contract from `_ctx`, never from the model. The whole tool,
+shortened to its shape:
 
 ```sql
-function bound_contract_id(p_arguments in clob) return number
+function list_invoices(p_arguments in clob) return clob
 as
-  l_args    json_object_t := json_object_t(p_arguments);
-  l_context json_object_t := l_args.get_object(uc_ai.c_run_context_key);
+  l_args     json_object_t := json_object_t(p_arguments);
+  l_ctx      json_object_t := l_args.get_object(uc_ai.c_run_context_key);
+  l_contract number;
+  l_invoices json_array_t  := json_array_t();
+  l_result   json_object_t := json_object_t();
 begin
-  if l_context is null then
-    return null;
-  end if;
-  return to_number(l_context.get_string('contract_id'));
-end bound_contract_id;
+  -- The contract comes from the run context, never from the arguments.
+  l_contract := to_number(l_ctx.get_string('contract_id'));
+
+  <<invoice_rows>>
+  for r in ( select i.invoice_no
+                  , i.parts_amount + i.labour_amount as total_amount
+               from sc_invoices i
+              where i.contract_id = l_contract )   -- the one contract this run sees
+  loop
+    l_invoices.append(json_object_t(json_object(
+      'invoice_no' value r.invoice_no, 'total_amount' value r.total_amount)));
+  end loop invoice_rows;
+
+  l_result.put('invoices', l_invoices);
+  l_result.put('count', l_invoices.get_size);
+  return l_result.to_clob;   -- the model reads this JSON as text
+end list_invoices;
 ```
 
-Every query then filters on that value:
-
-```sql
-where i.contract_id = l_contract_id
-```
+`sc_desk_pkg.list_invoices` returns four more columns than that, and it refuses
+with a reason when the run carries no contract at all. The shape is this one: read
+`_ctx`, filter on it, return JSON.
 
 <Aside type="caution" title="Read the arguments by name">
 Never count the keys of the argument object, and never walk all of them. Every tool
-now receives `_ctx` as one extra key, so a handler that reasons about the *shape* of
-the arguments changed meaning when the run context arrived — silently, with no
-signature change. The `MEMORY` tool that UC AI ships had this defect. Read
+now receives `_ctx` as one extra key. A handler that reasons about the *shape* of
+the arguments therefore means something else, with no change to its signature and
+no error. The `MEMORY` tool that UC AI ships had this defect. Read
 `l_args.get_string('max_rows')`, not the shape. The [tools
 guide](/products/uc-ai/docs/guides/tools/#what-you-must-know) has the details.
 </Aside>
@@ -144,10 +166,22 @@ make a version 2, so the agent needs no change.
 The desk now answers from your tables:
 
 <AiOutput model="gpt-5.6-terra" date="2026-08-24" seconds={4.2}>
+
+The desk asked for two tools before it answered, and neither call names a
+contract:
+
+```
+tool_call    SC_LIST_INVOICES   {"max_rows":20}
+tool_call    SC_LIST_CALLS      {"max_rows":20}
+```
+
 INV-1003 has $0 still available to credit; its full $200 has already been credited.
 
 The related call (2026-08-14) is inside the coverage window.
 </AiOutput>
+
+Lesson 4 reads those two rows back out of the database, with the results they
+returned.
 
 Lesson 1 answered "up to 200" to the same question, from rows pasted into the
 prompt. The number is right now because the model called a tool.
@@ -235,7 +269,10 @@ a run is really offered, and why an empty tag set is not a safe default.
 - `p_run_context => json_object_t('{"contract_id":"88"}')` reaches every tool of the
   run under `uc_ai.c_run_context_key`.
 
-**Full reference:** [The run
+**Full reference:** [Tools and function
+calling](/products/uc-ai/docs/guides/tools/) covers registration, the JSON schema
+and handler patterns, and the [Quickstart](/products/uc-ai/docs/guides/quickstart/)
+registers a small tool from nothing in five minutes. [The run
 context](/products/uc-ai/docs/guides/tools/#the-run-context) covers `_ctx`, the
 reserved name, and where else the run context applies.
 

@@ -21,7 +21,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
 ## The problem
 
 Every answer in lesson 2 was complete, well formed and correct. A strict schema
-returns a complete answer for a document it read badly, and for a document that
+returns a complete answer for a document it read wrong, and for a document that
 is not an invoice at all. The answer looks the same either way, and `needs_review`
 has to come from somewhere other than the model.
 
@@ -81,8 +81,7 @@ longer empty: it holds `DN-77118`, the delivery-note number, because the field
 asked for a number and the page has one.
 
 Without the `document_type` check, that row posts as invoice `DN-77118` for 0.00,
-against a real purchase order. Nothing in your database is then wrong enough to
-notice.
+against a real purchase order. Nothing in your database then shows an error.
 
 <Aside type="note" title="Missing document_type loses the information">
 The schema had no field for the document type. The information did not reach your
@@ -101,12 +100,12 @@ Neither rule needs your database, your supplier master or your purchase orders. 
 document carries its own check, and a document that fails it was read wrong,
 whatever else the answer looks like.
 
-You are not inventing these rules. The European e-invoicing standard EN 16931 has
-them as `BR-CO-10` (the line totals add up to the total of the lines) and
-`BR-CO-15` (the total with tax is the total without tax plus the tax). If you need
-more checks than the two here, that is the list to take them from.
+The European e-invoicing standard EN 16931 has these two rules as `BR-CO-10` (the
+line totals add up to the total of the lines) and `BR-CO-15` (the total with tax
+is the total without tax plus the tax). If you need more checks than the two here,
+that is the list to take them from.
 
-Here are the three real invoices, from the recorded run:
+The three invoices, from the recorded run:
 
 | Document | Sum of line_total | net_amount | tax | total |
 | --- | --- | --- | --- | --- |
@@ -147,15 +146,15 @@ then
 end if;
 ```
 
-The guard matters, and so does what it guards on. A delivery note is all zeros, and
-zeros add up perfectly, so the check has to skip it.
+The guard is needed, and so is the field it guards on. A delivery note is all
+zeros, and zeros add up perfectly, so the check has to skip it.
 
-The obvious way to write that is `if l_total != 0`, and it is a hole. `SUM_MISMATCH` exists for
-the invoice a model read so badly that it returned a total of 0. That version waves
-exactly that case through. Guard on the typed
-field, which the model cannot make disappear.
+The obvious way to write that is `if l_total != 0`, and it is a hole.
+`SUM_MISMATCH` exists for the invoice a model read so wrong that it returned a
+total of 0. That version lets exactly that case pass. Guard on the typed field,
+which the model cannot make disappear.
 
-`nvl` matters for the same reason. An absent `document_type` gives NULL, and
+The `nvl` is there for the same reason. An absent `document_type` gives NULL, and
 `NULL != 'INVOICE'` is NULL. Without the `nvl`, a document with no type at all
 passes the one check that exists to stop it.
 
@@ -177,8 +176,8 @@ lesson 2 exist for exactly this, and they always come back as a pair:
 ```
 
 `invoice_date_raw` is the string as printed. `invoice_date_iso` is the model's
-reading of it as `YYYY-MM-DD`. Keeping both is what lets your code notice the
-problem at all:
+reading of it as `YYYY-MM-DD`. Your code can find the problem because it has
+both:
 
 ```sql
 l_date_raw := l_inv.get_string('invoice_date_raw');
@@ -311,8 +310,8 @@ a network or a key.
 - A strict schema has no way to say "the document does not have this", so the model
   returns a value anyway. Decide what an absent value looks like, and give your
   code a typed field it can branch on.
-- The best check on an extraction comes from the document itself. An invoice that
-  does not add up was read wrong, whatever the answer looks like.
+- The arithmetic of the document is a check that needs nothing else. An invoice
+  that does not add up was read wrong, whatever the answer looks like.
 - `if nvl(l_inv.get_string('document_type'), 'MISSING') != 'INVOICE' then add_reason('NOT_AN_INVOICE'); end if;`
 
 **Full reference:** [Structured

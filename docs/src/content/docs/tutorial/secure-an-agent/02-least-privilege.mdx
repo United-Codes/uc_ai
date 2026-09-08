@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={2}
   of={7}
   minutes={15}
-  promise="the desk cannot change a bank account, whatever anybody writes to it — because the tool is gone."
+  promise="the desk cannot change a bank account, whatever anybody writes to it, because the tool is gone."
   scripts={["ap_desk_pkg.pkb", "02_least_privilege.sql"]}
   course="secure-an-agent"
 />
@@ -31,8 +31,8 @@ needs for the job, and nothing else.
 running. **With it,** the bank-account tool does not exist for this agent, and no
 wording brings it back.
 
-A control that has to be right every time is worse than a capability that is not
-there.
+A control that has to be right every time can fail once. A capability that is not
+there cannot.
 
 ## Find out which tools a run is offered
 
@@ -172,8 +172,8 @@ and it runs: {"probe":"ran"}
 
 <Aside type="caution" title="authorization_schema is recorded, not enforced">
 UC AI 26.3 stores the value and reads it nowhere. It records what somebody asked
-for. It is not a permission. The controls that work are the tag set, the `active` flag, and the
-[execution hook](/products/uc-ai/docs/guides/execution-hooks/).
+for. It is not a permission. The controls that work are the tag set, the `active`
+flag, and the [execution hook](/products/uc-ai/docs/guides/execution-hooks/).
 
 Keep the probe rather than this paragraph. If a later release starts to enforce
 the column, your own probe tells you, and this page does not have to.
@@ -220,7 +220,7 @@ Lesson 2 registers only its read tools:
 `p_json_schema` is a [JSON
 schema](/products/uc-ai/docs/guides/structured_output/#json-schema): it names the
 arguments the model is allowed to send, and their types. The one below names
-none, which is the point.
+none.
 
 ```sql
 l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
@@ -234,8 +234,8 @@ l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
 );
 ```
 
-Two things are missing from that schema, and both are deliberate. There is no
-invoice number, because the invoice comes from the run context. And none of the
+Two things are missing from that schema. There is no invoice number, because the
+invoice comes from the run context. And none of the
 three read tools returns an IBAN, because a tool that cannot read the payout
 account cannot leak it.
 [Lesson 5](/products/uc-ai/docs/tutorial/secure-an-agent/05-confused-deputy/) is
@@ -251,8 +251,8 @@ act on it. So the course splits it in two:
 | `AP_TRIAGE` | `apread` | never |
 | `AP_DESK` | `apread`, later `apwrite` | one tool, from lesson 3 |
 
-`AP_TRIAGE` is the interesting one. It reads the invoice, the vendor and the
-email, and there is nothing it can do about any of it. That makes it safe to
+`AP_TRIAGE` reads the invoice, the vendor and the email, and there is nothing it
+can do about any of it. That makes it safe to
 point at untrusted text, and
 [lesson 4](/products/uc-ai/docs/tutorial/secure-an-agent/04-untrusted-text/) turns
 that into a detector.
@@ -275,10 +275,10 @@ l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
 );
 ```
 
-Three things in that configuration matter later:
+Three parts of that configuration return later:
 
 - **`g_tool_tags`** is the whole control of this lesson. One tag, three tools.
-- **`g_max_tool_calls`** caps how many tools one run may call. The default is 10.
+- **`g_max_tool_calls`** caps how many tools one run can call. The default is 10.
   This course sets **6** on triage and **8** on the acting desk, and
   [lesson 7](/products/uc-ai/docs/tutorial/secure-an-agent/07-review/) ends on what
   happens when a run reaches that number.

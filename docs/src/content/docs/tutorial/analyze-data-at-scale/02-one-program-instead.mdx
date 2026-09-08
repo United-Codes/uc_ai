@@ -20,7 +20,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
 
 ## The problem
 
-Lesson 1 has the right answer and a bad shape. Twenty-six tool calls, 34 413 input
+Lesson 1 has the right answer at a high price. Twenty-six tool calls, 34 413 input
 tokens, and 48 KB of temperature readings that pass through the context window of
 the model. The part of the answer that a system uses is one line:
 `RESULT: SHP-2047, SHP-2052, SHP-2061 | 1920`.
@@ -111,7 +111,7 @@ code mode             yes           5    20280    3380      5     48  stop
 RESULT: SHP-2047, SHP-2052, SHP-2061 | 1920
 </AiOutput>
 
-One detail in that table is wrong, and it is left in on purpose. `SHP-2061` has
+One detail in that table is wrong. `SHP-2061` has
 **two** breaks, of 120 and 90 minutes, not one of 210. The total is right and the
 claim is right, because the program added them correctly. The sentence the model
 wrote about its own work is not. Lesson 6 comes back to this.
@@ -222,7 +222,7 @@ declines the program needs the budget of lesson 1.
 
 ## Code mode does not change your tools
 
-Three things stay exactly as they were, and each one matters later:
+Three things stay exactly as they were:
 
 - **Your tools are the same rows.** Lesson 1 registered them, and this lesson
   changed none of them.

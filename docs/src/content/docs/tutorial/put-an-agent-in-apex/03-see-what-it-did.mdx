@@ -20,9 +20,9 @@ import AiOutput from "../../../../components/AiOutput.astro";
 
 ## The problem
 
-A user says "the chat is broken". The page shows nothing useful. There is no
-stack trace, because nothing raised an error where you can see it: the agent runs
-in a background job.
+A user says "the chat is broken". The page shows nothing you can act on. There is
+no stack trace, because nothing raised an error where you can see it: the agent
+runs in a background job.
 
 You need to answer three questions from the database:
 
@@ -61,9 +61,9 @@ turn:
 
 ## Fault 1: the turn fails
 
-A tool is registered against a package that is not installed. Registering a tool
-does not check that its handler exists, so this passes without a word and fails
-on the first run.
+A tool is registered against a package that is not installed. Tool registration
+does not check that the handler exists, so it passes without a word and fails on
+the first run.
 
 ```
 ROLE        TURN_STATUS   CONTENT
@@ -83,10 +83,10 @@ ORA-06550: line 1, column 48:
 PLS-00201: identifier 'SC_DESK_PKG.LIST_INVOICES' must be declared
 ```
 
-That is a real one from writing this course: the tools were registered, but the
+That error comes from writing this course: the tools were registered, and the
 package they call was not installed.
 
-The plug-in keeps that text out of the browser on purpose. `show_errors` in
+The plug-in keeps that text out of the browser. `show_errors` in
 **Debug Config** puts it back — for developers only, never for everyone:
 
 ```sql
@@ -102,8 +102,8 @@ The error text is raw `sqlerrm`. The example above publishes a package name and 
 schema shape to anyone who reads it. Wrap it in an authorization check from the
 start. Lesson 6 uses the same function for the rest of the flags.
 
-Note also that **Debug Config** has five flags, not the four its help text lists.
-`show_errors` is the fifth.
+**Debug Config** has five flags, and its help text lists four. `show_errors` is
+the fifth.
 </Aside>
 
 ## Fault 2: the turn never finishes, and nothing says so
@@ -189,7 +189,7 @@ ID    STATUS     AUDIENCE  CREATED_BY        APEX_USER  APP  PAGE  TOOLS
 5294  completed  db        APEX_PUBLIC_USER                            1
 ```
 
-Two columns are worth a look now, because lesson 6 changes them:
+Two columns change in lesson 6:
 
 - `created_by` is `APEX_PUBLIC_USER`, not the person who typed the question.
 - `audience` is `db`.

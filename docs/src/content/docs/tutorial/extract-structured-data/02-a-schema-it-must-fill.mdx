@@ -31,7 +31,7 @@ A **JSON schema** is a JSON document that describes the shape of another JSON
 document. It says which fields exist, what type each one is, which ones must be
 there, and which values are allowed. It is a form, and the model has to fill it in.
 
-The smallest useful one looks like this:
+The smallest one looks like this:
 
 ```json
 {
@@ -45,12 +45,12 @@ The smallest useful one looks like this:
 }
 ```
 
-Four things are doing work there:
+Four keywords do the work there:
 
 - `"type": "object"` — the answer is a JSON object, not a list and not a string.
 - `"properties"` — the fields, each with its own type.
 - `"required"` — the fields the answer must contain.
-- `"additionalProperties": false` — the model may not add a field you did not ask
+- `"additionalProperties": false` — the model cannot add a field you did not ask
   for.
 
 You pass that to `generate_text` as `p_response_json_schema`, and the answer comes
@@ -63,9 +63,8 @@ You only need the four keywords above to finish this course, plus `enum` and
 `array`, which appear below. The [structured output
 guide](/products/uc-ai/docs/guides/structured_output/) covers the rest, and
 [json-schema.org](https://json-schema.org/learn/getting-started-step-by-step) is the
-reference. UC AI also has an [interactive schema
-builder](/products/uc-ai/docs/other/json-schema/) if you would rather click than
-type.
+reference. UC AI also has a [schema
+builder](/products/uc-ai/docs/other/json-schema/) that writes the JSON for you.
 </Aside>
 
 ## The schema for an invoice
@@ -114,7 +113,7 @@ The real one has three parts.
 }
 ```
 
-Two of these fields exist only for lesson 3, and it is useful to name them now:
+Two of these fields exist only for lesson 3:
 
 - **`document_type`** uses `enum`, which is a closed list of allowed values. It is
   the one field your PL/SQL can test when the document turns out not to be an
@@ -123,13 +122,12 @@ Two of these fields exist only for lesson 3, and it is useful to name them now:
 - **`invoice_date_raw`** keeps the date string exactly as it is printed, next to
   the date the model parsed. Lesson 3 needs both.
 
-The `kind` field on a line is the third. It makes freight, a discount and an
-early-payment discount easy to handle in SQL, and it is what makes the arithmetic
-of lesson 3 work.
+The `kind` field on a line is the third. It separates freight, a discount and an
+early-payment discount in SQL, and the arithmetic of lesson 3 needs it.
 
 One more field is not in either block above. `extraction_note` is a single string
-for anything the model could not read with confidence. It is one bounded place for
-a hedge, so that hedging does not leak into the fields your code reads.
+for anything the model could not read with confidence. It gives a hedge one
+bounded place, so that it does not leak into the fields your code reads.
 
 ## Read final_message as text, then parse it yourself
 
@@ -162,7 +160,7 @@ sends it. Two of those rewrites change what your schema **means**, and you canno
 see either one from your own code.
 
 You can see them from `uc_ai_structured_output`, which is the package that does the
-converting. Calling it directly costs nothing and needs no model:
+converting. A direct call costs nothing and needs no model:
 
 ```sql
 declare
@@ -196,8 +194,8 @@ end;
 /
 ```
 
-Look at what went in: **one** required field, and a `description` on all three
-properties. Here is what comes out:
+The input had **one** required field and a `description` on all three properties.
+The output:
 
 ```
 Schema name:  Invoice_Header
@@ -271,7 +269,7 @@ The delivery charge is **not** a printed line on that invoice. It sits under the
 table, next to the subtotal. The prompt asked for every charge as a line item. So it
 became line 6, and the six lines add up to the net amount exactly.
 
-Note the net amount: `2136.5`, and not the `2091.50` printed as the subtotal.
+The net amount is `2136.5`, and not the `2091.50` printed as the subtotal.
 
 ## The German invoice fills the same schema
 
@@ -308,7 +306,7 @@ Two checks:
 1. The token cost of the two documents. Both blocks print a `Tokens:` line, and
    the two counts are not the same even though the files are within 100 bytes of
    each other. A PDF does not cost tokens by its size on disk. What a provider
-   counts for a document is its own business, so store the number for every run.
+   counts for a document is not published, so store the number for every run.
    That is why `inv_extractions` has a column for it, and lesson 5 builds a report
    from it.
 

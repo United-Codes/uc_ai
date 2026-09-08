@@ -11,7 +11,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
 
 <LessonHeader
   lesson={6}
-  of={9}
+  of={7}
   minutes={15}
   promise="the desk follows a conversation, and it remembers a contract after the conversation ends."
   scripts={["06_memory.sql"]}
@@ -19,8 +19,8 @@ import AiOutput from "../../../../components/AiOutput.astro";
 
 ## Two different problems
 
-The desk answers one question at a time and forgets everything. That is two
-problems, not one, and they have two different answers:
+The desk answers one question at a time and forgets everything. Those are two
+problems with two different answers:
 
 - An engineer asks "and is that one inside the coverage window?". The desk does not
   know what "that one" is. **A session** fixes this.
@@ -32,8 +32,10 @@ conversation starts from nothing.
 
 ## A session keeps one conversation together
 
-You have passed `p_session_id` since lesson 2. Now use it for a second turn, with
-`p_follow_up_message` instead of new input parameters:
+Every run so far let UC AI generate its own session id, so every run was a
+conversation of one turn. Pass a session id of your own, and the second call
+continues the first. A follow-up sends `p_follow_up_message` instead of new input
+parameters:
 
 ```sql
 declare
@@ -90,8 +92,8 @@ reaches it through one `MEMORY` tool that follows the contract of the Anthropic
 memory tool, so it works on every provider, OpenAI included.
 
 The `context` scope keys the store on a run-context value, so **each contract gets
-its own memory**. Contract 88 and contract 99 cannot read each other's files. This
-is the same `contract_id` that bound the tools in lesson 3, doing a second job.
+its own memory**. Contract 88 and contract 99 cannot read each other's files. The
+same `contract_id` that binds the tools in lesson 3 does a second job here.
 
 `enable_for_agent` adds the memory tag to the model configuration and keeps the tag
 lesson 3 put there:
@@ -111,24 +113,34 @@ example json_object_t('{"contract_id":"123"}').
 ```
 
 The lesson 2 pattern, `execute_agent` with no `p_run_context`, stops working here.
-Enabling memory changes the contract of the agent you have been calling.
+Memory changes the contract of the agent that you call.
 </Aside>
 
 ## Two separate conversations
 
-Now the test that matters. Two runs, each with a **new** session, so nothing carries
-over except the memory:
+Now the test. Two runs, each with a **new** session, so nothing carries over
+except the memory. The first one tells the desk something that is in no table:
 
-<AiOutput model="gpt-5.6-terra" date="2026-08-24" label="Two separate conversations">
-**Conversation 1:** Noted: copy plant manager Anna Ruiz on any credit note, and use
-email rather than phone.
+> **Conversation 1:** Remember for next time: this customer always wants the plant
+> manager Anna Ruiz copied on any credit note, and they prefer email over phone.
 
-**Conversation 2:** Use email rather than phone, and copy plant manager Anna Ruiz on
-every credit note.
+<AiOutput model="gpt-5.6-terra" date="2026-08-24" label="Conversation 1" quiet>
+Noted: copy plant manager Anna Ruiz on any credit note, and use email rather than
+phone.
 </AiOutput>
 
-Conversation 2 is a different conversation. It was told nothing. It read its
-memory.
+The second one is a new conversation that was told none of it, and it asks:
+
+> **Conversation 2:** I am about to raise another credit note for this customer.
+> Anything I should know about how they want to be contacted?
+
+<AiOutput model="gpt-5.6-terra" date="2026-08-24" label="Conversation 2">
+Use email rather than phone, and copy plant manager Anna Ruiz on every credit
+note.
+</AiOutput>
+
+Nothing in conversation 2 named Anna Ruiz. No table holds her name either. The
+desk read the file it wrote in conversation 1.
 
 ## Verification
 
@@ -149,7 +161,7 @@ context:SC_DESK:contract_id:88   /memories/contract_invoice_status.txt          
 context:SC_DESK:contract_id:88   /memories/customer_communication_preference.txt         152
 ```
 
-The store key says everything: scope, agent, key, and value. An operator can read
+The store key holds four parts: scope, agent, key, and value. An operator can read
 or delete the memory of one contract from that string alone.
 
 The view carries **no content column**, so read a file through the API:
@@ -177,7 +189,29 @@ Anna Ruiz on every credit note. Customer prefers email rather than phone.
 ```
 
 The desk chose the filename and the wording. Nothing in your code told it to write
-a file, or what to call it. The `MEMORY PROTOCOL` in its system prompt did.
+a file, or what to call it. A `MEMORY PROTOCOL` block that UC AI adds to the
+rendered system prompt did.
+
+### Tell it what to record
+
+That block is the same text for every agent, and it says only "record important
+context". What counts as important at your desk is your decision, and the place to
+write it down is the system prompt of the prompt profile:
+
+```text
+MEMORY
+Record what a conversation told you and no table holds: how this customer wants
+to be contacted, who must be copied, what was agreed on the phone.
+Do not record anything a tool can read: invoice totals, credited amounts and
+coverage dates come from the tools, every time.
+Keep one file for each subject, and rewrite a line that stops being true.
+```
+
+Update the profile the way lesson 3 updated the model configuration: read the row
+with `get_prompt_profile`, set `system_prompt_template`, and pass the row back.
+[Give an Agent a
+Memory](/products/uc-ai/docs/tutorial/give-an-agent-a-memory/03-decide-what-it-writes/)
+is a whole lesson on this, with the file layout and a note that goes out of date.
 
 <Aside type="note" title="A store is created at its first use">
 `resolve_store_id` reports `ORA-20423` for a contract whose agent has never run,
@@ -197,14 +231,15 @@ end;
 ```
 </Aside>
 
-## Profile versions and open sessions
+## When a memory change takes effect
 
-- **A new profile version does not carry the memory tag.** `enable_for_agent`
-  writes the tag into the profile version the agent resolves to now. Make a version
-  2 later and the tag stays behind. Run `enable_for_agent` again; it is safe to
-  repeat.
-- **A memory change takes effect on the next new session.** An open conversation
-  keeps the system prompt it started with.
+A memory change reaches the **next new session**. An open conversation keeps the
+system prompt it started with, so it also keeps the memory rules it started with.
+
+`enable_for_agent` writes the memory tag into the profile version the agent
+resolves to now. `uc_ai_prompt_profiles_api.create_new_version` copies
+`model_config_json`, so a version made that way carries the tag with it. A version
+you build from scratch carries whatever configuration you pass it.
 
 ## Key takeaways
 
@@ -220,7 +255,7 @@ end;
 covers every scope, the size caps, and housekeeping.
 
 <LinkCard
-  title="Next lesson: Structured output your user interface can use"
-  description="Make the desk answer with a JSON object instead of prose, and learn the one change that silently breaks your earlier code."
-  href="/products/uc-ai/docs/tutorial/build-an-agent/07-structured-output/"
+  title="Next lesson: Audit, control, and shipping it"
+  description="Read who ran what and what it used, put the desk on a page, and move it from your development schema to production."
+  href="/products/uc-ai/docs/tutorial/build-an-agent/07-audit-and-shipping/"
 />

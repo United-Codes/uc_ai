@@ -10,22 +10,19 @@ import LessonHeader from "../../../../components/LessonHeader.astro";
 
 <LessonHeader
   lesson={4}
-  of={9}
+  of={7}
   minutes={15}
-  promise="you can answer “what did it actually do?” with a <code>select</code>."
+  promise="you can answer “what did this run do?” with a <code>select</code>."
 />
 
 ## The problem
 
-Lesson 3 gave the desk three tools and a good answer. One day the answer is wrong
+Lesson 3 gave the desk three tools and a correct answer. One day the answer is wrong
 or slow. Then you need to know what happened, and the answer text does not tell
 you. It is the **output** of the run, not a record of it.
 
 **Without the trace,** you change the prompt and hope. **With the trace,** you can
 see which tool ran, what it returned, and what the model did next.
-
-This lesson comes before the harder lessons on purpose. You need it at lesson 5,
-not at lesson 9.
 
 ## Every run writes its own history
 
@@ -36,7 +33,11 @@ UC AI records two things for each run:
 - **`uc_ai_agent_messages`** — one row for each message item, in order. This
   includes a row for each tool call and each tool result.
 
-Read the second one for the run of lesson 3:
+Both tables are keyed on the session. `execute_agent` returns the `session_id` of
+the run in its result, and the newest row of `uc_ai_agent_executions` carries it
+too.
+
+Read the messages of the lesson 3 run:
 
 ```sql
 select seq
@@ -64,16 +65,11 @@ Three facts you can read straight off that list:
 - The model asked for two tools **in one round** (`seq` 3 and 4), then read both
   results. A round can hold more than one call.
 - The arguments were `{"max_rows":20}`. There is no contract in them, because no
-  tool declares one. The trace is where you confirm that.
+  tool declares one. `tool_input` is what the **model** sent, and UC AI adds `_ctx`
+  after that point. The next query reads the run context from the execution row.
 - The answer at `seq` 7 came after the results at 5 and 6.
 
-<Aside type="tip" title="Where is the contract?">
-`tool_input` shows what the **model** sent. UC AI adds `_ctx` to the arguments
-after that point, so the run context is not in this column. Read it from the
-execution row instead, as the next query does.
-</Aside>
-
-## The one query to keep
+## The diagnostic query
 
 Save this. It answers "what did the last run of this agent do", and it drops
 straight into an APEX report region:
@@ -143,8 +139,8 @@ package globals, when you run through an agent.
 
 ### The tool ran and the model ignored it
 
-This one wastes the most time, because the trace looks healthy. There is a
-`tool_call`, a `tool_result`, and then an answer that does not use the result.
+The trace looks healthy in this case. There is a `tool_call`, a `tool_result`,
+and then an answer that does not use the result.
 
 Read `tool_output` before you blame the model:
 
@@ -156,16 +152,16 @@ select seq, tool_name, substr(tool_output, 1, 200) as tool_output
  order by seq;
 ```
 
-A handler that returns a refusal instead of data is the usual answer. The desk's
+The usual cause is a handler that returns a refusal instead of data. The desk's
 handlers return a `status` of `refused` and a `reason` when they decline, so the
 cause is in that column. The model then reports what it was told, and the answer is
 about your data access, not about your data.
 
 ### The run stopped early
 
-`g_max_tool_calls` bounds how far the tool loop goes. Read what really happened
-from `tool_calls_count` and from the count of `tool_call` rows, and do not assume
-the configured number:
+`g_max_tool_calls` bounds how far the tool loop goes. Read the true count from
+`tool_calls_count` and from the count of `tool_call` rows. Do not assume the
+configured number:
 
 ```sql
 select count(*) as tool_calls
@@ -198,20 +194,6 @@ select status, error_message, total_input_tokens, tool_calls_count
 So `tool_calls_count = 0` on a failed row does not mean "no tool ran". Count the
 `tool_call` rows in `uc_ai_agent_messages` instead. On a **completed** row the
 column is true.
-
-## Regression-test your own agent
-
-The trace is also how you test an agent without paying for tokens. Two rules carry
-most of the value:
-
-- **Test the handler, not the model.** A tool handler is a PL/SQL function that
-  takes JSON and returns JSON. Call it directly, with a `_ctx` you build yourself,
-  and assert the result. No provider call, no cost, and the same answer every time.
-  Lesson 3 already did this to prove the isolation.
-- **For a live run, assert properties and never prose.** Assert that the expected
-  row appeared, that the tool-call set holds the codes you expect, and that
-  `finish_reason` is `stop`. Never assert the wording of an answer: it changes with
-  the model, and a passing text match proves nothing about the data.
 
 ## Verification
 

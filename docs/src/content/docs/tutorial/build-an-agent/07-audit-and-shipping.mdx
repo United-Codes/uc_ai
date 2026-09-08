@@ -1,28 +1,28 @@
 ---
-title: Audit, control, and shipping it
-description: Read who ran what and what it used, stop a tool call with a hook, and move the desk from your development schema to production.
+title: Audit it, and ship it
+description: Read who ran what and what it used, put the desk in front of users, and move it from your development schema to production.
 sidebar:
-  order: 9
+  order: 7
 ---
 
-import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import { Aside, Steps } from "@astrojs/starlight/components";
 import LessonHeader from "../../../../components/LessonHeader.astro";
 
 <LessonHeader
-  lesson={9}
-  of={9}
+  lesson={7}
+  of={7}
   minutes={20}
-  promise="you can answer “who did what, what did it use, and how do I stop it” — and move the desk to another database."
-  scripts={["09_hook.sql", "09_promote.sql"]}
+  promise="you can answer “who did what and what did it use”, put the desk in front of a user, and move it to another database."
+  scripts={["09_promote.sql"]}
 />
 
 ## The problem
 
-The desk works. Now somebody else has to be able to run it, pay for it, and switch
-it off. Three questions arrive together:
+The desk works. Now somebody else has to be able to use it, and somebody has to
+pay for it. Three questions arrive together:
 
 - Who asked, and what did it use?
-- Can I stop it doing something, without changing the prompt?
+- How does a person talk to it, when everything so far ran in SQLcl?
 - How does any of this reach production, when my agent is a **row** and not a file?
 
 ## Who ran what
@@ -52,16 +52,20 @@ TURN_COUNT  MESSAGE_COUNT  TOTAL_INPUT_TOKENS  TOTAL_OUTPUT_TOKENS  CREATED_BY  
          1              4                 549                   38  UC_AI       db
 ```
 
-Three columns are worth knowing well:
+Three of those columns:
 
 - **`audience`** separates a signed-in APEX user from an anonymous visitor from a
   database session. A username cannot do that, because every anonymous visitor of
   an app shares one APEX public user. The rows above say `db`, because they were
   started from SQLcl and from a scheduler job.
-- **`created_by`** is the caller UC AI could prove: the APEX user when there is one,
-  the database user otherwise.
-- **`message_count` is `0` on the first row.** That run was stopped by the hook
-  below, and a failed run persists no messages.
+- **`created_by`** is the caller that UC AI can prove: the APEX user when there is
+  one, the database user otherwise.
+- **`message_count` is `0` on the first row.** That run failed. A failed run has
+  no result object to read, so UC AI records no tokens and no messages for it, and
+  `tool_calls_count` of `0` on such a row does not mean that no tool ran. Count the
+  `tool_call` rows in `uc_ai_agent_messages` when you need the truth, as
+  [lesson 4](/products/uc-ai/docs/tutorial/build-an-agent/04-see-what-it-did/)
+  does.
 
 ### Tokens are recorded, prices are not
 
@@ -87,7 +91,7 @@ Per-model pricing, budgets and spend enforcement are part of
 core records: token counts.
 </Aside>
 
-### Let the engineer tell you it was wrong
+### A title and a rating for each conversation
 
 Two calls turn a session list into something you can report on:
 
@@ -108,92 +112,34 @@ end;
 ```
 
 UC AI never sets either one itself. A thumbs-down next to a token count is how you
-find out which prompts cost money and produce bad answers.
+find out which prompts cost money and produce answers the engineer rejected.
 
-## Stop a tool call with a hook
+## Put it in front of a person
 
-An **execution hook** is a package you write. UC AI calls it before and after every
-run, and before every tool call. It is where a rule that has nothing to do with the
-prompt belongs.
+Everything so far ran in SQLcl. A person needs a page.
 
-The contract is three procedures. `before_execution` and `after_execution` are
-required; `before_tool_call` is optional, and UC AI detects whether your package
-has it.
+A run takes seconds, and an APEX page submit cannot wait that long. A chat region
+therefore has to store the question, run the agent in a background job, and poll
+for the answer. You do not have to write that. The **APEX Chat plug-in** is a
+region plug-in that already holds all three, and it needs three attributes:
 
-```sql
-procedure before_tool_call(
-  p_agent_id    in number
-, p_agent_code  in varchar2
-, p_tool_code   in varchar2
-, p_created_by  in varchar2
-, p_session_id  in varchar2
-, p_apex_app_id in number
-)
-as
-  l_hour pls_integer := to_number(to_char(systimestamp, 'HH24'));
-begin
-  -- A read is allowed at any time. A write is not.
-  if p_tool_code = 'SC_RAISE_CREDIT_NOTE'
-     and (l_hour < c_open_hour or l_hour >= c_close_hour)
-  then
-    raise_application_error(-20990
-      , 'The desk cannot raise a credit note outside office hours.');
-  end if;
-end before_tool_call;
-```
+- **Agent Code** names the agent: `SC_DESK`.
+- **Agent Input Mapping** fills the three placeholders of the profile, with
+  `&APP_USER.` for the engineer, a page item for the date, and `#USER_MESSAGE#`
+  for what the engineer typed.
+- **Agent Run Context** carries the contract the page is on, so the tools of
+  lesson 3 stay bound to one record and the memory of lesson 6 stays keyed on it.
 
-Register it **for your session** while you are learning:
+The plug-in writes every message to `uc_ai_chat_messages`, beside the execution
+rows this lesson reads.
 
-```sql
-begin
-  uc_ai_agents_api.set_execution_hook('SC_DESK_HOOK');
-end;
-/
-```
-
-<Aside type="caution" title="UC_AI_HOOK activates itself for everything">
-A valid package named `UC_AI_HOOK` in the schema is picked up automatically, with no
-registration call, for **every agent and every session**. That is the right shape
-for production and the wrong shape for an experiment: compile it and you have
-changed the behaviour of every agent in the schema, including other people's.
-
-Use `set_execution_hook` while you are trying things out. It is session-scoped, and
-you can clear it.
-</Aside>
-
-### The veto reaches the caller
-
-Asking the desk to raise a credit note now produces this:
-
-```
-[hook] run of SC_DESK by UC_AI starts.
-The veto stopped the run: ORA-20990: The desk cannot raise a credit note
-outside office hours.
-```
-
-Three facts about that output:
-
-- The error came **out of `execute_agent`**. It is not a tool result the model gets
-  to reason about, and not a sentence it can explain away. The run is over.
-- `before_execution` had already run, so the hook can see a run start and stop it
-  later.
-- `after_execution` still fired, and recorded the failed run:
-
-```
-EXEC_ID  STATUS   INPUT_TOKENS  OUTPUT_TOKENS
-   5073  failed              0              0
-```
-
-<Aside type="note" title="A failed run records no tokens and no messages">
-Both are `0`, and `message_count` on the session is `0` too. UC AI has no result
-object to read them from when a run raises. So `tool_calls_count = 0` on a failed
-row does **not** mean no tool ran. This is the same point as
-[lesson 4](/products/uc-ai/docs/tutorial/build-an-agent/04-see-what-it-did/): count the
-`tool_call` rows when you need the truth.
-</Aside>
-
-`before_tool_call` also fires for a plain `uc_ai.generate_text` call, not only for
-an agent run. So a hook is a schema-wide control, not an agent-level one.
+[Put an Agent in
+APEX](/products/uc-ai/docs/tutorial/put-an-agent-in-apex/01-a-chat-region/) builds
+that region on this desk, in six lessons. It covers what the plug-in does about a
+conversation another user must not read, a page that moves to another contract
+mid-conversation, and an audit trail that names the person who asked. The [APEX
+Chat plug-in guide](/products/uc-ai/docs/guides/apex-chat-plugin/) lists every
+region attribute.
 
 ## Ship it
 
@@ -201,8 +147,8 @@ Your prompt profile, your tools and your agent are **rows**. They are not in you
 repository, and a deployment of your packages does not carry them. So the
 deployment is a script.
 
-`09_promote.sql` is that script. It is written to be run more than one time, so the
-same file is the install and the upgrade:
+`09_promote.sql` is that script. You can run it more than one time, so the same
+file is the install and the upgrade:
 
 <Steps>
 
@@ -214,12 +160,12 @@ same file is the install and the upgrade:
 3. **The agent**, created when absent and left alone when present.
 
 4. **Memory, then the two activations.** `enable_for_agent` writes the memory tag
-   into the profile version the agent resolves to **now**, so it must run after the
-   profile exists — and again whenever you ship a new profile version.
+   into the profile version the agent resolves to **now**, so it runs after the
+   profile exists.
 
 </Steps>
 
-What the script deliberately does **not** carry:
+What the script does **not** carry:
 
 | Not deployed | Why |
 | --- | --- |
@@ -227,7 +173,7 @@ What the script deliberately does **not** carry:
 | The run history | The history of a development schema is not production data |
 | The memory stores | What the desk learned in development is not true in production |
 
-A release log should end with this:
+A release log ends with this:
 
 ```
 OBJECT    DETAIL
@@ -237,7 +183,7 @@ agent     SC_DESK v1 active
 memory    context on contract_id
 ```
 
-### Switching it off, and removing it
+### Switch it off, or remove it
 
 Two different needs, two different calls:
 
@@ -250,8 +196,8 @@ uc_ai_agents_api.purge_agent(p_code => 'SC_DESK');
 ```
 
 `change_status` to `archived` is the kill switch. An archived agent no longer
-resolves, so a queued job fails with a clear error instead of doing something you
-did not want.
+resolves, so a queued job fails with an error instead of doing something you did
+not want.
 
 `purge_agent` removes every version of the agent, its executions, its sessions,
 their messages, and the memory stores that belong to it alone. It **keeps** what
@@ -260,7 +206,7 @@ opened, and the prompt profile — a profile lives without an agent, and another
 agent can use it. It also keeps a tool whose PL/SQL text names the agent, because a
 tool only mentions it in a string.
 
-<Aside type="caution" title="Purging deletes an audit trail">
+<Aside type="caution" title="purge_agent deletes an audit trail">
 `purge_agent` removes run history. Decide whether you are allowed to do that before
 you run it in production. If you only want the agent to stop, archive it.
 </Aside>
@@ -272,51 +218,42 @@ select 'sessions' as what, to_char(count(*)) as detail
   from uc_ai_agent_sessions
  where root_agent_id = ( select id from uc_ai_agents where code = 'SC_DESK' )
 union all
-select 'audit rows', to_char(count(*)) from sc_desk_audit
-union all
 select 'tokens today'
      , to_char(nvl(sum(total_input_tokens + total_output_tokens), 0))
   from uc_ai_agent_sessions
  where started_at >= trunc(sysdate);
 ```
 
-Then clear the hook, so it does not affect your next experiment:
-
-```sql
-begin
-  uc_ai_agents_api.set_execution_hook(null);
-end;
-/
-```
-
+Two rows come back. `sessions` counts every conversation this course started, and
+`tokens today` is what they cost in tokens. Multiply that by the rate of your
+provider, because UC AI does not know it.
 
 ## What you built
 
-Nine lessons ago the model could not see your data. Now:
+Seven lessons ago the model could not see your data. Now:
 
 - It reads four tables through tools that **cannot** name a contract, so an
   engineer on contract 88 can never be shown contract 99.
 - It can raise a credit note, and the **database** decides whether that is allowed,
   in four conditions written in PL/SQL rather than in English.
 - It remembers each contract between conversations.
-- It answers in fields your page can render, from a background job that does not
-  block the page.
 - Every run is recorded: who, when, which tools, how many tokens.
+- It is a set of rows, so one script moves it to another database.
 
 ## Key takeaways
 
 - Core records tokens, not money. Multiply by your own rate, or use Guardrails for
   real spend control.
-- A hook raise in `before_tool_call` ends the run. It is not a refusal the model can
-  explain, which is what makes it a control rather than a suggestion.
+- An agent is a row, not a file. The deployment is a script that merges the tools,
+  the profile and the agent, and it must be safe to run again.
 - `uc_ai_agents_api.purge_agent(p_code => 'SC_DESK');` removes the agent and its
   history. `change_status(..., c_status_archived)` is the reversible one.
 
-**Full reference:** [Execution
-hooks](/products/uc-ai/docs/guides/execution-hooks/) has the whole contract.
-[Conversation
+**Full reference:** [Conversation
 sessions](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-sessions)
-has every session column.
+has every session column, and the [APEX Chat
+plug-in](/products/uc-ai/docs/guides/apex-chat-plugin/) has every region
+attribute.
 
 ## Where to go next
 
@@ -330,6 +267,13 @@ has every session column.
   Agent](/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/)** —
   the same desk, with data an outsider wrote in it. One supplier email redirects a
   payment, and the course closes every route it used.
+- **[Put an Agent in
+  APEX](/products/uc-ai/docs/tutorial/put-an-agent-in-apex/01-a-chat-region/)** —
+  this desk, as a chat region on a page, in six lessons.
+- **[Extract structured data from a
+  PDF](/products/uc-ai/docs/tutorial/extract-structured-data/01-the-pdf-in-the-inbox/)**
+  — a response schema, and the five checks that decide whether you can trust what
+  came back.
 - **[Multi-agent systems](/products/uc-ai/docs/guides/multi-agent-systems/)** —
   hand off to a specialist, or let one agent use another as a tool.
 - **[File analysis](/products/uc-ai/docs/guides/file_analysis/)** — attach the

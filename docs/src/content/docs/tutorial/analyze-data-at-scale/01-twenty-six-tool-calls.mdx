@@ -35,9 +35,8 @@ Two words from this domain, because the lessons use them:
   allowed. A long one is not.
 
 <Aside type="note" title="This course is about tokens, not correctness">
-A good model answers this question correctly with normal tool calling. The recorded
-run below does. What it cannot do is answer it in few tokens, and lesson 2 shows the
-difference.
+The recorded run below answers this question correctly with normal tool calling.
+What it cannot do is answer it in few tokens, and lesson 2 shows the difference.
 </Aside>
 
 ## Before you start
@@ -68,7 +67,7 @@ Three more facts before you run anything:
   table of four other providers that ran the same question, and one that got it
   wrong.
 
-<Aside type="tip" title="Never registered a tool?">
+<Aside type="tip" title="If you have not registered a tool">
 The [Quickstart](/products/uc-ai/docs/guides/quickstart/) registers a small one in
 five minutes. This course explains only as much as it needs.
 </Aside>
@@ -106,7 +105,7 @@ back. It proves the whole path in one step. It calls no tool and no model.
 
 <Aside type="caution" title="If check 3 and check 4 disagree, believe check 4">
 Check 3 looks for the sandbox. Check 4 uses it. If check 3 fails and check 4
-succeeds, the sandbox is there and your schema simply cannot see how it is wired.
+succeeds, the sandbox is there and your schema cannot see how it is wired.
 </Aside>
 
 ## The rule the analyst has to apply
@@ -123,7 +122,7 @@ One reading stands for 30 minutes. A **series** is readings above `max_temp_c` t
 follow each other with no gap.
 
 - A series that lasts **longer than** `max_minutes_above` is a break.
-- A series that is short enough is not a break, and it is worth nothing.
+- A shorter series is not a break, and it earns no claim.
 - Add the minutes of every series that is a break. Ignore the others.
 - The claim is `ceil(those minutes / 60) * claim_per_hour_eur`.
 
@@ -220,8 +219,8 @@ raises. You cannot mistake it for a result.
 
 <Aside type="note" title="The limit is checked between rounds">
 UC AI tests the limit before each new round of tool calls, and one round can hold
-several calls. So the number of calls that really run can pass the configured
-number by the size of the last round. So set the value by rounds, not by calls.
+several calls. So the number of calls that run can pass the configured number by
+the size of the last round. Set the value by rounds, not by calls.
 </Aside>
 
 ## Run B: give it a budget of 40

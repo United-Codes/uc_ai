@@ -22,8 +22,8 @@ import LessonHeader from "../../../../components/LessonHeader.astro";
 In the first course there was one user: you, in SQLcl. A page has many.
 
 Two engineers open the same page. Each has a conversation. The conversation id is
-a value in a page item, and a page item is not a secret. What stops the second
-engineer from reading the first one's chat?
+a value in a page item, and a page item is not a secret. Nothing so far stops the
+second engineer from reading the first one's chat.
 
 ## What the plug-in does
 
@@ -75,7 +75,7 @@ looks like a good idea to pass `APP_USER` to it.
 Do not. That guard is compared against `uc_ai_agent_sessions.created_by`, which is
 the **job's** database user. `APP_USER` matches nothing, so the write updates zero
 rows. No error is raised — it is recorded as a warning in the UC AI log, which
-nobody reads — and the title or the rating simply never appears.
+nobody reads — and the title or the rating never appears.
 
 The plug-in passes null there for this reason, and does its own check against
 `uc_ai_chat_messages.created_by` instead.

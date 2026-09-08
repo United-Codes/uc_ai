@@ -36,7 +36,7 @@ are.
 
 ## Two machines with the same kind of alarm
 
-The demo data holds a pair that a plant really has.
+The demo data holds a pair that a plant has.
 
 | Asset | Alarm | Severity | Is it real? |
 | --- | --- | --- | --- |
@@ -97,10 +97,9 @@ The desk gave the right answer and it still read a file that belonged to another
 machine. Those are two separate facts.
 
 UC AI reads a memory on demand: the model has a tool, and it opens a file when it
-decides to. So a note that belongs to the wrong machine bites only in the runs where
-the model both reads it and believes it. That makes the risk intermittent, not
-absent, and intermittent is worse to operate than constant, because a test that
-passes proves nothing.
+decides to. So a note that belongs to the wrong machine changes an answer only in
+the runs where the model reads it and believes it. The risk is intermittent, not
+absent, and a test that passes proves nothing.
 
 This lesson was recorded twice, in two independent passes from an empty schema. In
 both of them the compressor conversation opened the pump's handover file, and in both
@@ -267,7 +266,8 @@ and with the provider switched off.
   for a desk that works on one record at a time.
 - Read the trace, not the answer. A run that gives a correct answer can still have
   opened a file that belonged to another record.
-- Re-scoping does not move or delete the files in the old store. Clear it yourself.
+- A change of scope does not move or delete the files in the old store. Clear it
+  yourself.
 - `uc_ai_memory.enable_for_agent(p_agent_code => 'MX_DESK', p_scope => 'context', p_context_key => 'asset_no');`
 
 **Full reference:** [Scopes: which agents share which

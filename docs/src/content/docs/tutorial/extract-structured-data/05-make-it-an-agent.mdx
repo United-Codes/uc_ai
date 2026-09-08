@@ -27,7 +27,7 @@ this.
 a deployment, and you cannot tell afterwards which prompt read which invoice.
 
 **Nothing keeps a record of a run.** `inv_extractions` has the token counts because
-*you* wrote that code. If you had not, every run would be gone.
+*you* wrote that code. Without it, no record of a run survives.
 
 One move solves both: put the prompt on a **prompt profile**, and put an **agent**
 in front of it.
@@ -97,7 +97,8 @@ Three things about that block:
   of its own. An uncommitted agent row makes that write wait for a lock it never
   gets, so the run hangs.
 - **The profile is named by code, and nothing checks that it exists.** A typo in
-  `p_prompt_profile_code` creates and activates happily, and fails on the first run.
+  `p_prompt_profile_code` still creates and activates the agent, and the first run
+  fails.
 
 ## Step 3: run it
 
@@ -228,8 +229,8 @@ Two things in that table:
   tokens while the other costs 1,040. The prompt-token count for one document
   repeats across runs, so this is not noise. It is also not the same between
   models: `gpt-5.4-nano` charges 1,209 prompt tokens for `halvorsen.pdf` where
-  `gpt-5.6-terra` charges 4,055, for the same file. How a provider counts a document
-  is its own business, so store the number for every run.
+  `gpt-5.6-terra` charges 4,055, for the same file. How a provider counts a
+  document is not published, so store the number for every run.
 - **A second page costs about half again**, not double. `halvorsen.pdf` is 4,055
   prompt tokens against ferrotek's 2,711. It is also the longer document: eight
   line items to six, and a block of payment and returns text.
@@ -239,10 +240,10 @@ anyway. The same FerroTek invoice as an image-only PDF with no text layer at all
 48,694 bytes instead of 3,838, and it costs 3,494 prompt tokens instead of 2,711.
 It returned the same net amount, the same total and the same six lines.
 
-## Which model, and does it need reasoning?
+## Model tiers and reasoning
 
 `06_model_matrix.sql` holds the whole experiment: the schema and the system prompt
-are held fixed, and only the model and the reasoning level move. It scores every
+stay fixed, and only the model and the reasoning level change. It scores every
 run in PL/SQL against amounts typed in by hand from the paper, so nothing marks its
 own work.
 
@@ -278,8 +279,8 @@ measurement. Run it a few times.
 
 ### The cheap model on a scanned invoice
 
-Part 3 runs the hardest case three times per tier. It is the same FerroTek invoice,
-rasterized to an image-only PDF with no text layer at all — a scan:
+Part 3 runs the same FerroTek invoice three times for each tier, rasterized to an
+image-only PDF with no text layer at all — a scan:
 
 <AiOutput model="gpt-5.4-nano and gpt-5.6-terra" date="2026-08-25" label="Recorded run, three passes each" quiet>
 ```
@@ -297,13 +298,12 @@ Three failures out of three, and the larger model right three times out of three
 
 The small model returned `net=2091.5`, the **same** mistake it made intermittently
 on the text version. It did not misread a digit. It stopped applying a rule from
-the system prompt, and it did so every time once the input got harder. One pass
-would not have shown that.
+the system prompt, and it did so on every run of the scan. One pass does not show
+that.
 
 ### Reasoning on the cheapest model
 
-Part 2 turns reasoning on, on the **cheapest** model, because that is where it has
-the best chance of helping:
+Part 2 turns reasoning on, on the **cheapest** model:
 
 <AiOutput model="gpt-5.4-nano" date="2026-08-25" label="Recorded run, reasoning low and high" quiet>
 ```
@@ -318,9 +318,9 @@ an answer worse. But the model without reasoning also scored 4 of 4 in this run,
 **these four documents cannot show that reasoning fixed anything.** What they do
 show is the price: 8% more tokens at low, and 42% more at high.
 
-The provider guidance says the same thing. Reasoning effort buys a model room to
-**combine several parts of a page**, not sharper eyes. The rule is about the shape
-of the question:
+The provider guidance says the same. Reasoning effort gives a model room to
+**combine several parts of a page**. It does not change how it reads a character.
+The rule is about the shape of the question:
 
 - **Reading a value that is printed** — leave reasoning off.
 - **Combining several parts of the page into one answer** — turn reasoning on. A
@@ -356,8 +356,8 @@ One check from lesson 3 found the failure above. It compared the sum of the line
 items with the net amount, they did not agree, and `validate_extraction` returned
 `SUM_MISMATCH`.
 
-With the checks, choosing a cheaper model is a **cost** decision, because you find
-out when it was not good enough. Without them it is a risk nobody can see.
+With the checks, a cheaper model is a **cost** decision, because you find out when
+it failed. Without them it is a risk nobody can see.
 </Aside>
 
 ## The trace UC AI kept for you
@@ -425,8 +425,8 @@ Two rows:
 A third row with the role `reasoning` turns up on some runs and not others,
 depending on what the model did. That is normal.
 
-There is no `tool_call` row, because this agent has no tools. One glance at this
-table tells you whether a run did what you expected.
+There is no `tool_call` row, because this agent has no tools. This table tells you
+whether a run did what you expected.
 
 <Aside type="note" title="The PDF is not in this table">
 A file is not written to `uc_ai_agent_messages`, so the trace does not show that a
@@ -508,9 +508,11 @@ a person sees only what needs a person, and every run is on the record.
 Three directions from here:
 
 - **Put it behind a page.** A run takes about four seconds, and a page submit cannot
-  wait that long. [Lesson 8 of the agent
-  course](/products/uc-ai/docs/tutorial/build-an-agent/08-apex-page/) queues
-  the work in a background job and polls the row.
+  wait that long. The [APEX Chat
+  plug-in](/products/uc-ai/docs/guides/apex-chat-plugin/) holds the queue, the
+  background job and the poll, and [Put an Agent in
+  APEX](/products/uc-ai/docs/tutorial/put-an-agent-in-apex/01-a-chat-region/) is a
+  course on it.
 - **Give the agent tools.** This agent has none, which is why its trace has no
   `tool_call` rows. An agent with a tool can look the supplier up while it reads.
 - **Cap what it can spend.** A pipeline that runs on every incoming mail needs a

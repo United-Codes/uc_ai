@@ -5,15 +5,15 @@ sidebar:
   order: 2
 ---
 
-import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import { Aside, LinkCard } from "@astrojs/starlight/components";
 import LessonHeader from "../../../../components/LessonHeader.astro";
 import AiOutput from "../../../../components/AiOutput.astro";
 
 <LessonHeader
   lesson={2}
-  of={9}
+  of={7}
   minutes={15}
-  promise="your application calls one name — <code>SC_DESK</code> — instead of holding a prompt."
+  promise="your application calls one name, <code>SC_DESK</code>, instead of holding a prompt."
   scripts={["02_profile_agent.sql"]}
 />
 
@@ -69,7 +69,7 @@ end;
 ```
 
 The system prompt already tells the desk to read numbers with a tool. It has no
-tools yet. That is the subject of lesson 3.
+tools yet. Lesson 3 adds them.
 
 <Aside type="caution" title="Every placeholder needs a value, every time">
 If a template holds `{today}` and a call does not supply `today`, the run stops
@@ -78,10 +78,21 @@ with an error. UC AI does not leave a placeholder unfilled. The
 visible to the next reader.
 </Aside>
 
-## Create the agent, then activate both
+## Wrap the profile in an agent
 
-The agent is the thing your application calls. A **profile agent** runs one prompt
-profile.
+A profile is a prompt. An **agent** is the thing your application calls, and it
+adds three things the profile alone does not have:
+
+- **One name to call.** The application calls `SC_DESK`. Which profile version it
+  resolves to, and which model that version uses, are rows you change without
+  touching the application.
+- **A record of every run.** UC AI writes one row for each run and one row for
+  each message of it. Nothing in your code has to do that. The verification below
+  reads the first of those rows, and lesson 4 reads the rest.
+- **The place the rest of the course attaches to.** Tools, the run context and
+  memory are configured on the agent and its profile, not on the call.
+
+A **profile agent** is the simplest kind. It runs one prompt profile.
 
 ```sql
 declare
@@ -96,7 +107,11 @@ begin
   );
 end;
 /
+```
 
+The profile and the agent are both **drafts** now. Activate both:
+
+```sql
 begin
   uc_ai_prompt_profiles_api.change_status(
     p_code => 'SC_DESK_PROFILE', p_version => 1
@@ -122,8 +137,7 @@ tells you why.
 
 ```sql
 declare
-  l_result  json_object_t;
-  l_session varchar2(255 char) := uc_ai_agents_api.generate_session_id;
+  l_result json_object_t;
 begin
   l_result := uc_ai_agents_api.execute_agent(
     p_agent_code       => 'SC_DESK'
@@ -132,7 +146,6 @@ begin
         "today":         "2026-08-24",
         "question":      "How much can I still credit on INV-1003?"
       }')
-  , p_session_id       => l_session
   );
 
   sys.dbms_output.put_line(l_result.get_clob('final_message'));
@@ -140,13 +153,17 @@ end;
 /
 ```
 
+The call names no session. UC AI generates one and returns it, and every run
+above is therefore a conversation of one turn. Lesson 6 passes a session id of
+its own, so that two turns belong to the same conversation.
+
 ## What changed
 
 Your application no longer holds a prompt. It calls `SC_DESK` and passes three
 values. You can change the prompt, or release a new version of it, without a code
 change.
 
-The answer, however, is no better than lesson 1:
+The answer does not improve on lesson 1:
 
 <AiOutput model="gpt-5.6-terra" date="2026-08-24" seconds={2.5}>
 I can't access the contract records right now, so I can't verify the remaining
@@ -177,8 +194,7 @@ prompt profile    SC_DESK_PROFILE            1   active
 agent             SC_DESK                    1   active
 ```
 
-UC AI also recorded the run. This row is the start of the audit trail that
-lesson 4 reads:
+UC AI also recorded the run, and nothing in the block above asked it to:
 
 ```sql
 select status, total_input_tokens, total_output_tokens, tool_calls_count
@@ -193,6 +209,9 @@ completed                   283                    84                  0
 ```
 
 `tool_calls_count` is `0`, and that is correct: this agent has no tools yet.
+
+`uc_ai_agent_messages` holds the conversation behind that row, one message at a
+time. Lesson 4 reads both tables and shows what the desk did on each run.
 
 
 ## Key takeaways

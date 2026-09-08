@@ -110,9 +110,9 @@ end;
 /
 ```
 
-No scope is named, so this takes the default: **one store for the agent**. That is
-deliberate, and [lesson 2](/products/uc-ai/docs/tutorial/give-an-agent-a-memory/02-one-store-or-many/)
-is about when it is the wrong choice.
+No scope is named, so this takes the default: **one store for the agent**.
+[Lesson 2](/products/uc-ai/docs/tutorial/give-an-agent-a-memory/02-one-store-or-many/)
+is about when that is the wrong choice.
 
 ## What the call changed
 
@@ -124,7 +124,7 @@ MODEL_CONFIG_JSON
 ```
 
 The tag `memory` is new. The tag `mxdesk` that the two read tools carry is still
-there. That is how the `MEMORY` tool reaches the model.
+there. The `memory` tag is how the `MEMORY` tool reaches the model.
 
 Then the configuration row the call created:
 
@@ -191,8 +191,8 @@ reads that block and takes the naming decision back.
 
 ## Which facts belong in a memory, and which belong in a column
 
-This is the question to answer before you use this feature, and the answer is not
-"memory replaces your tables".
+Answer this question before you use the feature. The answer is not "memory
+replaces your tables".
 
 The work orders in this course **are** a table, and a tool reads them. The desk got
 both coupling repairs from `mx_work_orders`, and that is correct. What has no table
@@ -200,8 +200,8 @@ is what the conversation produced: the instruction Petra got from the reliabilit
 engineer.
 
 Every maintenance system has a free-text notes field for that kind of fact. Almost
-nobody fills it in, because filling it in is a second job after the repair. A memory
-is that field, written as a by-product of asking for help.
+nobody fills it in, because it is a second job after the repair. A memory is that
+field, written as a by-product of asking for help.
 
 Three lines draw the border:
 
@@ -212,15 +212,14 @@ Three lines draw the border:
 - **If the fact only has to reach a model as prose, a memory is the cheapest place
   it can live.** No DDL, no screen, and nobody to fill it in.
 
-<Aside type="note" title="Why not put it in the system prompt?">
+<Aside type="note" title="A system prompt cannot hold this fact">
 A system prompt is the same text for every machine and every run. It needs a new
 profile version to change. And the run that learns the fact cannot write it. A
 memory is per machine, and the run itself writes it.
 </Aside>
 
-The last question is what happens when a remembered fact matters enough that
-somebody wants to count it. At that point it wants a column, and a memory is where
-you found out that the column was worth building.
+One more case: somebody wants to count a remembered fact. Then it needs a column,
+and the memory is where you found out that the column was needed.
 
 ## What the memory costs on every run
 

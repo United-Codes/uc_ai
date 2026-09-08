@@ -20,8 +20,8 @@ import AiOutput from "../../../../components/AiOutput.astro";
 
 ## The problem
 
-The desk of lesson 3 is safe and half useful. It refuses, but it cannot tell a
-clerk **why an email is suspicious**, and that is information the clerk wants.
+The desk of lesson 3 is safe, and all it does is refuse. It cannot tell a clerk
+**why an email is suspicious**, and that is information the clerk wants.
 
 **Without a label,** your own instructions and a stranger's text arrive as one
 block of prose. **With one,** the model knows which sentences are evidence and
@@ -46,7 +46,7 @@ are guessing about it.
 }
 ```
 
-Four decisions are in that object, and each one is deliberate.
+Five decisions are in that object.
 
 **The delimiter carries the row id.** A body that contains `---END UNTRUSTED
 CONTENT---` closes a fixed marker and puts the rest of itself outside the fence.
@@ -91,7 +91,7 @@ The third field asks the model to quote the attack back at you:
 }
 ```
 
-The capability that made the desk dangerous is the same one that makes it a good
+The capability that made the desk dangerous is the same one that makes it a
 detector. It reads prose, and prose is where the attack is. Give it the reading
 job and none of the acting jobs.
 
@@ -101,8 +101,8 @@ already tells the model to treat the mail as a claim and to quote what it was
 asked to do. The measurement further down uses `uc_ai.generate_text` with a bare
 prompt instead, on purpose, so that instruction is not what it measures.
 
-That choice has a cost worth naming now. `generate_text` writes no execution row
-and no messages, so **none of those twenty runs appears in any audit trail.**
+That choice has a cost. `generate_text` writes no execution row and no messages,
+so **none of those twenty runs appears in any audit trail.**
 [Lesson 7](/products/uc-ai/docs/tutorial/secure-an-agent/07-review/) comes back to
 this. A measurement can afford to be invisible. A desk cannot.
 
@@ -216,7 +216,7 @@ numbers you get, including numbers that do not flatter the mechanism.
 
 ## Verification: the wrapper is there, and it stops nothing
 
-The wrapper is really there:
+The wrapper is in the tool result:
 
 ```sql
 declare
@@ -270,8 +270,8 @@ the path where it agrees, and a function that writes cannot run inside a query.
 
 - Untrusted is a property of who wrote the row, not of which table it is in. Your
   master data is untrusted the moment a portal writes to it.
-- An agent that reads attacker text and cannot act on it is the best injection
-  detector you have. Ask it to quote the instructions it was given.
+- An agent that reads attacker text and cannot act on it is an injection
+  detector. Ask it to quote the instructions it was given.
 - `"trust":"untrusted"` in a tool result is a hint. `{"status":"refused","reason":"NO_GOODS_RECEIPT"}`
   is the control.
 

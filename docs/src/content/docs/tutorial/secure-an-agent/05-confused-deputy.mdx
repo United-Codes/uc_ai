@@ -1,6 +1,6 @@
 ---
 title: A read tool and a send tool leak together
-description: See why a tool that reads a bank account and a tool that writes outward are only dangerous together, then close the channel and find out what a poisoned memory really costs.
+description: See why a tool that reads a bank account and a tool that writes outward are only dangerous together, then close the channel and find out what a poisoned memory costs.
 sidebar:
   order: 5
 ---
@@ -44,7 +44,7 @@ Somebody else supplies the intent.
 Audit the **pair**, not the tool. Two reviewers who each approve one tool approve
 the vulnerability between them.
 
-`05_deputy.sql` builds the pair on purpose, in `ap_leak_pkg`:
+`05_deputy.sql` builds that pair in `ap_leak_pkg`:
 
 - `AP_GET_VENDOR_FULL_L` returns the vendor row of this invoice, including the
   IBAN. A first draft returns the whole row, because the whole row is there.
@@ -87,7 +87,7 @@ p_model_config_json => '{"g_enable_tools": true
                        , "g_max_tool_calls": 8}'
 ```
 
-That is the whole change. `AP_DESK` now reaches two more tools, and the run below
+One tag is the whole change. `AP_DESK` now reaches two more tools, and the run below
 is a real `execute_agent` call on it, so it lands in the audit trail that
 [lesson 7](/products/uc-ai/docs/tutorial/secure-an-agent/07-review/) reads.
 
@@ -189,8 +189,8 @@ from the vendor row of the bound invoice. There is no field left to smuggle
 anything through.
 
 **Two: the read tools return no account number.** `AP_GET_INVOICE` and
-`AP_GET_VENDOR` never had an IBAN in them, from lesson 2. Only the payment run needs the
-payout account, and that job is not an agent.
+`AP_GET_VENDOR` never had an IBAN in them, from lesson 2. Only the payment run
+needs the payout account, and that job is not an agent.
 
 **Three: a last-resort check.** The handler refuses a rendered body that matches
 an account number:
@@ -254,7 +254,7 @@ Memory is the other half of the same problem. A tool that **writes what the mode
 read** turns one email into a standing policy, because every later conversation
 reads it back as fact.
 
-One call gives the desk a memory, and the scope is the alarming choice:
+One call gives the desk a memory, and the scope decides who owns the store:
 
 ```sql
 begin
@@ -319,10 +319,9 @@ file when it decides to. It is not injected into the prompt. So a planted file
 bites only in the runs where the model reads it, and the run above read its own
 notes instead.
 
-That makes the risk intermittent, not absent. Intermittent is worse to operate
-than constant, because a test that passes proves nothing. The file is in the
-store, every later conversation about this vendor can reach it, and no attacker
-has to be in the room:
+The risk is intermittent, not absent, and a test that passes proves nothing. The
+file is in the store, every later conversation about this vendor can reach it, and
+no attacker has to be in the room:
 
 ```sql
 select store_key, path, char_count
@@ -376,8 +375,8 @@ This lesson adds only what an attacker does with them.
 - An outbound tool with a free-text field is an exfiltration channel with a
   friendly name. Send a template code, and take the address from your own data.
 - `uc_ai_memory.expire_files(p_days => 7)` deletes what nobody read, so it never
-  reaches a poison that is working. The control is not giving memory to the agent
-  that reads the mail.
+  reaches a poison that is working. The control is to keep memory away from the
+  agent that reads the mail.
 
 **Full reference:** [Agent
 memory](/products/uc-ai/docs/guides/agent-memory/) covers the scopes, the store

@@ -1,6 +1,6 @@
 ---
 title: Tutorials
-description: Hands-on courses that build one working thing from an empty schema, in short lessons with real recorded output.
+description: Courses that build one working thing from an empty schema, in short lessons with recorded output.
 sidebar:
   order: 1
 ---
@@ -19,14 +19,13 @@ repository.
 
 ## At a glance
 
-Six courses, ordered from the one to start with to the one that asks most of you.
-Each row is one course, with what it builds and what it costs you in time. The
-section under [the courses in detail](#the-courses-in-detail) says what each one
-teaches that no guide covers.
+Six courses, in the order to take them. Each row is one course, with what it
+builds and how long it takes. The section under [the courses in
+detail](#the-courses-in-detail) says what each one teaches that no guide covers.
 
 <LinkCard
   title="Build an Agent →"
-  description="9 lessons · 130 min · OpenAI. Start here. A service-contract desk that reads your tables, obeys rules your database owns, remembers each contract, and runs from a page without blocking it."
+  description="7 lessons · 105 min · OpenAI. Start here. A service-contract desk that reads your tables, obeys rules your database owns, remembers each contract, and records every run."
   href="/products/uc-ai/docs/tutorial/build-an-agent/01-the-scenario/"
 />
 
@@ -69,8 +68,7 @@ a support engineer opens one service contract, and the desk answers about it and
 can raise a credit note against one of its invoices.
 
 By the end you have met tools, the run context, prompt profiles, agents, the
-trace, memory, structured output, background execution, hooks and deployment.
-Each appears where it is needed, not in isolation.
+trace, memory and deployment. Each appears where it is needed, not in isolation.
 
 Four things it teaches that no guide covers:
 
@@ -99,8 +97,8 @@ step that needs a DBA. Later lessons build on the objects the earlier ones creat
 Supplier invoices arrive as PDF files at a field-service company. The course turns four of them into invoice headers and
 lines for a payables clerk.
 
-There is no tool and no agent in it. A document goes in, a JSON object comes out,
-and the whole difficulty is in what happens between those two points.
+There is no tool and no agent in it. A document goes in and a JSON object comes
+out. The course is the steps between those two points.
 
 Three things it teaches that no guide covers:
 
@@ -116,7 +114,7 @@ Three things it teaches that no guide covers:
   one line, and every run from then on has a trace and a token count that you did
   not have to write.
 
-<Aside type="note" title="Two providers need a warning">
+<Aside type="note" title="OCI and Google cannot run this course">
 The course is recorded on OpenAI, and Anthropic works the same way. From lesson 2
 onwards it uses structured output, which OCI does not support, and it relies on
 `enum`, which Google removes when it converts a schema. Lesson 1 has the detail.
@@ -173,8 +171,8 @@ part in front of the agent: a chat region on an APEX page, bound to the contract
 page is on.
 
 An engineer opens one contract, asks a question, and reads the answer on the page.
-Everything hard about that is on the far side of the region: what it sends, what it
-stores, who is allowed to read it, and what you look at when it goes quiet.
+The hard parts are on the far side of the region: what it sends, what it stores,
+who can read it, and what you look at when it goes quiet.
 
 Four things it teaches that no guide covers:
 
@@ -210,11 +208,10 @@ trace, and it does not teach them again. You build an accounts-payable desk for 
 manufacturer. A clerk opens one incoming supplier invoice, and the desk reads it,
 reads the email that came with it, and can approve it for payment.
 
-That email is the point. A stranger wrote it, nobody reviewed it, and it reaches
-the model inside a tool result. Lesson 1 records a real run where one email
-redirects a supplier payment to another bank account, and the desk writes back to
-the attacker to confirm it. The other six lessons close every route that email
-used.
+A stranger wrote that email, nobody reviewed it, and it reaches the model inside
+a tool result. Lesson 1 records a run where one email redirects a supplier
+payment to another bank account, and the desk writes back to the attacker to
+agree to it. The other six lessons close every route that email used.
 
 Four things it teaches that no guide covers:
 
@@ -228,7 +225,7 @@ Four things it teaches that no guide covers:
 - **How to read your own security posture as rows**, in four queries you run after
   every deployment.
 
-<Aside type="caution" title="It installs attack text on purpose">
+<Aside type="caution" title="The demo schema holds attack text">
 The demo schema of this course holds supplier emails that are written to be obeyed
 by a model, and one vendor name with an instruction in it. Every account number
 and address in the seed data is invalid by construction, and `00_teardown.sql`
@@ -249,7 +246,7 @@ shipments, one temperature logger for each one, and the question "which shipment
 broke the cold chain, and what do we claim?".
 
 That question is 26 tool calls, and the recorded run needs a raised budget to
-finish at all. By lesson 4 it is **one** tool call, because the model writes a
+finish. By lesson 4 it is **one** tool call, because the model writes a
 JavaScript program that loops inside your database and returns only the answer.
 Each lesson prints the tokens its run used, so the course ends with a table built
 from real runs and not from a claim.

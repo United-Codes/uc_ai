@@ -27,7 +27,7 @@ there is no error anywhere.
 **Without the program,** you change the prompt and hope. **With the program,** you
 read the JavaScript that produced the number.
 
-Lesson 4 needs what this lesson teaches, so it comes before the harder ones.
+Lesson 4 needs what this lesson teaches, so it comes first.
 
 ## The program is an ordinary tool call
 
@@ -165,8 +165,6 @@ A code-mode failure is **data**. UC AI returns it to the model as a JSON object
 with an `error` and a `hint`, and the run continues. The model reads the error and
 writes a better program on its next turn.
 
-UC AI does this deliberately.
-
 <Aside type="caution" title="A run that does not raise can still be wrong">
 Your PL/SQL call succeeds when the program failed. `generate_text` returns
 normally, `finish_reason` is `stop`, and the answer is whatever the model made of
@@ -215,8 +213,8 @@ CLAIMS_FILED
 ```
 
 Second, print the program of your own lesson 2 run and read it. The one question
-to answer: does it read the fields that your tools really return? Compare its
-field names against the JSON your handler builds.
+to answer: does it read the fields that your tools return? Compare its field names
+against the JSON your handler builds.
 
 ## Key takeaways
 
@@ -236,6 +234,6 @@ tools](/products/uc-ai/docs/guides/programmatic-tool-calling/#how-the-program-ca
 
 <LinkCard
   title="Next lesson: Tell the program what your tools return"
-  description="Print what the program is really told about your tools, then correct it and watch the same question cost 3981 tokens."
+  description="Print what the program is told about your tools, then correct it and watch the same question cost 3981 tokens."
   href="/products/uc-ai/docs/tutorial/analyze-data-at-scale/04-the-catalog-is-the-api/"
 />

@@ -79,8 +79,8 @@ Two things still went wrong:
 - **The note is still there.** The run read it, used it, and left it in the store for
   the next conversation and the one after that.
 
-A wrong answer is one bad shift. A wrong note is every shift until somebody finds
-it.
+A wrong answer affects one shift. A wrong note affects every shift until somebody
+finds it.
 
 ## Rank your tables above the memory
 
@@ -173,7 +173,7 @@ end;
 /
 ```
 
-Run it from a scheduler job. It is hygiene, and it is worth having.
+Run it from a scheduler job. It keeps the store small.
 
 It is not an answer to a stale note. `expire_files` works on
 `greatest(last_accessed_at, updated_at)`, and **reading a file counts as touching
@@ -197,8 +197,8 @@ The last run of the course did the whole job, and the trace says what it did:
 ```
 
 Read it in order: it opened its memory, read all three files, then read the machine
-and its work orders, then rewrote `history.txt`, then answered. That is the
-precedence rule happening.
+and its work orders, then rewrote `history.txt`, then answered. The precedence rule
+produced that order.
 
 ```
 STATUS       CALLS    IN_TOK    OUT_TOK    RUN_CONTEXT

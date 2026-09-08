@@ -77,10 +77,10 @@ l_result := uc_ai_agents_api.execute_agent(
 );
 ```
 
-Two things there are deliberate. `reset_globals` clears every global, including the
-one lesson 2 set, so nothing in this block can be the reason code mode runs. And
-`today` comes from `sysdate`, because `00_setup.sql` makes every date relative to
-`sysdate`, and a literal date would age.
+Two things in that block have a reason. `reset_globals` clears every global,
+including the one lesson 2 set, so nothing in this block can be the reason code
+mode runs. And `today` comes from `sysdate`, because `00_setup.sql` makes every
+date relative to `sysdate`, and a literal date would age.
 
 This run computes over 1176 readings, then writes.
 
@@ -134,7 +134,7 @@ SEQ  ROLE          TOOL_NAME         DETAIL_CHARS
  13  assistant                                1294
 ```
 
-Read that list from the top. It is the whole run in thirteen rows.
+The list is the whole run in thirteen rows.
 
 - Row 2 is 2598 characters of JavaScript. Row 3 is 239 characters, which is short
   for a result and about right for an error. It was an error. The model wrote a
@@ -267,7 +267,7 @@ is small.
 
 ## Who filed the claim
 
-The claims are in the table, and one column is worth reading closely:
+The claims are in the table, with the column that records who filed them:
 
 ```sql
 select s.shipment_no, c.minutes_over, c.amount_eur, c.filed_by
@@ -283,8 +283,7 @@ SHP-2052                90          240   UC_AI
 SHP-2061               210          960   UC_AI
 ```
 
-`filed_by` says `UC_AI`, the schema, and getting that right took one extra step in
-the handler.
+`filed_by` says `UC_AI`, the schema, and that took one extra step in the handler.
 
 The obvious way to write an audit column is
 `coalesce(sys_context('APEX$SESSION','app_user'), sys_context('userenv','session_user'))`.
@@ -342,7 +341,8 @@ other code-mode user of the database.
 - Write `g_tool_tags` in lower case. A wrong case matches no tool and raises no
   error.
 - UC AI keeps the generated program in `uc_ai_agent_messages.tool_input`, as a
-  CLOB. That is the audit trail, and it is better evidence than the answer.
+  CLOB. That is the audit trail, and it records what ran, not what the model said
+  about it.
 - The saving comes from data that stops crossing the wire. Most of it came from
   `code_mode_access`, not from the flag.
 - Measure before you decide. One tool call gains nothing from a program.

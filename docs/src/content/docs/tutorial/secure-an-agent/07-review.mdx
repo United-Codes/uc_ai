@@ -1,6 +1,6 @@
 ---
 title: Read your own configuration
-description: Four queries that answer what an agent can do, who wrote the PL/SQL behind its tools, what it already tried, and where the untrusted text is — plus a review checklist.
+description: Four queries that answer what an agent can do, who wrote the PL/SQL behind its tools, what it already tried, and where the untrusted text is. It ends with a review checklist.
 sidebar:
   order: 7
 ---
@@ -32,7 +32,7 @@ anybody writes to it.
 And it is rows: which tools a tag reaches, what those tools declare, who wrote the
 PL/SQL behind them, and what the agent already tried.
 
-## 1. What can each agent do?
+## 1. What each agent can do
 
 An agent names its profile by **code and version**, and the version is null when
 the agent resolves the latest active one. So the join needs both branches:
@@ -90,9 +90,7 @@ Nothing in the query above can change a bank account, because the row for that
 tool is gone. Every write tool the desk still has declares one parameter, and
 neither of them is a record or an amount.
 
-Then look at the sixth row.
-
-`MEMORY` is on `AP_DESK` because
+The sixth row is `MEMORY`. It is on `AP_DESK` because
 [lesson 5](/products/uc-ai/docs/tutorial/secure-an-agent/05-confused-deputy/) called
 `uc_ai_memory.enable_for_agent`, and that call adds the memory tag to the profile.
 It is a tool with **ten** parameters the model chooses, and one of them is a path
@@ -104,8 +102,7 @@ not grant.**
 
 ### There is no column that says whether a tool writes
 
-This is the query most people write next, and it is worth running once to see it
-fail:
+The next query to try is this one, and it fails:
 
 ```sql
 select t.code
@@ -135,7 +132,6 @@ A tool row holds the **call**, not the code. `function_call` is one line of PL/S
 that names a procedure, and what that procedure does is in a package the row does
 not mention. So no query over `uc_ai_tools` can tell you which of your tools
 write. The naive one is worse than nothing, because it produces a clean report.
-
 
 Keep the register outside the table. This course puts every read tool on
 `apread` and every write tool on `apwrite`, rather than trusting somebody to work
@@ -170,8 +166,8 @@ select a.code as agent
 ```
 
 On the schema that recorded this course it returned 28 rows, from four unrelated
-projects, and every one of them said `scoped`. That is the answer you want, and it
-is worth re-reading after every deployment rather than once.
+projects, and every one of them said `scoped`. That is the answer you want. Run it
+after every deployment, not once.
 
 ## 2. Who can change what a tool does
 
@@ -221,7 +217,7 @@ public in that package, so granting it to another schema is close to granting
 arbitrary PL/SQL execution as the UC AI owner.
 </Aside>
 
-### Is a hook already active in your schema?
+### Find an active UC_AI_HOOK
 
 ```sql
 select o.object_name, o.object_type, o.status
@@ -243,10 +239,10 @@ UC_AI_HOOK    PACKAGE BODY    VALID    2026-08-23 12:28
 ```
 
 Two rows mean a hook is running before every tool call of every agent in this
-schema, and nobody had to register it. If that surprises you on your own schema,
-read the body before you trust anything else in this list.
+schema, and nobody had to register it. If you did not know about that package on
+your own schema, read its body before you trust anything else in this list.
 
-## 3. What did it try?
+## 3. What the desk already tried
 
 A refusal is the record of an attempt:
 
@@ -284,8 +280,7 @@ optimistic email. Twenty against one supplier is that supplier probing you.
 The fifteen refusals in
 [lesson 3](/products/uc-ai/docs/tutorial/secure-an-agent/03-bound-write/) do not
 appear here. They are direct handler calls, so no execution row and no message
-row exists for them. This query sees agent runs
-only.
+row exists for them. This query sees agent runs only.
 
 <Aside type="note" title="A plain generate_text call records nothing">
 `uc_ai_agent_messages` and `uc_ai_agent_executions` are written by the agent
@@ -297,7 +292,7 @@ your codebase, that path has no audit trail. Give it one in the handler, or rout
 everything through an agent.
 </Aside>
 
-## 4. Where is the untrusted text?
+## 4. Where the untrusted text is
 
 ```sql
 select m.id
@@ -366,8 +361,8 @@ The model of
 [lesson 4](/products/uc-ai/docs/tutorial/secure-an-agent/04-untrusted-text/) quoted
 that same string back in `untrusted_instructions_found` in every recorded run.
 
-Two weak detectors that fail differently are worth more than one you trust. Use
-the pattern to find candidates cheaply, and the reporter agent to read them.
+The two detectors fail in different places, so run both. Use the pattern to find
+candidates cheaply, and the reporter agent to read them.
 
 ## Verification: what the four queries must say here
 
@@ -383,8 +378,7 @@ you can check:
 | 3 | Every refusal carries a `reason` from the `c_reason_*` list, and none carries an ORA number. |
 | 4 | `8004` ranks first, `8002` second, and the two remaining attacks rank as `ok`. |
 
-The last row is the one to keep. Two of the four attacks in this schema score
-zero.
+Two of the four attacks in this schema score zero.
 
 ## The review checklist
 
@@ -407,7 +401,7 @@ Twelve items. Each one is a query you ran or a decision you made:
 11. Memory is not enabled on an agent that reads untrusted text, or it expires.
 12. The kill switch is a row, and somebody who is not you can set it.
 
-## Switching it off
+## Switch it off
 
 Three levels, most reversible first:
 
@@ -429,7 +423,7 @@ delete from uc_ai_tools where code = 'AP_APPROVE_INVOICE';
 `purge_agent` deletes the run history as well, which deletes the audit trail of
 everything above. The warning about that is in
 [lesson 9 of the first
-course](/products/uc-ai/docs/tutorial/build-an-agent/09-audit-and-shipping/).
+course](/products/uc-ai/docs/tutorial/build-an-agent/07-audit-and-shipping/).
 
 ## The finished desk, on one invoice, end to end
 
@@ -490,7 +484,7 @@ completed   UC_AI        db                        8     2781        86   {"invo
 `run_context` is the column to keep. When somebody asks in six months why this
 approval carries Petra's name, that row is the answer.
 
-### Count the tool calls, not just the outcome
+### Count the tool calls, not only the outcome
 
 Eight tool calls, and **four of them are `MEMORY`** — bookkeeping the model chose
 to do, none of it about this invoice. `g_max_tool_calls` on this profile is 8, from
@@ -504,13 +498,13 @@ to the supplier, and before it said anything to the clerk: 25 output tokens, non
 of which reached a person.
 
 Same agent, same question, two outcomes. The difference was how much bookkeeping
-the model felt like doing.
+the model did.
 
 ### The same job with the memory taken off
 
 [Lesson 5](/products/uc-ai/docs/tutorial/secure-an-agent/05-confused-deputy/) said
-not to give memory to the desk that acts. Here is what that advice is worth in
-tool calls:
+not to give memory to the desk that acts. Here is the same job with the memory
+taken off:
 
 ```sql
 begin

@@ -41,23 +41,24 @@ end if;
 
 An admin sees the tool calls. Everyone else sees the answer and nothing else.
 
-This is not a display setting. When a flag is false, the plug-in **removes those
-rows from the response on the server**, so the browser never receives them. A
-user who opens the developer tools finds nothing, because there is nothing there.
+The flags do more than change the display. When a flag is false, the plug-in
+**removes those rows from the response on the server**, so the browser never
+receives them. A user who opens the developer tools finds nothing, because there
+is nothing there.
 
-<Aside type="caution" title="Clearing the box turns everything off">
+<Aside type="caution" title="An empty box turns every flag off">
 The shipped default has reasoning, tools and metadata **on**. Clearing the box
-does not reset it to something sensible: an empty attribute means every flag is
-false, so all the detail disappears at once.
+does not restore that default: an empty attribute means every flag is false, so
+all the detail disappears at once.
 
 Set the function you want. Do not empty the box to "start again".
 </Aside>
 
-Tool names deserve a thought of their own. `SC_LIST_INVOICES` is harmless.
+Tool names are part of this. `SC_LIST_INVOICES` is harmless.
 `GET_HR_SALARIES` tells a user something about your system that you may not have
 meant to publish. `show_tools` is what controls that.
 
-## Record who really asked the question
+## Record who asked the question
 
 Lesson 3 showed the audit trail saying the wrong thing:
 
@@ -99,8 +100,7 @@ it, a chat turn is a database caller, so only limits scoped `global` with the
 audience `any` govern it. After it, every limit scoped to a user, an application
 or a session starts to apply.
 
-That is what you want. Know that it happens on the turn you add this attribute,
-not later.
+It happens on the turn you add this attribute, not later.
 </Aside>
 
 ## Collect feedback
@@ -123,7 +123,7 @@ select session_id, feedback_rating, feedback_comment, feedback_at
 ```
 
 `uc_ai_agents_api.list_sessions` returns the same columns, so "list the
-conversations people were unhappy with" is one query. That query points at the
+conversations with a negative rating" is one query. That query points at the
 prompts and the tools that need work.
 
 ## Check it yourself
@@ -139,8 +139,8 @@ select role, count(*)
 ```
 
 With `show_tools` off, the `tool_call` and `tool_result` rows are still in the
-table — they are just never sent to that user. The audit trail stays complete
-while the screen stays clean.
+table — they are never sent to that user. The audit trail stays complete, and the
+user sees only the answer.
 
 ## Key takeaways
 

@@ -24,7 +24,7 @@ The bank tool is gone. The desk still has to approve invoices, so one tool that
 writes has to come back.
 
 The naive one took three arguments: `invoice_no`, `amount` and `note`. Two of
-those are worth money, and the model reads its values out of a supplier email.
+those decide money, and the model reads its values out of a supplier email.
 
 **Without the run context,** the model chooses which invoice and how much.
 **With it,** the model chooses a sentence of explanation, and nothing else.
@@ -70,11 +70,11 @@ One sentence holds this lesson together:
 > The run context says **who is asking**. The database says **what they can do**.
 
 The first course used the run context to [decide which rows a tool may
-read](/products/uc-ai/docs/tutorial/build-an-agent/03-tools-that-read/).
-Deciding what a caller may **do** is the harder job, and it is this one.
+read](/products/uc-ai/docs/tutorial/build-an-agent/03-tools-that-read/). This
+lesson decides what a caller can **do**.
 
-An identity in `_ctx` is a claim your application makes. An authority in `_ctx`
-would be a limit the caller can raise, so it does not go there.
+An identity in `_ctx` is a claim your application makes. An authority in `_ctx` is
+a limit the caller can raise, so it does not go there.
 
 ## Seven conditions, in PL/SQL
 
@@ -212,7 +212,7 @@ INV-88003    RECEIVED     V-1002      DE00000000000000002202
 
 That IBAN is the seeded one. Lesson 1 changed it with the same email.
 
-Two more things are visible in that trace, and both matter:
+Two more things are visible in that trace:
 
 - The read tools sent `{}`. They have no arguments to send, so there was nothing
   in them for the email to change.
@@ -276,7 +276,7 @@ INV-88001 petra.k AGAIN, the second time    -> ALREADY_APPROVED
 rolled back.
 ```
 
-Four pairs are worth pointing at:
+Four pairs from that table:
 
 - Rows 3 and 15 are the **same invoice**, approved for one clerk and refused for
   another. The limit belongs to the clerk, not to the invoice.
@@ -323,7 +323,7 @@ recorded for INV-88003, so it is not payable. ..."}
 Five forged keys, all ignored. `goods_receipt` is the one to look at: the handler
 never reads it, because it reads the row.
 
-<Aside type="caution" title="The run context is trusted, and that is now your problem">
+<Aside type="caution" title="The run context is trusted, and the caller builds it">
 No model can write `_ctx`. Every **caller** of `execute_agent` can.
 
 A page that takes the clerk from a page item, a URL parameter or an AJAX payload
@@ -357,6 +357,6 @@ reserved name and where else the run context applies.
 
 <LinkCard
   title="Next lesson: Label the text you cannot trust"
-  description="Mark untrusted text at the tool boundary, turn the reader into a reporter, and measure what the label is really worth."
+  description="Mark untrusted text at the tool boundary, turn the reader into a reporter, and measure what the label is worth."
   href="/products/uc-ai/docs/tutorial/secure-an-agent/04-untrusted-text/"
 />

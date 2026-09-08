@@ -37,9 +37,8 @@ works, you are ready. If it does not, the [installation
 guide](/products/uc-ai/docs/guides/installation/) covers the network and key
 setup.
 
-The version matters: the plug-in package calls `execute_agent` with
-`p_run_context`, which is new in 26.4, so on an older version it does not
-compile.
+The plug-in package calls `execute_agent` with `p_run_context`, which is new in
+26.4, so it does not compile on an older version.
 
 You also need the plug-in itself. It is attached to the [latest UC AI
 release](https://github.com/United-Codes/uc_ai/releases/latest).
@@ -59,7 +58,7 @@ Run the setup script once:
 sql your_user/your_password@your_db @00_setup.sql
 ```
 
-It ends with a report. Every line must be good before you go on. To remove
+It ends with a report. Every line must pass before you go on. To remove
 everything again later, run `00_teardown.sql` from the same directory.
 
 ```
@@ -160,13 +159,13 @@ and it reads the value from session state. A value that exists only in the
 browser is not in session state, so the plug-in gets nothing and the agent stops
 with a missing-value error.
 
-A computation writes to session state. That is the difference, and it is hard to
-see, because the item looks correct on the page.
+A computation writes to session state. The item looks correct on the page either
+way.
 </Aside>
 
 ## Send the first message
 
-Run the page and ask the desk something it should know:
+Run the page and ask the desk a question about the contract:
 
 > Which invoices on this contract still have an uncredited amount?
 

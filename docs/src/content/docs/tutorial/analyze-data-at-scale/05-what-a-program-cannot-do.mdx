@@ -46,7 +46,7 @@ l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
 );
 ```
 
-This is the split code mode wants:
+Code mode splits the work three ways:
 
 - the **program** computes over large data
 - the **model** decides what to do with the small result
@@ -104,8 +104,6 @@ const result = probe;
    the uncommitted row of the caller is still pending: yes
 ```
 
-The second line shows the uncommitted row is still pending.
-
 **`COMMIT` and `ROLLBACK` need no privilege.** A sandbox built only on privileges
 still lets generated code throw away the pending work of the caller. Removal of all
 SQL is what stops that, and it is why `PURE` is the context to use.
@@ -160,9 +158,9 @@ Twenty-five. One for `CC_LIST_SHIPMENTS` and one for each of the 24
 `CC_GET_READINGS` calls. UC AI does not call the hook one time for the program. It
 calls the hook for every `callTool` inside it.
 
-So authorization and auditing through this hook keep working in code mode.
-It also means that a hook which writes an audit row must be cheap.
-One tool call from the model can produce a hundred rows.
+So authorization and auditing through this hook keep working in code mode. It
+also means that a hook which writes an audit row must be cheap. One tool call from
+the model can produce a hundred rows.
 
 <Aside type="note" title="Why 25 and not 26">
 This block calls the sandbox directly with `execute_agent_tool`, so nothing fires
@@ -197,7 +195,8 @@ the rejected promise, and it cannot catch its way past the decision.
 
 ## Check 5: the call budget
 
-One program can make 100 tool calls. The number is a constant, not a setting:
+One program can make 100 tool calls. The number is a constant, and you cannot
+change it:
 
 ```js
 let ok = 0, stoppedAt = null;

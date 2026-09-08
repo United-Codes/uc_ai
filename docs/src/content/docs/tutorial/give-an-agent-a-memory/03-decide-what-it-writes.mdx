@@ -129,14 +129,14 @@ Two more facts about a layout change:
 ## Adopt the layout on an empty store
 
 The store still holds the names the desk chose before the rules existed. Nothing
-migrates them, and asking a model to tidy its own filing is not something you can
-check. So the script empties the AS-14 store first:
+migrates them, and you cannot check whether a model tidied its own filing. So the
+script empties the AS-14 store first:
 
 ```sql
 uc_ai_memory.clear_store_files(l_store_id);
 ```
 
-The AS-31 store is left as it was, on purpose. At the end of this lesson it still
+The script leaves the AS-31 store as it was. At the end of this lesson it still
 holds `/memories/current_asset.md`, which is a name the rules do not allow. That is
 what an unmigrated store looks like.
 
@@ -240,7 +240,7 @@ Everything in this lesson is an instruction to a model. The desk obeyed it in th
 recorded runs, and a model can leave an instruction out of any run.
 
 If a file must not be written, the control is not a sentence in a prompt. It is
-`clear_store_files` on a schedule, a review of the store, or not giving that agent a
+`clear_store_files` on a schedule, a review of the store, or an agent with no
 memory at all. For the case where the untrusted text comes from outside your company,
 read [What to do about a poisoned
 memory](/products/uc-ai/docs/tutorial/secure-an-agent/05-confused-deputy/#what-to-do-about-a-poisoned-memory).

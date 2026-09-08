@@ -25,7 +25,7 @@ session item, so the conversation survives a page load.
 Put those together. The engineer is on contract 88, asks two questions, then
 navigates to contract 99. Same page, same conversation, different record.
 
-What should the chat do?
+The region has to decide what to do.
 
 ## UC AI refuses to re-bind a conversation
 
@@ -65,11 +65,11 @@ turn 2 (contract 99): ORA-20507: Run context key "contract_id" is already bound
                       to "88" and cannot be changed to "99"
 ```
 
-This is deliberate. The conversation already holds messages about contract 88, and
-memory files may be stored under that binding. Moving the conversation to another
-contract would show one customer's conversation under another customer's record.
+The conversation already holds messages about contract 88, and memory files can be
+stored under that binding. A move to another contract would show one customer's
+conversation under another customer's record.
 
-## The three settings, and when to use each
+## The three values, and when to use each
 
 The region attribute **Run Context Drift**, in the **Run Context** group, decides
 what the plug-in does before it sends anything:
@@ -116,8 +116,8 @@ costs nothing.
 
 ## Key takeaways
 
-- UC AI binds the run context on the first turn. A later turn may add a key, never
-  change one: `ORA-20507`.
+- UC AI binds the run context on the first turn. A later turn can add a key, and
+  never change one: `ORA-20507`.
 - **Run Context Drift** decides what the region does about it: `error`,
   `new_session`, or `ignore`.
 - Set it explicitly. An empty box does not mean the same thing in every region.

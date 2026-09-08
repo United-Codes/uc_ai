@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={6}
   of={7}
   minutes={20}
-  promise="every run has a veto you own, a kill switch that is a row, and a rollback — and you know what each one cannot see."
+  promise="every run has a veto you own, a kill switch that is a row, and a rollback, and you know what each one cannot see."
   scripts={["06_blast_radius.sql"]}
   course="secure-an-agent"
 />
@@ -38,8 +38,7 @@ before every tool call, in every run, including a plain `uc_ai.generate_text`
 call. So it sees everything in the schema, and narrowing it to what you meant is
 your job.
 
-`ap_desk_hook` carries three rules, and they are deliberately of three different
-kinds:
+`ap_desk_hook` carries three rules of three different kinds:
 
 ```sql
 procedure before_execution(
@@ -143,8 +142,8 @@ end;
 
 <Aside type="caution" title="A package named UC_AI_HOOK activates itself">
 A valid package with that name in the schema is picked up with no registration
-call, for **every agent and every session**. Compile one and you have changed the
-behavior of every agent in the schema, including other people's.
+call, for **every agent and every session**. Compile one, and the behavior of
+every agent in the schema changes, including other people's.
 
 Use `set_execution_hook` while you are learning, and clear it afterwards.
 [Lesson 7](/products/uc-ai/docs/tutorial/secure-an-agent/07-review/) has the query
@@ -182,7 +181,7 @@ failed                  0                    0                     0   ORA-20991
 ```
 
 <Aside type="note" title="A failed run records no tokens and no messages">
-All three counters are `0`, and the run certainly called tools before the veto.
+All three counters are `0`, and the run called tools before the veto.
 UC AI has no result object to read them from when a run raises, so
 `tool_calls_count = 0` on a failed row does **not** mean no tool ran. Count the
 `tool_call` rows in `uc_ai_agent_messages` when you need the truth. This is the
@@ -190,14 +189,14 @@ same point as [lesson 4 of the first
 course](/products/uc-ai/docs/tutorial/build-an-agent/04-see-what-it-did/).
 </Aside>
 
-<Aside type="caution" title="Why this run needed a vendor_no">
+<Aside type="caution" title="This run needs a vendor_no">
 `p_run_context` above carries `vendor_no`, which has nothing to do with the hook.
 Lesson 5 scoped the memory of `AP_DESK` on `vendor_no`. A run that omits that key
 now stops with `ORA-20426`. The stop comes before the execution row exists, and
 before the hook runs.
 
-Enabling memory changed the calling contract of an agent you already had. That is
-worth knowing before a queued job starts failing on a key nobody remembers adding.
+Memory changed the calling contract of an agent you already had. A queued job then
+fails on a key nobody remembers adding.
 </Aside>
 
 ## Verification, part 1: the hook, with no run at all
@@ -266,9 +265,9 @@ exception
 end;
 ```
 
-That matters most when a run fails **after** a write. The approval is still in
-your transaction. Roll back, or you keep an approval that the clerk never saw and
-the model never confirmed.
+The case to plan for is a run that fails **after** a write. The approval is still
+in your transaction. Roll back, or you keep an approval that the clerk never saw
+and the model never confirmed.
 
 ```
 {"status":"approved","approval_no":"AP-5007","invoice_no":"INV-88001","amount":5712,"approved_by":"petra.k"}
@@ -318,7 +317,7 @@ other providers it ends the whole run instead. Return a refusal for a business
 decision. Raise in the hook for a hard stop.
 </Aside>
 
-## Cap how many tools one run may call
+## Cap how many tools one run can call
 
 `g_max_tool_calls` bounds the tool loop. The default is 10. What happens at the
 bound is not the same everywhere either:

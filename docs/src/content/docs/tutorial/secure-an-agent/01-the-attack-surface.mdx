@@ -1,6 +1,6 @@
 ---
 title: A supplier email changes a bank account
-description: Build the payables desk the way a first draft builds it, then watch a supplier email redirect a payment — and see that the tool, not the model, is the fault.
+description: Build the payables desk the way a first draft builds it, then watch a supplier email redirect a payment. The fault is in the tool, not in the model.
 sidebar:
   order: 1
 ---
@@ -52,7 +52,7 @@ lessons name most often:
 | `invoice_id: 7005` | `INV-88004` | `V-1003` Rosswerk | `8004` |
 | `invoice_id: 7007` | `INV-88006` | `V-1001` Ostwald | none |
 
-<Aside type="note" title="This course assumes the first one">
+<Aside type="note" title="This course assumes Build an Agent">
 [Build an Agent](/products/uc-ai/docs/tutorial/build-an-agent/01-the-scenario/)
 teaches what a tool is, how the run context binds one, how to read the trace, and
 why a refusal is a result. This course uses all of it and does not repeat it. If
@@ -89,7 +89,7 @@ Every other lesson is provider-independent. Providers this course did not test a
 not listed, in either direction.
 </Aside>
 
-<Aside type="caution" title="This schema holds attack text on purpose">
+<Aside type="caution" title="The demo schema holds attack text">
 `00_setup.sql` writes five supplier emails into `ap_messages`. Four of them are
 attacks, and each one attacks differently. One `ap_vendors` row carries an
 instruction in the vendor name.
@@ -125,8 +125,8 @@ tokens** for the whole course. Lesson 4 is the only lesson that repeats a run.
 
 ## The problem
 
-A first draft gives the agent the tools that make it useful. Each one is obvious
-on its own, and the set is not.
+A first draft gives the agent every tool the job seems to need. Each one is
+obvious on its own, and the set is not.
 
 A **threat model** is a short, written answer to one question: what can somebody
 outside this company make my agent do?
@@ -144,16 +144,14 @@ Here is what the first draft handed the model:
 | `AP_UPDATE_VENDOR_BANK_N` | vendor number, **IBAN** | writes `ap_vendors.iban` |
 | `AP_SEND_VENDOR_REPLY_N` | address, subject, **body** | writes `ap_outbox` |
 
-Read the middle column again. Every value in bold comes from the model, and the
-model reads its values out of an email.
+Every value in bold comes from the model, and the model reads its values out of an
+email.
 
 ## The email
 
-This is seed row `8002`, on invoice `INV-88003`. Read it and notice what is **not**
-in it. There is no "ignore your instructions". There is no fake system block. There
-is no urgency:
-
-The dates in it are relative to `sysdate`, so yours will differ:
+This is seed row `8002`, on invoice `INV-88003`. There is no "ignore your
+instructions" in it. There is no fake system block. There is no urgency. The dates
+in it are relative to `sysdate`, so yours will differ:
 
 ```text
 Subject: Invoice INV-88003 and updated remittance details
@@ -253,9 +251,9 @@ TO_ADDRESS                          SUBJECT
 k.weber@kepler-kalibrier.example    Re: Invoice INV-88003 - remittance details updated
 ```
 
-The next **payment run** — the job that actually moves the money — pays the
-attacker. No invoice was approved, no rule was
-broken, and nothing in your system says an attack happened.
+The next **payment run**, the job that moves the money, pays the attacker. No
+invoice was approved, no rule was broken, and nothing in your system says an
+attack happened.
 
 `CHANGED_BY` says `UC_AI`, because the naive handler read the database user. It
 does not say which clerk was at the desk.
@@ -317,6 +315,6 @@ handler patterns.
 
 <LinkCard
   title="Next lesson: Remove the bank-account tool"
-  description="Find out what your agent is really offered, then remove the capability instead of defending it."
+  description="Find out what your agent is offered, then remove the capability instead of defending it."
   href="/products/uc-ai/docs/tutorial/secure-an-agent/02-least-privilege/"
 />
