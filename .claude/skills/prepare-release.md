@@ -126,7 +126,7 @@ Run the LLM-free suites by name.
 
 **LLM-free suites** — verified: none of these calls `generate_text`,
 `generate_embeddings`, `execute_agent` or `execute_profile` in a way that reaches a
-provider. 416 tests, all of them fast and free:
+provider. 575 tests, all of them fast and free:
 
 ```sql
 begin ut.run('test_uc_ai_toon'); end;                    -- 22
@@ -155,6 +155,14 @@ begin ut.run('test_uc_ai_agent_session_meta'); end;      -- 28
 /
 begin ut.run('test_uc_ai_agent_validation'); end;        -- 41
 /
+begin ut.run('test_uc_ai_agent_as_tool'); end;           -- 20
+/
+begin ut.run('test_uc_ai_agent_purge'); end;             --  9
+/
+begin ut.run('test_uc_ai_memory'); end;                  -- 84
+/
+begin ut.run('test_uc_ai_run_context'); end;             -- 46
+/
 begin ut.run('test_uc_ai_hook'); end;                    -- 12
 /
 begin ut.run('test_uc_ai_wire'); end;                    -- 24
@@ -181,8 +189,16 @@ begin ut.run('test_uc_ai_spec_wire'); end;               --  5
 /
 ```
 
-The last two do call `execute_agent`, but only on an agent that must fail first —
-uncommitted, or pointing at a missing prompt profile — so no provider is reached.
+The last two of the wire suites do call `execute_agent`, but only on an agent that
+must fail first — uncommitted, or pointing at a missing prompt profile — so no
+provider is reached.
+
+The four agent suites in this set reach no provider either, each for its own
+reason: `agent_as_tool` and `agent_purge` run workflows built from `plsql` steps
+only, `run_context` pins an offline OCI model so `generate_text` raises before it
+opens a connection, and `memory` drives `uc_ai_memory.execute_command` directly —
+its one `execute_agent` call is the test that expects the run to fail at start.
+Keep that property when you add a test to them.
 
 **Do not** put these in the LLM-free set: `test_uc_ai_prompt_profiles_api` calls
 `execute_profile` 25 times, and every `test_uc_ai_agent_*` suite not named above

@@ -14,7 +14,7 @@ For new installations follow [this guide](https://www.united-codes.com/products/
 **Before you upgrade**:
 
 - **The migration resets the token totals on historical parent runs.** `v26.2_to_v26.3.sql` sets `total_input_tokens` and `total_output_tokens` to 0 on every existing `workflow`, `handoff`, and `conversation` row in `uc_ai_agent_executions`. These rows held the sum of their child runs. The new session totals sum every row, so the old parent values would count the same tokens twice. Profile and orchestrator rows are not touched. If you report on these two columns, keep a copy of the table before you upgrade.
-- **The message-log backfill covers the last completed turn of each session.** For each session the migration reconstructs the transcript from the most recent completed top-level run, whose stored result holds the accumulated conversation. A session whose last top-level run failed gets no transcript, and backfilled rows carry no `agent_code` attribution. Turns from the upgrade onward are recorded in full.
+- **The message-log backfill covers the last turn of each session that stored a result.** For each session the migration reconstructs the transcript from the most recent top-level run whose stored result holds the accumulated conversation. A failed final turn stores no result, so the transcript comes from the turn before it and stops there. A session whose turns never stored a result gets no transcript. Backfilled rows carry no `agent_code` attribution. Turns from the upgrade onward are recorded in full.
 
 **Breaking change**:
 

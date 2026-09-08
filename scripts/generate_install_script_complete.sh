@@ -68,6 +68,10 @@ PROMPT ===================================================
 PROMPT UC AI Installation Starting...
 PROMPT ===================================================
 
+-- The inlined table DDL carries whitespace-only lines inside a statement, which
+-- SQL*Plus and SQLcl treat as the end of the statement unless this is on. Without
+-- it, "create table uc_ai_agents" is cut short and fails with ORA-00931.
+set sqlblanklines on
 EOF
 
 # Install tables first
