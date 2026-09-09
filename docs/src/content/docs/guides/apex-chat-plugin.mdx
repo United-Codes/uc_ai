@@ -16,8 +16,11 @@ background job, it polls for the answer, and it keeps the conversation.
 ![An empty UC AI chat region: the title APEX Helper, a welcome message next to the assistant avatar, and a row of three outlined suggested-prompt buttons labelled "Try asking" directly above the message box](../../../assets/apex-chat/chat-empty-state.png)
 
 <Aside type="note" title="Where to get the plug-in">
-The plug-in is not part of the UC AI installation. It is a separate download.
-Ask United Codes for the plug-in files.
+The plug-in is not part of the UC AI installation. Download the
+`uc-ai-chat-*.zip` file from the [latest UC AI
+release](https://github.com/United-Codes/uc_ai/releases/latest). The archive
+holds the table script, the two packages, the optional hook package, and the
+plug-in export file.
 </Aside>
 
 ## Why the agent needs a background job
@@ -56,26 +59,26 @@ You need these three things:
 
 1. ### Create the table
 
-   Run `src/ddl/ai_tables.sql`. This script creates `uc_ai_chat_messages`, which
-   holds every message of every conversation.
+   Run `ai_tables.sql`. This script creates `uc_ai_chat_messages`, which holds
+   every message of every conversation.
 
    If the table exists from an earlier version, run the `alter table` blocks at
    the end of the same script instead.
 
 2. ### Install the packages
 
-   Run `src/plsql/uc_ai_chat.pks` and `src/plsql/uc_ai_chat.pkb`. The package
-   body calls `uc_ai_agents_api`, so UC AI must be installed first.
+   Run `uc_ai_chat.pks` and then `uc_ai_chat.pkb`. The package body calls
+   `uc_ai_agents_api`, so UC AI must be installed first.
 
 3. ### Import the plug-in
 
-   Import the plug-in export file into your APEX application. The file is a
-   normal APEX component export.
+   Import `region_type_plugin_com_united_codes_uc_ai_chat.sql` into your APEX
+   application. The file is a normal APEX component export.
 
 4. ### Optional: show the tool progress
 
-   Install `src/plsql/uc_ai_chat_hook.pks` and `.pkb`. With this package, the
-   chat shows the name of the tool that runs now.
+   Run `uc_ai_chat_hook.pks` and then `uc_ai_chat_hook.pkb`. With this package,
+   the chat shows the name of the tool that runs now.
 
    If UC AI is in a different schema, grant `execute` on the hook package to
    that schema. Without the grant the plug-in leaves this feature off.
