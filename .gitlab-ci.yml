@@ -21,14 +21,15 @@ build:
 
 package:
   stage: package
-  image: debian:bullseye
+  image: debian:bookworm-slim
   only:
     - main
   before_script:
-    - apt-get update && apt-get install -y zip
+    - apt-get update
+    - apt-get install --no-install-recommends -y zip
   script:
     - cd public
-    - zip -r ../uc-ai.zip ./*
+    - zip -r ../uc-ai.zip .
     - cd ..
     - mkdir -p deploy
     - mv uc-ai.zip deploy/
