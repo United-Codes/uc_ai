@@ -15,6 +15,7 @@ as
   g_use_responses_api boolean := true;
 
   -- get from https://developers.openai.com/api/docs/pricing
+  c_model_gpt_6_astra constant uc_ai.model_type := 'gpt-6-astra';
   c_model_gpt_5_6_sol constant uc_ai.model_type := 'gpt-5.6-sol';
   c_model_gpt_5_6_terra constant uc_ai.model_type := 'gpt-5.6-terra';
   c_model_gpt_5_6_luna constant uc_ai.model_type := 'gpt-5.6-luna';

@@ -22,9 +22,11 @@ as
   c_model_codestral        constant uc_ai.model_type := 'codestral-latest';
   c_model_devstral_medium  constant uc_ai.model_type := 'devstral-medium-latest';
   c_model_devstral_small   constant uc_ai.model_type := 'devstral-small-latest';
+  c_model_ministral_3_14b  constant uc_ai.model_type := 'ministral-3-14b-25-12';
   c_model_ministral_8b     constant uc_ai.model_type := 'ministral-8b-latest';
   c_model_ministral_3b     constant uc_ai.model_type := 'ministral-3b-latest';
   c_model_pixtral_large    constant uc_ai.model_type := 'pixtral-large-latest';
+  c_model_zai_glm_5_2      constant uc_ai.model_type := 'zai-glm-5-2';
 
   -- embedding models
   c_model_mistral_embed    constant uc_ai.model_type := 'mistral-embed';

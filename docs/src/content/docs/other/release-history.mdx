@@ -114,6 +114,8 @@ Providers:
 
 - **[OCI](/products/uc-ai/docs/providers/oci/): configurable output length and detectable truncation** (`uc_ai_oci.g_max_tokens`, default 4096). The adapter used a hardcoded `maxTokens` of 600 and always reported `finish_reason` as `stop`, so a truncated answer looked complete. Truncation is now reported. Also settable with the `g_max_tokens` OCI config key.
 - **[OCI](/products/uc-ai/docs/providers/oci/): image and PDF input** for the GENERIC chat format.
+- **New model constants**: `uc_ai_anthropic.c_model_claude_5_1_fable` (Claude Fable 5.1), `uc_ai_openai.c_model_gpt_6_astra` (GPT-6 Astra), `uc_ai_google.c_model_gemini_3_8_flash` (Gemini 3.8 Flash), and `uc_ai_mistral.c_model_ministral_3_14b` and `uc_ai_mistral.c_model_zai_glm_5_2` on the Mistral platform. `uc_ai_utils.get_models` returns all five.
+- **Fix: `c_model_gemini_2_0_flash_lite` held `gemini-2.0-flash_lite`.** The underscore is not part of the model id, so the constant named a model that does not exist. It is `gemini-2.0-flash-lite` now.
 - **[OCI](/products/uc-ai/docs/providers/oci/): reach a dedicated AI cluster** (`uc_ai_oci.g_endpoint_id`). `DEDICATED` serving mode now sends the OCID of the endpoint and no model id, on the chat path and on the embeddings path. `ON_DEMAND` is unchanged and stays the default. Also settable with the `g_endpoint_id` OCI config key and on a prompt profile.
 
 Internal:

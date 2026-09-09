@@ -48,9 +48,11 @@ Mistral offers a range of models optimized for different use cases. The UC AI Mi
 - `uc_ai_mistral.c_model_mistral_large` - Most capable model for complex tasks
 - `uc_ai_mistral.c_model_mistral_medium` - Balanced frontier-class multimodal model
 - `uc_ai_mistral.c_model_mistral_small` - Fast and cost-efficient multimodal model
+- `uc_ai_mistral.c_model_zai_glm_5_2` - Z.ai GLM 5.2, served on the Mistral platform
 
 ### Edge Models
 
+- `uc_ai_mistral.c_model_ministral_3_14b` - Ministral 3 14B, the largest edge model
 - `uc_ai_mistral.c_model_ministral_8b` - Powerful edge model
 - `uc_ai_mistral.c_model_ministral_3b` - Most efficient edge model
 
@@ -63,7 +65,7 @@ Mistral offers a range of models optimized for different use cases. The UC AI Mi
 - `uc_ai_mistral.c_model_mistral_embed` - General purpose text embeddings
 - `uc_ai_mistral.c_model_codestral_embed` - Code-specific embeddings
 
-Most of these constants hold a `-latest` name, such as `mistral-small-latest`. Mistral resolves such a name to the newest version of that model family. The two embedding constants hold a fixed name.
+Most of these constants hold a `-latest` name, such as `mistral-small-latest`. Mistral resolves such a name to the newest version of that model family. The two embedding constants hold a fixed name. `c_model_ministral_3_14b` and `c_model_zai_glm_5_2` hold a fixed name too, because Mistral documents no `-latest` alias for them.
 
 ### Retired Models
 
