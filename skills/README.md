@@ -1,10 +1,25 @@
-# UC AI — Claude Code Skills
+# UC AI — Agent Skills
 
-Agent skills that teach [Claude Code](https://claude.com/claude-code) (and other agents that support the skill format) how to use the [UC AI](https://www.united-codes.com/products/uc-ai/docs/) PL/SQL framework in your Oracle project. Each skill is self-contained with copy-pasteable PL/SQL, verified against the UC AI package specs.
+Agent skills that teach a coding agent how to use the [UC AI](https://www.united-codes.com/products/uc-ai/docs/) PL/SQL framework in your Oracle project. Each skill is self-contained with copy-pasteable PL/SQL, verified against the UC AI package specs.
+
+They use the `SKILL.md` format, so any agent that reads it can use them — Claude Code, Cursor, opencode, Codex, Gemini CLI, and others.
 
 ## Installation
 
-Copy the skills you need into your project's `.claude/skills/` directory:
+With the [skills CLI](https://github.com/vercel-labs/skills):
+
+```bash
+# see what is in here
+npx skills add United-Codes/uc_ai --list
+
+# all nine, into the agents the CLI finds in the project
+npx skills add United-Codes/uc_ai --all
+
+# or one skill, for one agent
+npx skills add United-Codes/uc_ai --skill uc-ai-tools -a claude-code
+```
+
+Or copy the directories you need yourself:
 
 ```bash
 # all skills
@@ -14,7 +29,7 @@ cp -r uc_ai/skills/uc-ai-* your-project/.claude/skills/
 cp -r uc_ai/skills/uc-ai-tools your-project/.claude/skills/
 ```
 
-Claude Code discovers them automatically; each skill loads when a task matches its description.
+The agent discovers them automatically; each skill loads when a task matches its description.
 
 ## Skills
 

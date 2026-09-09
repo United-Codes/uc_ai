@@ -180,18 +180,39 @@ as
   -- ============================================================================
 
   /*
-   * Registers a child agent as a temporary tool for orchestration.
+   * Registers a child agent as a tool.
    *
    * The tool handler is uc_ai_agents_api.run_agent_as_tool, which takes the
    * session and the parent execution from the context of the orchestrator run.
+   * The parameters of the tool come from the input schema of the agent.
+   *
+   * The trigger uc_ai_tools_biu sets created_by and updated_by on the tool, on
+   * its parameter rows and on its tag rows, so the caller does not give a user.
+   *
+   * The tool is written with uc_ai_tools_api.create_tool_from_schema, which
+   * inserts. A p_tool_code that already exists therefore raises ORA-00001 on
+   * the unique constraint uc_ai_tools_uk. For a setup script that runs more
+   * than once, delete the tool first, or register it with
+   * uc_ai_tools_api.merge_tool_from_schema and this handler:
+   *   'return uc_ai_agents_api.run_agent_as_tool(''my_agent'', :parameters);'
    *
    * @param p_agent_code       Code of the agent to register
    * @param p_tool_tag         Tag to assign to the tool for identification
+   * @param p_tool_code        Code of the tool. Null (the default) generates
+   *                           <agent_code>_TOOL_<guid>, which the orchestrator
+   *                           uses for a tool that lives for one run only.
+   *                           A generated code makes the returned id the only
+   *                           handle on the tool: a setup script that runs
+   *                           twice then writes two tools with the same tag,
+   *                           and the calling model sees the same specialist
+   *                           twice under two names. Give a code of your own
+   *                           for a tool that you keep.
    * @return Tool ID of the created tool
    */
   function register_agent_as_tool(
     p_agent_code       in varchar2,
-    p_tool_tag         in varchar2
+    p_tool_tag         in varchar2,
+    p_tool_code        in uc_ai_tools.code%type default null
   ) return uc_ai_tools.id%type;
 
 

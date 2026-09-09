@@ -171,7 +171,6 @@ guide heading can carry a lot of them — `guides/tools/#the-run-context` is lin
 - Agent error codes: `src/packages/uc_ai_agents_api.pkb` (-20011 to -20023)
 - Table schema: `src/tables/install.sql`
 - Input mapping syntax: `docs/input-mapping-guide.md`
-- Multi-agent architecture: `docs/multi-agent-systems-proposal.md`
 
 ## Additional Documentation
 
@@ -182,7 +181,6 @@ Check these files for context on specific topics:
 | Architectural patterns & conventions | `.claude/docs/architectural_patterns.md` |
 | Docs voice and register (all docs pages) | `.claude/skills/docs-voice.md` |
 | Structure of a tutorial course | `.claude/skills/write-tutorial-guide.md` |
-| Multi-agent system design | `docs/multi-agent-systems-proposal.md` |
 | Input mapping syntax for workflows | `docs/input-mapping-guide.md` |
 | Provider setup guides | `docs/src/content/docs/providers/*.mdx` |
 | API reference (generate_text) | `docs/src/content/docs/api/generate_text.mdx` |

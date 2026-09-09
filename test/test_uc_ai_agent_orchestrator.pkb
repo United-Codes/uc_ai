@@ -151,7 +151,8 @@ create or replace package body test_uc_ai_agent_orchestrator as
       p_session_id       => l_session_id
     );
 
-    sys.dbms_output.put_line('Orchestrator travel result JSON: ' || l_result.to_clob);
+    -- substr: put_line stops at 32767 bytes and a long travel plan exceeds it
+    sys.dbms_output.put_line('Orchestrator travel result JSON: ' || substr(l_result.to_clob, 1, 500));
     -- The prompt explicitly requests both a flight and a hotel, so the
     -- orchestrator should delegate to at least two specialist agents. We assert
     -- >= 2 rather than a higher fan-out count: exactly which extra agents

@@ -804,10 +804,15 @@ Only finalize if budget ok and no major critiques left. If you finalize, say "Fi
   )
   as
   begin
+    -- `p_result is not null`, not `ut.expect(p_result).to_be_not_null()`: giving
+    -- utPLSQL the object makes it build a JSON tree of the whole result for its
+    -- diff output, and ut_json_tree_details raises ORA-06502 "character string
+    -- buffer too small" on a large one. A long agent answer therefore errored
+    -- the test instead of failing it.
     ut.expect(
-      p_result,
+      p_result is not null,
       p_test_name || ': Result should not be null'
-    ).to_be_not_null();
+    ).to_be_true();
 
     ut.expect(
       p_result.has('final_message'),

@@ -82,5 +82,20 @@ create or replace package test_uc_ai_agent_as_tool as
   --%test(A circular agent-as-tool reference stops at the nesting limit)
   procedure recursion_hits_depth_limit;
 
+  --%test(A tool code of your own is the code of the tool)
+  procedure explicit_tool_code_is_used;
+
+  --%test(Without a tool code the name of the tool is generated)
+  procedure generated_tool_code_is_used;
+
+  --%test(The same tool code twice raises the unique constraint)
+  procedure same_tool_code_twice_raises;
+
+  --%test(Two generated codes leave two tools under one tag)
+  procedure generated_code_duplicates_tool;
+
+  --%test(The trigger sets created_by on the tool, its parameters and its tags)
+  procedure the_trigger_sets_created_by;
+
 end test_uc_ai_agent_as_tool;
 /

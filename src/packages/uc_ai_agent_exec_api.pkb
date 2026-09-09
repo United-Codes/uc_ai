@@ -873,11 +873,12 @@ create or replace package body uc_ai_agent_exec_api as
 
 
   /*
-   * Registers a child agent as a temporary tool for orchestration
+   * Registers a child agent as a tool
    */
   function register_agent_as_tool(
     p_agent_code       in varchar2,
-    p_tool_tag         in varchar2
+    p_tool_tag         in varchar2,
+    p_tool_code        in uc_ai_tools.code%type default null
   ) return uc_ai_tools.id%type
   as
     l_scope           uc_ai_logger.scope := gc_scope_prefix || 'register_agent_as_tool';
@@ -913,7 +914,12 @@ create or replace package body uc_ai_agent_exec_api as
 
     -- Create the tool
     l_tool_id := uc_ai_tools_api.create_tool_from_schema(
-      p_tool_code    => p_agent_code || '_TOOL_' || sys_guid(),
+      -- Without a code of its own the tool lives for one run only, which is
+      -- what the orchestrator wants. A generated code makes the returned id
+      -- the only handle on the tool, so a setup script that runs twice writes
+      -- two tools with the same tag and the calling model sees the same
+      -- specialist twice under two names.
+      p_tool_code    => coalesce(p_tool_code, p_agent_code || '_TOOL_' || sys_guid()),
       p_description  => l_agent.description,
       p_function_call => l_function_call,
       -- An agent without an input schema takes no parameters: json_object_t of
@@ -921,7 +927,6 @@ create or replace package body uc_ai_agent_exec_api as
       p_json_schema  => json_object_t(coalesce(l_agent.input_schema, '{"type":"object","properties":{}}')),
       p_active       => 1,
       p_tags         => apex_t_varchar2(p_tool_tag),
-      p_created_by   => 'UC_AI_AGENT_EXEC_API',
       -- direct only: delegating to a sub-agent costs LLM calls, so it stays a
       -- deliberate decision of the calling model instead of something a code-mode
       -- program can loop over unsupervised

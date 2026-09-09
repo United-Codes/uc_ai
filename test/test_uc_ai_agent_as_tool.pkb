@@ -16,6 +16,10 @@ create or replace package body test_uc_ai_agent_as_tool as
   gc_quote_code  constant varchar2(50 char) := q'#TEST_AAT_Q'UOTE#';
 
   gc_sub_tool     constant varchar2(50 char) := 'TEST_AAT_SUB_TOOL';
+  -- tool codes the register tests hand to register_agent_as_tool themselves
+  gc_named_tool   constant varchar2(50 char) := 'TEST_AAT_NAMED_TOOL';
+  gc_dup_tool     constant varchar2(50 char) := 'TEST_AAT_DUP_TOOL';
+  gc_cb_tool      constant varchar2(50 char) := 'TEST_AAT_CB_TOOL';
   gc_missing_tool constant varchar2(50 char) := 'TEST_AAT_MISSING_TOOL';
   gc_loop_tool    constant varchar2(50 char) := 'TEST_AAT_LOOP_TOOL';
 
@@ -1043,6 +1047,219 @@ create or replace package body test_uc_ai_agent_as_tool as
     sys.dbms_output.put_line('recursion depth reached: ' || l_count);
     ut.expect(l_count).to_be_greater_than(1);
   end recursion_hits_depth_limit;
+
+
+  procedure explicit_tool_code_is_used
+  as
+    l_tool_id     number;
+    l_tool_code   uc_ai_tools.code%type;
+    l_tag_count   number;
+    l_param_count number;
+  begin
+    -- A tool that you keep needs a name that you choose. The orchestrator does
+    -- not pass one, so the parameter is optional and null keeps the old name.
+    delete_tool(gc_named_tool);
+
+    l_tool_id := uc_ai_agent_exec_api.register_agent_as_tool(
+      p_agent_code => gc_sub_code,
+      p_tool_tag   => gc_tool_tag,
+      p_tool_code  => gc_named_tool
+    );
+    commit;
+
+    select code into l_tool_code from uc_ai_tools where id = l_tool_id;
+
+    sys.dbms_output.put_line('explicit_tool_code_is_used: ' || l_tool_code);
+
+    ut.expect(l_tool_code).to_equal(gc_named_tool);
+
+    -- the tag and the parameters of the agent are there as well
+    select count(*)
+      into l_tag_count
+      from uc_ai_tool_tags
+     where tool_id = l_tool_id
+       and tag_name = gc_tool_tag;
+
+    ut.expect(l_tag_count).to_equal(1);
+
+    select count(*)
+      into l_param_count
+      from uc_ai_tool_parameters
+     where tool_id = l_tool_id
+       and name = 'city';
+
+    ut.expect(l_param_count, 'the input schema of the agent became the parameters').to_equal(1);
+
+    delete_tool(gc_named_tool);
+  end explicit_tool_code_is_used;
+
+
+  procedure generated_tool_code_is_used
+  as
+    l_tool_id   number;
+    l_tool_code uc_ai_tools.code%type;
+  begin
+    -- Null gives the name the orchestrator has always used. The GUID part is
+    -- not fixed, so the assertion only reads the prefix.
+    l_tool_id := uc_ai_agent_exec_api.register_agent_as_tool(
+      p_agent_code => gc_sub_code,
+      p_tool_tag   => gc_tool_tag
+    );
+    commit;
+
+    select code into l_tool_code from uc_ai_tools where id = l_tool_id;
+
+    sys.dbms_output.put_line('generated_tool_code_is_used: ' || l_tool_code);
+
+    ut.expect(l_tool_code).to_be_like(gc_sub_code || '_TOOL_%');
+    ut.expect(l_tool_code).not_to_equal(gc_sub_code || '_TOOL_');
+
+    delete_tool(l_tool_code);
+  end generated_tool_code_is_used;
+
+
+  procedure same_tool_code_twice_raises
+  as
+    l_tool_id number;
+    l_sqlcode number;
+    l_sqlerrm varchar2(4000 char);
+    l_count   number;
+  begin
+    -- create_tool_from_schema inserts, so the second call hits the unique
+    -- constraint uc_ai_tools_uk. This is the contract the doc comment states:
+    -- a setup script that runs twice has to delete the tool first, or use
+    -- merge_tool_from_schema with the one-line handler.
+    delete_tool(gc_dup_tool);
+
+    l_tool_id := uc_ai_agent_exec_api.register_agent_as_tool(
+      p_agent_code => gc_sub_code,
+      p_tool_tag   => gc_tool_tag,
+      p_tool_code  => gc_dup_tool
+    );
+    commit;
+
+    ut.expect(l_tool_id).to_be_not_null();
+
+    begin
+      l_tool_id := uc_ai_agent_exec_api.register_agent_as_tool(
+        p_agent_code => gc_sub_code,
+        p_tool_tag   => gc_tool_tag,
+        p_tool_code  => gc_dup_tool
+      );
+      ut.fail('The second call with the same tool code should have raised');
+    -- @dblinter ignore(g-5080): the assertion is on sqlcode/sqlerrm; a backtrace would add nothing
+    exception
+      when others then
+        l_sqlcode := sqlcode;
+        l_sqlerrm := sqlerrm;
+    end;
+
+    sys.dbms_output.put_line('same_tool_code_twice_raises: ' || l_sqlcode || ' ' || l_sqlerrm);
+
+    ut.expect(l_sqlcode, 'a duplicate tool code raises the unique constraint').to_equal(-1);
+    ut.expect(l_sqlerrm).to_be_like('%UC_AI_TOOLS_UK%');
+
+    -- and there is still exactly one tool under that code
+    select count(*) into l_count from uc_ai_tools where code = gc_dup_tool;
+    ut.expect(l_count).to_equal(1);
+
+    delete_tool(gc_dup_tool);
+  end same_tool_code_twice_raises;
+
+
+  procedure generated_code_duplicates_tool
+  as
+    l_first  number;
+    l_second number;
+    l_code_1 uc_ai_tools.code%type;
+    l_code_2 uc_ai_tools.code%type;
+    l_count  number;
+  begin
+    -- This is the failure mode p_tool_code exists to prevent: a setup script
+    -- that runs twice leaves two tools under one tag, and the calling model
+    -- sees the same specialist twice under two names.
+    l_first := uc_ai_agent_exec_api.register_agent_as_tool(
+      p_agent_code => gc_sub_code,
+      p_tool_tag   => gc_tool_tag
+    );
+    l_second := uc_ai_agent_exec_api.register_agent_as_tool(
+      p_agent_code => gc_sub_code,
+      p_tool_tag   => gc_tool_tag
+    );
+    commit;
+
+    select code into l_code_1 from uc_ai_tools where id = l_first;
+    select code into l_code_2 from uc_ai_tools where id = l_second;
+
+    sys.dbms_output.put_line('generated_code_duplicates_tool: ' || l_code_1 || ' / ' || l_code_2);
+
+    ut.expect(l_first).not_to_equal(l_second);
+    ut.expect(l_code_1).not_to_equal(l_code_2);
+
+    select count(*)
+      into l_count
+      from uc_ai_tool_tags
+     where tag_name = gc_tool_tag
+       and tool_id in (l_first, l_second);
+
+    ut.expect(l_count, 'both tools carry the same tag').to_equal(2);
+
+    delete_tool(l_code_1);
+    delete_tool(l_code_2);
+  end generated_code_duplicates_tool;
+
+
+  procedure the_trigger_sets_created_by
+  as
+    l_tool_id    number;
+    l_created_by uc_ai_tools.created_by%type;
+    l_updated_by uc_ai_tools.updated_by%type;
+    l_param_by   uc_ai_tool_parameters.created_by%type;
+    l_tag_by     uc_ai_tool_tags.created_by%type;
+    l_trigger_by uc_ai_tools.created_by%type;
+  begin
+    -- register_agent_as_tool takes no user: the triggers uc_ai_tools_biu,
+    -- uc_ai_tool_parameters_biu and uc_ai_tool_tags_biu set created_by and
+    -- updated_by on every insert. This test holds that behaviour, so a change
+    -- of the triggers cannot pass unnoticed.
+    delete_tool(gc_cb_tool);
+
+    select coalesce(sys_context('APEX$SESSION', 'APP_USER'), user)
+      into l_trigger_by
+      from sys.dual;
+
+    l_tool_id := uc_ai_agent_exec_api.register_agent_as_tool(
+      p_agent_code => gc_sub_code,
+      p_tool_tag   => gc_tool_tag,
+      p_tool_code  => gc_cb_tool
+    );
+    commit;
+
+    select created_by, updated_by
+      into l_created_by, l_updated_by
+      from uc_ai_tools
+     where id = l_tool_id;
+
+    select max(created_by)
+      into l_param_by
+      from uc_ai_tool_parameters
+     where tool_id = l_tool_id;
+
+    select max(created_by)
+      into l_tag_by
+      from uc_ai_tool_tags
+     where tool_id = l_tool_id;
+
+    sys.dbms_output.put_line('the_trigger_sets_created_by: tool=' || l_created_by
+      || ' param=' || l_param_by || ' tag=' || l_tag_by || ' trigger=' || l_trigger_by);
+
+    ut.expect(l_created_by, 'the trigger owns created_by').to_equal(l_trigger_by);
+    ut.expect(l_updated_by, 'the trigger owns updated_by').to_equal(l_trigger_by);
+    ut.expect(l_param_by, 'the trigger owns created_by of a parameter row').to_equal(l_trigger_by);
+    ut.expect(l_tag_by, 'the trigger owns created_by of a tag row').to_equal(l_trigger_by);
+
+    delete_tool(gc_cb_tool);
+  end the_trigger_sets_created_by;
 
 end test_uc_ai_agent_as_tool;
 /
