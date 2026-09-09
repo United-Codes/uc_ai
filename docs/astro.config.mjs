@@ -9,7 +9,7 @@ import starlightLinksValidator from "starlight-links-validator";
 
 // https://astro.build/config
 export default defineConfig({
-	site: "https://united-codes.com/products/uc-ai/docs",
+	site: "https://www.united-codes.com/products/uc-ai/docs",
 	base: "/products/uc-ai/docs",
 	// Astro 7 defaults to the new "Satteri" Markdown processor, which
 	// starlight-image-zoom does not support yet. Use the classic unified()
@@ -99,9 +99,7 @@ export default defineConfig({
 								text: "Pro",
 								variant: "tip",
 							},
-							items: [
-								{ autogenerate: { directory: "guides/guardrails" } },
-							],
+							items: [{ autogenerate: { directory: "guides/guardrails" } }],
 						},
 					],
 				},
