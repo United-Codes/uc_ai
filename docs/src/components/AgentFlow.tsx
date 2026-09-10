@@ -17,9 +17,12 @@ import {
   CLOSING,
   FINAL_ANSWER,
   LAST,
+  LEVEL0_COUNT,
+  MODEL_CALLS,
   NODES,
   NODE_BY_ID,
   PAYMENT_ROWS,
+  PROVIDERS,
   PLAN_ITEMS,
   POLICY_ROWS,
   POLICY_RULE,
@@ -27,18 +30,19 @@ import {
   REVEAL_STAGGER_MS,
   SCENES,
   SESSION_STATS,
-  THINK_MS,
-  TRAVEL_MS,
+  WIRES,
+  beatAt,
   durationOf,
   movementEnd,
+  otherProvider,
+  providerLabel,
+  rectAt,
   rectsFor,
-  rowsVisibleAt,
-  summaryVisibleAt,
+  renderRectAt,
+  visibleAt,
+  wireKey,
 } from "./AgentFlow/story";
 import "./AgentFlow.css";
-
-/** Node kinds whose own appearance depends on the scene clock. */
-const CLOCKED = new Set(["table", "summary", "tool"]);
 
 function useMediaFlag(query: string): boolean {
   const [flag, setFlag] = useState(false);
@@ -66,8 +70,18 @@ export default function AgentFlow() {
   const [announcement, setAnnouncement] = useState("");
   const [viewport, setViewport] = useState({ w: 0, h: 0 });
   const [expanded, setExpanded] = useState(false);
+  /**
+   * Which provider the model card names. The first entry is what the server
+   * renders; a random one replaces it once, after hydration, so picking it
+   * cannot make the server and the client disagree.
+   */
+  const [provider, setProvider] = useState(0);
 
   const reduced = useMediaFlag("(prefers-reduced-motion: reduce)");
+
+  useEffect(() => {
+    setProvider(Math.floor(Math.random() * PROVIDERS.length));
+  }, []);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -116,7 +130,7 @@ export default function AgentFlow() {
 
   /* -------------------------------------------------------------- camera */
 
-  /* Scene 9 pulls back out to the whole system once the answer has landed. */
+  /* The closing scene pulls back out to the whole system once the answer lands. */
   const secondTarget =
     scene.frameThen !== undefined &&
     scene.frameThenAt !== undefined &&
@@ -129,7 +143,7 @@ export default function AgentFlow() {
     return cameraFor(
       rectsFor(frame, index),
       aspect,
-      narrow ? 30 : (scene.framePadding ?? 70),
+      narrow ? 40 : (scene.framePadding ?? 110),
       viewport.w,
     );
   }, [scene, index, aspect, secondTarget, narrow, viewport.w]);
@@ -162,10 +176,10 @@ export default function AgentFlow() {
     lastFrame.current = performance.now();
 
     /*
-     * The hold at the end of a scene is most of its length and nothing reads
-     * the clock during it, so publishing `elapsed` there would reconcile the
-     * tree at 60fps for no reason. Past the last movement the loop keeps
-     * running the clock but stops re-rendering.
+     * The hold at the end of a scene is for reading what just changed, and
+     * nothing reads the clock during it, so publishing `elapsed` there would
+     * reconcile the tree at 60fps for no reason. Past the last movement the
+     * loop keeps running the clock but stops re-rendering.
      */
     const liveUntil = CAMERA_MS + movementEnd(scene);
 
@@ -258,9 +272,9 @@ export default function AgentFlow() {
     elapsedRef.current = 0;
     setElapsed(0);
     setIndex(0);
-    setAnnouncement(
-      reduced ? `1 of ${SCENES.length} · ${SCENES[0].title}` : "",
-    );
+    // A second viewing names a different provider, which is the whole point.
+    setProvider(otherProvider);
+    setAnnouncement(reduced ? `1 of ${SCENES.length} · ${SCENES[0].title}` : "");
     setPlaying(!reduced);
   }, [reduced]);
 
@@ -334,13 +348,34 @@ export default function AgentFlow() {
 
   /* -------------------------------------------------------- derived state */
 
-  const motion = Math.max(0, elapsed - CAMERA_MS);
+  /*
+   * Milliseconds since the camera arrived, which is the clock every moment in
+   * the story is measured against. A scene shown at its end state passes
+   * Infinity, so every "from when" question answers yes and the picture is the
+   * exact end of that scene.
+   */
+  const motion = settled ? Infinity : Math.max(0, elapsed - CAMERA_MS);
 
   /* The pull-out swaps the answer for the closing statement. */
   const shownCaption =
     secondTarget && scene.captionThen ? scene.captionThen : scene.caption;
   const asQuote = scene.quote && !(secondTarget && scene.captionThen);
   const captionText = asQuote ? `“${shownCaption}”` : shownCaption;
+
+  /* The model call running right now. Nothing travels; the wire runs hot. */
+  const beat = useMemo(() => beatAt(index, motion), [index, motion]);
+  const hotWire = beat ? wireKey(beat.agent, "model") : null;
+
+  /** The nodes on the canvas at all. Detail exists only where the camera is. */
+  const visible = useMemo(() => {
+    const set = new Set<string>();
+    for (const node of NODES) {
+      if (visibleAt(node, index, motion)) {
+        set.add(node.id);
+      }
+    }
+    return set;
+  }, [index, motion]);
 
   /*
    * A node is lit only if the camera actually shows it. On a phone a scene
@@ -352,40 +387,38 @@ export default function AgentFlow() {
 
     for (const id of scene.lit) {
       const node = NODE_BY_ID[id];
-      if (!node) {
+      if (!node || !visible.has(id)) {
         continue;
       }
+      const box = rectAt(node, index);
       const onCamera =
-        node.x >= camera.x &&
-        node.y >= camera.y &&
-        node.x + node.w <= camera.x + camera.w &&
-        node.y + node.h <= camera.y + camera.h;
+        box.x >= camera.x &&
+        box.y >= camera.y &&
+        box.x + box.w <= camera.x + camera.w &&
+        box.y + box.h <= camera.y + camera.h;
       if (onCamera || ALWAYS_LIT.has(id)) {
         set.add(id);
       }
     }
 
     return set;
-  }, [scene, camera]);
+  }, [scene, camera, index, visible]);
 
-  /** The model pulses between an outgoing question and the decision returning. */
-  const thinking = useMemo(() => {
-    const ask = scene.transfers.find((transfer) => transfer.to === "model");
-    const back = scene.transfers.find((transfer) => transfer.from === "model");
-    if (!ask || !back) {
-      return false;
+  /* A wire exists where both of its ends are on the canvas, and lights with them. */
+  const wires = useMemo(
+    () => WIRES.filter((wire) => visible.has(wire.from) && visible.has(wire.to)),
+    [visible],
+  );
+
+  const litWires = useMemo(() => {
+    const set = new Set<string>();
+    for (const wire of wires) {
+      if (lit.has(wire.from) && lit.has(wire.to)) {
+        set.add(wireKey(wire.from, wire.to));
+      }
     }
-    const from = ask.at + TRAVEL_MS;
-    return motion >= from && motion < Math.max(back.at, from + THINK_MS);
-  }, [scene, motion]);
-
-  /** Rows arrive once the chip that fetched them lands. */
-  const rowsFrom = useMemo(() => {
-    const call = scene.transfers.find(
-      (transfer) => transfer.to === "payments" || transfer.to === "policies",
-    );
-    return call ? call.at + TRAVEL_MS : 0;
-  }, [scene]);
+    return set;
+  }, [wires, lit]);
 
   const boundary = NODE_BY_ID.db;
   const labelRect = {
@@ -400,13 +433,21 @@ export default function AgentFlow() {
     labelRect.x + labelRect.w <= camera.x + camera.w &&
     labelRect.y + labelRect.h <= camera.y + camera.h;
 
-  const revealCount =
-    scene.id === "system"
-      ? Math.floor(motion / REVEAL_STAGGER_MS) + 1
-      : NODES.length;
+  /*
+   * The opening scene runs off `elapsed`, not `motion`. Every other scene has
+   * to wait for the camera to arrive before anything moves, but this one is
+   * already where it needs to be, so counting from the camera left the first
+   * thing a visitor ever sees as 800ms of an empty dashed box.
+   */
+  const opening = scene.id === "system" && elapsed < duration;
 
-  const wiresDrawn =
-    scene.id === "system" ? Math.min(1, Math.max(0, (motion - 400) / 500)) : 1;
+  const revealCount = opening
+    ? Math.floor(elapsed / REVEAL_STAGGER_MS) + 1
+    : LEVEL0_COUNT;
+
+  const wiresDrawn = opening
+    ? Math.min(1, Math.max(0, (elapsed - 400) / 500))
+    : 1;
 
   /* --------------------------------------------------------------- render */
 
@@ -430,39 +471,47 @@ export default function AgentFlow() {
                 style={{ width: CANVAS.w, height: CANVAS.h, transform }}
                 aria-hidden="true"
               >
-                <Wires lit={lit} drawn={wiresDrawn} />
+                <Wires
+                  wires={wires}
+                  index={index}
+                  lit={litWires}
+                  hot={hotWire}
+                  drawn={wiresDrawn}
+                />
 
-                {NODES.map((node) => (
+                {NODES.filter((node) => visible.has(node.id)).map((node) => (
                   <NodeView
                     key={node.id}
                     node={node}
+                    rect={renderRectAt(node, index, motion, far)}
                     index={index}
-                    elapsed={
-                      CLOCKED.has(node.kind)
-                        ? node.kind === "summary" && !summaryVisibleAt(index)
-                          ? 0
-                          : motion
-                        : 0
-                    }
+                    motion={motion}
                     lit={lit.has(node.id)}
                     revealed={node.reveal < revealCount}
-                    thinking={node.kind === "model" ? thinking : undefined}
-                    note={node.kind === "model" ? scene.modelNote : undefined}
-                labelVisible={
-                  node.kind === "boundary" ? boundaryLabelVisible : undefined
-                }
-                    rowsVisible={rowsVisibleAt(node.id, index)}
-                    rowsFrom={rowsFrom}
+                    thinking={
+                      node.kind === "model"
+                        ? beat !== undefined
+                        : beat?.agent === node.id
+                    }
+                    given={node.kind === "model" ? beat?.given : undefined}
+                    provider={
+                      node.kind === "model"
+                        ? providerLabel(PROVIDERS[provider])
+                        : undefined
+                    }
+                    labelVisible={
+                      node.kind === "boundary" ? boundaryLabelVisible : undefined
+                    }
                   />
                 ))}
 
                 <Transfers
                   transfers={scene.transfers}
+                  index={index}
                   motion={motion}
                   settled={reduced || settled}
                 />
               </div>
-
             </div>
 
             <p
@@ -474,11 +523,7 @@ export default function AgentFlow() {
           </div>
 
           <div className="af-controls">
-            <button
-              type="button"
-              className="af-primary"
-              onClick={primaryAction}
-            >
+            <button type="button" className="af-primary" onClick={primaryAction}>
               <ControlIcon kind={primaryIcon} />
               {primaryLabel}
             </button>
@@ -551,6 +596,8 @@ export default function AgentFlow() {
         <p>
           A customer asks: “{PROMPT}” Everything below runs inside an Oracle
           database, except the AI model, which the database calls over HTTPS.
+          This run uses {providerLabel(PROVIDERS[provider])}. UC AI takes any of{" "}
+          {PROVIDERS.map((entry) => entry.name).join(", ")}.
         </p>
 
         <ol>
@@ -558,13 +605,20 @@ export default function AgentFlow() {
             <li key={entry.id}>
               <strong>{entry.title}.</strong>{" "}
               {entry.quote ? `“${entry.caption}”` : entry.caption}
-              {entry.transfers.length > 0 ? (
+              {entry.beats.length > 0 || entry.transfers.length > 0 ? (
                 <span className="af-transcript-note">
                   {" "}
                   (
-                  {entry.transfers
-                    .map((transfer) => `${transfer.kind}: ${transfer.label}`)
-                    .join("; ")}
+                  {[
+                    ...entry.beats.map(
+                      (item) =>
+                        `model call: ${item.agent} sends ${item.given}` +
+                        (item.yields ? `, and gets back “${item.yields}”` : ""),
+                    ),
+                    ...entry.transfers.map(
+                      (item) => `${item.kind}: ${item.label}`,
+                    ),
+                  ].join("; ")}
                   )
                 </span>
               ) : null}
@@ -572,6 +626,11 @@ export default function AgentFlow() {
           ))}
         </ol>
 
+        <p>
+          The run makes {MODEL_CALLS} model calls in all. Every agent is its own
+          loop: it asks the model what to do, runs what the model picked, and
+          asks again with the result.
+        </p>
         <p>
           The orchestrator's plan:{" "}
           {PLAN_ITEMS.map((item) => item.label).join(", then ")}.
@@ -582,9 +641,8 @@ export default function AgentFlow() {
           two stayed unused.
         </p>
         <p>
-          get_payments runs: select invoice_id, amount, status from payments
-          where invoice_id = :p_invoice, with p_invoice set to 'INV-1003'. The
-          PAYMENTS rows it reads:{" "}
+          get_payments runs: select amount from payments where invoice_id =
+          'INV-1003'. The PAYMENTS rows it reads:{" "}
           {PAYMENT_ROWS.map(
             (row) => `${row.cells.join(", ")}${row.match ? " (selected)" : ""}`,
           ).join("; ")}
@@ -593,8 +651,8 @@ export default function AgentFlow() {
         <p>
           The Policy agent has find_policy and get_customer_tier. The model
           chose find_policy, which runs: select rule_text from refund_policies
-          where reason_code = :p_reason, with p_reason set to
-          'duplicate_payment'. The REFUND_POLICIES rows it reads:{" "}
+          where reason_code = 'duplicate_payment'. The REFUND_POLICIES rows it
+          reads:{" "}
           {POLICY_ROWS.map(
             (row) => `${row.cells.join(", ")}${row.match ? " (selected)" : ""}`,
           ).join("; ")}
@@ -603,9 +661,7 @@ export default function AgentFlow() {
         <p>Answer: {FINAL_ANSWER}</p>
         <p>
           The run in total:{" "}
-          {SESSION_STATS.map((stat) => `${stat.value} ${stat.label}`).join(
-            ", ",
-          )}
+          {SESSION_STATS.map((stat) => `${stat.value} ${stat.label}`).join(", ")}
           . {CLOSING}
         </p>
       </details>

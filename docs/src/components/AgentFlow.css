@@ -81,7 +81,7 @@
 	left: 0;
 	top: 0;
 	transform-origin: 0 0;
-	transition: transform 900ms cubic-bezier(0.65, 0, 0.35, 1);
+	transition: transform 800ms cubic-bezier(0.65, 0, 0.35, 1);
 	will-change: transform;
 }
 
@@ -89,17 +89,26 @@
 	transition: none;
 }
 
-/* The boundary's label, on the canvas at the box's own corner. */
+/*
+ * The boundary's label, on the canvas at the box's own corner.
+ *
+ * It carries the panel colour behind it because the orchestrator's wire to the
+ * model crosses this corner on its way out of the database. Without it the
+ * wire ran straight through the middle of the UC AI badge.
+ */
 .af-boundary-label {
-	display: flex;
+	display: inline-flex;
 	align-items: center;
 	gap: 9px;
-	margin: 0;
+	margin: -4px 0 0 -6px;
+	border-radius: 8px;
+	background: var(--af-panel);
+	padding: 3px 8px;
 }
 
 .af-boundary-db {
 	color: var(--af-sub);
-	font-size: 21px;
+	font-size: 20px;
 	font-weight: 650;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
@@ -116,32 +125,24 @@
 
 /*
  * Zoomed far out, the whole canvas is about half size on a desktop and a fifth
- * of it on a phone. Rather than shrink the near view, the far view gets its own
- * typography: the detail goes and the names grow, so it reads as a block
- * diagram. The caption and the transcript carry what is dropped.
+ * of it on a phone.
  *
- * The answer and the session strip are the exceptions. Both belong to the
- * closing pull-out, so they are sized for this scale.
+ * Semantic zoom does most of the work here: tools and tables do not exist at
+ * level 0, so there is nothing to hide. What is left is the text that belongs
+ * to a card the camera is normally much closer to. The session strip is the
+ * exception, because the closing pull-out is the only place it appears.
  */
 .af-canvas.is-far .af-node-sub,
-.af-canvas.is-far .af-tool-tag,
 .af-canvas.is-far .af-bubble,
 .af-canvas.is-far .af-answer,
-.af-canvas.is-far .af-table-kind,
 .af-canvas.is-far .af-plan,
-.af-canvas.is-far .af-plan-note,
-.af-canvas.is-far .af-node--tool,
-.af-canvas.is-far .af-rows {
+.af-canvas.is-far .af-note {
 	display: none;
 }
 
-/* Sized to fit the narrowest card, which is the orchestrator at 290 units. */
+/* Sized to fit the narrowest card, which is the orchestrator at 300 units. */
 .af-canvas.is-far .af-node-title {
 	font-size: 34px;
-}
-
-.af-canvas.is-far .af-table-name {
-	font-size: 32px;
 }
 
 .af-canvas.is-far .af-boundary-db {
@@ -221,7 +222,7 @@
 
 .af-node-title {
 	color: var(--af-title);
-	font-size: 26px;
+	font-size: 28px;
 	font-weight: 650;
 	line-height: 1.2;
 }
@@ -229,7 +230,7 @@
 .af-node-sub {
 	margin: 6px 0 0;
 	color: var(--af-sub);
-	font-size: 18px;
+	font-size: 20px;
 	line-height: 1.35;
 }
 
@@ -256,7 +257,7 @@
 	border-radius: 12px 12px 12px 3px;
 	background: var(--af-panel);
 	color: var(--af-title);
-	font-size: 19px;
+	font-size: 20px;
 	line-height: 1.4;
 	padding: 10px 12px;
 }
@@ -273,7 +274,7 @@
 .af-answer-text {
 	margin: 0;
 	color: var(--af-title);
-	font-size: 19px;
+	font-size: 20px;
 	line-height: 1.4;
 }
 
@@ -289,7 +290,7 @@
 	border-radius: 5px;
 	color: var(--af-sub);
 	font-family: var(--__sl-font-mono, ui-monospace, monospace);
-	font-size: 15px;
+	font-size: 16px;
 	padding: 1px 6px;
 }
 
@@ -307,7 +308,7 @@
 	gap: 10px;
 	margin: 0 0 8px;
 	color: var(--af-sub);
-	font-size: 19px;
+	font-size: 20px;
 	line-height: 1.3;
 	transition: color 300ms ease;
 }
@@ -338,24 +339,45 @@
 	animation: af-pop 200ms ease-out;
 }
 
-/* Where the model's latest decision stays after its chip fades. */
-.af-plan-note {
-	margin: 10px 0 0;
+/*
+ * The last thing the model told this card, kept after the beat ends. It sits
+ * at the card's foot rather than in flow, because an agent's tool rows are
+ * separate canvas nodes drawn over the card: in flow the note would land under
+ * the title and behind them.
+ */
+.af-note {
+	position: absolute;
+	left: 18px;
+	right: 18px;
+	bottom: 14px;
+	margin: 0;
 	border-left: 3px solid var(--af-tone);
-	color: var(--af-sub);
-	font-size: 17px;
+	color: var(--af-title);
+	font-size: 20px;
 	line-height: 1.3;
-	padding-left: 9px;
+	padding-left: 10px;
+	animation: af-pop 250ms ease-out;
 }
 
 /* ------------------------------------------------------------------ tools */
 
-.af-node--user {
+/* The two cards that grow: the conversation, and the agent whose turn it is. */
+.af-node--user,
+.af-node--agent {
 	transition:
 		height 400ms cubic-bezier(0.4, 0, 0.2, 1),
 		opacity 300ms ease,
 		border-color 300ms ease,
 		box-shadow 300ms ease;
+}
+
+/*
+ * Detail fades in where the camera is. Nothing fades out: by the time an
+ * agent's turn is over the camera has already moved on.
+ */
+.af-node--tool,
+.af-node--table {
+	animation: af-fade 300ms ease-out;
 }
 
 .af-node--tool {
@@ -381,35 +403,23 @@
 	align-items: center;
 	gap: 8px;
 	margin: 0;
-	height: 36px;
-}
-
-.af-tool-glyph {
-	color: var(--af-tone);
-	font-family: var(--__sl-font-mono, ui-monospace, monospace);
-	font-size: 20px;
-	font-weight: 700;
-	line-height: 1;
-}
-
-.af-node--tool.is-dim .af-tool-glyph,
-.af-node--tool.is-passed .af-tool-glyph {
-	color: var(--af-sub);
+	height: 38px;
 }
 
 .af-tool-name {
 	color: var(--af-title);
 	font-family: var(--__sl-font-mono, ui-monospace, monospace);
-	font-size: 19px;
+	font-size: 16px;
 	font-weight: 600;
 }
 
+/* Only the open card carries the tag. A row says what it is by its name. */
 .af-tool-tag {
 	margin-left: auto;
 	border: 1px solid var(--af-tone);
 	border-radius: 5px;
 	color: var(--af-tone);
-	font-size: 17px;
+	font-size: 16px;
 	padding: 1px 7px;
 	white-space: nowrap;
 }
@@ -440,40 +450,30 @@
 	overflow: visible;
 }
 
+/*
+ * The argument is substituted into the SQL rather than shown beside it as a
+ * bind name, so a reader does not have to join two lines to see what ran.
+ */
 .af-sql-line {
 	color: var(--af-title);
 }
 
-.af-sql-bind {
-	margin-top: 4px;
-	color: var(--af-tone);
-	font-size: 16px;
-}
-
-.af-sql-bind::before {
-	content: "→ ";
-}
-
 /* ----------------------------------------------------------------- tables */
 
-.af-table-kind {
-	color: var(--af-sub);
-	font-size: 17px;
-}
-
+/* The icon and the uppercase name already say "table"; the word is dropped. */
 .af-table-name {
 	color: var(--af-title);
 	font-family: var(--__sl-font-mono, ui-monospace, monospace);
-	font-size: 20px;
+	font-size: 28px;
 	font-weight: 650;
 	letter-spacing: 0.02em;
 }
 
 .af-rows {
 	width: 100%;
-	margin: 10px 0 0;
+	margin: 12px 0 0;
 	border-collapse: collapse;
-	font-size: 15px;
+	font-size: 16px;
 	table-layout: fixed;
 }
 
@@ -482,30 +482,38 @@
 	border-bottom: 2px solid var(--af-border);
 	color: var(--af-sub);
 	font-family: var(--__sl-font-mono, ui-monospace, monospace);
-	font-size: 15px;
+	font-size: 16px;
 	font-weight: 600;
 	letter-spacing: 0.02em;
-	padding: 0 8px 4px 0;
+	padding: 0 8px 5px 0;
 	text-align: left;
 	white-space: nowrap;
 }
 
-.af-rows th:first-child {
+/*
+ * The first column holds the key the query matched on, which is the longest
+ * text in the table and the one a reader compares against the SQL. An even
+ * split truncated it to "duplicate_pay…".
+ */
+.af-rows th:first-child,
+.af-rows td:first-child {
+	width: 60%;
 	padding-left: 6px;
 }
 
-.af-rows tr {
+/* Only the data rows stagger in. The column names are there from the start. */
+.af-rows tbody tr {
 	opacity: 0;
 	transition:
 		opacity 220ms ease,
 		background-color 300ms ease;
 }
 
-.af-rows tr.is-in {
+.af-rows tbody tr.is-in {
 	opacity: 1;
 }
 
-.af-rows tr.is-match {
+.af-rows tbody tr.is-match {
 	background: color-mix(in srgb, var(--af-tone) 20%, transparent);
 }
 
@@ -519,10 +527,6 @@
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
-}
-
-.af-rows td:first-child {
-	padding-left: 6px;
 }
 
 .af-rows tr:last-child td {
@@ -543,7 +547,17 @@
 	transition: opacity 200ms ease;
 }
 
-.af-node--model.is-thinking .af-dots {
+/*
+ * A card in a beat: the model, and the card waiting on it. Both show the dots,
+ * so a reader can see a model call even in the one scene where the model box
+ * itself is off camera.
+ */
+.af-node.is-thinking {
+	border-color: var(--af-accent);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--af-accent) 30%, transparent);
+}
+
+.af-node.is-thinking .af-dots {
 	opacity: 1;
 }
 
@@ -554,7 +568,7 @@
 	background: var(--af-accent);
 }
 
-.af-node--model.is-thinking .af-dots i {
+.af-node.is-thinking .af-dots i {
 	animation: af-blink 900ms ease-in-out infinite;
 }
 
@@ -626,6 +640,24 @@
 	opacity: 1;
 }
 
+/*
+ * The wire carrying the model call happening right now.
+ *
+ * This is what a beat looks like: nothing travels, the wire runs. A model
+ * round trip costs 1.1 seconds this way instead of two chip journeys, which is
+ * what makes it affordable to show all seven calls a real run makes.
+ *
+ * `pathLength` is normalised to 1 on every wire, so one dash pattern marches
+ * at the same rate whatever the wire's real length.
+ */
+.af-wire.is-hot {
+	stroke: var(--af-accent);
+	stroke-width: 4;
+	opacity: 1;
+	stroke-dasharray: 0.055 0.045;
+	animation: af-flow 700ms linear infinite;
+}
+
 /* ------------------------------------------------------- travelling chips */
 
 .af-chip {
@@ -660,39 +692,35 @@
 	/* offset-anchor centres the box on the path; nudge it back along the
 	   direction of travel so it trails its landing point. */
 	transform: translate(var(--af-nudge-x, 0), var(--af-nudge-y, 0));
-	font-size: 18px;
+	font-size: 20px;
 	line-height: 1.3;
 	padding: 7px 11px;
 	box-shadow: 0 4px 16px rgb(0 0 0 / 0.28);
 }
 
-/* A task or a question leaves: filled. */
-.af-chip--task .af-chip-inner,
-.af-chip--ask .af-chip-inner {
+/*
+ * Two kinds of chip, because two kinds of thing actually move between places:
+ * work handed on, and a result handed back. Asking the model is not a chip at
+ * all any more; it is a beat on the wire.
+ */
+.af-chip--task .af-chip-inner {
 	border: 1px solid var(--af-tone);
 	background: var(--af-tone);
 	color: var(--af-on-tone);
 	font-weight: 600;
 }
 
-/* A result or a decision comes back: outlined, with a check. */
-.af-chip--result .af-chip-inner,
-.af-chip--decision .af-chip-inner {
+/* A result comes back: outlined, with a check. */
+.af-chip--result .af-chip-inner {
 	border: 2px solid var(--af-tone);
 	background: var(--af-card);
 	color: var(--af-title);
 }
 
-.af-chip--result .af-chip-inner::before,
-.af-chip--decision .af-chip-inner::before {
+.af-chip--result .af-chip-inner::before {
 	content: "✓ ";
 	color: var(--af-tone);
 	font-weight: 700;
-}
-
-/* A question to the model is short and round. */
-.af-chip--ask .af-chip-inner {
-	border-radius: 999px;
 }
 
 .af-chip--right {
@@ -971,6 +999,27 @@
 	}
 }
 
+@keyframes af-fade {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+/* The dashes marching along the wire of a running model call. */
+@keyframes af-flow {
+	from {
+		stroke-dashoffset: 0;
+	}
+	to {
+		stroke-dashoffset: -0.1;
+	}
+}
+
 @keyframes af-blink {
 	0%,
 	100% {
@@ -984,12 +1033,16 @@
 /* The reader asked for less motion: scenes change, nothing eases. */
 .af-static .af-node,
 .af-static .af-wire,
-.af-static .af-rows tr,
+.af-static .af-rows tbody tr,
 .af-static .af-plan-item {
 	transition: none;
 }
 
 .af-static .af-answer,
+.af-static .af-note,
+.af-static .af-node--tool,
+.af-static .af-node--table,
+.af-static .af-wire,
 .af-static .af-plan-item.is-new .af-plan-box,
 .af-static .af-dots i {
 	animation: none;

@@ -16,8 +16,15 @@ export interface Rect {
   h: number;
 }
 
-/** Logical size of the canvas, in canvas units. */
-export const CANVAS: Rect = { x: 0, y: 0, w: 1600, h: 900 };
+/**
+ * Logical size of the canvas, in canvas units.
+ *
+ * Slightly wider than 16:9, so the establishing shot shows a thin empty band
+ * above and below rather than cropping the sides. The width is what the two
+ * data tables need to hold a full reason code beside its rule without
+ * truncating either.
+ */
+export const CANVAS: Rect = { x: 0, y: 0, w: 1660, h: 900 };
 
 /** The smallest rectangle that contains all of `rects`. */
 export function boundsOf(rects: Rect[]): Rect {

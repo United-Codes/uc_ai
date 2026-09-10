@@ -17,6 +17,7 @@ import {
   LINGER_MS,
   NODE_BY_ID,
   TRAVEL_MS,
+  rectAt,
   type Transfer,
 } from "./story";
 import { centreOf, headingOf, straightDelta, wirePath } from "./geometry";
@@ -26,6 +27,8 @@ const SHORTEN = 18;
 
 interface TransfersProps {
   transfers: Transfer[];
+  /** Scene index, so a chip leaves and lands at the height a card is drawn at. */
+  index: number;
   /** Milliseconds elapsed since the scene's movement began. */
   motion: number;
   /** True when the scene is showing its end state; no chip is drawn. */
@@ -37,6 +40,7 @@ const ease = (t: number) => 1 - Math.pow(1 - t, 3);
 
 export default function Transfers({
   transfers,
+  index,
   motion,
   settled,
 }: TransfersProps) {
@@ -47,11 +51,13 @@ export default function Transfers({
   return (
     <>
       {transfers.map((transfer, position) => {
-        const from = NODE_BY_ID[transfer.from];
-        const to = NODE_BY_ID[transfer.to];
-        if (!from || !to) {
+        const source = NODE_BY_ID[transfer.from];
+        const target = NODE_BY_ID[transfer.to];
+        if (!source || !target) {
           return null;
         }
+        const from = rectAt(source, index);
+        const to = rectAt(target, index);
 
         const since = motion - transfer.at;
         if (since < 0) {
@@ -68,7 +74,7 @@ export default function Transfers({
         const origin = centreOf(from);
         const delta = straightDelta(from, to);
         const heading = headingOf(from, to);
-        const tone = to.tone === "neutral" ? from.tone : to.tone;
+        const tone = target.tone === "neutral" ? source.tone : target.tone;
 
         return (
           <div

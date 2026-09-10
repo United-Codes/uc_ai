@@ -2,49 +2,56 @@
  * One component per node kind. Every node is positioned in canvas units, so
  * these components never measure anything: the coordinates come from story.ts
  * and the camera scales the whole canvas around them.
+ *
+ * Every kind takes the scene clock. Whether a thing is on screen is a question
+ * about a moment in the run, never about a scene index alone, so nothing can
+ * appear before the chip or the model call that put it there.
  */
 import React from "react";
 import Icon from "./Icon";
 import {
   ANSWER_SOURCES,
+  COUNT_MS,
   FINAL_ANSWER,
   PROMPT,
+  MOMENTS,
   ROWS_BY_TABLE,
   SESSION_STATS,
   answerVisibleAt,
-  heightAt,
+  noteFor,
   planAt,
-  planNoteAt,
   planVisibleAt,
+  renderRectAt,
+  rowsShownAt,
   summaryVisibleAt,
   toolChosenAt,
   toolPassedAt,
+  type Rect,
   type StoryNode,
 } from "./story";
 
-/**
- * Rows appear one after another, driven by the scene clock. Slow enough that
- * a reader watches each row land rather than seeing the table blink into
- * existence.
- */
-const ROW_STAGGER_MS = 220;
-
 export interface NodeViewProps {
   node: StoryNode;
+  /** Where the card is drawn right now, from `renderRectAt`. */
+  rect: Rect;
   index: number;
-  /** Milliseconds elapsed inside the current scene. */
-  elapsed: number;
+  /** Milliseconds since the scene's camera arrived. */
+  motion: number;
   lit: boolean;
   revealed: boolean;
-  /** True while the model shows its thinking dots. */
+  /**
+   * True while this card is in a beat: the model card, and the agent card
+   * waiting on it. The Policy agent sits too far down the canvas to frame
+   * beside the model box without falling to the far view, so an agent shows
+   * the dots on its own card and a reader can see it is waiting on something.
+   */
   thinking?: boolean;
-  /** A second line for the model card, set by the scene. */
-  note?: string;
+  /** What the model was given, shown on its card while it thinks. */
+  given?: string;
+  /** The provider and model this run is using, shown between beats. */
+  provider?: string;
   /** Whether the boundary's label is fully inside the camera. */
   labelVisible?: boolean;
-  rowsVisible?: boolean;
-  /** Milliseconds after which the table rows start to appear. */
-  rowsFrom?: number;
 }
 
 function shellClass(node: StoryNode, lit: boolean, revealed: boolean) {
@@ -59,19 +66,24 @@ function shellClass(node: StoryNode, lit: boolean, revealed: boolean) {
     .join(" ");
 }
 
-function style(node: StoryNode): React.CSSProperties {
-  return { left: node.x, top: node.y, width: node.w, height: node.h };
+/*
+ * Position comes from the story, never from the node's own declared box: an
+ * agent card is anchored by its foot and the conversation card grows, so where
+ * a card sits is a question about the current moment in the run.
+ */
+function style(rect: Rect): React.CSSProperties {
+  return { left: rect.x, top: rect.y, width: rect.w, height: rect.h };
 }
 
 /* --------------------------------------------------------------- boundary */
 
-function Boundary({ node, lit, revealed, labelVisible }: NodeViewProps) {
+function Boundary({ node, rect, lit, revealed, labelVisible }: NodeViewProps) {
   /*
    * The label sits at the box's own corner and moves with it. It is dropped
    * when the corner is off camera, so it is never a cropped half word.
    */
   return (
-    <div className={shellClass(node, lit, revealed)} style={style(node)}>
+    <div className={shellClass(node, lit, revealed)} style={style(rect)}>
       {labelVisible ? (
         <p className="af-boundary-label">
           <span className="af-boundary-db">{node.title}</span>
@@ -84,23 +96,17 @@ function Boundary({ node, lit, revealed, labelVisible }: NodeViewProps) {
 
 /* ------------------------------------------------------------------- user */
 
-function User({ node, index, lit, revealed }: NodeViewProps) {
-  const answer = answerVisibleAt(index);
-
+function User({ node, rect, index, motion, lit, revealed }: NodeViewProps) {
   return (
-    <div
-      className={shellClass(node, lit, revealed)}
-      style={{ ...style(node), height: heightAt(node, index) }}
-    >
+    <div className={shellClass(node, lit, revealed)} style={style(rect)}>
       <p className="af-node-head">
         <Icon kind="user" />
         <span className="af-node-title">{node.title}</span>
       </p>
-      <p className="af-node-sub">{node.subtitle}</p>
 
       <p className="af-bubble">{PROMPT}</p>
 
-      {answer ? (
+      {answerVisibleAt(index, motion) ? (
         <div className="af-answer">
           <p className="af-answer-text">{FINAL_ANSWER}</p>
           <p className="af-answer-sources">
@@ -116,21 +122,31 @@ function User({ node, index, lit, revealed }: NodeViewProps) {
 
 /* ----------------------------------------------------------- orchestrator */
 
-function Orchestrator({ node, index, lit, revealed }: NodeViewProps) {
-  const plan = planAt(index);
-  const note = planNoteAt(index);
-
+function Orchestrator({
+  node,
+  rect,
+  index,
+  motion,
+  lit,
+  revealed,
+  thinking,
+}: NodeViewProps) {
   return (
-    <div className={shellClass(node, lit, revealed)} style={style(node)}>
+    <div
+      className={`${shellClass(node, lit, revealed)}${
+        thinking ? " is-thinking" : ""
+      }`}
+      style={style(rect)}
+    >
       <p className="af-node-head">
         <Icon kind="orchestrator" />
         <span className="af-node-title">{node.title}</span>
+        <Dots />
       </p>
-      <p className="af-node-sub">{node.subtitle}</p>
 
-      {planVisibleAt(index) ? (
+      {planVisibleAt(index, motion) ? (
         <ul className="af-plan">
-          {plan.map((item) => (
+          {planAt(index, motion).map((item) => (
             <li
               key={item.label}
               className={`af-plan-item${item.done ? " is-done" : ""}${
@@ -146,38 +162,80 @@ function Orchestrator({ node, index, lit, revealed }: NodeViewProps) {
         </ul>
       ) : null}
 
-      {note ? <p className="af-plan-note">{note}</p> : null}
+      <Note agent={node.id} index={index} motion={motion} />
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ agent */
 
-function Agent({ node, lit, revealed }: NodeViewProps) {
+/*
+ * An agent is a titled box until the run is about its turn, when the card
+ * opens and its tool rows appear inside it. Its height comes from the scene,
+ * so the camera framed the open card before it opened.
+ */
+function Agent({
+  node,
+  rect,
+  index,
+  motion,
+  lit,
+  revealed,
+  thinking,
+}: NodeViewProps) {
   return (
-    <div className={shellClass(node, lit, revealed)} style={style(node)}>
+    <div
+      className={`${shellClass(node, lit, revealed)}${
+        thinking ? " is-thinking" : ""
+      }`}
+      style={style(rect)}
+    >
       <p className="af-node-head">
         <Icon kind="agent" />
         <span className="af-node-title">{node.title}</span>
+        <Dots />
       </p>
-      <p className="af-node-sub">{node.subtitle}</p>
+
+      <Note agent={node.id} index={index} motion={motion} />
     </div>
   );
+}
+
+/** Shown on a card that is waiting on the model. */
+function Dots() {
+  return (
+    <span className="af-dots" aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
+
+/** Where the model's latest answer to this agent stays, once its beat ends. */
+function Note({
+  agent,
+  index,
+  motion,
+}: {
+  agent: string;
+  index: number;
+  motion: number;
+}) {
+  const text = noteFor(agent, index, motion);
+  return text ? <p className="af-note">{text}</p> : null;
 }
 
 /* ------------------------------------------------------------------- tool */
 
 /*
  * A tool is a row with its name until the model picks it. Then it opens into a
- * code card with the SQL it runs and the argument the model passed, which is
- * what tells a visitor this is a database function and not an API call.
- *
- * The chosen tool is placed last in its agent, so opening it extends into the
- * card's own padding instead of pushing the other rows down.
+ * code card with the SQL it runs, with the argument already substituted, which
+ * is what tells a visitor this is a database function and not an API call.
  */
-function Tool({ node, index, elapsed, lit, revealed }: NodeViewProps) {
-  const chosen = toolChosenAt(node.id, index, elapsed);
-  const passed = toolPassedAt(node.id, index, elapsed);
+function Tool({ node, rect, index, motion, lit, revealed }: NodeViewProps) {
+  const chosen = toolChosenAt(node.id, index, motion);
+  const passed = toolPassedAt(node.id, index, motion);
 
   return (
     <div
@@ -189,19 +247,14 @@ function Tool({ node, index, elapsed, lit, revealed }: NodeViewProps) {
         .filter(Boolean)
         .join(" ")}
       style={{
-        ...style(node),
+        ...style(rect),
         // Collapsed until chosen, so an unused tool stays a single row.
-        height: chosen ? node.h : 38,
+        height: chosen ? rect.h : 38,
       }}
     >
       <p className="af-tool-head">
-        <span className="af-tool-glyph" aria-hidden="true">
-          ƒ
-        </span>
         <span className="af-tool-name">{node.title}</span>
-        {chosen ? (
-          <span className="af-tool-tag">PL/SQL function</span>
-        ) : null}
+        {chosen ? <span className="af-tool-tag">PL/SQL function</span> : null}
       </p>
 
       {chosen && node.sql ? (
@@ -211,9 +264,6 @@ function Tool({ node, index, elapsed, lit, revealed }: NodeViewProps) {
               {line}
             </span>
           ))}
-          {node.bind ? (
-            <span className="af-sql-bind">{node.bind}</span>
-          ) : null}
         </pre>
       ) : null}
     </div>
@@ -222,34 +272,18 @@ function Tool({ node, index, elapsed, lit, revealed }: NodeViewProps) {
 
 /* ------------------------------------------------------------------ table */
 
-function Table({
-  node,
-  index,
-  elapsed,
-  lit,
-  revealed,
-  rowsVisible,
-  rowsFrom = 0,
-}: NodeViewProps) {
+function Table({ node, rect, index, motion, lit, revealed }: NodeViewProps) {
   const rows = ROWS_BY_TABLE[node.id] ?? [];
   const columns = node.columns ?? [];
 
-  /* Rows stagger in on the scene they arrive, and are simply there after it. */
-  const shown = !rowsVisible
-    ? 0
-    : elapsed >= rowsFrom
-      ? Math.min(
-          rows.length,
-          Math.floor((elapsed - rowsFrom) / ROW_STAGGER_MS) + 1,
-        )
-      : 0;
-  const settled = rowsVisible && shown >= rows.length;
+  /* Rows stagger in as the query chip lands, and are simply there after it. */
+  const shown = rowsShownAt(node.id, index, motion, rows.length);
+  const settled = shown >= rows.length;
 
   return (
-    <div className={shellClass(node, lit, revealed)} style={style(node)}>
+    <div className={shellClass(node, lit, revealed)} style={style(rect)}>
       <p className="af-node-head">
-        <Icon kind="table" size={18} />
-        <span className="af-table-kind">table</span>
+        <Icon kind="table" size={22} />
         <span className="af-table-name">{node.title}</span>
       </p>
 
@@ -287,40 +321,53 @@ function Table({
 
 /* ------------------------------------------------------------------ model */
 
-function Model({ node, lit, revealed, thinking, note }: NodeViewProps) {
+/*
+ * The model card is where a beat is visible: the dots run and the subtitle
+ * says what the model was given. Between beats it says only what it is, which
+ * is the point that the provider is interchangeable.
+ */
+function Model({
+  node,
+  rect,
+  lit,
+  revealed,
+  thinking,
+  given,
+  provider,
+}: NodeViewProps) {
   return (
     <div
       className={`${shellClass(node, lit, revealed)}${
         thinking ? " is-thinking" : ""
       }`}
-      style={style(node)}
+      style={style(rect)}
     >
       <p className="af-node-head">
         <Icon kind="model" />
         <span className="af-node-title">{node.title}</span>
-        <span className="af-dots" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
+        <Dots />
       </p>
-      <p className="af-node-sub">{note ?? node.subtitle}</p>
+      <p className="af-node-sub">{given ? `given ${given}` : provider}</p>
     </div>
   );
 }
 
 /* ---------------------------------------------------------------- summary */
 
-function Summary({ node, index, elapsed, lit, revealed }: NodeViewProps) {
-  if (!summaryVisibleAt(index)) {
+function Summary({ node, rect, index, motion, lit, revealed }: NodeViewProps) {
+  if (!summaryVisibleAt(index, motion)) {
     return null;
   }
 
-  /* Counters run up once, so the numbers register as a total for the run. */
-  const progress = Math.min(1, Math.max(0, elapsed / 600));
+  /*
+   * Counters run up once, from the moment the camera finishes pulling back
+   * out, so the numbers register as a total for the run.
+   */
+  const since = motion - MOMENTS.summary.at;
+  const progress = Math.min(1, Math.max(0, since / COUNT_MS));
 
   return (
-    <div className={shellClass(node, lit, revealed)} style={style(node)}>
+    <div className={shellClass(node, lit, revealed)} style={style(rect)}>
       {SESSION_STATS.map((stat) => (
         <span className="af-stat" key={stat.label}>
           <b>{Math.round(stat.value * progress)}</b> {stat.label}
