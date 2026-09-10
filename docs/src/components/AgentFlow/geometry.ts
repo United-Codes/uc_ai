@@ -4,8 +4,8 @@
  * Curved cubic beziers between node edges. A straight dashed line reads like
  * a diagram tool export, so every wire bends.
  *
- * Pure functions. The chips reuse the same paths through `offset-path`, so a
- * chip always travels the wire the reader can see.
+ * Pure functions. The tokens reuse the same paths through `offset-path`, so a
+ * token always travels the wire the reader can see.
  */
 
 import type { Rect } from "./camera";
@@ -17,26 +17,13 @@ interface Point {
 
 const centre = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
 
-/** Which way a wire runs. A chip uses this to sit beside its landing point. */
-export type Heading = "right" | "left" | "up" | "down";
-
-export function headingOf(a: Rect, b: Rect): Heading {
-  if (b.x >= a.x + a.w) {
-    return "right";
-  }
-  if (a.x >= b.x + b.w) {
-    return "left";
-  }
-  return b.y + b.h <= a.y ? "up" : "down";
-}
-
 /**
  * The path from `a` to `b`, leaving and entering on whichever sides face each
  * other. Control points are offset along the axis of travel.
  *
  * `shorten` stops the path that many canvas units before the destination edge.
- * A chip rides this path, so ending short is what keeps the chip's box off the
- * card's own text when it lands.
+ * A token rides this path, so ending short is what lets it touch the card's
+ * border rather than sit on it.
  */
 export function wirePath(a: Rect, b: Rect, shorten = 0): string {
   const ca = centre(a);

@@ -1,41 +1,45 @@
 /**
- * The travelling chips.
+ * The travelling tokens.
  *
- * A chip rides the same bezier as its wire through `offset-path`, and its
+ * A token rides the same bezier as its wire through `offset-path`, and its
  * position comes from the scene clock rather than a CSS animation. That is
- * what makes Pause exact: the clock stops, so the chip stops where it is.
+ * what makes Pause exact: the clock stops, so the token stops where it is.
  *
- * A chip is a messenger, not a label. It fades out shortly after it lands, and
- * the destination's own state carries the information from then on: the tool
- * row lights, the rows appear, the plan ticks, the answer bubble pops. So a
- * scene reached by hand, or read with reduced motion, shows no chips at all --
- * everything a chip said is already on the card.
+ * A token carries no text. The gaps between cards are 40 to 60 canvas units
+ * and a label is 150 to 250, so a label in flight always sat on a card's own
+ * text, and when it landed it covered the thing it was about. The token is a
+ * 28-unit dot; what it hands over is written into the destination card's
+ * message line the moment it lands (`messageFor` in story.ts), and stays there
+ * as state. So a scene reached by hand, or read with reduced motion, shows no
+ * tokens at all -- everything a token carried is already on the card.
  */
 import React from "react";
 import {
   FADE_MS,
-  LINGER_MS,
   NODE_BY_ID,
   TRAVEL_MS,
   rectAt,
   type Transfer,
 } from "./story";
-import { centreOf, headingOf, straightDelta, wirePath } from "./geometry";
+import { centreOf, straightDelta, wirePath } from "./geometry";
 
-/** Canvas units the chip stops short of the card it is heading for. */
-const SHORTEN = 18;
+/** Diameter of a token, in canvas units. Matches `.af-chip-inner`. */
+export const TOKEN = 28;
+
+/** The path stops short so the token touches the card's border, not its text. */
+const SHORTEN = TOKEN / 2 + 2;
 
 interface TransfersProps {
   transfers: Transfer[];
-  /** Scene index, so a chip leaves and lands at the height a card is drawn at. */
+  /** Scene index, so a token leaves and lands at the height a card is drawn at. */
   index: number;
   /** Milliseconds elapsed since the scene's movement began. */
   motion: number;
-  /** True when the scene is showing its end state; no chip is drawn. */
+  /** True when the scene is showing its end state; no token is drawn. */
   settled: boolean;
 }
 
-/* Ease-out, so a chip leaves quickly and arrives gently. */
+/* Ease-out, so a token leaves quickly and arrives gently. */
 const ease = (t: number) => 1 - Math.pow(1 - t, 3);
 
 export default function Transfers({
@@ -65,7 +69,8 @@ export default function Transfers({
         }
 
         const progress = ease(Math.min(1, since / TRAVEL_MS));
-        const past = since - TRAVEL_MS - LINGER_MS;
+        /* The token is gone as soon as its message is on the card. */
+        const past = since - TRAVEL_MS;
         const opacity = past <= 0 ? 1 : 1 - past / FADE_MS;
         if (opacity <= 0) {
           return null;
@@ -73,13 +78,12 @@ export default function Transfers({
 
         const origin = centreOf(from);
         const delta = straightDelta(from, to);
-        const heading = headingOf(from, to);
         const tone = target.tone === "neutral" ? source.tone : target.tone;
 
         return (
           <div
             key={`${transfer.from}-${transfer.to}-${position}`}
-            className={`af-chip af-chip--${transfer.kind} af-chip--${heading} af-tone-${tone}`}
+            className={`af-chip af-chip--${transfer.kind} af-tone-${tone}`}
             style={
               {
                 opacity,
@@ -91,8 +95,9 @@ export default function Transfers({
                 "--af-dy": `${delta.dy * progress}px`,
               } as React.CSSProperties
             }
+            aria-hidden="true"
           >
-            <span className="af-chip-inner">{transfer.label}</span>
+            <span className="af-chip-inner" />
           </div>
         );
       })}

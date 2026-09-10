@@ -136,7 +136,8 @@
 .af-canvas.is-far .af-bubble,
 .af-canvas.is-far .af-answer,
 .af-canvas.is-far .af-plan,
-.af-canvas.is-far .af-note {
+.af-canvas.is-far .af-note,
+.af-canvas.is-far .af-msg {
 	display: none;
 }
 
@@ -658,8 +659,14 @@
 	animation: af-flow 700ms linear infinite;
 }
 
-/* ------------------------------------------------------- travelling chips */
+/* ------------------------------------------------------ travelling tokens */
 
+/*
+ * A token is a dot that rides its wire. It carries no text: the gaps between
+ * cards are 40 to 60 units and a label is 150 to 250, so a label in flight
+ * always sat on a card's own text. What it hands over appears in the
+ * destination card's message line (`.af-msg`) the moment it lands.
+ */
 .af-chip {
 	position: absolute;
 	left: 0;
@@ -671,10 +678,10 @@
 	offset-rotate: 0deg;
 }
 
-/* Without offset-path the chip still travels, in a straight line. */
+/* Without offset-path the token still travels, in a straight line. */
 @supports not (offset-path: path("M 0 0 L 1 1")) {
 	.af-chip {
-		/* No offset-anchor here, so centre the box by hand. */
+		/* No offset-anchor here, so centre the dot by hand. */
 		left: var(--af-origin-x);
 		top: var(--af-origin-y);
 		transform: translate(
@@ -686,54 +693,80 @@
 
 .af-chip-inner {
 	display: block;
-	width: max-content;
-	max-width: 250px;
-	border-radius: 10px;
-	/* offset-anchor centres the box on the path; nudge it back along the
-	   direction of travel so it trails its landing point. */
-	transform: translate(var(--af-nudge-x, 0), var(--af-nudge-y, 0));
-	font-size: 20px;
-	line-height: 1.3;
-	padding: 7px 11px;
-	box-shadow: 0 4px 16px rgb(0 0 0 / 0.28);
+	width: 28px;
+	height: 28px;
+	box-sizing: border-box;
+	border-radius: 50%;
+	box-shadow:
+		0 0 0 5px color-mix(in srgb, var(--af-tone) 28%, transparent),
+		0 2px 8px rgb(0 0 0 / 0.3);
 }
 
-/*
- * Two kinds of chip, because two kinds of thing actually move between places:
- * work handed on, and a result handed back. Asking the model is not a chip at
- * all any more; it is a beat on the wire.
- */
+/* Work handed on: a filled dot. */
 .af-chip--task .af-chip-inner {
-	border: 1px solid var(--af-tone);
+	background: var(--af-tone);
+}
+
+/* A result handed back: a ring. */
+.af-chip--result .af-chip-inner {
+	border: 4px solid var(--af-tone);
+	background: var(--af-card);
+}
+
+/* -------------------------------------------------------------- messages */
+
+/*
+ * The line a card keeps for what it was last handed. It is inside the card, in
+ * room the card reserves for it, so it never covers anything. The styles match
+ * the token that brought it: filled for work handed on, a ring's outline and a
+ * check for a result.
+ */
+.af-msg {
+	display: block;
+	box-sizing: border-box;
+	max-width: 100%;
+	margin: 6px 0 0;
+	border-radius: 8px;
+	font-size: 18px;
+	line-height: 1.25;
+	padding: 3px 10px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	animation: af-pop 250ms ease-out;
+}
+
+.af-msg--task {
 	background: var(--af-tone);
 	color: var(--af-on-tone);
 	font-weight: 600;
 }
 
-/* A result comes back: outlined, with a check. */
-.af-chip--result .af-chip-inner {
+.af-msg--result {
 	border: 2px solid var(--af-tone);
-	background: var(--af-card);
+	background: var(--af-panel);
 	color: var(--af-title);
 }
 
-.af-chip--result .af-chip-inner::before {
+.af-msg--result::before {
 	content: "✓ ";
 	color: var(--af-tone);
 	font-weight: 700;
 }
 
-.af-chip--right {
-	--af-nudge-x: -50%;
+/* On a table the message is the predicate the function ran with. */
+.af-node--table .af-msg {
+	font-family: var(--__sl-font-mono, ui-monospace, monospace);
+	font-size: 16px;
 }
-.af-chip--left {
-	--af-nudge-x: 50%;
-}
-.af-chip--up {
-	--af-nudge-y: 50%;
-}
-.af-chip--down {
-	--af-nudge-y: -50%;
+
+/* In a tool's head row the result sits where the tag was. */
+.af-tool-head .af-msg {
+	margin: 0 0 0 auto;
+	flex: none;
+	max-width: 45%;
+	font-size: 16px;
+	padding: 1px 8px;
 }
 
 /* --------------------------------------------------- caption and controls */
@@ -1040,6 +1073,7 @@
 
 .af-static .af-answer,
 .af-static .af-note,
+.af-static .af-msg,
 .af-static .af-node--tool,
 .af-static .af-node--table,
 .af-static .af-wire,

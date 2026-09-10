@@ -18,6 +18,8 @@ import {
   ROWS_BY_TABLE,
   SESSION_STATS,
   answerVisibleAt,
+  laterThan,
+  messageFor,
   noteFor,
   planAt,
   planVisibleAt,
@@ -26,6 +28,7 @@ import {
   summaryVisibleAt,
   toolChosenAt,
   toolPassedAt,
+  type Landed,
   type Rect,
   type StoryNode,
 } from "./story";
@@ -144,6 +147,8 @@ function Orchestrator({
         <Dots />
       </p>
 
+      <Message landed={messageFor(node.id, index, motion)} />
+
       {planVisibleAt(index, motion) ? (
         <ul className="af-plan">
           {planAt(index, motion).map((item) => (
@@ -162,7 +167,7 @@ function Orchestrator({
         </ul>
       ) : null}
 
-      <Note agent={node.id} index={index} motion={motion} />
+      <Note landed={noteFor(node.id, index, motion)} />
     </div>
   );
 }
@@ -183,6 +188,19 @@ function Agent({
   revealed,
   thinking,
 }: NodeViewProps) {
+  const message = messageFor(node.id, index, motion);
+  const note = noteFor(node.id, index, motion);
+
+  /*
+   * A compact card has one line of room under its title. It shows whichever
+   * arrived last: the task it was handed, or what the model told it. The open
+   * card has room for both, the task under the title and the note at the foot.
+   */
+  const compact = rect.h <= (node.compactH ?? 0);
+  const noteWins =
+    compact && note !== undefined &&
+    (message === undefined || laterThan(note.moment, message.moment));
+
   return (
     <div
       className={`${shellClass(node, lit, revealed)}${
@@ -196,7 +214,8 @@ function Agent({
         <Dots />
       </p>
 
-      <Note agent={node.id} index={index} motion={motion} />
+      {!compact || !noteWins ? <Message landed={message} /> : null}
+      {!compact || noteWins ? <Note landed={note} /> : null}
     </div>
   );
 }
@@ -213,17 +232,24 @@ function Dots() {
 }
 
 /** Where the model's latest answer to this agent stays, once its beat ends. */
-function Note({
-  agent,
-  index,
-  motion,
-}: {
-  agent: string;
-  index: number;
-  motion: number;
-}) {
-  const text = noteFor(agent, index, motion);
-  return text ? <p className="af-note">{text}</p> : null;
+function Note({ landed }: { landed: Landed | undefined }) {
+  return landed ? (
+    <p className="af-note" key={landed.text}>
+      {landed.text}
+    </p>
+  ) : null;
+}
+
+/**
+ * Where what a token carried is written when it lands. Keyed on the text, so
+ * a new message pops in rather than silently replacing the old one.
+ */
+function Message({ landed }: { landed: Landed | undefined }) {
+  return landed ? (
+    <span className={`af-msg af-msg--${landed.kind}`} key={landed.text}>
+      {landed.text}
+    </span>
+  ) : null;
 }
 
 /* ------------------------------------------------------------------- tool */
@@ -236,6 +262,8 @@ function Note({
 function Tool({ node, rect, index, motion, lit, revealed }: NodeViewProps) {
   const chosen = toolChosenAt(node.id, index, motion);
   const passed = toolPassedAt(node.id, index, motion);
+  /* The rows coming back land here, in place of the tag. */
+  const message = messageFor(node.id, index, motion);
 
   return (
     <div
@@ -254,7 +282,11 @@ function Tool({ node, rect, index, motion, lit, revealed }: NodeViewProps) {
     >
       <p className="af-tool-head">
         <span className="af-tool-name">{node.title}</span>
-        {chosen ? <span className="af-tool-tag">PL/SQL function</span> : null}
+        {message ? (
+          <Message landed={message} />
+        ) : chosen ? (
+          <span className="af-tool-tag">PL/SQL function</span>
+        ) : null}
       </p>
 
       {chosen && node.sql ? (
@@ -286,6 +318,8 @@ function Table({ node, rect, index, motion, lit, revealed }: NodeViewProps) {
         <Icon kind="table" size={22} />
         <span className="af-table-name">{node.title}</span>
       </p>
+
+      <Message landed={messageFor(node.id, index, motion)} />
 
       <table className="af-rows">
         <thead>

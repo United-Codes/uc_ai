@@ -191,9 +191,9 @@ export const NODES: StoryNode[] = [
     id: "billing",
     kind: "agent",
     x: 720,
-    y: 168,
+    y: 160,
     w: 470,
-    h: 315,
+    h: 336,
     compactH: 110,
     title: "Billing agent",
     tone: "billing",
@@ -203,7 +203,7 @@ export const NODES: StoryNode[] = [
     id: "get_invoice",
     kind: "tool",
     x: 742,
-    y: 232,
+    y: 256,
     w: 426,
     h: 38,
     title: "get_invoice",
@@ -216,7 +216,7 @@ export const NODES: StoryNode[] = [
     id: "issue_refund",
     kind: "tool",
     x: 742,
-    y: 276,
+    y: 300,
     w: 426,
     h: 38,
     title: "issue_refund",
@@ -229,7 +229,7 @@ export const NODES: StoryNode[] = [
     id: "get_payments",
     kind: "tool",
     x: 742,
-    y: 320,
+    y: 344,
     w: 426,
     h: 104,
     title: "get_payments",
@@ -246,9 +246,9 @@ export const NODES: StoryNode[] = [
     id: "payments",
     kind: "table",
     x: 1230,
-    y: 168,
+    y: 160,
     w: 380,
-    h: 230,
+    h: 268,
     title: "PAYMENTS",
     tone: "billing",
     parent: "get_payments",
@@ -262,7 +262,7 @@ export const NODES: StoryNode[] = [
     x: 720,
     y: 500,
     w: 470,
-    h: 278,
+    h: 292,
     compactH: 110,
     title: "Policy agent",
     tone: "policy",
@@ -272,7 +272,7 @@ export const NODES: StoryNode[] = [
     id: "get_customer_tier",
     kind: "tool",
     x: 742,
-    y: 564,
+    y: 596,
     w: 426,
     h: 38,
     title: "get_customer_tier",
@@ -285,7 +285,7 @@ export const NODES: StoryNode[] = [
     id: "find_policy",
     kind: "tool",
     x: 742,
-    y: 608,
+    y: 640,
     w: 426,
     h: 104,
     title: "find_policy",
@@ -304,7 +304,7 @@ export const NODES: StoryNode[] = [
     x: 1230,
     y: 500,
     w: 380,
-    h: 230,
+    h: 240,
     title: "REFUND_POLICIES",
     tone: "policy",
     parent: "find_policy",
@@ -510,9 +510,20 @@ export interface Transfer {
   from: string;
   to: string;
   kind: TransferKind;
+  /**
+   * What is handed over. Nothing this long can travel: the gaps between cards
+   * are 40 to 60 units and a label is 150 to 250, so a label in flight always
+   * sat on a card's own text. A small token travels instead, and the label
+   * lands inside the destination card in its message line.
+   */
   label: string;
   /** Milliseconds after the camera arrives. */
   at: number;
+  /**
+   * Set when the landing already shows itself another way, so the label is
+   * not written onto the card. The answer is one: the bubble pops.
+   */
+  silent?: boolean;
 }
 
 /**
@@ -782,6 +793,7 @@ export const SCENES: Scene[] = [
         kind: "result",
         label: "Answer ready",
         at: ANSWER.hand,
+        silent: true,
       },
     ],
     hold: 2500,
@@ -1009,25 +1021,63 @@ export function planAt(index: number, motion: number) {
  * the model said has to land somewhere. This is where it lands: one line on
  * the agent's own card, replaced each time the model answers again.
  */
+/** Something that has arrived on a card, and when. */
+export interface Landed {
+  text: string;
+  kind: TransferKind | "note";
+  moment: Moment;
+}
+
+/** True when `a` happened after `b`. */
+export const laterThan = (a: Moment, b: Moment) =>
+  a.scene !== b.scene ? a.scene > b.scene : a.at > b.at;
+
 export function noteFor(
   agent: string,
   index: number,
   motion: number,
-): string | undefined {
-  let text: string | undefined;
+): Landed | undefined {
+  let landed: Landed | undefined;
 
   for (let scene = 0; scene <= index && scene < SCENES.length; scene += 1) {
     for (const beat of SCENES[scene].beats) {
       if (beat.agent !== agent || !beat.yields) {
         continue;
       }
-      if (reached({ scene, at: beat.at + BEAT_MS }, index, motion)) {
-        text = beat.yields;
+      const moment = { scene, at: beat.at + BEAT_MS };
+      if (reached(moment, index, motion)) {
+        landed = { text: beat.yields, kind: "note", moment };
       }
     }
   }
 
-  return text;
+  return landed;
+}
+
+/**
+ * The last thing handed to this card, once its token has landed. Stays until
+ * the next one lands, so a card always says what it was last given.
+ */
+export function messageFor(
+  nodeId: string,
+  index: number,
+  motion: number,
+): Landed | undefined {
+  let landed: Landed | undefined;
+
+  for (let scene = 0; scene <= index && scene < SCENES.length; scene += 1) {
+    for (const transfer of SCENES[scene].transfers) {
+      if (transfer.to !== nodeId || transfer.silent) {
+        continue;
+      }
+      const moment = { scene, at: transfer.at + TRAVEL_MS };
+      if (reached(moment, index, motion)) {
+        landed = { text: transfer.label, kind: transfer.kind, moment };
+      }
+    }
+  }
+
+  return landed;
 }
 
 /** The beat running right now, if any. */
