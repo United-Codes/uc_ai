@@ -30,6 +30,7 @@ import {
   THINK_MS,
   TRAVEL_MS,
   durationOf,
+  movementEnd,
   rectsFor,
   rowsVisibleAt,
   summaryVisibleAt,
@@ -160,6 +161,14 @@ export default function AgentFlow() {
     let frame = 0;
     lastFrame.current = performance.now();
 
+    /*
+     * The hold at the end of a scene is most of its length and nothing reads
+     * the clock during it, so publishing `elapsed` there would reconcile the
+     * tree at 60fps for no reason. Past the last movement the loop keeps
+     * running the clock but stops re-rendering.
+     */
+    const liveUntil = CAMERA_MS + movementEnd(scene);
+
     const step = (now: number) => {
       const next = elapsedRef.current + (now - lastFrame.current);
       lastFrame.current = now;
@@ -179,14 +188,17 @@ export default function AgentFlow() {
         return;
       }
 
+      const wasLive = elapsedRef.current <= liveUntil;
       elapsedRef.current = next;
-      setElapsed(next);
+      if (wasLive) {
+        setElapsed(next);
+      }
       frame = requestAnimationFrame(step);
     };
 
     frame = requestAnimationFrame(step);
     return () => cancelAnimationFrame(frame);
-  }, [playing, reduced, duration, index]);
+  }, [playing, reduced, duration, index, scene]);
 
   /* Playback never resumes on its own after it leaves the reader's view. */
   useEffect(() => {

@@ -643,10 +643,12 @@ export const SCENES: Scene[] = [
 
 export const LAST = SCENES.length - 1;
 
-/** Milliseconds the whole scene takes, camera plus movement plus hold. */
-export function durationOf(scene: Scene): number {
-  // A scene must not advance while a chip is still fading out.
-  const lastMovement = scene.transfers.reduce(
+/**
+ * Milliseconds from the camera arriving to the last thing on screen settling.
+ * A scene must not advance while a chip is still fading out.
+ */
+export function movementEnd(scene: Scene): number {
+  const lastChip = scene.transfers.reduce(
     (latest, transfer) => Math.max(latest, transfer.at + CHIP_LIFE_MS),
     0,
   );
@@ -655,9 +657,12 @@ export function durationOf(scene: Scene): number {
   const secondCamera =
     scene.frameThenAt === undefined ? 0 : scene.frameThenAt + CAMERA_MS;
 
-  return (
-    CAMERA_MS + Math.max(lastMovement, revealDone, secondCamera) + scene.hold
-  );
+  return Math.max(lastChip, revealDone, secondCamera);
+}
+
+/** Milliseconds the whole scene takes, camera plus movement plus hold. */
+export function durationOf(scene: Scene): number {
+  return CAMERA_MS + movementEnd(scene) + scene.hold;
 }
 
 export const TOTAL_MS = SCENES.reduce(
