@@ -63,13 +63,12 @@ export default function AgentFlow() {
    */
   const [elapsed, setElapsed] = useState(() => durationOf(SCENES[0]));
   const [announcement, setAnnouncement] = useState("");
-  const [viewport, setViewport] = useState({ w: 0, h: 0, caption: 0 });
+  const [viewport, setViewport] = useState({ w: 0, h: 0 });
   const [expanded, setExpanded] = useState(false);
 
   const reduced = useMediaFlag("(prefers-reduced-motion: reduce)");
 
   const viewportRef = useRef<HTMLDivElement>(null);
-  const captionRef = useRef<HTMLParagraphElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const expandRef = useRef<HTMLButtonElement>(null);
   const returnFocusTo = useRef<HTMLElement | null>(null);
@@ -94,11 +93,7 @@ export default function AgentFlow() {
      * disagree with it and letterbox the canvas.
      */
     const measure = () =>
-      setViewport({
-        w: element.clientWidth,
-        h: element.clientHeight,
-        caption: captionRef.current?.offsetHeight ?? 0,
-      });
+      setViewport({ w: element.clientWidth, h: element.clientHeight });
     measure();
 
     if (typeof ResizeObserver === "undefined") {
@@ -106,19 +101,16 @@ export default function AgentFlow() {
     }
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    if (captionRef.current) {
-      observer.observe(captionRef.current);
-    }
     return () => observer.disconnect();
   }, []);
 
   /*
-   * The caption is an overlay strip across the bottom of the viewport. Fitting
-   * the camera to the full height would put the lowest part of the canvas
-   * behind it, which clipped the session strip in the closing scene.
+   * The caption sits below the viewport, not over it, so the camera fits the
+   * whole viewport. Measuring the caption made the aspect drift between scenes
+   * whenever the text wrapped, which nudged the camera and letterboxed the
+   * establishing shot. The stylesheet owns the ratio; nothing here measures it.
    */
-  const stageHeight = Math.max(1, viewport.h - viewport.caption);
-  const aspect = viewport.h > 0 ? viewport.w / stageHeight : 16 / 9;
+  const aspect = viewport.h > 0 ? viewport.w / viewport.h : 16 / 9;
   const narrow = viewport.w > 0 && viewport.w < 560;
 
   /* -------------------------------------------------------------- camera */
@@ -332,6 +324,12 @@ export default function AgentFlow() {
 
   const motion = Math.max(0, elapsed - CAMERA_MS);
 
+  /* The pull-out swaps the answer for the closing statement. */
+  const shownCaption =
+    secondTarget && scene.captionThen ? scene.captionThen : scene.caption;
+  const asQuote = scene.quote && !(secondTarget && scene.captionThen);
+  const captionText = asQuote ? `“${shownCaption}”` : shownCaption;
+
   /*
    * A node is lit only if the camera actually shows it. On a phone a scene
    * frames one card, so without this the scene would highlight nodes that are
@@ -377,6 +375,10 @@ export default function AgentFlow() {
     return call ? call.at + TRAVEL_MS : 0;
   }, [scene]);
 
+  /* What the badge says depends on whether the camera has left the database. */
+  const framedIds = secondTarget ? (scene.frameThen ?? []) : scene.frame;
+  const showsModel = framedIds.length === 0 || framedIds.includes("model");
+
   const revealCount =
     scene.id === "system"
       ? Math.floor(motion / REVEAL_STAGGER_MS) + 1
@@ -400,47 +402,60 @@ export default function AgentFlow() {
         aria-label="The multi-agent run"
       >
         <div className="af-shell">
-          <div className="af-viewport" ref={viewportRef}>
-            <div
-              className={`af-canvas${far ? " is-far" : ""}`}
-              style={{ width: CANVAS.w, height: CANVAS.h, transform }}
-              aria-hidden="true"
-            >
-              <Wires lit={lit} drawn={wiresDrawn} />
+          <div className="af-frame">
+            <div className="af-viewport" ref={viewportRef}>
+              <div
+                className={`af-canvas${far ? " is-far" : ""}`}
+                style={{ width: CANVAS.w, height: CANVAS.h, transform }}
+                aria-hidden="true"
+              >
+                <Wires lit={lit} drawn={wiresDrawn} />
 
-              {NODES.map((node) => (
-                <NodeView
-                  key={node.id}
-                  node={node}
-                  index={index}
-                  elapsed={
-                    CLOCKED.has(node.kind)
-                      ? node.kind === "summary" && !summaryVisibleAt(index)
-                        ? 0
-                        : motion
-                      : 0
-                  }
-                  lit={lit.has(node.id)}
-                  revealed={node.reveal < revealCount}
-                  thinking={node.kind === "model" ? thinking : undefined}
-                  rowsVisible={rowsVisibleAt(node.id, index)}
-                  rowsFrom={rowsFrom}
+                {NODES.map((node) => (
+                  <NodeView
+                    key={node.id}
+                    node={node}
+                    index={index}
+                    elapsed={
+                      CLOCKED.has(node.kind)
+                        ? node.kind === "summary" && !summaryVisibleAt(index)
+                          ? 0
+                          : motion
+                        : 0
+                    }
+                    lit={lit.has(node.id)}
+                    revealed={node.reveal < revealCount}
+                    thinking={node.kind === "model" ? thinking : undefined}
+                    note={node.kind === "model" ? scene.modelNote : undefined}
+                    rowsVisible={rowsVisibleAt(node.id, index)}
+                    rowsFrom={rowsFrom}
+                  />
+                ))}
+
+                <Transfers
+                  transfers={scene.transfers}
+                  motion={motion}
+                  settled={reduced || settled}
                 />
-              ))}
+              </div>
 
-              <Transfers
-                transfers={scene.transfers}
-                motion={motion}
-                settled={reduced || settled}
-              />
+              {/*
+                4.3: the boundary label at the canvas corner was cropped in
+                every zoomed scene, so a badge in the viewport corner says
+                where the camera is instead.
+              */}
+              <p className="af-where">
+                {showsModel
+                  ? "Your Oracle Database, and the AI model outside it"
+                  : "Inside your Oracle Database"}
+              </p>
             </div>
 
             <p
-              className={`af-caption${scene.quote ? " is-quote" : ""}`}
-              ref={captionRef}
+              className={`af-caption${asQuote ? " is-quote" : ""}`}
               aria-live="off"
             >
-              {scene.quote ? `“${scene.caption}”` : scene.caption}
+              {captionText}
             </p>
           </div>
 
@@ -553,20 +568,23 @@ export default function AgentFlow() {
           two stayed unused.
         </p>
         <p>
-          PAYMENTS rows read:{" "}
+          get_payments runs: select invoice_id, amount, status from payments
+          where invoice_id = :p_invoice, with p_invoice set to 'INV-1003'. The
+          PAYMENTS rows it reads:{" "}
           {PAYMENT_ROWS.map(
-            (row) =>
-              `${row.id}, ${row.amount}, ${row.status}${
-                row.match ? " (matches INV-1003)" : ""
-              }`,
+            (row) => `${row.cells.join(", ")}${row.match ? " (selected)" : ""}`,
           ).join("; ")}
           .
         </p>
         <p>
           The Policy agent has find_policy and get_customer_tier. The model
-          chose find_policy. REFUND_POLICIES rows read:{" "}
-          {POLICY_ROWS.map((row) => `${row.id}, ${row.title}`).join("; ")}. The
-          rule that applies: {POLICY_RULE}
+          chose find_policy, which runs: select rule_text from refund_policies
+          where reason_code = :p_reason, with p_reason set to
+          'duplicate_payment'. The REFUND_POLICIES rows it reads:{" "}
+          {POLICY_ROWS.map(
+            (row) => `${row.cells.join(", ")}${row.match ? " (selected)" : ""}`,
+          ).join("; ")}
+          . The rule that applies: {POLICY_RULE}
         </p>
         <p>Answer: {FINAL_ANSWER}</p>
         <p>

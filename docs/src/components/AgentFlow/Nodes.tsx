@@ -8,16 +8,13 @@ import Icon from "./Icon";
 import {
   ANSWER_SOURCES,
   FINAL_ANSWER,
-  PAYMENT_ROWS,
-  POLICY_ROWS,
-  POLICY_RULE,
   PROMPT,
+  ROWS_BY_TABLE,
   SESSION_STATS,
   answerVisibleAt,
   planAt,
   planNoteAt,
   planVisibleAt,
-  ruleVisibleAt,
   summaryVisibleAt,
   toolChosenAt,
   toolPassedAt,
@@ -36,6 +33,8 @@ export interface NodeViewProps {
   revealed: boolean;
   /** True while the model shows its thinking dots. */
   thinking?: boolean;
+  /** A second line for the model card, set by the scene. */
+  note?: string;
   rowsVisible?: boolean;
   /** Milliseconds after which the table rows start to appear. */
   rowsFrom?: number;
@@ -152,6 +151,14 @@ function Agent({ node, lit, revealed }: NodeViewProps) {
 
 /* ------------------------------------------------------------------- tool */
 
+/*
+ * A tool is a row with its name until the model picks it. Then it opens into a
+ * code card with the SQL it runs and the argument the model passed, which is
+ * what tells a visitor this is a database function and not an API call.
+ *
+ * The chosen tool is placed last in its agent, so opening it extends into the
+ * card's own padding instead of pushing the other rows down.
+ */
 function Tool({ node, index, lit, revealed }: NodeViewProps) {
   const chosen = toolChosenAt(node.id, index);
   const passed = toolPassedAt(node.id, index);
@@ -165,11 +172,34 @@ function Tool({ node, index, lit, revealed }: NodeViewProps) {
       ]
         .filter(Boolean)
         .join(" ")}
-      style={style(node)}
+      style={{
+        ...style(node),
+        // Collapsed until chosen, so an unused tool stays a single row.
+        height: chosen ? node.h : 38,
+      }}
     >
-      <Icon kind="tool" size={18} />
-      <span className="af-tool-name">{node.title}</span>
-      <span className="af-tool-tag">your PL/SQL</span>
+      <p className="af-tool-head">
+        <span className="af-tool-glyph" aria-hidden="true">
+          ƒ
+        </span>
+        <span className="af-tool-name">{node.title}</span>
+        {chosen ? (
+          <span className="af-tool-tag">PL/SQL function</span>
+        ) : null}
+      </p>
+
+      {chosen && node.sql ? (
+        <pre className="af-sql">
+          {node.sql.map((line) => (
+            <span className="af-sql-line" key={line}>
+              {line}
+            </span>
+          ))}
+          {node.bind ? (
+            <span className="af-sql-bind">{node.bind}</span>
+          ) : null}
+        </pre>
+      ) : null}
     </div>
   );
 }
@@ -185,8 +215,8 @@ function Table({
   rowsVisible,
   rowsFrom = 0,
 }: NodeViewProps) {
-  const isPayments = node.id === "payments";
-  const rows = isPayments ? PAYMENT_ROWS : POLICY_ROWS;
+  const rows = ROWS_BY_TABLE[node.id] ?? [];
+  const columns = node.columns ?? [];
 
   /* Rows stagger in on the scene they arrive, and are simply there after it. */
   const shown = !rowsVisible
@@ -203,14 +233,24 @@ function Table({
     <div className={shellClass(node, lit, revealed)} style={style(node)}>
       <p className="af-node-head">
         <Icon kind="table" size={18} />
+        <span className="af-table-kind">table</span>
         <span className="af-table-name">{node.title}</span>
       </p>
 
       <table className="af-rows">
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th scope="col" key={column}>
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
           {rows.map((row, position) => (
             <tr
-              key={row.id}
+              key={row.cells.join("|")}
               className={[
                 position < shown ? "is-in" : "",
                 settled && row.match ? "is-match" : "",
@@ -218,32 +258,20 @@ function Table({
                 .filter(Boolean)
                 .join(" ")}
             >
-              <td>{row.id}</td>
-              {isPayments ? (
-                <>
-                  <td>{(row as (typeof PAYMENT_ROWS)[number]).amount}</td>
-                  <td>{(row as (typeof PAYMENT_ROWS)[number]).status}</td>
-                </>
-              ) : (
-                <td colSpan={2}>
-                  {(row as (typeof POLICY_ROWS)[number]).title}
-                </td>
-              )}
+              {row.cells.map((cell) => (
+                <td key={cell}>{cell}</td>
+              ))}
             </tr>
           ))}
         </tbody>
       </table>
-
-      {!isPayments && ruleVisibleAt(index) ? (
-        <p className="af-rule">{POLICY_RULE}</p>
-      ) : null}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ model */
 
-function Model({ node, lit, revealed, thinking }: NodeViewProps) {
+function Model({ node, lit, revealed, thinking, note }: NodeViewProps) {
   return (
     <div
       className={`${shellClass(node, lit, revealed)}${
@@ -260,7 +288,7 @@ function Model({ node, lit, revealed, thinking }: NodeViewProps) {
           <i />
         </span>
       </p>
-      <p className="af-node-sub">{node.subtitle}</p>
+      <p className="af-node-sub">{note ?? node.subtitle}</p>
     </div>
   );
 }
@@ -269,9 +297,7 @@ function Model({ node, lit, revealed, thinking }: NodeViewProps) {
 
 function Summary({ node, index, elapsed, lit, revealed }: NodeViewProps) {
   if (!summaryVisibleAt(index)) {
-    return (
-      <div className={shellClass(node, lit, revealed)} style={style(node)} />
-    );
+    return null;
   }
 
   /* Counters run up once, so the numbers register as a total for the run. */

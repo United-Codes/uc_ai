@@ -57,19 +57,44 @@
 
 /* ------------------------------------------------------------- the frame */
 
+.af-frame {
+	border: 1px solid var(--af-border);
+	border-radius: 0.75rem;
+	background: var(--af-panel);
+	overflow: hidden;
+}
+
 .af-viewport {
 	position: relative;
 	overflow: hidden;
 	aspect-ratio: 4 / 3;
-	border: 1px solid var(--af-border);
-	border-radius: 0.75rem;
-	background: var(--af-panel);
 }
 
 @media (min-width: 55rem) {
 	.af-viewport {
 		aspect-ratio: 16 / 9;
 	}
+}
+
+/*
+ * Where the camera is. The canvas label was cropped in every zoomed scene.
+ * Top right, because the model card sits at the top left of the canvas.
+ */
+.af-where {
+	position: absolute;
+	right: 0.6rem;
+	top: 0.5rem;
+	z-index: 5;
+	margin: 0;
+	border: 1px solid var(--af-border);
+	border-radius: 0.35rem;
+	background: color-mix(in srgb, var(--af-panel) 86%, transparent);
+	color: var(--af-sub);
+	font-size: 0.72rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	padding: 0.16rem 0.45rem;
+	backdrop-filter: blur(6px);
 }
 
 .af-canvas {
@@ -86,18 +111,38 @@
 }
 
 /*
- * Zoomed far out, only the names and the shape survive legibly. The session
- * strip is the exception: it belongs to the closing pull-out, so it is sized
- * for this scale rather than for a close-up.
+ * Zoomed far out, the whole canvas is about half size on a desktop and a fifth
+ * of it on a phone. Rather than shrink the near view, the far view gets its own
+ * typography: the detail goes and the names grow, so it reads as a block
+ * diagram. The caption and the transcript carry what is dropped.
+ *
+ * The answer and the session strip are the exceptions. Both belong to the
+ * closing pull-out, so they are sized for this scale.
  */
 .af-canvas.is-far .af-node-sub,
 .af-canvas.is-far .af-tool-tag,
 .af-canvas.is-far .af-bubble,
 .af-canvas.is-far .af-answer,
+.af-canvas.is-far .af-table-kind,
 .af-canvas.is-far .af-plan,
-.af-canvas.is-far .af-rows,
-.af-canvas.is-far .af-rule {
+.af-canvas.is-far .af-plan-note,
+.af-canvas.is-far .af-node--tool,
+.af-canvas.is-far .af-rows {
 	display: none;
+}
+
+/* Sized to fit the narrowest card, which is the orchestrator at 290 units. */
+.af-canvas.is-far .af-node-title {
+	font-size: 34px;
+}
+
+.af-canvas.is-far .af-table-name {
+	font-size: 32px;
+}
+
+.af-canvas.is-far .af-icon {
+	width: 28px;
+	height: 28px;
 }
 
 /* --------------------------------------------------------------- nodes */
@@ -118,8 +163,17 @@
 
 /* Dim rather than tint, so the lit node is the only coloured thing. */
 .af-node.is-dim {
-	opacity: 0.32;
+	opacity: 0.5;
 	border-color: var(--af-border);
+}
+
+/*
+ * A dimmed card keeps its title as a landmark and hides its body, so no
+ * half-legible paragraph competes with the lit node. A tool row's head is its
+ * whole body, so it is spared.
+ */
+.af-node.is-dim > :not(.af-node-head, .af-tool-head) {
+	visibility: hidden;
 }
 
 .af-node.is-lit {
@@ -177,6 +231,10 @@
 .af-node--boundary.is-lit {
 	box-shadow: none;
 	border-color: var(--af-border);
+}
+
+.af-canvas:not(.is-far) .af-boundary-label {
+	display: none;
 }
 
 .af-boundary-label {
@@ -306,17 +364,42 @@
 /* ------------------------------------------------------------------ tools */
 
 .af-node--tool {
-	display: flex;
-	align-items: center;
-	gap: 8px;
+	display: block;
+	overflow: hidden;
 	border-width: 1px;
 	border-radius: 9px;
 	padding: 0 12px;
 	background: var(--af-panel);
+	transition:
+		height 320ms cubic-bezier(0.4, 0, 0.2, 1),
+		border-color 300ms ease,
+		background 300ms ease,
+		opacity 300ms ease;
 }
 
 .af-node--tool.is-lit {
 	box-shadow: none;
+}
+
+.af-tool-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0;
+	height: 36px;
+}
+
+.af-tool-glyph {
+	color: var(--af-tone);
+	font-family: var(--__sl-font-mono, ui-monospace, monospace);
+	font-size: 20px;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.af-node--tool.is-dim .af-tool-glyph,
+.af-node--tool.is-passed .af-tool-glyph {
+	color: var(--af-sub);
 }
 
 .af-tool-name {
@@ -328,28 +411,60 @@
 
 .af-tool-tag {
 	margin-left: auto;
-	border: 1px solid var(--af-border);
+	border: 1px solid var(--af-tone);
 	border-radius: 5px;
-	color: var(--af-sub);
-	font-size: 14px;
-	padding: 0 6px;
+	color: var(--af-tone);
+	font-size: 17px;
+	padding: 1px 7px;
 	white-space: nowrap;
 }
 
-/* The tool the model picked. */
+/* The tool the model picked, open with the SQL it runs. */
 .af-node--tool.is-chosen {
-	transform: scale(1.04);
 	border-color: var(--af-tone);
-	background: color-mix(in srgb, var(--af-tone) 16%, var(--af-card));
+	background: color-mix(in srgb, var(--af-tone) 14%, var(--af-card));
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--af-tone) 24%, transparent);
 }
 
 /* Tools that exist and were not needed for this request. */
 .af-node--tool.is-passed {
-	opacity: 0.4;
+	opacity: 0.45;
+}
+
+.af-sql {
+	display: flex;
+	flex-direction: column;
+	margin: 2px 0 0;
+	background: none;
+	border: 0;
+	padding: 0;
+	font-family: var(--__sl-font-mono, ui-monospace, monospace);
+	font-size: 16px;
+	line-height: 1.5;
+	white-space: pre;
+	overflow: visible;
+}
+
+.af-sql-line {
+	color: var(--af-title);
+}
+
+.af-sql-bind {
+	margin-top: 4px;
+	color: var(--af-tone);
+	font-size: 16px;
+}
+
+.af-sql-bind::before {
+	content: "→ ";
 }
 
 /* ----------------------------------------------------------------- tables */
+
+.af-table-kind {
+	color: var(--af-sub);
+	font-size: 17px;
+}
 
 .af-table-name {
 	color: var(--af-title);
@@ -361,10 +476,27 @@
 
 .af-rows {
 	width: 100%;
-	margin: 12px 0 0;
+	margin: 10px 0 0;
 	border-collapse: collapse;
-	font-size: 18px;
+	font-size: 15px;
 	table-layout: fixed;
+}
+
+.af-rows th {
+	border: 0;
+	border-bottom: 2px solid var(--af-border);
+	color: var(--af-sub);
+	font-family: var(--__sl-font-mono, ui-monospace, monospace);
+	font-size: 15px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	padding: 0 8px 4px 0;
+	text-align: left;
+	white-space: nowrap;
+}
+
+.af-rows th:first-child {
+	padding-left: 6px;
 }
 
 .af-rows tr {
@@ -389,6 +521,9 @@
 	font-family: var(--__sl-font-mono, ui-monospace, monospace);
 	padding: 5px 8px 5px 0;
 	text-align: left;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .af-rows td:first-child {
@@ -397,14 +532,6 @@
 
 .af-rows tr:last-child td {
 	border-bottom: 0;
-}
-
-.af-rule {
-	margin: 10px 0 0;
-	color: var(--af-sub);
-	font-size: 17px;
-	line-height: 1.35;
-	animation: af-pop 300ms ease-out;
 }
 
 /* ------------------------------------------------------------- the model */
@@ -588,21 +715,20 @@
 
 /* --------------------------------------------------- caption and controls */
 
-/* The caption sits in the picture, so the eye does not leave it. */
+/*
+ * A fixed two-line strip under the picture, inside the same frame. Fixed is
+ * the point: a measured height changed the camera aspect between scenes.
+ */
 .af-caption {
-	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	z-index: 5;
+	display: flex;
+	align-items: center;
 	margin: 0;
-	background: color-mix(in srgb, var(--af-panel) 88%, transparent);
+	min-height: 3.4rem;
 	border-top: 1px solid var(--af-border);
 	color: var(--af-title);
 	font-size: 0.95rem;
-	line-height: 1.5;
-	padding: 0.7rem 0.9rem;
-	backdrop-filter: blur(6px);
+	line-height: 1.45;
+	padding: 0.6rem 0.9rem;
 }
 
 .af-caption.is-quote {
@@ -869,7 +995,6 @@
 }
 
 .af-static .af-answer,
-.af-static .af-rule,
 .af-static .af-plan-item.is-new .af-plan-box,
 .af-static .af-dots i {
 	animation: none;

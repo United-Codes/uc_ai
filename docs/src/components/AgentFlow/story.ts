@@ -38,6 +38,16 @@ export interface StoryNode extends Rect {
   parent?: string;
   /** Order in the scene 0 reveal. */
   reveal: number;
+  /**
+   * The body of a tool, shown once the model has chosen it. Three lines of
+   * real Oracle SQL with a bind variable, so a reader who knows PL/SQL sees a
+   * function and not an API call.
+   */
+  sql?: string[];
+  /** The argument the model passed, which is what its decision chip carried. */
+  bind?: string;
+  /** Columns of a table node. */
+  columns?: string[];
 }
 
 /* ----------------------------------------------------------------- canvas */
@@ -51,9 +61,9 @@ export const NODES: StoryNode[] = [
     id: "model",
     kind: "model",
     x: 340,
-    y: 26,
-    w: 440,
-    h: 100,
+    y: 16,
+    w: 460,
+    h: 110,
     title: "AI model",
     subtitle: "Claude, GPT, Gemini, or a local Ollama model",
     tone: "accent",
@@ -63,9 +73,9 @@ export const NODES: StoryNode[] = [
     id: "db",
     kind: "boundary",
     x: 40,
-    y: 156,
-    w: 1520,
-    h: 700,
+    y: 138,
+    w: 1540,
+    h: 748,
     title: "Oracle Database",
     subtitle: "UC AI",
     tone: "neutral",
@@ -75,9 +85,9 @@ export const NODES: StoryNode[] = [
     id: "you",
     kind: "user",
     x: 80,
-    y: 270,
-    w: 210,
-    h: 290,
+    y: 210,
+    w: 230,
+    h: 400,
     title: "You",
     subtitle: "APEX · PL/SQL",
     tone: "accent",
@@ -87,9 +97,9 @@ export const NODES: StoryNode[] = [
     id: "orch",
     kind: "orchestrator",
     x: 350,
-    y: 240,
+    y: 210,
     w: 290,
-    h: 230,
+    h: 250,
     title: "Orchestrator",
     subtitle: "Plans the run",
     tone: "accent",
@@ -98,34 +108,22 @@ export const NODES: StoryNode[] = [
   {
     id: "billing",
     kind: "agent",
-    x: 720,
-    y: 200,
-    w: 340,
-    h: 250,
+    x: 700,
+    y: 150,
+    w: 420,
+    h: 340,
     title: "Billing agent",
     subtitle: "Finds the payment facts",
     tone: "billing",
     reveal: 3,
   },
   {
-    id: "get_payments",
-    kind: "tool",
-    x: 740,
-    y: 290,
-    w: 300,
-    h: 42,
-    title: "get_payments",
-    tone: "billing",
-    parent: "billing",
-    reveal: 4,
-  },
-  {
     id: "get_invoice",
     kind: "tool",
-    x: 740,
-    y: 340,
-    w: 300,
-    h: 42,
+    x: 722,
+    y: 240,
+    w: 376,
+    h: 36,
     title: "get_invoice",
     tone: "billing",
     parent: "billing",
@@ -134,80 +132,106 @@ export const NODES: StoryNode[] = [
   {
     id: "issue_refund",
     kind: "tool",
-    x: 740,
-    y: 390,
-    w: 300,
-    h: 42,
+    x: 722,
+    y: 282,
+    w: 376,
+    h: 36,
     title: "issue_refund",
     tone: "billing",
     parent: "billing",
     reveal: 4,
   },
   {
+    id: "get_payments",
+    kind: "tool",
+    x: 722,
+    y: 324,
+    w: 376,
+    h: 144,
+    title: "get_payments",
+    tone: "billing",
+    parent: "billing",
+    reveal: 4,
+    sql: [
+      "select invoice_id, amount, status",
+      "from   payments",
+      "where  invoice_id = :p_invoice",
+    ],
+    bind: "p_invoice => 'INV-1003'",
+  },
+  {
     id: "payments",
     kind: "table",
-    x: 1160,
-    y: 225,
-    w: 340,
-    h: 200,
+    x: 1180,
+    y: 170,
+    w: 380,
+    h: 230,
     title: "PAYMENTS",
     tone: "billing",
     parent: "get_payments",
     reveal: 5,
+    columns: ["INVOICE_ID", "AMOUNT", "STATUS"],
   },
   {
     id: "policy",
     kind: "agent",
-    x: 720,
-    y: 560,
-    w: 340,
-    h: 200,
+    x: 700,
+    y: 500,
+    w: 420,
+    h: 300,
     title: "Policy agent",
     subtitle: "Finds the refund rule",
     tone: "policy",
     reveal: 6,
   },
   {
-    id: "find_policy",
-    kind: "tool",
-    x: 740,
-    y: 650,
-    w: 300,
-    h: 42,
-    title: "find_policy",
-    tone: "policy",
-    parent: "policy",
-    reveal: 7,
-  },
-  {
     id: "get_customer_tier",
     kind: "tool",
-    x: 740,
-    y: 700,
-    w: 300,
-    h: 42,
+    x: 722,
+    y: 592,
+    w: 376,
+    h: 36,
     title: "get_customer_tier",
     tone: "policy",
     parent: "policy",
     reveal: 7,
   },
   {
+    id: "find_policy",
+    kind: "tool",
+    x: 722,
+    y: 634,
+    w: 376,
+    h: 144,
+    title: "find_policy",
+    tone: "policy",
+    parent: "policy",
+    reveal: 7,
+    sql: [
+      "select rule_text",
+      "from   refund_policies",
+      "where  reason_code = :p_reason",
+    ],
+    bind: "p_reason => 'duplicate_payment'",
+  },
+  {
     id: "policies",
     kind: "table",
-    x: 1160,
-    y: 575,
-    w: 340,
-    h: 185,
+    x: 1180,
+    y: 520,
+    w: 380,
+    h: 230,
     title: "REFUND_POLICIES",
     tone: "policy",
     parent: "find_policy",
     reveal: 8,
+    columns: ["REASON_CODE", "RULE_TEXT"],
   },
   {
     id: "summary",
     kind: "summary",
     x: 80,
-    y: 780,
+    y: 810,
     w: 1420,
     h: 66,
     title: "Session",
@@ -260,24 +284,31 @@ export const ANSWER_SOURCES = ["PAYMENTS", "REFUND_POLICIES"];
 export const CLOSING =
   "Your agents work together. UC AI connects them to your PL/SQL tools and business data.";
 
-export interface PaymentRow {
-  id: string;
-  amount: string;
-  status: string;
-  /** Rows that answer the question get the tone background. */
+/** A row of demo data. `cells` lines up with the table node's `columns`. */
+export interface DataRow {
+  cells: string[];
+  /** Rows the where clause selects get the tone background. */
   match?: boolean;
 }
 
-export const PAYMENT_ROWS: PaymentRow[] = [
-  { id: "PAY-198", amount: "€120", status: "Completed" },
-  { id: "PAY-201", amount: "€49", status: "Completed", match: true },
-  { id: "PAY-202", amount: "€49", status: "Completed", match: true },
+export const PAYMENT_ROWS: DataRow[] = [
+  { cells: ["INV-0977", "€120", "Completed"] },
+  { cells: ["INV-1003", "€49", "Completed"], match: true },
+  { cells: ["INV-1003", "€49", "Completed"], match: true },
 ];
 
-export const POLICY_ROWS = [
-  { id: "RP-04", title: "Duplicate payment", match: true },
-  { id: "RP-07", title: "Service downgrade" },
+export const POLICY_ROWS: DataRow[] = [
+  {
+    cells: ["duplicate_payment", "Refund extra payment"],
+    match: true,
+  },
+  { cells: ["service_downgrade", "Pro-rate difference"] },
 ];
+
+export const ROWS_BY_TABLE: Record<string, DataRow[]> = {
+  payments: PAYMENT_ROWS,
+  policies: POLICY_ROWS,
+};
 
 export const POLICY_RULE =
   "Duplicate payment: refund the extra payment to the original payment method.";
@@ -344,8 +375,15 @@ export interface Scene {
   /** A second camera target inside the same scene. */
   frameThen?: string[];
   frameThenAt?: number;
+  /** Caption to show once the second camera target is reached. */
+  captionThen?: string;
   /** Nodes drawn at full strength. Every other node is dimmed. */
   lit: string[];
+  /**
+   * A second line on the model card. This is where the picture says what the
+   * model does and does not do.
+   */
+  modelNote?: string;
   transfers: Transfer[];
   /** Milliseconds to hold after the last movement ends. */
   hold: number;
@@ -443,10 +481,11 @@ export const SCENES: Scene[] = [
     id: "choose",
     title: "Choose a tool",
     caption:
-      "The Billing agent has three of your functions. The model picks one.",
+      "The model does not run code. It picks one of your functions and its arguments.",
     frame: ["billing", "model"],
     frameNarrow: ["billing"],
     lit: ["billing", "model", "get_payments", "get_invoice", "issue_refund"],
+    modelNote: "returns a function name and its arguments",
     transfers: [
       {
         from: "billing",
@@ -469,7 +508,7 @@ export const SCENES: Scene[] = [
     id: "read",
     title: "Read your data",
     caption:
-      "UC AI runs get_payments. It is your PL/SQL function, reading your own table.",
+      "UC AI calls get_payments. Your PL/SQL runs the SQL on your own table.",
     frame: ["billing", "payments"],
     frameNarrow: ["payments"],
     lit: ["billing", "get_payments", "payments"],
@@ -478,8 +517,15 @@ export const SCENES: Scene[] = [
         from: "get_payments",
         to: "payments",
         kind: "task",
-        label: "get_payments('INV-1003')",
+        label: "invoice_id = 'INV-1003'",
         at: 0,
+      },
+      {
+        from: "payments",
+        to: "get_payments",
+        kind: "result",
+        label: "2 rows → JSON",
+        at: 1250,
       },
     ],
     hold: 1800,
@@ -514,7 +560,7 @@ export const SCENES: Scene[] = [
     id: "second",
     title: "Second specialist",
     caption:
-      "The Policy agent reads the rule that applies. Its other tool stays unused.",
+      "UC AI calls find_policy. The same again: your function, your table.",
     frame: ["policy", "policies"],
     frameNarrow: ["policies"],
     framePadding: 90,
@@ -531,11 +577,18 @@ export const SCENES: Scene[] = [
         from: "find_policy",
         to: "policies",
         kind: "task",
-        label: "find_policy('duplicate_payment')",
+        label: "reason_code = 'duplicate_payment'",
         at: 1250,
       },
+      {
+        from: "policies",
+        to: "find_policy",
+        kind: "result",
+        label: "1 row → JSON",
+        at: 2500,
+      },
     ],
-    hold: 1600,
+    hold: 1400,
   },
   {
     id: "combine",
@@ -579,6 +632,7 @@ export const SCENES: Scene[] = [
     frameNarrow: ["you"],
     frameThen: [],
     frameThenAt: 2000,
+    captionThen: CLOSING,
     lit: NODES.map((node) => node.id),
     transfers: [
       { from: "orch", to: "you", kind: "result", label: "Answer ready", at: 0 },
@@ -620,7 +674,6 @@ const CHOSEN_FROM: Record<string, number> = {
   find_policy: 7,
 };
 const ROWS_FROM: Record<string, number> = { payments: 5, policies: 7 };
-const RULE_FROM = 7;
 const ANSWER_FROM = 9;
 const SUMMARY_FROM = 9;
 
@@ -656,6 +709,5 @@ export function toolPassedAt(toolId: string, index: number): boolean {
 export const rowsVisibleAt = (tableId: string, index: number) =>
   ROWS_FROM[tableId] !== undefined && index >= ROWS_FROM[tableId];
 
-export const ruleVisibleAt = (index: number) => index >= RULE_FROM;
 export const answerVisibleAt = (index: number) => index >= ANSWER_FROM;
 export const summaryVisibleAt = (index: number) => index >= SUMMARY_FROM;
