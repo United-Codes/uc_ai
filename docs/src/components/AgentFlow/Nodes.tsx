@@ -12,6 +12,7 @@ import {
   ROWS_BY_TABLE,
   SESSION_STATS,
   answerVisibleAt,
+  heightAt,
   planAt,
   planNoteAt,
   planVisibleAt,
@@ -21,8 +22,12 @@ import {
   type StoryNode,
 } from "./story";
 
-/** Rows appear one after another, 80ms apart, driven by the scene clock. */
-const ROW_STAGGER_MS = 80;
+/**
+ * Rows appear one after another, driven by the scene clock. Slow enough that
+ * a reader watches each row land rather than seeing the table blink into
+ * existence.
+ */
+const ROW_STAGGER_MS = 220;
 
 export interface NodeViewProps {
   node: StoryNode;
@@ -35,6 +40,8 @@ export interface NodeViewProps {
   thinking?: boolean;
   /** A second line for the model card, set by the scene. */
   note?: string;
+  /** Whether the boundary's label is fully inside the camera. */
+  labelVisible?: boolean;
   rowsVisible?: boolean;
   /** Milliseconds after which the table rows start to appear. */
   rowsFrom?: number;
@@ -58,13 +65,19 @@ function style(node: StoryNode): React.CSSProperties {
 
 /* --------------------------------------------------------------- boundary */
 
-function Boundary({ node, lit, revealed }: NodeViewProps) {
+function Boundary({ node, lit, revealed, labelVisible }: NodeViewProps) {
+  /*
+   * The label sits at the box's own corner and moves with it. It is dropped
+   * when the corner is off camera, so it is never a cropped half word.
+   */
   return (
     <div className={shellClass(node, lit, revealed)} style={style(node)}>
-      <p className="af-boundary-label">
-        <span className="af-boundary-db">{node.title}</span>
-        <span className="af-boundary-uc">{node.subtitle}</span>
-      </p>
+      {labelVisible ? (
+        <p className="af-boundary-label">
+          <span className="af-boundary-db">{node.title}</span>
+          <span className="af-boundary-uc">{node.subtitle}</span>
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -75,7 +88,10 @@ function User({ node, index, lit, revealed }: NodeViewProps) {
   const answer = answerVisibleAt(index);
 
   return (
-    <div className={shellClass(node, lit, revealed)} style={style(node)}>
+    <div
+      className={shellClass(node, lit, revealed)}
+      style={{ ...style(node), height: heightAt(node, index) }}
+    >
       <p className="af-node-head">
         <Icon kind="user" />
         <span className="af-node-title">{node.title}</span>
@@ -159,9 +175,9 @@ function Agent({ node, lit, revealed }: NodeViewProps) {
  * The chosen tool is placed last in its agent, so opening it extends into the
  * card's own padding instead of pushing the other rows down.
  */
-function Tool({ node, index, lit, revealed }: NodeViewProps) {
-  const chosen = toolChosenAt(node.id, index);
-  const passed = toolPassedAt(node.id, index);
+function Tool({ node, index, elapsed, lit, revealed }: NodeViewProps) {
+  const chosen = toolChosenAt(node.id, index, elapsed);
+  const passed = toolPassedAt(node.id, index, elapsed);
 
   return (
     <div

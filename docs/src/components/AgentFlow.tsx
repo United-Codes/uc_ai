@@ -38,7 +38,7 @@ import {
 import "./AgentFlow.css";
 
 /** Node kinds whose own appearance depends on the scene clock. */
-const CLOCKED = new Set(["table", "summary"]);
+const CLOCKED = new Set(["table", "summary", "tool"]);
 
 function useMediaFlag(query: string): boolean {
   const [flag, setFlag] = useState(false);
@@ -127,12 +127,12 @@ export default function AgentFlow() {
     const frame =
       narrow && !secondTarget && scene.frameNarrow ? scene.frameNarrow : wide;
     return cameraFor(
-      rectsFor(frame),
+      rectsFor(frame, index),
       aspect,
       narrow ? 30 : (scene.framePadding ?? 70),
       viewport.w,
     );
-  }, [scene, aspect, secondTarget, narrow, viewport.w]);
+  }, [scene, index, aspect, secondTarget, narrow, viewport.w]);
 
   const transform =
     viewport.w > 0 ? transformFor(camera, viewport.w) : undefined;
@@ -387,9 +387,18 @@ export default function AgentFlow() {
     return call ? call.at + TRAVEL_MS : 0;
   }, [scene]);
 
-  /* What the badge says depends on whether the camera has left the database. */
-  const framedIds = secondTarget ? (scene.frameThen ?? []) : scene.frame;
-  const showsModel = framedIds.length === 0 || framedIds.includes("model");
+  const boundary = NODE_BY_ID.db;
+  const labelRect = {
+    x: boundary.x + 20,
+    y: boundary.y + 12,
+    w: 340,
+    h: 40,
+  };
+  const boundaryLabelVisible =
+    labelRect.x >= camera.x &&
+    labelRect.y >= camera.y &&
+    labelRect.x + labelRect.w <= camera.x + camera.w &&
+    labelRect.y + labelRect.h <= camera.y + camera.h;
 
   const revealCount =
     scene.id === "system"
@@ -439,6 +448,9 @@ export default function AgentFlow() {
                     revealed={node.reveal < revealCount}
                     thinking={node.kind === "model" ? thinking : undefined}
                     note={node.kind === "model" ? scene.modelNote : undefined}
+                labelVisible={
+                  node.kind === "boundary" ? boundaryLabelVisible : undefined
+                }
                     rowsVisible={rowsVisibleAt(node.id, index)}
                     rowsFrom={rowsFrom}
                   />
@@ -451,16 +463,6 @@ export default function AgentFlow() {
                 />
               </div>
 
-              {/*
-                4.3: the boundary label at the canvas corner was cropped in
-                every zoomed scene, so a badge in the viewport corner says
-                where the camera is instead.
-              */}
-              <p className="af-where">
-                {showsModel
-                  ? "Your Oracle Database, and the AI model outside it"
-                  : "Inside your Oracle Database"}
-              </p>
             </div>
 
             <p

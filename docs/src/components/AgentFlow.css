@@ -76,38 +76,42 @@
 	}
 }
 
-/*
- * Where the camera is. The canvas label was cropped in every zoomed scene.
- * Top right, because the model card sits at the top left of the canvas.
- */
-.af-where {
-	position: absolute;
-	right: 0.6rem;
-	top: 0.5rem;
-	z-index: 5;
-	margin: 0;
-	border: 1px solid var(--af-border);
-	border-radius: 0.35rem;
-	background: color-mix(in srgb, var(--af-panel) 86%, transparent);
-	color: var(--af-sub);
-	font-size: 0.72rem;
-	font-weight: 600;
-	letter-spacing: 0.02em;
-	padding: 0.16rem 0.45rem;
-	backdrop-filter: blur(6px);
-}
-
 .af-canvas {
 	position: absolute;
 	left: 0;
 	top: 0;
 	transform-origin: 0 0;
-	transition: transform 800ms cubic-bezier(0.65, 0, 0.35, 1);
+	transition: transform 900ms cubic-bezier(0.65, 0, 0.35, 1);
 	will-change: transform;
 }
 
 .af-static .af-canvas {
 	transition: none;
+}
+
+/* The boundary's label, on the canvas at the box's own corner. */
+.af-boundary-label {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	margin: 0;
+}
+
+.af-boundary-db {
+	color: var(--af-sub);
+	font-size: 21px;
+	font-weight: 650;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.af-boundary-uc {
+	border: 1px solid var(--af-accent);
+	border-radius: 6px;
+	color: var(--af-accent);
+	font-size: 16px;
+	font-weight: 650;
+	padding: 1px 6px;
 }
 
 /*
@@ -138,6 +142,17 @@
 
 .af-canvas.is-far .af-table-name {
 	font-size: 32px;
+}
+
+.af-canvas.is-far .af-boundary-db {
+	font-size: 34px;
+}
+
+.af-canvas.is-far .af-boundary-uc {
+	font-size: 24px;
+	border-width: 2px;
+	border-radius: 8px;
+	padding: 1px 8px;
 }
 
 .af-canvas.is-far .af-icon {
@@ -231,34 +246,6 @@
 .af-node--boundary.is-lit {
 	box-shadow: none;
 	border-color: var(--af-border);
-}
-
-.af-canvas:not(.is-far) .af-boundary-label {
-	display: none;
-}
-
-.af-boundary-label {
-	display: flex;
-	align-items: baseline;
-	gap: 12px;
-	margin: 0;
-}
-
-.af-boundary-db {
-	color: var(--af-sub);
-	font-size: 32px;
-	font-weight: 650;
-	letter-spacing: 0.06em;
-	text-transform: uppercase;
-}
-
-.af-boundary-uc {
-	border: 2px solid var(--af-accent);
-	border-radius: 8px;
-	color: var(--af-accent);
-	font-size: 24px;
-	font-weight: 650;
-	padding: 1px 8px;
 }
 
 /* --------------------------------------------------------------- the user */
@@ -362,6 +349,14 @@
 }
 
 /* ------------------------------------------------------------------ tools */
+
+.af-node--user {
+	transition:
+		height 400ms cubic-bezier(0.4, 0, 0.2, 1),
+		opacity 300ms ease,
+		border-color 300ms ease,
+		box-shadow 300ms ease;
+}
 
 .af-node--tool {
 	display: block;

@@ -48,6 +48,12 @@ export interface StoryNode extends Rect {
   bind?: string;
   /** Columns of a table node. */
   columns?: string[];
+  /**
+   * Height before the node's own content grows it. The conversation reserves
+   * room for the answer only in the scene that has one, rather than standing
+   * two thirds empty for the other nine.
+   */
+  collapsedH?: number;
 }
 
 /* ----------------------------------------------------------------- canvas */
@@ -76,7 +82,7 @@ export const NODES: StoryNode[] = [
     y: 138,
     w: 1540,
     h: 748,
-    title: "Oracle Database",
+    title: "Your Oracle Database",
     subtitle: "UC AI",
     tone: "neutral",
     reveal: 0,
@@ -85,9 +91,10 @@ export const NODES: StoryNode[] = [
     id: "you",
     kind: "user",
     x: 80,
-    y: 210,
-    w: 230,
-    h: 400,
+    y: 195,
+    w: 250,
+    h: 470,
+    collapsedH: 330,
     title: "You",
     subtitle: "APEX · PL/SQL",
     tone: "accent",
@@ -96,7 +103,7 @@ export const NODES: StoryNode[] = [
   {
     id: "orch",
     kind: "orchestrator",
-    x: 350,
+    x: 370,
     y: 210,
     w: 290,
     h: 250,
@@ -244,8 +251,19 @@ export const NODE_BY_ID: Record<string, StoryNode> = Object.fromEntries(
   NODES.map((node) => [node.id, node]),
 );
 
-export function rectsFor(ids: string[]): Rect[] {
-  return ids.map((id) => NODE_BY_ID[id]).filter(Boolean);
+/** A node's height in a given scene, which the camera has to agree with. */
+export function heightAt(node: StoryNode, index: number): number {
+  if (node.collapsedH === undefined) {
+    return node.h;
+  }
+  return answerVisibleAt(index) ? node.h : node.collapsedH;
+}
+
+export function rectsFor(ids: string[], index = Number.MAX_SAFE_INTEGER): Rect[] {
+  return ids
+    .map((id) => NODE_BY_ID[id])
+    .filter(Boolean)
+    .map((node) => ({ ...node, h: heightAt(node, index) }));
 }
 
 /** The boundary and the session strip are structure, not story beats. */
@@ -277,7 +295,7 @@ export const PROMPT =
   "I was charged twice for invoice INV-1003. Can I get a refund?";
 
 export const FINAL_ANSWER =
-  "You paid €49 twice for invoice INV-1003. Under the refund policy, the extra €49 qualifies for a refund.";
+  "You paid €49 twice for INV-1003. The extra €49 qualifies for a refund.";
 
 export const ANSWER_SOURCES = ["PAYMENTS", "REFUND_POLICIES"];
 
@@ -390,18 +408,27 @@ export interface Scene {
 }
 
 /** How long the camera takes to reach a new scene. */
-export const CAMERA_MS = 800;
+export const CAMERA_MS = 900;
 /** How long a chip takes to travel its wire. */
-export const TRAVEL_MS = 700;
+export const TRAVEL_MS = 850;
 /** How long the model shows its thinking dots. */
-export const THINK_MS = 600;
-/** How long a chip rests on its landing point, then how long it fades. */
-export const LINGER_MS = 200;
-export const FADE_MS = 250;
+export const THINK_MS = 1000;
+/**
+ * How long a chip rests on its landing point, then how long it fades. The
+ * rest is deliberately long: the chip carries a sentence, and a reader has to
+ * be able to finish it before the picture moves on.
+ */
+export const LINGER_MS = 900;
+export const FADE_MS = 400;
 /** Total life of a chip, from leaving to gone. */
 export const CHIP_LIFE_MS = TRAVEL_MS + LINGER_MS + FADE_MS;
+/**
+ * Spacing between chips in a scene. Wider than a chip's whole life, so only
+ * one is ever moving.
+ */
+export const CHIP_GRID_MS = 2250;
 /** Milliseconds between node reveals in the opening scene. */
-export const REVEAL_STAGGER_MS = 60;
+export const REVEAL_STAGGER_MS = 110;
 
 export const SCENES: Scene[] = [
   {
@@ -412,7 +439,7 @@ export const SCENES: Scene[] = [
     frame: [],
     lit: ["you"],
     transfers: [],
-    hold: 1600,
+    hold: 3600,
   },
   {
     id: "request",
@@ -420,6 +447,7 @@ export const SCENES: Scene[] = [
     caption: PROMPT,
     quote: true,
     frame: ["you", "orch"],
+    framePadding: 30,
     frameNarrow: ["orch"],
     lit: ["you", "orch"],
     transfers: [
@@ -431,7 +459,7 @@ export const SCENES: Scene[] = [
         at: 0,
       },
     ],
-    hold: 1000,
+    hold: 3000,
   },
   {
     id: "plan",
@@ -454,10 +482,10 @@ export const SCENES: Scene[] = [
         to: "orch",
         kind: "decision",
         label: "Payments first, then the refund rule",
-        at: 1250,
+        at: CHIP_GRID_MS,
       },
     ],
-    hold: 1000,
+    hold: 3200,
   },
   {
     id: "delegate",
@@ -475,7 +503,7 @@ export const SCENES: Scene[] = [
         at: 0,
       },
     ],
-    hold: 1000,
+    hold: 3000,
   },
   {
     id: "choose",
@@ -499,10 +527,10 @@ export const SCENES: Scene[] = [
         to: "billing",
         kind: "decision",
         label: "get_payments('INV-1003')",
-        at: 1250,
+        at: CHIP_GRID_MS,
       },
     ],
-    hold: 1000,
+    hold: 3600,
   },
   {
     id: "read",
@@ -525,10 +553,10 @@ export const SCENES: Scene[] = [
         to: "get_payments",
         kind: "result",
         label: "2 rows → JSON",
-        at: 1250,
+        at: CHIP_GRID_MS,
       },
     ],
-    hold: 1800,
+    hold: 4400,
   },
   {
     id: "report",
@@ -545,16 +573,16 @@ export const SCENES: Scene[] = [
         label: "2 payments · €49 each",
         at: 0,
       },
-      { from: "orch", to: "model", kind: "ask", label: "What next?", at: 1250 },
+      { from: "orch", to: "model", kind: "ask", label: "What next?", at: CHIP_GRID_MS },
       {
         from: "model",
         to: "orch",
         kind: "decision",
         label: "A duplicate. Ask Policy",
-        at: 2500,
+        at: CHIP_GRID_MS * 2,
       },
     ],
-    hold: 900,
+    hold: 3200,
   },
   {
     id: "second",
@@ -578,17 +606,17 @@ export const SCENES: Scene[] = [
         to: "policies",
         kind: "task",
         label: "reason_code = 'duplicate_payment'",
-        at: 1250,
+        at: CHIP_GRID_MS,
       },
       {
         from: "policies",
         to: "find_policy",
         kind: "result",
         label: "1 row → JSON",
-        at: 2500,
+        at: CHIP_GRID_MS * 2,
       },
     ],
-    hold: 1400,
+    hold: 4400,
   },
   {
     id: "combine",
@@ -611,17 +639,17 @@ export const SCENES: Scene[] = [
         to: "model",
         kind: "ask",
         label: "Compose the answer",
-        at: 1250,
+        at: CHIP_GRID_MS,
       },
       {
         from: "model",
         to: "orch",
         kind: "decision",
         label: "Answer ready",
-        at: 2500,
+        at: CHIP_GRID_MS * 2,
       },
     ],
-    hold: 900,
+    hold: 3200,
   },
   {
     id: "answer",
@@ -629,15 +657,16 @@ export const SCENES: Scene[] = [
     caption: FINAL_ANSWER,
     quote: true,
     frame: ["you", "orch"],
+    framePadding: 30,
     frameNarrow: ["you"],
     frameThen: [],
-    frameThenAt: 2000,
+    frameThenAt: 3500,
     captionThen: CLOSING,
     lit: NODES.map((node) => node.id),
     transfers: [
       { from: "orch", to: "you", kind: "result", label: "Answer ready", at: 0 },
     ],
-    hold: 2000,
+    hold: 4200,
   },
 ];
 
@@ -674,9 +703,16 @@ export const TOTAL_MS = SCENES.reduce(
 
 /** Scene index from which each persistent change is visible. */
 const PLAN_FROM = 2;
-const CHOSEN_FROM: Record<string, number> = {
-  get_payments: 4,
-  find_policy: 7,
+/*
+ * When each tool lights up: which scene, and how far into it. The scene index
+ * alone is not enough -- lighting a tool the moment its scene starts shows the
+ * model's choice before the model has answered.
+ */
+const CHOSEN_AT: Record<string, { scene: number; afterMs: number }> = {
+  // Lights when the model's decision chip lands back on the Billing agent.
+  get_payments: { scene: 4, afterMs: CHIP_GRID_MS + TRAVEL_MS },
+  // Lights when the orchestrator's delegation reaches the Policy agent.
+  find_policy: { scene: 7, afterMs: TRAVEL_MS },
 };
 const ROWS_FROM: Record<string, number> = { payments: 5, policies: 7 };
 const ANSWER_FROM = 9;
@@ -693,11 +729,31 @@ export function planAt(index: number) {
   }));
 }
 
-export const toolChosenAt = (toolId: string, index: number) =>
-  CHOSEN_FROM[toolId] !== undefined && index >= CHOSEN_FROM[toolId];
+/**
+ * @param motion milliseconds since the scene's movement began. Omit it to ask
+ *   only whether the scene has reached the point at all.
+ */
+export function toolChosenAt(
+  toolId: string,
+  index: number,
+  motion = Infinity,
+): boolean {
+  const when = CHOSEN_AT[toolId];
+  if (!when) {
+    return false;
+  }
+  if (index !== when.scene) {
+    return index > when.scene;
+  }
+  return motion >= when.afterMs;
+}
 
 /** A tool the model passed over, once the choice has been made. */
-export function toolPassedAt(toolId: string, index: number): boolean {
+export function toolPassedAt(
+  toolId: string,
+  index: number,
+  motion = Infinity,
+): boolean {
   const node = NODE_BY_ID[toolId];
   if (!node?.parent) {
     return false;
@@ -706,9 +762,9 @@ export function toolPassedAt(toolId: string, index: number): boolean {
     (other) =>
       other.parent === node.parent &&
       other.id !== toolId &&
-      toolChosenAt(other.id, index),
+      toolChosenAt(other.id, index, motion),
   );
-  return siblingChosen && !toolChosenAt(toolId, index);
+  return siblingChosen && !toolChosenAt(toolId, index, motion);
 }
 
 export const rowsVisibleAt = (tableId: string, index: number) =>
