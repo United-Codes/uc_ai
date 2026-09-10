@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 import { CANVAS, cameraFor, transformFor, type Rect } from "./AgentFlow/camera";
+import { ControlIcon, type ControlKind } from "./AgentFlow/Icon";
 import NodeView from "./AgentFlow/Nodes";
 import Transfers from "./AgentFlow/Transfers";
 import Wires from "./AgentFlow/Wires";
@@ -17,6 +18,7 @@ import {
   FINAL_ANSWER,
   LAST,
   NODES,
+  NODE_BY_ID,
   PAYMENT_ROWS,
   PLAN_ITEMS,
   POLICY_ROWS,
@@ -63,12 +65,14 @@ export default function AgentFlow() {
    */
   const [elapsed, setElapsed] = useState(() => durationOf(SCENES[0]));
   const [announcement, setAnnouncement] = useState("");
-  const [viewport, setViewport] = useState({ w: 0, h: 0 });
+  const [viewport, setViewport] = useState({ w: 0, h: 0, caption: 0 });
   const [expanded, setExpanded] = useState(false);
 
   const reduced = useMediaFlag("(prefers-reduced-motion: reduce)");
 
   const viewportRef = useRef<HTMLDivElement>(null);
+  const captionRef = useRef<HTMLParagraphElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const expandRef = useRef<HTMLButtonElement>(null);
   const returnFocusTo = useRef<HTMLElement | null>(null);
   const lastFrame = useRef(0);
@@ -92,7 +96,11 @@ export default function AgentFlow() {
      * disagree with it and letterbox the canvas.
      */
     const measure = () =>
-      setViewport({ w: element.clientWidth, h: element.clientHeight });
+      setViewport({
+        w: element.clientWidth,
+        h: element.clientHeight,
+        caption: captionRef.current?.offsetHeight ?? 0,
+      });
     measure();
 
     if (typeof ResizeObserver === "undefined") {
@@ -100,10 +108,19 @@ export default function AgentFlow() {
     }
     const observer = new ResizeObserver(measure);
     observer.observe(element);
+    if (captionRef.current) {
+      observer.observe(captionRef.current);
+    }
     return () => observer.disconnect();
   }, []);
 
-  const aspect = viewport.h > 0 ? viewport.w / viewport.h : 16 / 9;
+  /*
+   * The caption is an overlay strip across the bottom of the viewport. Fitting
+   * the camera to the full height would put the lowest part of the canvas
+   * behind it, which clipped the session strip in the closing scene.
+   */
+  const stageHeight = Math.max(1, viewport.h - viewport.caption);
+  const aspect = viewport.h > 0 ? viewport.w / stageHeight : 16 / 9;
   const narrow = viewport.w > 0 && viewport.w < 560;
 
   /* -------------------------------------------------------------- camera */
@@ -122,19 +139,20 @@ export default function AgentFlow() {
       rectsFor(frame),
       aspect,
       narrow ? 30 : (scene.framePadding ?? 70),
+      viewport.w,
     );
-  }, [scene, aspect, secondTarget, narrow]);
+  }, [scene, aspect, secondTarget, narrow, viewport.w]);
 
   const transform =
     viewport.w > 0 ? transformFor(camera, viewport.w) : undefined;
 
   /*
-   * The establishing shot and the closing pull-out show the whole canvas. On a
-   * phone that is about a fifth of full size, where the secondary labels are
-   * illegible. Below this scale the canvas drops them and reads as a block
-   * diagram; the transcript keeps the detail.
+   * The establishing shot and the closing pull-out show the whole canvas, which
+   * is about half size on a desktop and a fifth of it on a phone. The secondary
+   * labels are illegible there, so the canvas drops them and reads as a block
+   * diagram. The caption and the transcript keep the detail.
    */
-  const far = viewport.w > 0 && viewport.w / camera.w < 0.4;
+  const far = viewport.w > 0 && viewport.w / camera.w < 0.56;
 
   /* ---------------------------------------------------------- one clock */
 
@@ -238,55 +256,72 @@ export default function AgentFlow() {
     elapsedRef.current = 0;
     setElapsed(0);
     setIndex(0);
-    setAnnouncement(reduced ? `1 of ${SCENES.length} · ${SCENES[0].title}` : "");
+    setAnnouncement(
+      reduced ? `1 of ${SCENES.length} · ${SCENES[0].title}` : "",
+    );
     setPlaying(!reduced);
   }, [reduced]);
 
   const atEnd = index >= LAST && settled;
 
   let primaryLabel: string;
+  let primaryIcon: ControlKind;
   let primaryAction: () => void;
 
   if (reduced) {
     primaryLabel = index < LAST ? "Next scene" : "Replay";
+    primaryIcon = index < LAST ? "next" : "replay";
     primaryAction = index < LAST ? () => goTo(index + 1) : replay;
   } else if (playing) {
     primaryLabel = "Pause";
+    primaryIcon = "pause";
     primaryAction = () => setPlaying(false);
   } else if (atEnd) {
     primaryLabel = "Replay";
+    primaryIcon = "replay";
     primaryAction = replay;
   } else {
     primaryLabel = "Play";
+    primaryIcon = "play";
     primaryAction = () => setPlaying(true);
   }
 
   /* -------------------------------------------------------------- expand */
 
   /*
-   * Expanding keeps one instance of the figure and turns it into a fixed
-   * overlay. Rendering a second copy into a <dialog> would give two elements
-   * the same ref and break the viewport measurement.
+   * Expanding uses a real <dialog> in the browser's top layer. Starlight puts
+   * `isolation: isolate` on the main pane, so any z-index we pick only counts
+   * inside it and the header and the sidebars paint over the overlay. The top
+   * layer beats every stacking context.
+   *
+   * The dialog stays in the DOM and is merely re-opened as modal, so the
+   * viewport element and its refs never remount.
    */
   const close = useCallback(() => setExpanded(false), []);
 
   useEffect(() => {
-    if (!expanded) {
-      returnFocusTo.current?.focus();
-      returnFocusTo.current = null;
+    const dialog = dialogRef.current;
+    if (!dialog) {
       return;
     }
 
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close();
+    if (expanded) {
+      if (!dialog.matches(":modal")) {
+        dialog.showModal();
       }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    expandRef.current?.focus();
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [expanded, close]);
+      document.documentElement.style.overflow = "hidden";
+      expandRef.current?.focus();
+      return () => {
+        document.documentElement.style.overflow = "";
+      };
+    }
+
+    if (dialog.open) {
+      dialog.close();
+    }
+    returnFocusTo.current?.focus();
+    returnFocusTo.current = null;
+  }, [expanded]);
 
   const toggleExpanded = () => {
     if (!expanded) {
@@ -299,13 +334,31 @@ export default function AgentFlow() {
 
   const motion = Math.max(0, elapsed - CAMERA_MS);
 
+  /*
+   * A node is lit only if the camera actually shows it. On a phone a scene
+   * frames one card, so without this the scene would highlight nodes that are
+   * off screen. The boundary is always lit: it is larger than most cameras.
+   */
   const lit = useMemo(() => {
-    const set = new Set(scene.lit);
-    for (const id of ALWAYS_LIT) {
-      set.add(id);
+    const set = new Set<string>(ALWAYS_LIT);
+
+    for (const id of scene.lit) {
+      const node = NODE_BY_ID[id];
+      if (!node) {
+        continue;
+      }
+      const onCamera =
+        node.x >= camera.x &&
+        node.y >= camera.y &&
+        node.x + node.w <= camera.x + camera.w &&
+        node.y + node.h <= camera.y + camera.h;
+      if (onCamera || ALWAYS_LIT.has(id)) {
+        set.add(id);
+      }
     }
+
     return set;
-  }, [scene]);
+  }, [scene, camera]);
 
   /** The model pulses between an outgoing question and the decision returning. */
   const thinking = useMemo(() => {
@@ -338,110 +391,132 @@ export default function AgentFlow() {
 
   return (
     <figure
-      className={`af${reduced ? " af-static" : ""}${expanded ? " is-expanded" : ""}`}
+      className={`af not-content${reduced ? " af-static" : ""}${
+        expanded ? " is-expanded" : ""
+      }`}
     >
-      {expanded ? (
-        <div className="af-scrim" onClick={close} aria-hidden="true" />
-      ) : null}
-
-      <div
-        className="af-shell"
-        role={expanded ? "dialog" : undefined}
-        aria-modal={expanded ? true : undefined}
-        aria-label={expanded ? "The multi-agent run, expanded" : undefined}
+      <dialog
+        className="af-dialog"
+        ref={dialogRef}
+        onClose={close}
+        aria-label="The multi-agent run"
       >
-        <div className="af-viewport" ref={viewportRef}>
-          <div
-            className={`af-canvas${far ? " is-far" : ""}`}
-            style={{ width: CANVAS.w, height: CANVAS.h, transform }}
-            aria-hidden="true"
-          >
-            <Wires lit={lit} drawn={wiresDrawn} />
+        <div className="af-shell">
+          <div className="af-viewport" ref={viewportRef}>
+            <div
+              className={`af-canvas${far ? " is-far" : ""}`}
+              style={{ width: CANVAS.w, height: CANVAS.h, transform }}
+              aria-hidden="true"
+            >
+              <Wires lit={lit} drawn={wiresDrawn} />
 
-            {NODES.map((node) => (
-              <NodeView
-                key={node.id}
-                node={node}
-                index={index}
-                elapsed={
-                  CLOCKED.has(node.kind)
-                    ? node.kind === "summary" && !summaryVisibleAt(index)
-                      ? 0
-                      : motion
-                    : 0
-                }
-                lit={lit.has(node.id)}
-                revealed={node.reveal < revealCount}
-                thinking={node.kind === "model" ? thinking : undefined}
-                rowsVisible={rowsVisibleAt(node.id, index)}
-                rowsFrom={rowsFrom}
+              {NODES.map((node) => (
+                <NodeView
+                  key={node.id}
+                  node={node}
+                  index={index}
+                  elapsed={
+                    CLOCKED.has(node.kind)
+                      ? node.kind === "summary" && !summaryVisibleAt(index)
+                        ? 0
+                        : motion
+                      : 0
+                  }
+                  lit={lit.has(node.id)}
+                  revealed={node.reveal < revealCount}
+                  thinking={node.kind === "model" ? thinking : undefined}
+                  rowsVisible={rowsVisibleAt(node.id, index)}
+                  rowsFrom={rowsFrom}
+                />
+              ))}
+
+              <Transfers
+                transfers={scene.transfers}
+                motion={motion}
+                settled={reduced || settled}
               />
-            ))}
+            </div>
 
-            <Transfers
-              transfers={scene.transfers}
-              motion={motion}
-              settled={reduced || settled}
-            />
+            <p
+              className={`af-caption${scene.quote ? " is-quote" : ""}`}
+              ref={captionRef}
+              aria-live="off"
+            >
+              {scene.quote ? `“${scene.caption}”` : scene.caption}
+            </p>
           </div>
 
-          <p
-            className={`af-caption${scene.quote ? " is-quote" : ""}`}
-            aria-live="off"
-          >
-            {scene.quote ? `“${scene.caption}”` : scene.caption}
-          </p>
+          <div className="af-controls">
+            <button
+              type="button"
+              className="af-primary"
+              onClick={primaryAction}
+            >
+              <ControlIcon kind={primaryIcon} />
+              {primaryLabel}
+            </button>
 
-          <button
-            type="button"
-            className="af-expand"
-            onClick={toggleExpanded}
-            ref={expandRef}
-          >
-            {expanded ? "Close" : "Expand"}
-          </button>
+            <button
+              type="button"
+              className="af-step"
+              onClick={() => goTo(index - 1)}
+              disabled={index === 0}
+              aria-label="Previous scene"
+              title="Previous scene"
+            >
+              <ControlIcon kind="prev" />
+            </button>
+            <button
+              type="button"
+              className="af-step"
+              onClick={() => goTo(index + 1)}
+              disabled={index >= LAST}
+              aria-label="Next scene"
+              title="Next scene"
+            >
+              <ControlIcon kind="next" />
+            </button>
+
+            <ol className="af-rail">
+              {SCENES.map((entry, position) => (
+                <li key={entry.id}>
+                  <button
+                    type="button"
+                    className={`af-dot${position === index ? " is-current" : ""}${
+                      position < index ? " is-done" : ""
+                    }`}
+                    onClick={() => goTo(position)}
+                    aria-label={`Scene ${position + 1} of ${SCENES.length}: ${entry.title}`}
+                    aria-current={position === index ? "step" : undefined}
+                    title={entry.title}
+                  />
+                </li>
+              ))}
+            </ol>
+
+            <p className="af-progress">
+              <span className="af-progress-count">
+                {index + 1} / {SCENES.length}
+              </span>
+              <span className="af-progress-title"> · {scene.title}</span>
+            </p>
+
+            <button
+              type="button"
+              className="af-expand"
+              onClick={toggleExpanded}
+              ref={expandRef}
+              aria-label={expanded ? "Close the expanded view" : "Expand"}
+              title={expanded ? "Close" : "Expand"}
+            >
+              <ControlIcon kind={expanded ? "close" : "expand"} />
+              <span className="af-expand-label">
+                {expanded ? "Close" : "Expand"}
+              </span>
+            </button>
+          </div>
         </div>
-
-        <div className="af-controls">
-          <button type="button" className="af-primary" onClick={primaryAction}>
-            {primaryLabel}
-          </button>
-          <button
-            type="button"
-            className="af-secondary"
-            onClick={() => goTo(index - 1)}
-            disabled={index === 0}
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            className="af-secondary"
-            onClick={() => goTo(index + 1)}
-            disabled={index >= LAST}
-          >
-            Next
-          </button>
-
-          <ol className="af-rail">
-            {SCENES.map((entry, position) => (
-              <li key={entry.id}>
-                <button
-                  type="button"
-                  className={`af-rail-dot${
-                    position === index ? " is-current" : ""
-                  }${position < index ? " is-done" : ""}`}
-                  onClick={() => goTo(position)}
-                  aria-label={`Scene ${position + 1} of ${SCENES.length}: ${entry.title}`}
-                  aria-current={position === index ? "step" : undefined}
-                >
-                  <span className="af-rail-label">{entry.title}</span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
+      </dialog>
 
       <details className="af-transcript">
         <summary>Read the story</summary>
@@ -498,7 +573,9 @@ export default function AgentFlow() {
         <p>Answer: {FINAL_ANSWER}</p>
         <p>
           The run in total:{" "}
-          {SESSION_STATS.map((stat) => `${stat.value} ${stat.label}`).join(", ")}
+          {SESSION_STATS.map((stat) => `${stat.value} ${stat.label}`).join(
+            ", ",
+          )}
           . {CLOSING}
         </p>
       </details>

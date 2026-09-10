@@ -207,9 +207,9 @@ export const NODES: StoryNode[] = [
     id: "summary",
     kind: "summary",
     x: 80,
-    y: 790,
+    y: 780,
     w: 1420,
-    h: 56,
+    h: 66,
     title: "Session",
     tone: "neutral",
     reveal: 10,
@@ -346,7 +346,7 @@ export const SCENES: Scene[] = [
     frame: [],
     lit: ["you"],
     transfers: [],
-    hold: 2400,
+    hold: 2000,
   },
   {
     id: "request",
@@ -365,7 +365,7 @@ export const SCENES: Scene[] = [
         at: 0,
       },
     ],
-    hold: 1600,
+    hold: 1300,
   },
   {
     id: "plan",
@@ -385,7 +385,7 @@ export const SCENES: Scene[] = [
         at: 1400,
       },
     ],
-    hold: 1600,
+    hold: 1300,
   },
   {
     id: "delegate",
@@ -403,7 +403,7 @@ export const SCENES: Scene[] = [
         at: 0,
       },
     ],
-    hold: 1600,
+    hold: 1300,
   },
   {
     id: "choose",
@@ -423,7 +423,7 @@ export const SCENES: Scene[] = [
         at: 1400,
       },
     ],
-    hold: 1800,
+    hold: 1400,
   },
   {
     id: "read",
@@ -442,7 +442,7 @@ export const SCENES: Scene[] = [
         at: 0,
       },
     ],
-    hold: 2600,
+    hold: 2200,
   },
   {
     id: "report",
@@ -465,10 +465,10 @@ export const SCENES: Scene[] = [
         to: "orch",
         kind: "decision",
         label: "A duplicate. Ask Policy about refunds",
-        at: 2400,
+        at: 2100,
       },
     ],
-    hold: 1600,
+    hold: 1200,
   },
   {
     id: "second",
@@ -495,7 +495,7 @@ export const SCENES: Scene[] = [
         at: 900,
       },
     ],
-    hold: 2400,
+    hold: 2000,
   },
   {
     id: "combine",
@@ -518,10 +518,10 @@ export const SCENES: Scene[] = [
         to: "orch",
         kind: "decision",
         label: "Answer ready",
-        at: 2400,
+        at: 2100,
       },
     ],
-    hold: 1600,
+    hold: 1200,
   },
   {
     id: "answer",
@@ -531,12 +531,12 @@ export const SCENES: Scene[] = [
     frame: ["you", "orch"],
     frameNarrow: ["you"],
     frameThen: [],
-    frameThenAt: 2600,
+    frameThenAt: 2000,
     lit: NODES.map((node) => node.id),
     transfers: [
       { from: "orch", to: "you", kind: "result", label: "Answer ready", at: 0 },
     ],
-    hold: 3200,
+    hold: 2400,
   },
 ];
 

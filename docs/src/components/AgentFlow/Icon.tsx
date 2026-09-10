@@ -77,3 +77,51 @@ export default function Icon({ kind, size = 22 }: IconProps) {
     </svg>
   );
 }
+
+/** Glyphs for the playback controls. */
+const CONTROL_PATHS = {
+  play: <path d="M8 5.5v13l11-6.5-11-6.5Z" fill="currentColor" stroke="none" />,
+  pause: (
+    <>
+      <path d="M9 5v14" strokeWidth="2.6" />
+      <path d="M15 5v14" strokeWidth="2.6" />
+    </>
+  ),
+  replay: (
+    <>
+      <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+      <path d="M20 4v4h-4" />
+    </>
+  ),
+  prev: <path d="M14.5 6 9 12l5.5 6" />,
+  next: <path d="M9.5 6 15 12l-5.5 6" />,
+  expand: <path d="M9 4H4v5M15 4h5v5M15 20h5v-5M9 20H4v-5" />,
+  close: <path d="M6 6l12 12M18 6 6 18" />,
+} as const;
+
+export type ControlKind = keyof typeof CONTROL_PATHS;
+
+export function ControlIcon({
+  kind,
+  size = 16,
+}: {
+  kind: ControlKind;
+  size?: number;
+}) {
+  return (
+    <svg
+      className="af-ctrl-icon"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {CONTROL_PATHS[kind]}
+    </svg>
+  );
+}

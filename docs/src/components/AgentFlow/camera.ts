@@ -106,18 +106,46 @@ export function clampToCanvas(rect: Rect): Rect {
 }
 
 /**
+ * Largest scale the camera will use. Without a cap, a two-node scene in the
+ * 1400px expanded view reaches 1.7 and the labels become comically large.
+ * Expanding should show more context, not bigger letters.
+ */
+export const MAX_SCALE = 1.15;
+
+/**
  * The camera rectangle for a set of nodes.
  *
- * @param rects  the nodes to frame; an empty list frames the whole canvas
- * @param aspect the viewport aspect ratio, as width / height
- * @param pad    padding around the nodes, in canvas units
+ * @param rects          the nodes to frame; an empty list frames the whole canvas
+ * @param aspect         the viewport aspect ratio, as width / height
+ * @param pad            padding around the nodes, in canvas units
+ * @param viewportWidth  used to hold the scale at or below MAX_SCALE
  */
-export function cameraFor(rects: Rect[], aspect: number, pad = 70): Rect {
+export function cameraFor(
+  rects: Rect[],
+  aspect: number,
+  pad = 70,
+  viewportWidth = 0,
+): Rect {
   if (rects.length === 0) {
     return fitAspect(CANVAS, aspect);
   }
 
-  return clampToCanvas(fitAspect(padRect(boundsOf(rects), pad), aspect));
+  let rect = fitAspect(padRect(boundsOf(rects), pad), aspect);
+
+  const minWidth = viewportWidth / MAX_SCALE;
+  if (viewportWidth > 0 && rect.w < minWidth) {
+    rect = fitAspect(
+      {
+        x: rect.x - (minWidth - rect.w) / 2,
+        y: rect.y,
+        w: minWidth,
+        h: rect.h,
+      },
+      aspect,
+    );
+  }
+
+  return clampToCanvas(rect);
 }
 
 /** The canvas transform that puts `camera` in a viewport of `viewportWidth`. */
