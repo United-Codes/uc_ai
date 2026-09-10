@@ -15,6 +15,7 @@ import {
   SESSION_STATS,
   answerVisibleAt,
   planAt,
+  planNoteAt,
   planVisibleAt,
   ruleVisibleAt,
   summaryVisibleAt,
@@ -102,6 +103,7 @@ function User({ node, index, lit, revealed }: NodeViewProps) {
 
 function Orchestrator({ node, index, lit, revealed }: NodeViewProps) {
   const plan = planAt(index);
+  const note = planNoteAt(index);
 
   return (
     <div className={shellClass(node, lit, revealed)} style={style(node)}>
@@ -128,6 +130,8 @@ function Orchestrator({ node, index, lit, revealed }: NodeViewProps) {
           ))}
         </ul>
       ) : null}
+
+      {note ? <p className="af-plan-note">{note}</p> : null}
     </div>
   );
 }

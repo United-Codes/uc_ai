@@ -287,6 +287,27 @@ export const PLAN_ITEMS = [
   { label: "Check the refund rule", doneAt: 8 },
 ];
 
+/*
+ * The orchestrator's latest decision, kept on its card. A chip is a messenger
+ * and fades, so anything a decision chip says has to land somewhere; this is
+ * where the model's answers land.
+ */
+export const PLAN_NOTES = [
+  { from: 2, text: "Payments first, then the refund rule" },
+  { from: 6, text: "A duplicate. Ask Policy about refunds" },
+  { from: 8, text: "Both findings in. Write the answer" },
+];
+
+export function planNoteAt(index: number): string | undefined {
+  let note: string | undefined;
+  for (const entry of PLAN_NOTES) {
+    if (index >= entry.from) {
+      note = entry.text;
+    }
+  }
+  return note;
+}
+
 export const SESSION_STATS = [
   { value: 3, label: "agents" },
   { value: 2, label: "tool calls" },
@@ -336,6 +357,13 @@ export const CAMERA_MS = 800;
 export const TRAVEL_MS = 700;
 /** How long the model shows its thinking dots. */
 export const THINK_MS = 600;
+/** How long a chip rests on its landing point, then how long it fades. */
+export const LINGER_MS = 200;
+export const FADE_MS = 250;
+/** Total life of a chip, from leaving to gone. */
+export const CHIP_LIFE_MS = TRAVEL_MS + LINGER_MS + FADE_MS;
+/** Milliseconds between node reveals in the opening scene. */
+export const REVEAL_STAGGER_MS = 60;
 
 export const SCENES: Scene[] = [
   {
@@ -346,7 +374,7 @@ export const SCENES: Scene[] = [
     frame: [],
     lit: ["you"],
     transfers: [],
-    hold: 2000,
+    hold: 1600,
   },
   {
     id: "request",
@@ -365,7 +393,7 @@ export const SCENES: Scene[] = [
         at: 0,
       },
     ],
-    hold: 1300,
+    hold: 1000,
   },
   {
     id: "plan",
@@ -376,16 +404,22 @@ export const SCENES: Scene[] = [
     frameNarrow: ["model"],
     lit: ["orch", "model"],
     transfers: [
-      { from: "orch", to: "model", kind: "ask", label: "What should we check?", at: 0 },
+      {
+        from: "orch",
+        to: "model",
+        kind: "ask",
+        label: "What should we check?",
+        at: 0,
+      },
       {
         from: "model",
         to: "orch",
         kind: "decision",
         label: "Payments first, then the refund rule",
-        at: 1400,
+        at: 1250,
       },
     ],
-    hold: 1300,
+    hold: 1000,
   },
   {
     id: "delegate",
@@ -403,7 +437,7 @@ export const SCENES: Scene[] = [
         at: 0,
       },
     ],
-    hold: 1300,
+    hold: 1000,
   },
   {
     id: "choose",
@@ -414,16 +448,22 @@ export const SCENES: Scene[] = [
     frameNarrow: ["billing"],
     lit: ["billing", "model", "get_payments", "get_invoice", "issue_refund"],
     transfers: [
-      { from: "billing", to: "model", kind: "ask", label: "Which tool?", at: 0 },
+      {
+        from: "billing",
+        to: "model",
+        kind: "ask",
+        label: "Which tool?",
+        at: 0,
+      },
       {
         from: "model",
         to: "billing",
         kind: "decision",
         label: "get_payments('INV-1003')",
-        at: 1400,
+        at: 1250,
       },
     ],
-    hold: 1400,
+    hold: 1000,
   },
   {
     id: "read",
@@ -442,7 +482,7 @@ export const SCENES: Scene[] = [
         at: 0,
       },
     ],
-    hold: 2200,
+    hold: 1800,
   },
   {
     id: "report",
@@ -459,16 +499,16 @@ export const SCENES: Scene[] = [
         label: "2 payments · €49 each",
         at: 0,
       },
-      { from: "orch", to: "model", kind: "ask", label: "What next?", at: 1000 },
+      { from: "orch", to: "model", kind: "ask", label: "What next?", at: 1250 },
       {
         from: "model",
         to: "orch",
         kind: "decision",
-        label: "A duplicate. Ask Policy about refunds",
-        at: 2100,
+        label: "A duplicate. Ask Policy",
+        at: 2500,
       },
     ],
-    hold: 1200,
+    hold: 900,
   },
   {
     id: "second",
@@ -492,15 +532,16 @@ export const SCENES: Scene[] = [
         to: "policies",
         kind: "task",
         label: "find_policy('duplicate_payment')",
-        at: 900,
+        at: 1250,
       },
     ],
-    hold: 2000,
+    hold: 1600,
   },
   {
     id: "combine",
     title: "Combine",
-    caption: "The orchestrator has the facts and the rule. It writes the answer.",
+    caption:
+      "The orchestrator has the facts and the rule. It writes the answer.",
     frame: ["orch", "model"],
     frameNarrow: ["orch"],
     lit: ["orch", "model"],
@@ -512,16 +553,22 @@ export const SCENES: Scene[] = [
         label: "Refund the extra payment",
         at: 0,
       },
-      { from: "orch", to: "model", kind: "ask", label: "Compose the answer", at: 1000 },
+      {
+        from: "orch",
+        to: "model",
+        kind: "ask",
+        label: "Compose the answer",
+        at: 1250,
+      },
       {
         from: "model",
         to: "orch",
         kind: "decision",
         label: "Answer ready",
-        at: 2100,
+        at: 2500,
       },
     ],
-    hold: 1200,
+    hold: 900,
   },
   {
     id: "answer",
@@ -536,7 +583,7 @@ export const SCENES: Scene[] = [
     transfers: [
       { from: "orch", to: "you", kind: "result", label: "Answer ready", at: 0 },
     ],
-    hold: 2400,
+    hold: 2000,
   },
 ];
 
@@ -544,18 +591,18 @@ export const LAST = SCENES.length - 1;
 
 /** Milliseconds the whole scene takes, camera plus movement plus hold. */
 export function durationOf(scene: Scene): number {
+  // A scene must not advance while a chip is still fading out.
   const lastMovement = scene.transfers.reduce(
-    (latest, transfer) => Math.max(latest, transfer.at + TRAVEL_MS),
+    (latest, transfer) => Math.max(latest, transfer.at + CHIP_LIFE_MS),
     0,
   );
-  const revealDone = scene.id === "system" ? NODES.length * 60 : 0;
+  const revealDone =
+    scene.id === "system" ? NODES.length * REVEAL_STAGGER_MS : 0;
   const secondCamera =
     scene.frameThenAt === undefined ? 0 : scene.frameThenAt + CAMERA_MS;
 
   return (
-    CAMERA_MS +
-    Math.max(lastMovement, revealDone, secondCamera) +
-    scene.hold
+    CAMERA_MS + Math.max(lastMovement, revealDone, secondCamera) + scene.hold
   );
 }
 

@@ -17,25 +17,42 @@ interface Point {
 
 const centre = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
 
+/** Which way a wire runs. A chip uses this to sit beside its landing point. */
+export type Heading = "right" | "left" | "up" | "down";
+
+export function headingOf(a: Rect, b: Rect): Heading {
+  if (b.x >= a.x + a.w) {
+    return "right";
+  }
+  if (a.x >= b.x + b.w) {
+    return "left";
+  }
+  return b.y + b.h <= a.y ? "up" : "down";
+}
+
 /**
  * The path from `a` to `b`, leaving and entering on whichever sides face each
  * other. Control points are offset along the axis of travel.
+ *
+ * `shorten` stops the path that many canvas units before the destination edge.
+ * A chip rides this path, so ending short is what keeps the chip's box off the
+ * card's own text when it lands.
  */
-export function wirePath(a: Rect, b: Rect): string {
+export function wirePath(a: Rect, b: Rect, shorten = 0): string {
   const ca = centre(a);
   const cb = centre(b);
 
   // Side by side: leave the right edge, enter the left edge.
   if (b.x >= a.x + a.w) {
     const x1 = a.x + a.w;
-    const x2 = b.x;
+    const x2 = Math.max(x1, b.x - shorten);
     const bend = Math.max(50, (x2 - x1) * 0.55);
     return `M ${x1} ${ca.y} C ${x1 + bend} ${ca.y}, ${x2 - bend} ${cb.y}, ${x2} ${cb.y}`;
   }
 
   if (a.x >= b.x + b.w) {
     const x1 = a.x;
-    const x2 = b.x + b.w;
+    const x2 = Math.min(x1, b.x + b.w + shorten);
     const bend = Math.max(50, (x1 - x2) * 0.55);
     return `M ${x1} ${ca.y} C ${x1 - bend} ${ca.y}, ${x2 + bend} ${cb.y}, ${x2} ${cb.y}`;
   }
@@ -43,13 +60,13 @@ export function wirePath(a: Rect, b: Rect): string {
   // Stacked: leave the top or bottom edge.
   if (b.y + b.h <= a.y) {
     const y1 = a.y;
-    const y2 = b.y + b.h;
+    const y2 = Math.min(y1, b.y + b.h + shorten);
     const bend = Math.max(50, (y1 - y2) * 0.55);
     return `M ${ca.x} ${y1} C ${ca.x} ${y1 - bend}, ${cb.x} ${y2 + bend}, ${cb.x} ${y2}`;
   }
 
   const y1 = a.y + a.h;
-  const y2 = b.y;
+  const y2 = Math.max(y1, b.y - shorten);
   const bend = Math.max(50, (y2 - y1) * 0.55);
   return `M ${ca.x} ${y1} C ${ca.x} ${y1 + bend}, ${cb.x} ${y2 - bend}, ${cb.x} ${y2}`;
 }

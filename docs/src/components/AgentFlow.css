@@ -293,6 +293,16 @@
 	animation: af-pop 200ms ease-out;
 }
 
+/* Where the model's latest decision stays after its chip fades. */
+.af-plan-note {
+	margin: 10px 0 0;
+	border-left: 3px solid var(--af-tone);
+	color: var(--af-sub);
+	font-size: 17px;
+	line-height: 1.3;
+	padding-left: 9px;
+}
+
 /* ------------------------------------------------------------------ tools */
 
 .af-node--tool {
@@ -523,11 +533,14 @@
 .af-chip-inner {
 	display: block;
 	width: max-content;
-	max-width: 340px;
+	max-width: 250px;
 	border-radius: 10px;
-	font-size: 19px;
+	/* offset-anchor centres the box on the path; nudge it back along the
+	   direction of travel so it trails its landing point. */
+	transform: translate(var(--af-nudge-x, 0), var(--af-nudge-y, 0));
+	font-size: 18px;
 	line-height: 1.3;
-	padding: 8px 12px;
+	padding: 7px 11px;
 	box-shadow: 0 4px 16px rgb(0 0 0 / 0.28);
 }
 
@@ -558,6 +571,19 @@
 /* A question to the model is short and round. */
 .af-chip--ask .af-chip-inner {
 	border-radius: 999px;
+}
+
+.af-chip--right {
+	--af-nudge-x: -50%;
+}
+.af-chip--left {
+	--af-nudge-x: 50%;
+}
+.af-chip--up {
+	--af-nudge-y: 50%;
+}
+.af-chip--down {
+	--af-nudge-y: -50%;
 }
 
 /* --------------------------------------------------- caption and controls */

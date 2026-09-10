@@ -4,16 +4,31 @@
  * A chip rides the same bezier as its wire through `offset-path`, and its
  * position comes from the scene clock rather than a CSS animation. That is
  * what makes Pause exact: the clock stops, so the chip stops where it is.
+ *
+ * A chip is a messenger, not a label. It fades out shortly after it lands, and
+ * the destination's own state carries the information from then on: the tool
+ * row lights, the rows appear, the plan ticks, the answer bubble pops. So a
+ * scene reached by hand, or read with reduced motion, shows no chips at all --
+ * everything a chip said is already on the card.
  */
 import React from "react";
-import { NODE_BY_ID, TRAVEL_MS, type Transfer } from "./story";
-import { centreOf, straightDelta, wirePath } from "./geometry";
+import {
+  FADE_MS,
+  LINGER_MS,
+  NODE_BY_ID,
+  TRAVEL_MS,
+  type Transfer,
+} from "./story";
+import { centreOf, headingOf, straightDelta, wirePath } from "./geometry";
+
+/** Canvas units the chip stops short of the card it is heading for. */
+const SHORTEN = 18;
 
 interface TransfersProps {
   transfers: Transfer[];
   /** Milliseconds elapsed since the scene's movement began. */
   motion: number;
-  /** True when every chip should sit at its destination with no travel. */
+  /** True when the scene is showing its end state; no chip is drawn. */
   settled: boolean;
 }
 
@@ -25,6 +40,10 @@ export default function Transfers({
   motion,
   settled,
 }: TransfersProps) {
+  if (settled) {
+    return null;
+  }
+
   return (
     <>
       {transfers.map((transfer, position) => {
@@ -34,22 +53,31 @@ export default function Transfers({
           return null;
         }
 
-        const raw = settled ? 1 : (motion - transfer.at) / TRAVEL_MS;
-        if (raw < 0) {
+        const since = motion - transfer.at;
+        if (since < 0) {
           return null;
         }
 
-        const progress = ease(Math.min(1, raw));
+        const progress = ease(Math.min(1, since / TRAVEL_MS));
+        const past = since - TRAVEL_MS - LINGER_MS;
+        const opacity = past <= 0 ? 1 : 1 - past / FADE_MS;
+        if (opacity <= 0) {
+          return null;
+        }
+
         const origin = centreOf(from);
         const delta = straightDelta(from, to);
+        const heading = headingOf(from, to);
+        const tone = to.tone === "neutral" ? from.tone : to.tone;
 
         return (
           <div
             key={`${transfer.from}-${transfer.to}-${position}`}
-            className={`af-chip af-chip--${transfer.kind} af-tone-${to.tone === "neutral" ? from.tone : to.tone}`}
+            className={`af-chip af-chip--${transfer.kind} af-chip--${heading} af-tone-${tone}`}
             style={
               {
-                "--af-path": `path("${wirePath(from, to)}")`,
+                opacity,
+                "--af-path": `path("${wirePath(from, to, SHORTEN)}")`,
                 "--af-progress": `${progress * 100}%`,
                 "--af-origin-x": `${origin.x}px`,
                 "--af-origin-y": `${origin.y}px`,

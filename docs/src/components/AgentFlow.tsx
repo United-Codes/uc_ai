@@ -24,6 +24,7 @@ import {
   POLICY_ROWS,
   POLICY_RULE,
   PROMPT,
+  REVEAL_STAGGER_MS,
   SCENES,
   SESSION_STATS,
   THINK_MS,
@@ -34,9 +35,6 @@ import {
   summaryVisibleAt,
 } from "./AgentFlow/story";
 import "./AgentFlow.css";
-
-/** Milliseconds between node reveals in the opening scene. */
-const REVEAL_STAGGER_MS = 60;
 
 /** Node kinds whose own appearance depends on the scene clock. */
 const CLOCKED = new Set(["table", "summary"]);
