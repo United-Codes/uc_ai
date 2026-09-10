@@ -1,0 +1,565 @@
+/*
+ * Homepage animation: one refund request through an orchestrator and two
+ * specialist agents. Cards are HTML so the text stays selectable and readable
+ * at 200% zoom. SVG draws only the active connection.
+ */
+
+.af {
+	--af-panel: var(--sl-color-gray-6);
+	--af-card: var(--sl-color-gray-5);
+	--af-border: var(--sl-color-gray-5);
+	--af-title: var(--sl-color-white);
+	--af-sub: var(--sl-color-gray-3);
+	--af-accent: var(--sl-color-accent-high);
+	--af-accent-line: var(--sl-color-accent-high);
+	--af-accent-soft: color-mix(in srgb, var(--sl-color-accent) 34%, transparent);
+
+	margin: 2rem 0 2.5rem;
+	padding: 0;
+}
+
+:root[data-theme="light"] .af {
+	--af-panel: var(--sl-color-gray-7);
+	--af-card: #ffffff;
+	--af-border: var(--sl-color-gray-5);
+	--af-accent: var(--sl-color-accent);
+	--af-accent-line: var(--sl-color-accent);
+	--af-accent-soft: color-mix(in srgb, var(--sl-color-accent) 14%, transparent);
+}
+
+/* ------------------------------------------------------------- the stage */
+
+/*
+ * Starlight puts a 1rem top margin between siblings inside markdown content.
+ * That margin shifted the absolutely positioned overlays and the measured card
+ * heights. The component sets all of its own spacing, so clear it first.
+ * `:where()` keeps the specificity at zero, so every rule below still wins.
+ */
+.af :where(div, p, ol, ul, li, table, details, svg, span, section, figcaption) {
+	margin-top: 0;
+}
+
+.af-frame {
+	border: 1px solid var(--af-border);
+	border-radius: 0.75rem;
+	background: var(--af-panel);
+	padding: 0.9rem;
+}
+
+/*
+ * The measured positioning context. It carries no padding of its own, so the
+ * coordinates taken from getBoundingClientRect match what `left` and `top`
+ * resolve against for the wire and the travelling card.
+ */
+.af-stage {
+	position: relative;
+}
+
+/* The request card. Keeps the run and its findings in one place. */
+.af-run {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem;
+	margin: 0 0 0.9rem;
+	min-height: 1.9rem;
+}
+
+.af-run-label,
+.af-finding {
+	display: inline-block;
+	border-radius: 0.35rem;
+	font-size: 0.76rem;
+	line-height: 1.4;
+	padding: 0.2rem 0.5rem;
+}
+
+.af-run-label {
+	background: var(--af-accent-soft);
+	border: 1px solid var(--af-accent);
+	color: var(--af-title);
+	font-weight: 600;
+}
+
+.af-finding {
+	border: 1px solid var(--af-border);
+	color: var(--af-sub);
+}
+
+.af-finding::before {
+	content: "✓ ";
+	color: var(--af-accent);
+	font-weight: 700;
+}
+
+.af-columns {
+	display: grid;
+	grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+	gap: 0.9rem;
+	align-items: stretch;
+}
+
+.af-col-label {
+	margin: 0 0 0.5rem;
+	color: var(--af-sub);
+	font-size: 0.74rem;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+}
+
+/* The conversation sits outside the UC AI workspace. */
+.af-convo {
+	position: relative;
+	z-index: 1;
+	align-self: start;
+	display: flex;
+	flex-direction: column;
+	border: 1px solid transparent;
+	border-radius: 0.6rem;
+	padding: 0.6rem;
+	transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+.af-convo.is-focus {
+	border-color: var(--af-accent);
+	background: var(--af-accent-soft);
+}
+
+.af-bubble {
+	margin: 0;
+	border: 1px solid var(--af-border);
+	border-radius: 0.6rem 0.6rem 0.6rem 0.15rem;
+	background: var(--af-card);
+	color: var(--af-title);
+	font-size: 0.86rem;
+	line-height: 1.45;
+	padding: 0.55rem 0.65rem;
+}
+
+.af-answer {
+	margin-top: 0.6rem;
+	border: 1px solid var(--af-accent);
+	border-radius: 0.6rem 0.6rem 0.15rem 0.6rem;
+	background: var(--af-card);
+	padding: 0.55rem 0.65rem;
+}
+
+.af-answer-text {
+	margin: 0;
+	color: var(--af-title);
+	font-size: 0.86rem;
+	line-height: 1.45;
+}
+
+.af-answer-sources {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3rem;
+	margin: 0.5rem 0 0;
+}
+
+.af-answer-sources span {
+	border: 1px solid var(--af-border);
+	border-radius: 0.3rem;
+	color: var(--af-sub);
+	font-size: 0.7rem;
+	padding: 0.1rem 0.35rem;
+}
+
+/* ------------------------------------------------------- the UC AI group */
+
+.af-workspace {
+	border: 1px dashed var(--af-border);
+	border-radius: 0.6rem;
+	padding: 0.6rem;
+}
+
+.af-col-label--ws {
+	color: var(--af-sub);
+	text-transform: none;
+	letter-spacing: 0.03em;
+	font-size: 0.76rem;
+}
+
+.af-workspace-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+	gap: 0.9rem;
+	align-items: start;
+}
+
+.af-specialists {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
+}
+
+/* Covers the reserved specialist area until the orchestrator introduces them. */
+.af-hint {
+	position: absolute;
+	inset: 0;
+	z-index: 1;
+	display: flex;
+	align-items: flex-start;
+	margin: 0;
+	border: 1px dashed var(--af-border);
+	border-radius: 0.6rem;
+	background: var(--af-panel);
+	color: var(--af-sub);
+	font-size: 0.8rem;
+	line-height: 1.5;
+	padding: 0.6rem 0.75rem;
+}
+
+.af-card--agent:not(.is-present) {
+	visibility: hidden;
+}
+
+.af-card {
+	position: relative;
+	z-index: 1;
+	border: 1px solid var(--af-border);
+	border-radius: 0.6rem;
+	background: var(--af-card);
+	padding: 0.6rem 0.65rem;
+	transition:
+		border-color 0.3s ease,
+		background 0.3s ease,
+		opacity 0.3s ease;
+}
+
+.af-card.is-focus {
+	border-color: var(--af-accent);
+	background: var(--af-accent-soft);
+}
+
+.af-card-name {
+	margin: 0;
+	color: var(--af-title);
+	font-size: 0.86rem;
+	font-weight: 600;
+}
+
+.af-card-job {
+	margin: 0.1rem 0 0;
+	color: var(--af-sub);
+	font-size: 0.74rem;
+	line-height: 1.35;
+}
+
+/* Where a travelling card lands. Empty, so the layout never jumps. */
+.af-slot {
+	min-height: 2.7rem;
+	margin-top: 0.35rem;
+}
+
+/* ---------------------------------------------------------- tool cards */
+
+.af-tool-stack {
+	display: grid;
+	margin-top: 0.15rem;
+}
+
+.af-tool-layer {
+	grid-area: 1 / 1;
+	visibility: hidden;
+	opacity: 0;
+	transition: opacity 0.3s ease;
+}
+
+.af-tool-layer.is-shown {
+	visibility: visible;
+	opacity: 1;
+}
+
+.af-tool {
+	border: 1px solid var(--af-border);
+	border-radius: 0.45rem;
+	padding: 0.45rem 0.5rem;
+}
+
+.af-tool-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 0.35rem;
+	margin: 0 0 0.35rem;
+}
+
+.af-tool-name {
+	color: var(--af-title);
+	font-family: var(--__sl-font-mono, ui-monospace, monospace);
+	font-size: 0.76rem;
+	font-weight: 600;
+}
+
+.af-tool-tag {
+	border: 1px solid var(--af-border);
+	border-radius: 0.25rem;
+	color: var(--af-sub);
+	font-size: 0.66rem;
+	padding: 0.02rem 0.28rem;
+	white-space: nowrap;
+}
+
+.af-tool-summary,
+.af-tool-rule {
+	margin: 0;
+	color: var(--af-sub);
+	font-size: 0.76rem;
+	line-height: 1.4;
+}
+
+.af-rows {
+	width: 100%;
+	margin: 0;
+	border-collapse: collapse;
+	font-size: 0.72rem;
+	table-layout: fixed;
+}
+
+.af-rows th,
+.af-rows td {
+	border: 0;
+	border-bottom: 1px solid var(--af-border);
+	padding: 0.18rem 0.3rem 0.18rem 0;
+	text-align: left;
+}
+
+.af-rows th {
+	color: var(--af-sub);
+	font-weight: 600;
+}
+
+.af-rows td {
+	color: var(--af-title);
+}
+
+.af-rows tr:last-child td {
+	border-bottom: 0;
+}
+
+/* ------------------------------------------- connection and travelling card */
+
+.af-wire {
+	position: absolute;
+	left: 0;
+	top: 0;
+	pointer-events: none;
+	z-index: 0;
+}
+
+.af-wire line {
+	stroke: var(--af-accent-line);
+	stroke-width: 1.5;
+	stroke-dasharray: 4 4;
+	opacity: 0.65;
+}
+
+.af-travel {
+	position: absolute;
+	z-index: 3;
+	pointer-events: none;
+	animation: af-travel var(--af-travel, 520ms) cubic-bezier(0.4, 0, 0.2, 1)
+		forwards;
+}
+
+.af.is-paused .af-travel {
+	animation-play-state: paused;
+}
+
+@keyframes af-travel {
+	from {
+		transform: translate(0, 0);
+	}
+	to {
+		transform: translate(var(--af-dx), var(--af-dy));
+	}
+}
+
+.af-travel-inner {
+	display: block;
+	width: max-content;
+	max-width: 12.5rem;
+	transform: translate(-50%, -50%);
+	border-radius: 0.4rem;
+	font-size: 0.74rem;
+	line-height: 1.35;
+	padding: 0.3rem 0.45rem;
+	box-shadow: 0 2px 10px rgb(0 0 0 / 0.25);
+}
+
+/* A task leaves the orchestrator: filled. */
+.af-travel--task .af-travel-inner {
+	background: var(--af-accent);
+	border: 1px solid var(--af-accent);
+	color: var(--sl-color-black);
+	font-weight: 600;
+}
+
+/* A result comes back: outlined, with a check. */
+.af-travel--result .af-travel-inner {
+	background: var(--af-card);
+	border: 1px solid var(--af-accent);
+	color: var(--af-title);
+}
+
+.af-travel--result .af-travel-inner::before {
+	content: "✓ ";
+	color: var(--af-accent);
+	font-weight: 700;
+}
+
+/* ---------------------------------------------------- caption and controls */
+
+.af-caption {
+	margin-top: 0.85rem;
+	min-height: 4.5rem;
+}
+
+.af-caption-text {
+	margin: 0;
+	font-size: var(--sl-text-base);
+	line-height: 1.55;
+}
+
+.af-caption-text.is-quote {
+	color: var(--af-title);
+	font-weight: 600;
+}
+
+.af-caption-text--idle {
+	color: var(--af-sub);
+}
+
+.af-closing {
+	margin: 0.5rem 0 0;
+	color: var(--af-sub);
+	font-size: 0.9rem;
+	line-height: 1.5;
+}
+
+.af-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.4rem;
+	margin-top: 0.4rem;
+}
+
+.af-primary,
+.af-secondary {
+	border-radius: 0.4rem;
+	cursor: pointer;
+	font-size: 0.8rem;
+	font-weight: 600;
+	padding: 0.38rem 0.75rem;
+}
+
+.af-primary {
+	border: 1px solid var(--af-accent);
+	background: var(--af-accent);
+	color: var(--sl-color-black);
+}
+
+.af-secondary {
+	border: 1px solid var(--af-border);
+	background: transparent;
+	color: var(--af-title);
+	font-weight: 500;
+}
+
+.af-secondary:hover:not(:disabled) {
+	border-color: var(--af-accent);
+}
+
+.af-secondary:disabled {
+	color: var(--af-sub);
+	cursor: not-allowed;
+	opacity: 0.55;
+}
+
+.af-primary:focus-visible,
+.af-secondary:focus-visible,
+.af-transcript summary:focus-visible {
+	outline: 2px solid var(--af-accent);
+	outline-offset: 2px;
+}
+
+.af-progress {
+	margin: 0 0 0 0.3rem;
+	color: var(--af-sub);
+	font-size: 0.78rem;
+	font-variant-numeric: tabular-nums;
+}
+
+.af-transcript {
+	margin-top: 0.9rem;
+	font-size: 0.85rem;
+}
+
+.af-transcript summary {
+	cursor: pointer;
+	color: var(--af-sub);
+	font-weight: 600;
+}
+
+.af-transcript ol {
+	margin: 0.6rem 0 0;
+}
+
+.af-transcript-note {
+	color: var(--af-sub);
+}
+
+.af-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* --------------------------------------------------------------- mobile */
+
+/* One vertical sequence. No horizontal scrolling, no shrunken desktop graph. */
+@media (max-width: 55rem) {
+	.af-columns,
+	.af-workspace-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.af-slot {
+		min-height: 2.5rem;
+	}
+
+	.af-caption {
+		min-height: 5.5rem;
+	}
+}
+
+@media (max-width: 30rem) {
+	.af-frame {
+		padding: 0.65rem;
+	}
+
+	.af-rows {
+		font-size: 0.68rem;
+	}
+
+	.af-progress {
+		flex-basis: 100%;
+		margin-left: 0;
+	}
+}
+
+/* The reader asked for less motion: scenes change, nothing travels. */
+.af-static .af-travel,
+.af-travel.is-settled {
+	animation: none;
+}

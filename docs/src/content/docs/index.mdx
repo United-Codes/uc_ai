@@ -1,60 +1,93 @@
 ---
 title: UC AI - Agentic AI for Oracle
-description: Call LLMs from the database and create PL/SQL based agents
+description: Build AI agents and multi-agent systems in PL/SQL, inside your Oracle database
 sidebar:
   order: 10
 template: doc
 hero:
-  tagline: Call LLMs from the database and create PL/SQL based agents
+  tagline: Build AI agents in PL/SQL. Next to your data, inside your database.
   actions:
     - text: Installation
       link: /products/uc-ai/docs/guides/installation/
       icon: right-arrow
+    - text: Build an agent
+      link: /products/uc-ai/docs/guides/multi-agent-systems/
+      icon: puzzle
+      variant: minimal
     - text: View on GitHub
       link: https://github.com/United-Codes/uc_ai
       icon: external
       variant: minimal
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, Card, CardGrid, LinkButton, Tabs, TabItem } from "@astrojs/starlight/components";
+import AgentFlow from "../../components/AgentFlow.tsx";
 import FullscreenTable from "../../components/FullscreenTable.astro";
 
-This PL/SQL framework lets you integrate AI agents and automations directly into your Oracle database. You need no Python and no other external tools. With UC AI, you can work with LLMs from providers like OpenAI GPT, Anthropic Claude, Google Gemini, Ollama, and OpenRouter. One unified PL/SQL API gives you function calling, step-by-step reasoning, and file analysis. Keep everything close to your data.
+UC AI is a PL/SQL framework that turns your Oracle database into the runtime for AI agents. An agent reasons about a task, calls your own PL/SQL functions to read and change data, remembers what it learned, and hands work to other agents. You need no Python, no middle tier, and no external orchestrator.
 
 <Aside type="tip" title="New to UC AI?">
-See [**what you can build**](/products/uc-ai/docs/guides/use-cases/) — classification, document Q&A, in-database chatbots, and more — or jump straight to the [**Quickstart**](/products/uc-ai/docs/guides/quickstart/).
+See [**what you can build**](/products/uc-ai/docs/guides/use-cases/) — ticket triage, document Q&A, in-database chatbots, and more — or jump straight to the [**Quickstart**](/products/uc-ai/docs/guides/quickstart/).
 </Aside>
+
+## Follow one request through a team of AI agents
+
+A customer says they were charged twice. One question goes in, and a coordinator hands it to the specialists who can answer it.
+
+<AgentFlow client:visible />
+
+This is a multi-agent system: specialist agents work together on one request. With UC AI, you build these agents in PL/SQL.
+
+<LinkButton href="/products/uc-ai/docs/guides/multi-agent-systems/" icon="right-arrow">
+  Build your first agent
+</LinkButton>
+
+<details>
+<summary>How UC AI runs this</summary>
+
+You define each agent and its tools. The orchestrator uses an AI model to choose a specialist. UC AI runs the specialist and returns its result. Tools call your PL/SQL functions. Each agent can use its own model.
+
+Model requests can include prompts and tool results. Your model configuration determines where those requests go.
+
+</details>
 
 ## Key Features
 
-import { Card, CardGrid } from "@astrojs/starlight/components";
-
 <CardGrid>
+  <Card title="Multi-Agent Systems" icon="puzzle">
+    Coordinate specialized agents with a [workflow, an orchestrator, a handoff, or
+    a conversation](/products/uc-ai/docs/guides/multi-agent-systems/). UC AI manages
+    the data flow and the termination logic.
+  </Card>
+  <Card title="Tools / Function Calling" icon="setting">
+    Agents [call your PL/SQL functions](/products/uc-ai/docs/guides/tools/) with
+    type-safe parameters and JSON schema validation. Your business logic stays in
+    the database.
+  </Card>
+  <Card title="Agent Memory" icon="document">
+    Give an agent a [virtual filesystem](/products/uc-ai/docs/guides/agent-memory/)
+    it writes to itself, so it keeps context between runs.
+  </Card>
+  <Card title="Guardrails" icon="approve-check">
+    Put a [token budget and a rate limit](/products/uc-ai/docs/guides/guardrails/)
+    on an agent before it reaches production.
+  </Card>
+  <Card title="Prompt Profiles" icon="pencil">
+    Store prompts as [versioned templates](/products/uc-ai/docs/guides/prompt-profiles/)
+    with parameters and model configuration. Change a prompt with no code change.
+  </Card>
   <Card title="Multi-Provider Support" icon="rocket">
-    Support for OpenAI, Anthropic, Google, xAI, Mistral, Ollama, OCI, and OpenRouter with
-    unified API interface.
-  </Card>
-  <Card title="Tools/Function Calling" icon="puzzle">
-    AI models can execute PL/SQL functions with type-safe parameter passing and
-    JSON schema validation.
-  </Card>
-  <Card title="Unified API" icon="seti:json">
-    Consistent interface for text generation and
-    tool calls for all providers.
+    One API for OpenAI, Anthropic, Google, xAI, Mistral, Ollama, OCI, and
+    OpenRouter. Give each agent the model that fits its job.
   </Card>
   <Card title="Runs on older DBs" icon="seti:db">
-    No need for 26ai. This is just PL/SQL! Oracle Database 12.2+ are supported!
+    You need no 26ai. This is just PL/SQL. Oracle Database 12.2 and later are
+    supported.
   </Card>
-  <Card title="Agentic AI" icon="starlight">
-    Create agents that work directly with data in your Oracle databases.
+  <Card title="Local LLMs" icon="codePen">
+    Run offline models like GPT-OSS or Qwen through Ollama, so model requests stay
+    on your own network.
   </Card>
-
-{" "}
-
-<Card title="Local LLMs" icon="codePen">
-  Integrate offline LLMs like GPT OSS or Qwen via Ollama
-</Card>
-
 </CardGrid>
 
 <Aside type="tip">
@@ -68,30 +101,22 @@ To get a quick start into what this framework can do, watch our [UC Live webinar
 
 This framework is specifically designed for Oracle Database developers who want to:
 
-- **Integrate AI**: Add AI capabilities directly to database applications and procedures
-- **Automate Tasks**: Let AI models execute database functions based on natural language prompts
-- **Build Smart Apps**: Create applications that can reason about data and take actions
+- **Build agents in PL/SQL**: Write the agent, its tools, and its prompts as database objects
+- **Automate Tasks**: Let AI models call your functions from a natural language prompt
+- **Keep data in place**: Tools read your own tables, with no copy to a middle tier
 - **Extend Functionality**: Give AI models access to custom business logic and database operations
-- **Maintain Control**: Keep AI interactions secure with validated parameters and controlled execution
-
-## Supported AI Providers
-
-- **OpenAI**: GPT-5.6 Sol / Terra / Luna, GPT-5.5, the GPT-5.4 family, and text-embedding-3...
-- **Anthropic**: Claude Fable 5, Claude Opus 5, Claude Sonnet 5, Claude Haiku 4.5, and the Claude 4.x family...
-- **Google**: Gemini 3.7 Flash, Gemini 3.1 Pro, Gemini 3.5 Flash / Flash-Lite, plus Gemini embeddings...
-- **xAI**: Grok 4.6, Grok 4.5, Grok 4.3, Grok 4.20, Grok Build...
-- **Mistral**: Mistral Large / Medium / Small, Ministral, Codestral...
-- **Ollama**: Local LLMs like Llama, Qwen, Gemma, GPT-OSS, and more
-- **OCI**: Oracle Cloud Infrastructure Generative AI — Llama 4, Cohere Command A, Gemini 2.5, Grok 4.3, GPT-OSS...
-- **OpenRouter**: Unified API for 300+ models from OpenAI, Anthropic, Google, Meta, Mistral, and more
+- **Maintain Control**: Keep AI interactions secure with validated parameters, budgets, and controlled execution
 
 ## Quick Example
+
+<Tabs>
+<TabItem label="One AI call">
 
 ```sql
 DECLARE
   l_result JSON_OBJECT_T;
 BEGIN
-  -- Let AI calculate something using a custom tool
+  -- Let AI answer a question using a custom tool
   l_result := uc_ai.generate_text(
     p_user_prompt => 'How many open tickets do I have?',
     p_system_prompt => 'You are a helpful assistant to an ticketing system.
@@ -107,6 +132,47 @@ BEGIN
 END;
 /
 ```
+
+</TabItem>
+<TabItem label="A multi-agent run">
+
+```sql
+DECLARE
+  l_result     JSON_OBJECT_T;
+  l_session_id VARCHAR2(100);
+BEGIN
+  -- One session groups every agent, tool call, and token count of the run
+  l_session_id := uc_ai_agents_api.generate_session_id;
+
+  -- The orchestrator decides which specialist agents to call
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'support_orchestrator',
+    p_input_parameters => JSON_OBJECT_T(
+      '{"prompt": "Customer 4711 says invoice INV-1003 was charged twice."}'
+    ),
+    p_session_id       => l_session_id
+  );
+
+  DBMS_OUTPUT.PUT_LINE(l_result.get_clob('final_message'));
+END;
+/
+```
+
+See the [multi-agent systems guide](/products/uc-ai/docs/guides/multi-agent-systems/) for the agents behind this call.
+
+</TabItem>
+</Tabs>
+
+## Supported AI Providers
+
+- **OpenAI**: GPT-5.6 Sol / Terra / Luna, GPT-5.5, the GPT-5.4 family, and text-embedding-3...
+- **Anthropic**: Claude Fable 5, Claude Opus 5, Claude Sonnet 5, Claude Haiku 4.5, and the Claude 4.x family...
+- **Google**: Gemini 3.7 Flash, Gemini 3.1 Pro, Gemini 3.5 Flash / Flash-Lite, plus Gemini embeddings...
+- **xAI**: Grok 4.6, Grok 4.5, Grok 4.3, Grok 4.20, Grok Build...
+- **Mistral**: Mistral Large / Medium / Small, Ministral, Codestral...
+- **Ollama**: Local LLMs like Llama, Qwen, Gemma, GPT-OSS, and more
+- **OCI**: Oracle Cloud Infrastructure Generative AI — Llama 4, Cohere Command A, Gemini 2.5, Grok 4.3, GPT-OSS...
+- **OpenRouter**: Unified API for 300+ models from OpenAI, Anthropic, Google, Meta, Mistral, and more
 
 ## Feature Matrix
 
