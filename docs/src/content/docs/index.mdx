@@ -45,7 +45,11 @@ This is a multi-agent system: specialist agents work together on one request. Wi
 <details>
 <summary>How UC AI runs this</summary>
 
-You define each agent and its tools. The orchestrator uses an AI model to choose a specialist. UC AI runs the specialist and returns its result. Tools call your PL/SQL functions. Each agent can use its own model.
+You define each agent and the tools it may use. The orchestrator asks an AI model which specialist to call. UC AI runs that specialist and returns its result.
+
+A specialist asks the model which of its tools to call, and UC AI runs that tool as your PL/SQL function. An agent can hold more tools than one run needs, and the model chooses between them.
+
+One session groups the whole run, so you can see every agent, every tool call, and every token it used. Each agent can use its own model.
 
 Model requests can include prompts and tool results. Your model configuration determines where those requests go.
 

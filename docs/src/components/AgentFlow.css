@@ -1,18 +1,32 @@
 /*
  * Homepage animation: one refund request through an orchestrator and two
- * specialist agents. Cards are HTML so the text stays selectable and readable
- * at 200% zoom. SVG draws only the active connection.
+ * specialist agents.
+ *
+ * The picture is one fixed 1600x900 canvas of HTML cards. A camera transform
+ * on `.af-canvas` zooms and pans to the part of the canvas the current scene
+ * is about, so a card can carry readable detail without the whole diagram
+ * shrinking. Because `.af-viewport` has a fixed aspect ratio, the frame never
+ * changes height while playing.
+ *
+ * Sizes inside the canvas are in canvas units (px at scale 1). Sizes outside
+ * it are in rem.
  */
 
 .af {
 	--af-panel: var(--sl-color-gray-6);
 	--af-card: var(--sl-color-gray-5);
-	--af-border: var(--sl-color-gray-5);
+	--af-border: var(--sl-color-gray-4);
 	--af-title: var(--sl-color-white);
 	--af-sub: var(--sl-color-gray-3);
 	--af-accent: var(--sl-color-accent-high);
-	--af-accent-line: var(--sl-color-accent-high);
-	--af-accent-soft: color-mix(in srgb, var(--sl-color-accent) 34%, transparent);
+
+	/* Two tones beside the accent. A reader can follow one colour through
+	   the run: the agent, its tools, its chips, its rows. */
+	--af-billing: oklch(74% 0.115 205);
+	--af-policy: oklch(80% 0.13 72);
+	/* Text drawn on a tone. Set explicitly rather than through Starlight's
+	   inverted white/black pair, which is easy to get backwards. */
+	--af-on-tone: #0c0d12;
 
 	margin: 2rem 0 2.5rem;
 	padding: 0;
@@ -23,422 +37,571 @@
 	--af-card: #ffffff;
 	--af-border: var(--sl-color-gray-5);
 	--af-accent: var(--sl-color-accent);
-	--af-accent-line: var(--sl-color-accent);
-	--af-accent-soft: color-mix(in srgb, var(--sl-color-accent) 14%, transparent);
+	--af-billing: oklch(47% 0.12 205);
+	--af-policy: oklch(46% 0.13 72);
+	--af-on-tone: #ffffff;
 }
-
-/* ------------------------------------------------------------- the stage */
 
 /*
  * Starlight puts a 1rem top margin between siblings inside markdown content.
- * That margin shifted the absolutely positioned overlays and the measured card
- * heights. The component sets all of its own spacing, so clear it first.
- * `:where()` keeps the specificity at zero, so every rule below still wins.
+ * The component sets all of its own spacing. `:where()` keeps the specificity
+ * at zero, so every rule below still wins.
  */
-.af :where(div, p, ol, ul, li, table, details, svg, span, section, figcaption) {
+.af :where(div, p, ol, ul, li, table, tbody, tr, details, svg, span, figcaption) {
 	margin-top: 0;
 }
 
-.af-frame {
+.af-tone-accent {
+	--af-tone: var(--af-accent);
+}
+.af-tone-billing {
+	--af-tone: var(--af-billing);
+}
+.af-tone-policy {
+	--af-tone: var(--af-policy);
+}
+.af-tone-neutral {
+	--af-tone: var(--af-border);
+}
+
+/* ------------------------------------------------------------- the frame */
+
+.af-viewport {
+	position: relative;
+	overflow: hidden;
+	aspect-ratio: 4 / 3;
 	border: 1px solid var(--af-border);
 	border-radius: 0.75rem;
 	background: var(--af-panel);
-	padding: 0.9rem;
 }
 
-/*
- * The measured positioning context. It carries no padding of its own, so the
- * coordinates taken from getBoundingClientRect match what `left` and `top`
- * resolve against for the wire and the travelling card.
- */
-.af-stage {
-	position: relative;
+@media (min-width: 55rem) {
+	.af-viewport {
+		aspect-ratio: 16 / 9;
+	}
 }
 
-/* The request card. Keeps the run and its findings in one place. */
-.af-run {
+.af-canvas {
+	position: absolute;
+	left: 0;
+	top: 0;
+	transform-origin: 0 0;
+	transition: transform 800ms cubic-bezier(0.65, 0, 0.35, 1);
+	will-change: transform;
+}
+
+.af-static .af-canvas {
+	transition: none;
+}
+
+/* Zoomed far out, only the names and the shape survive legibly. */
+.af-canvas.is-far .af-node-sub,
+.af-canvas.is-far .af-tool-tag,
+.af-canvas.is-far .af-bubble,
+.af-canvas.is-far .af-answer,
+.af-canvas.is-far .af-plan,
+.af-canvas.is-far .af-rows,
+.af-canvas.is-far .af-rule,
+.af-canvas.is-far .af-stat {
+	display: none;
+}
+
+/* --------------------------------------------------------------- nodes */
+
+.af-node {
+	position: absolute;
+	box-sizing: border-box;
+	border: 2px solid var(--af-border);
+	border-radius: 16px;
+	background: var(--af-card);
+	padding: 16px 18px;
+	transition:
+		opacity 300ms ease,
+		border-color 300ms ease,
+		box-shadow 300ms ease,
+		transform 300ms ease;
+}
+
+/* Dim rather than tint, so the lit node is the only coloured thing. */
+.af-node.is-dim {
+	opacity: 0.32;
+	border-color: var(--af-border);
+}
+
+.af-node.is-lit {
+	opacity: 1;
+	border-color: var(--af-tone);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--af-tone) 22%, transparent);
+}
+
+/* Scene 0 brings the system in, in reading order. */
+.af-node:not(.is-revealed) {
+	opacity: 0;
+	transform: translateY(8px);
+}
+
+.af-node-head {
 	display: flex;
-	flex-wrap: wrap;
 	align-items: center;
-	gap: 0.4rem;
-	margin: 0 0 0.9rem;
-	min-height: 1.9rem;
+	gap: 8px;
+	margin: 0;
 }
 
-.af-run-label,
-.af-finding {
-	display: inline-block;
-	border-radius: 0.35rem;
-	font-size: 0.76rem;
-	line-height: 1.4;
-	padding: 0.2rem 0.5rem;
+.af-icon {
+	flex: none;
+	color: var(--af-tone);
 }
 
-.af-run-label {
-	background: var(--af-accent-soft);
-	border: 1px solid var(--af-accent);
+.af-node.is-dim .af-icon {
+	color: var(--af-sub);
+}
+
+.af-node-title {
 	color: var(--af-title);
-	font-weight: 600;
+	font-size: 26px;
+	font-weight: 650;
+	line-height: 1.2;
 }
 
-.af-finding {
-	border: 1px solid var(--af-border);
+.af-node-sub {
+	margin: 6px 0 0;
 	color: var(--af-sub);
+	font-size: 18px;
+	line-height: 1.35;
 }
 
-.af-finding::before {
-	content: "✓ ";
-	color: var(--af-accent);
-	font-weight: 700;
+/* ------------------------------------------------------ database boundary */
+
+.af-node--boundary {
+	border-style: dashed;
+	border-width: 2px;
+	background: color-mix(in srgb, var(--af-card) 30%, transparent);
+	padding: 14px 22px;
+	border-radius: 24px;
 }
 
-.af-columns {
-	display: grid;
-	grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
-	gap: 0.9rem;
-	align-items: stretch;
+.af-node--boundary.is-lit {
+	box-shadow: none;
+	border-color: var(--af-border);
 }
 
-.af-col-label {
-	margin: 0 0 0.5rem;
+.af-boundary-label {
+	display: flex;
+	align-items: baseline;
+	gap: 12px;
+	margin: 0;
+}
+
+.af-boundary-db {
 	color: var(--af-sub);
-	font-size: 0.74rem;
-	font-weight: 600;
-	letter-spacing: 0.05em;
+	font-size: 22px;
+	font-weight: 650;
+	letter-spacing: 0.06em;
 	text-transform: uppercase;
 }
 
-/* The conversation sits outside the UC AI workspace. */
-.af-convo {
-	position: relative;
-	z-index: 1;
-	align-self: start;
-	display: flex;
-	flex-direction: column;
-	border: 1px solid transparent;
-	border-radius: 0.6rem;
-	padding: 0.6rem;
-	transition: border-color 0.3s ease, background 0.3s ease;
+.af-boundary-uc {
+	border: 1px solid var(--af-accent);
+	border-radius: 6px;
+	color: var(--af-accent);
+	font-size: 17px;
+	font-weight: 650;
+	padding: 1px 8px;
 }
 
-.af-convo.is-focus {
-	border-color: var(--af-accent);
-	background: var(--af-accent-soft);
-}
+/* --------------------------------------------------------------- the user */
 
 .af-bubble {
-	margin: 0;
+	margin: 14px 0 0;
 	border: 1px solid var(--af-border);
-	border-radius: 0.6rem 0.6rem 0.6rem 0.15rem;
-	background: var(--af-card);
+	border-radius: 12px 12px 12px 3px;
+	background: var(--af-panel);
 	color: var(--af-title);
-	font-size: 0.86rem;
-	line-height: 1.45;
-	padding: 0.55rem 0.65rem;
+	font-size: 19px;
+	line-height: 1.4;
+	padding: 10px 12px;
 }
 
 .af-answer {
-	margin-top: 0.6rem;
-	border: 1px solid var(--af-accent);
-	border-radius: 0.6rem 0.6rem 0.15rem 0.6rem;
-	background: var(--af-card);
-	padding: 0.55rem 0.65rem;
+	margin-top: 12px;
+	border: 2px solid var(--af-accent);
+	border-radius: 12px 12px 3px 12px;
+	background: var(--af-panel);
+	padding: 10px 12px;
+	animation: af-pop 300ms ease-out;
 }
 
 .af-answer-text {
 	margin: 0;
 	color: var(--af-title);
-	font-size: 0.86rem;
-	line-height: 1.45;
+	font-size: 19px;
+	line-height: 1.4;
 }
 
 .af-answer-sources {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 0.3rem;
-	margin: 0.5rem 0 0;
+	gap: 6px;
+	margin: 10px 0 0;
 }
 
 .af-answer-sources span {
 	border: 1px solid var(--af-border);
-	border-radius: 0.3rem;
+	border-radius: 5px;
 	color: var(--af-sub);
-	font-size: 0.7rem;
-	padding: 0.1rem 0.35rem;
+	font-family: var(--__sl-font-mono, ui-monospace, monospace);
+	font-size: 15px;
+	padding: 1px 6px;
 }
 
-/* ------------------------------------------------------- the UC AI group */
+/* ----------------------------------------------------------- the plan card */
 
-.af-workspace {
-	border: 1px dashed var(--af-border);
-	border-radius: 0.6rem;
-	padding: 0.6rem;
+.af-plan {
+	list-style: none;
+	margin: 14px 0 0;
+	padding: 0;
 }
 
-.af-col-label--ws {
-	color: var(--af-sub);
-	text-transform: none;
-	letter-spacing: 0.03em;
-	font-size: 0.76rem;
-}
-
-.af-workspace-grid {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
-	gap: 0.9rem;
-	align-items: start;
-}
-
-.af-specialists {
-	position: relative;
+.af-plan-item {
 	display: flex;
-	flex-direction: column;
-	gap: 0.6rem;
-}
-
-/* Covers the reserved specialist area until the orchestrator introduces them. */
-.af-hint {
-	position: absolute;
-	inset: 0;
-	z-index: 1;
-	display: flex;
-	align-items: flex-start;
-	margin: 0;
-	border: 1px dashed var(--af-border);
-	border-radius: 0.6rem;
-	background: var(--af-panel);
+	align-items: center;
+	gap: 10px;
+	margin: 0 0 8px;
 	color: var(--af-sub);
-	font-size: 0.8rem;
-	line-height: 1.5;
-	padding: 0.6rem 0.75rem;
+	font-size: 19px;
+	line-height: 1.3;
+	transition: color 300ms ease;
 }
 
-.af-card--agent:not(.is-present) {
-	visibility: hidden;
-}
-
-.af-card {
-	position: relative;
-	z-index: 1;
-	border: 1px solid var(--af-border);
-	border-radius: 0.6rem;
-	background: var(--af-card);
-	padding: 0.6rem 0.65rem;
-	transition:
-		border-color 0.3s ease,
-		background 0.3s ease,
-		opacity 0.3s ease;
-}
-
-.af-card.is-focus {
-	border-color: var(--af-accent);
-	background: var(--af-accent-soft);
-}
-
-.af-card-name {
-	margin: 0;
+.af-plan-item.is-done {
 	color: var(--af-title);
-	font-size: 0.86rem;
-	font-weight: 600;
 }
 
-.af-card-job {
-	margin: 0.1rem 0 0;
-	color: var(--af-sub);
-	font-size: 0.74rem;
-	line-height: 1.35;
-}
-
-/* Where a travelling card lands. Empty, so the layout never jumps. */
-.af-slot {
-	min-height: 2.7rem;
-	margin-top: 0.35rem;
-}
-
-/* ---------------------------------------------------------- tool cards */
-
-.af-tool-stack {
+.af-plan-box {
 	display: grid;
-	margin-top: 0.15rem;
+	place-items: center;
+	flex: none;
+	width: 24px;
+	height: 24px;
+	border: 2px solid var(--af-border);
+	border-radius: 6px;
+	color: var(--af-on-tone);
+	font-size: 16px;
+	font-weight: 700;
 }
 
-.af-tool-layer {
-	grid-area: 1 / 1;
-	visibility: hidden;
-	opacity: 0;
-	transition: opacity 0.3s ease;
+.af-plan-item.is-done .af-plan-box {
+	border-color: var(--af-accent);
+	background: var(--af-accent);
 }
 
-.af-tool-layer.is-shown {
-	visibility: visible;
-	opacity: 1;
+.af-plan-item.is-new .af-plan-box {
+	animation: af-pop 200ms ease-out;
 }
 
-.af-tool {
-	border: 1px solid var(--af-border);
-	border-radius: 0.45rem;
-	padding: 0.45rem 0.5rem;
-}
+/* ------------------------------------------------------------------ tools */
 
-.af-tool-head {
+.af-node--tool {
 	display: flex;
-	flex-wrap: wrap;
-	align-items: baseline;
-	gap: 0.35rem;
-	margin: 0 0 0.35rem;
+	align-items: center;
+	gap: 8px;
+	border-width: 1px;
+	border-radius: 9px;
+	padding: 0 12px;
+	background: var(--af-panel);
+}
+
+.af-node--tool.is-lit {
+	box-shadow: none;
 }
 
 .af-tool-name {
 	color: var(--af-title);
 	font-family: var(--__sl-font-mono, ui-monospace, monospace);
-	font-size: 0.76rem;
+	font-size: 19px;
 	font-weight: 600;
 }
 
 .af-tool-tag {
+	margin-left: auto;
 	border: 1px solid var(--af-border);
-	border-radius: 0.25rem;
+	border-radius: 5px;
 	color: var(--af-sub);
-	font-size: 0.66rem;
-	padding: 0.02rem 0.28rem;
+	font-size: 14px;
+	padding: 0 6px;
 	white-space: nowrap;
 }
 
-.af-tool-summary,
-.af-tool-rule {
-	margin: 0;
-	color: var(--af-sub);
-	font-size: 0.76rem;
-	line-height: 1.4;
+/* The tool the model picked. */
+.af-node--tool.is-chosen {
+	transform: scale(1.04);
+	border-color: var(--af-tone);
+	background: color-mix(in srgb, var(--af-tone) 16%, var(--af-card));
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--af-tone) 24%, transparent);
+}
+
+/* Tools that exist and were not needed for this request. */
+.af-node--tool.is-passed {
+	opacity: 0.4;
+}
+
+/* ----------------------------------------------------------------- tables */
+
+.af-table-name {
+	color: var(--af-title);
+	font-family: var(--__sl-font-mono, ui-monospace, monospace);
+	font-size: 20px;
+	font-weight: 650;
+	letter-spacing: 0.02em;
 }
 
 .af-rows {
 	width: 100%;
-	margin: 0;
+	margin: 12px 0 0;
 	border-collapse: collapse;
-	font-size: 0.72rem;
+	font-size: 18px;
 	table-layout: fixed;
 }
 
-.af-rows th,
+.af-rows tr {
+	opacity: 0;
+	transition:
+		opacity 220ms ease,
+		background-color 300ms ease;
+}
+
+.af-rows tr.is-in {
+	opacity: 1;
+}
+
+.af-rows tr.is-match {
+	background: color-mix(in srgb, var(--af-tone) 20%, transparent);
+}
+
 .af-rows td {
 	border: 0;
 	border-bottom: 1px solid var(--af-border);
-	padding: 0.18rem 0.3rem 0.18rem 0;
+	color: var(--af-title);
+	font-family: var(--__sl-font-mono, ui-monospace, monospace);
+	padding: 5px 8px 5px 0;
 	text-align: left;
 }
 
-.af-rows th {
-	color: var(--af-sub);
-	font-weight: 600;
-}
-
-.af-rows td {
-	color: var(--af-title);
+.af-rows td:first-child {
+	padding-left: 6px;
 }
 
 .af-rows tr:last-child td {
 	border-bottom: 0;
 }
 
-/* ------------------------------------------- connection and travelling card */
+.af-rule {
+	margin: 10px 0 0;
+	color: var(--af-sub);
+	font-size: 17px;
+	line-height: 1.35;
+	animation: af-pop 300ms ease-out;
+}
 
-.af-wire {
+/* ------------------------------------------------------------- the model */
+
+.af-node--model {
+	border-style: solid;
+}
+
+.af-dots {
+	display: inline-flex;
+	gap: 5px;
+	margin-left: auto;
+	opacity: 0;
+	transition: opacity 200ms ease;
+}
+
+.af-node--model.is-thinking .af-dots {
+	opacity: 1;
+}
+
+.af-dots i {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--af-accent);
+}
+
+.af-node--model.is-thinking .af-dots i {
+	animation: af-blink 900ms ease-in-out infinite;
+}
+
+.af-dots i:nth-child(2) {
+	animation-delay: 150ms;
+}
+.af-dots i:nth-child(3) {
+	animation-delay: 300ms;
+}
+
+/* --------------------------------------------------------- session strip */
+
+.af-node--summary {
+	display: flex;
+	align-items: center;
+	gap: 28px;
+	border-style: dashed;
+	border-width: 1px;
+	background: transparent;
+	padding: 0 20px;
+}
+
+.af-node--summary.is-lit {
+	box-shadow: none;
+	border-color: var(--af-border);
+}
+
+.af-stat {
+	color: var(--af-sub);
+	font-size: 19px;
+}
+
+.af-stat b {
+	color: var(--af-title);
+	font-size: 24px;
+	font-variant-numeric: tabular-nums;
+}
+
+.af-stat--note {
+	margin-left: auto;
+	font-family: var(--__sl-font-mono, ui-monospace, monospace);
+	font-size: 17px;
+}
+
+/* ------------------------------------------------------------------ wires */
+
+.af-wires {
 	position: absolute;
 	left: 0;
 	top: 0;
+	overflow: visible;
 	pointer-events: none;
-	z-index: 0;
 }
 
-.af-wire line {
-	stroke: var(--af-accent-line);
-	stroke-width: 1.5;
-	stroke-dasharray: 4 4;
-	opacity: 0.65;
+.af-wire {
+	fill: none;
+	stroke: var(--af-border);
+	stroke-width: 2.5;
+	opacity: 0.45;
+	transition:
+		stroke 300ms ease,
+		opacity 300ms ease,
+		stroke-width 300ms ease;
 }
 
-.af-travel {
+.af-wire.is-lit {
+	stroke: var(--af-accent);
+	stroke-width: 3.5;
+	opacity: 1;
+}
+
+/* ------------------------------------------------------- travelling chips */
+
+.af-chip {
 	position: absolute;
-	z-index: 3;
+	left: 0;
+	top: 0;
+	z-index: 4;
 	pointer-events: none;
-	animation: af-travel var(--af-travel, 520ms) cubic-bezier(0.4, 0, 0.2, 1)
-		forwards;
+	offset-path: var(--af-path);
+	offset-distance: var(--af-progress);
+	offset-rotate: 0deg;
 }
 
-.af.is-paused .af-travel {
-	animation-play-state: paused;
-}
-
-@keyframes af-travel {
-	from {
-		transform: translate(0, 0);
+/* Without offset-path the chip still travels, in a straight line. */
+@supports not (offset-path: path("M 0 0 L 1 1")) {
+	.af-chip {
+		/* No offset-anchor here, so centre the box by hand. */
+		left: var(--af-origin-x);
+		top: var(--af-origin-y);
+		transform: translate(
+			calc(var(--af-dx) - 50%),
+			calc(var(--af-dy) - 50%)
+		);
 	}
-	to {
-		transform: translate(var(--af-dx), var(--af-dy));
-	}
 }
 
-.af-travel-inner {
+.af-chip-inner {
 	display: block;
 	width: max-content;
-	max-width: 12.5rem;
-	transform: translate(-50%, -50%);
-	border-radius: 0.4rem;
-	font-size: 0.74rem;
-	line-height: 1.35;
-	padding: 0.3rem 0.45rem;
-	box-shadow: 0 2px 10px rgb(0 0 0 / 0.25);
+	max-width: 340px;
+	border-radius: 10px;
+	font-size: 19px;
+	line-height: 1.3;
+	padding: 8px 12px;
+	box-shadow: 0 4px 16px rgb(0 0 0 / 0.28);
 }
 
-/* A task leaves the orchestrator: filled. */
-.af-travel--task .af-travel-inner {
-	background: var(--af-accent);
-	border: 1px solid var(--af-accent);
-	color: var(--sl-color-black);
+/* A task or a question leaves: filled. */
+.af-chip--task .af-chip-inner,
+.af-chip--ask .af-chip-inner {
+	border: 1px solid var(--af-tone);
+	background: var(--af-tone);
+	color: var(--af-on-tone);
 	font-weight: 600;
 }
 
-/* A result comes back: outlined, with a check. */
-.af-travel--result .af-travel-inner {
+/* A result or a decision comes back: outlined, with a check. */
+.af-chip--result .af-chip-inner,
+.af-chip--decision .af-chip-inner {
+	border: 2px solid var(--af-tone);
 	background: var(--af-card);
-	border: 1px solid var(--af-accent);
 	color: var(--af-title);
 }
 
-.af-travel--result .af-travel-inner::before {
+.af-chip--result .af-chip-inner::before,
+.af-chip--decision .af-chip-inner::before {
 	content: "✓ ";
-	color: var(--af-accent);
+	color: var(--af-tone);
 	font-weight: 700;
 }
 
-/* ---------------------------------------------------- caption and controls */
+/* A question to the model is short and round. */
+.af-chip--ask .af-chip-inner {
+	border-radius: 999px;
+}
 
+/* --------------------------------------------------- caption and controls */
+
+/* The caption sits in the picture, so the eye does not leave it. */
 .af-caption {
-	margin-top: 0.85rem;
-	min-height: 4.5rem;
-}
-
-.af-caption-text {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 5;
 	margin: 0;
-	font-size: var(--sl-text-base);
-	line-height: 1.55;
+	background: color-mix(in srgb, var(--af-panel) 88%, transparent);
+	border-top: 1px solid var(--af-border);
+	color: var(--af-title);
+	font-size: 0.95rem;
+	line-height: 1.5;
+	padding: 0.7rem 0.9rem;
+	backdrop-filter: blur(6px);
 }
 
-.af-caption-text.is-quote {
-	color: var(--af-title);
+.af-caption.is-quote {
 	font-weight: 600;
 }
 
-.af-caption-text--idle {
-	color: var(--af-sub);
-}
-
-.af-closing {
-	margin: 0.5rem 0 0;
-	color: var(--af-sub);
-	font-size: 0.9rem;
-	line-height: 1.5;
+.af-expand {
+	position: absolute;
+	right: 0.5rem;
+	top: 0.5rem;
+	z-index: 6;
+	border: 1px solid var(--af-border);
+	border-radius: 0.4rem;
+	background: color-mix(in srgb, var(--af-panel) 88%, transparent);
+	color: var(--af-title);
+	cursor: pointer;
+	font-size: 0.76rem;
+	font-weight: 600;
+	padding: 0.25rem 0.55rem;
 }
 
 .af-controls {
@@ -446,7 +609,7 @@
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 0.4rem;
-	margin-top: 0.4rem;
+	margin-top: 0.7rem;
 }
 
 .af-primary,
@@ -455,13 +618,14 @@
 	cursor: pointer;
 	font-size: 0.8rem;
 	font-weight: 600;
-	padding: 0.38rem 0.75rem;
+	padding: 0.38rem 0.8rem;
 }
 
 .af-primary {
-	border: 1px solid var(--af-accent);
-	background: var(--af-accent);
-	color: var(--sl-color-black);
+	border: 1px solid var(--sl-color-accent);
+	background: var(--sl-color-accent);
+	color: #ffffff;
+	min-width: 5.5rem;
 }
 
 .af-secondary {
@@ -481,19 +645,64 @@
 	opacity: 0.55;
 }
 
+/* Ten labelled dots. Each one jumps to its scene. */
+.af-rail {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.3rem;
+	list-style: none;
+	margin: 0 0 0 0.3rem;
+	padding: 0;
+}
+
+.af-rail li {
+	margin: 0;
+}
+
+.af-rail-dot {
+	display: flex;
+	align-items: center;
+	border: 1px solid var(--af-border);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--af-sub);
+	cursor: pointer;
+	font-size: 0.72rem;
+	padding: 0.18rem 0.5rem;
+	transition:
+		color 200ms ease,
+		border-color 200ms ease,
+		background 200ms ease;
+}
+
+.af-rail-dot:hover {
+	color: var(--af-title);
+	border-color: var(--af-accent);
+}
+
+.af-rail-dot.is-done {
+	border-color: color-mix(in srgb, var(--af-accent) 55%, transparent);
+	color: var(--af-title);
+}
+
+.af-rail-dot.is-current {
+	background: var(--sl-color-accent);
+	border-color: var(--sl-color-accent);
+	color: #ffffff;
+	font-weight: 650;
+}
+
 .af-primary:focus-visible,
 .af-secondary:focus-visible,
+.af-expand:focus-visible,
+.af-rail-dot:focus-visible,
 .af-transcript summary:focus-visible {
 	outline: 2px solid var(--af-accent);
 	outline-offset: 2px;
 }
 
-.af-progress {
-	margin: 0 0 0 0.3rem;
-	color: var(--af-sub);
-	font-size: 0.78rem;
-	font-variant-numeric: tabular-nums;
-}
+/* -------------------------------------------------------------- transcript */
 
 .af-transcript {
 	margin-top: 0.9rem;
@@ -506,7 +715,8 @@
 	font-weight: 600;
 }
 
-.af-transcript ol {
+.af-transcript ol,
+.af-transcript p {
 	margin: 0.6rem 0 0;
 }
 
@@ -525,41 +735,62 @@
 	white-space: nowrap;
 }
 
-/* --------------------------------------------------------------- mobile */
+/* ----------------------------------------------------------------- expand */
 
-/* One vertical sequence. No horizontal scrolling, no shrunken desktop graph. */
-@media (max-width: 55rem) {
-	.af-columns,
-	.af-workspace-grid {
-		grid-template-columns: minmax(0, 1fr);
+.af-scrim {
+	position: fixed;
+	inset: 0;
+	z-index: 90;
+	background: rgb(0 0 0 / 0.6);
+}
+
+.af.is-expanded .af-shell {
+	position: fixed;
+	inset: 50% auto auto 50%;
+	z-index: 91;
+	width: min(1400px, calc(100vw - 2rem));
+	max-height: calc(100vh - 2rem);
+	transform: translate(-50%, -50%);
+	border-radius: 0.75rem;
+	background: var(--af-panel);
+	padding: 0.75rem;
+	overflow: auto;
+}
+
+/* --------------------------------------------------------------- keyframes */
+
+@keyframes af-pop {
+	from {
+		transform: scale(0.86);
+		opacity: 0;
 	}
-
-	.af-slot {
-		min-height: 2.5rem;
-	}
-
-	.af-caption {
-		min-height: 5.5rem;
+	to {
+		transform: scale(1);
+		opacity: 1;
 	}
 }
 
-@media (max-width: 30rem) {
-	.af-frame {
-		padding: 0.65rem;
+@keyframes af-blink {
+	0%,
+	100% {
+		opacity: 0.3;
 	}
-
-	.af-rows {
-		font-size: 0.68rem;
-	}
-
-	.af-progress {
-		flex-basis: 100%;
-		margin-left: 0;
+	50% {
+		opacity: 1;
 	}
 }
 
-/* The reader asked for less motion: scenes change, nothing travels. */
-.af-static .af-travel,
-.af-travel.is-settled {
+/* The reader asked for less motion: scenes change, nothing eases. */
+.af-static .af-node,
+.af-static .af-wire,
+.af-static .af-rows tr,
+.af-static .af-plan-item {
+	transition: none;
+}
+
+.af-static .af-answer,
+.af-static .af-rule,
+.af-static .af-plan-item.is-new .af-plan-box,
+.af-static .af-dots i {
 	animation: none;
 }

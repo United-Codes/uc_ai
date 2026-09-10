@@ -2,157 +2,183 @@ import React, {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
+import { CANVAS, cameraFor, transformFor, type Rect } from "./AgentFlow/camera";
+import NodeView from "./AgentFlow/Nodes";
+import Transfers from "./AgentFlow/Transfers";
+import Wires from "./AgentFlow/Wires";
 import {
-  ANSWER_SOURCES,
+  ALWAYS_LIT,
+  CAMERA_MS,
   CLOSING,
   FINAL_ANSWER,
   LAST,
-  PAYMENTS,
+  NODES,
+  PAYMENT_ROWS,
+  PLAN_ITEMS,
+  POLICY_ROWS,
   POLICY_RULE,
   PROMPT,
-  REQUEST_LABEL,
   SCENES,
-  SPECIALISTS,
-  WORKSPACE_LABEL,
-  findingsAt,
-  toolStateAt,
-  type ParticipantId,
-  type Specialist,
+  SESSION_STATS,
+  THINK_MS,
+  TRAVEL_MS,
+  durationOf,
+  rectsFor,
+  rowsVisibleAt,
+  summaryVisibleAt,
 } from "./AgentFlow/story";
 import "./AgentFlow.css";
 
-/** How long a task or result card takes to travel, in milliseconds. */
-const TRAVEL_MS = 520;
+/** Milliseconds between node reveals in the opening scene. */
+const REVEAL_STAGGER_MS = 60;
 
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
+/** Node kinds whose own appearance depends on the scene clock. */
+const CLOCKED = new Set(["table", "summary"]);
+
+function useMediaFlag(query: string): boolean {
+  const [flag, setFlag] = useState(false);
 
   useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(query.matches);
-    const onChange = (event: MediaQueryListEvent) => setReduced(event.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
+    const media = window.matchMedia(query);
+    setFlag(media.matches);
+    const onChange = (event: MediaQueryListEvent) => setFlag(event.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, [query]);
 
-  return reduced;
+  return flag;
 }
-
-interface Geometry {
-  width: number;
-  height: number;
-  from: { x: number; y: number };
-  to: { x: number; y: number };
-}
-
-/* ------------------------------------------------------------------ cards */
-
-interface ToolCardProps {
-  specialist: Specialist;
-  state: "open" | "summary";
-}
-
-function ToolCard({ specialist, state }: ToolCardProps) {
-  const isPolicy = specialist.id === "policy";
-
-  return (
-    <div className={`af-tool af-tool--${state}`}>
-      <p className="af-tool-head">
-        <span className="af-tool-name">{specialist.tool.name}</span>
-        <span className="af-tool-tag">Your PL/SQL function</span>
-      </p>
-
-      {state === "summary" ? (
-        <p className="af-tool-summary">{specialist.tool.summary}</p>
-      ) : isPolicy ? (
-        <p className="af-tool-rule">{POLICY_RULE}</p>
-      ) : (
-        <table className="af-rows">
-          <thead>
-            <tr>
-              <th scope="col">Payment</th>
-              <th scope="col">Amount</th>
-              <th scope="col">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {PAYMENTS.map((row) => (
-              <tr key={row.id}>
-                <td>{row.id}</td>
-                <td>{row.amount}</td>
-                <td>{row.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------- component */
 
 export default function AgentFlow() {
-  const [started, setStarted] = useState(false);
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  /**
+   * Milliseconds elapsed inside the current scene. Every effect reads this,
+   * so one pause freezes all of them and one resume continues all of them.
+   * It starts at the end of scene 0, which is the idle picture.
+   */
+  const [elapsed, setElapsed] = useState(() => durationOf(SCENES[0]));
   const [announcement, setAnnouncement] = useState("");
-  /** True when the reader stepped here, so the scene shows its end state. */
-  const [manual, setManual] = useState(false);
-  const [geometry, setGeometry] = useState<Geometry | null>(null);
-  const [measureTick, setMeasureTick] = useState(0);
+  const [viewport, setViewport] = useState({ w: 0, h: 0 });
+  const [expanded, setExpanded] = useState(false);
 
-  const reduced = usePrefersReducedMotion();
+  const reduced = useMediaFlag("(prefers-reduced-motion: reduce)");
 
-  const frameRef = useRef<HTMLDivElement>(null);
-  const slots = useRef<Partial<Record<ParticipantId, HTMLDivElement | null>>>(
-    {},
-  );
-  /** Milliseconds left in the current scene. Survives a pause. */
-  const remaining = useRef(0);
-  const resumedAt = useRef(0);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const expandRef = useRef<HTMLButtonElement>(null);
+  const returnFocusTo = useRef<HTMLElement | null>(null);
+  const lastFrame = useRef(0);
+  const elapsedRef = useRef(durationOf(SCENES[0]));
 
-  const scene = started ? SCENES[index] : null;
-  const findings = started ? findingsAt(index) : [];
-  const showAnswer = started && index >= LAST;
-  const setSlot = (id: ParticipantId) => (node: HTMLDivElement | null) => {
-    slots.current[id] = node;
-  };
+  const scene = SCENES[index];
+  const duration = durationOf(scene);
+  const settled = elapsed >= duration;
+
+  /* ------------------------------------------------------------- measure */
+
+  useLayoutEffect(() => {
+    const element = viewportRef.current;
+    if (!element) {
+      return;
+    }
+
+    /*
+     * The aspect ratio comes from the measured element, not from a breakpoint
+     * in this file. The stylesheet owns the ratio, so the camera cannot
+     * disagree with it and letterbox the canvas.
+     */
+    const measure = () =>
+      setViewport({ w: element.clientWidth, h: element.clientHeight });
+    measure();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const aspect = viewport.h > 0 ? viewport.w / viewport.h : 16 / 9;
+  const narrow = viewport.w > 0 && viewport.w < 560;
+
+  /* -------------------------------------------------------------- camera */
+
+  /* Scene 9 pulls back out to the whole system once the answer has landed. */
+  const secondTarget =
+    scene.frameThen !== undefined &&
+    scene.frameThenAt !== undefined &&
+    elapsed >= CAMERA_MS + scene.frameThenAt;
+
+  const camera: Rect = useMemo(() => {
+    const wide = secondTarget ? scene.frameThen! : scene.frame;
+    const frame =
+      narrow && !secondTarget && scene.frameNarrow ? scene.frameNarrow : wide;
+    return cameraFor(
+      rectsFor(frame),
+      aspect,
+      narrow ? 30 : (scene.framePadding ?? 70),
+    );
+  }, [scene, aspect, secondTarget, narrow]);
+
+  const transform =
+    viewport.w > 0 ? transformFor(camera, viewport.w) : undefined;
+
+  /*
+   * The establishing shot and the closing pull-out show the whole canvas. On a
+   * phone that is about a fifth of full size, where the secondary labels are
+   * illegible. Below this scale the canvas drops them and reads as a block
+   * diagram; the transcript keeps the detail.
+   */
+  const far = viewport.w > 0 && viewport.w / camera.w < 0.4;
 
   /* ---------------------------------------------------------- one clock */
 
   useEffect(() => {
-    if (!scene || !playing || reduced) {
+    if (!playing || reduced) {
       return;
     }
 
-    const duration = remaining.current > 0 ? remaining.current : scene.ms;
-    remaining.current = duration;
-    resumedAt.current = Date.now();
+    // Playing from a finished scene replays it rather than skipping it.
+    if (elapsedRef.current >= duration) {
+      elapsedRef.current = 0;
+      setElapsed(0);
+    }
 
-    const timer = window.setTimeout(() => {
-      remaining.current = 0;
-      if (index >= LAST) {
-        setPlaying(false);
+    let frame = 0;
+    lastFrame.current = performance.now();
+
+    const step = (now: number) => {
+      const next = elapsedRef.current + (now - lastFrame.current);
+      lastFrame.current = now;
+
+      if (next >= duration) {
+        if (index >= LAST) {
+          elapsedRef.current = duration;
+          setElapsed(duration);
+          setPlaying(false);
+          return;
+        }
+        elapsedRef.current = 0;
+        setElapsed(0);
+        // Autoplay must not talk over the reader.
+        setAnnouncement("");
+        setIndex((value) => value + 1);
         return;
       }
-      // Autoplay must not talk over the reader.
-      setAnnouncement("");
-      setManual(false);
-      setIndex((value) => value + 1);
-    }, duration);
 
-    return () => {
-      window.clearTimeout(timer);
-      remaining.current = Math.max(
-        0,
-        remaining.current - (Date.now() - resumedAt.current),
-      );
+      elapsedRef.current = next;
+      setElapsed(next);
+      frame = requestAnimationFrame(step);
     };
-  }, [scene, playing, reduced, index]);
+
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [playing, reduced, duration, index]);
 
   /* Playback never resumes on its own after it leaves the reader's view. */
   useEffect(() => {
@@ -166,122 +192,68 @@ export default function AgentFlow() {
   }, []);
 
   useEffect(() => {
-    const frame = frameRef.current;
-    if (!frame) {
+    const element = viewportRef.current;
+    if (!element || reduced) {
       return;
     }
+
+    let started = false;
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries[0]?.isIntersecting) {
+        const entry = entries[0];
+        if (!entry) {
+          return;
+        }
+        if (entry.isIntersecting) {
+          // Start once, when half of the figure is on screen.
+          if (!started) {
+            started = true;
+            setPlaying(true);
+          }
+        } else {
           setPlaying(false);
         }
       },
-      { threshold: 0.2 },
+      { threshold: 0.5 },
     );
-    observer.observe(frame);
+    observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [reduced]);
 
-  /* ------------------------------------------------------- measurement */
-
-  useLayoutEffect(() => {
-    const frame = frameRef.current;
-    const pair = scene?.transfer
-      ? ([scene.transfer.from, scene.transfer.to] as const)
-      : scene?.link;
-
-    if (!frame || !pair) {
-      setGeometry(null);
-      return;
-    }
-
-    const source = slots.current[pair[0]];
-    const target = slots.current[pair[1]];
-    if (!source || !target) {
-      setGeometry(null);
-      return;
-    }
-
-    const base = frame.getBoundingClientRect();
-    const a = source.getBoundingClientRect();
-    const b = target.getBoundingClientRect();
-
-    setGeometry({
-      width: base.width,
-      height: base.height,
-      from: {
-        x: a.left - base.left + a.width / 2,
-        y: a.top - base.top + a.height / 2,
-      },
-      to: {
-        x: b.left - base.left + b.width / 2,
-        y: b.top - base.top + b.height / 2,
-      },
-    });
-  }, [scene, started, measureTick]);
-
-  useEffect(() => {
-    const frame = frameRef.current;
-    if (!frame || typeof ResizeObserver === "undefined") {
-      return;
-    }
-    let last = "";
-    const observer = new ResizeObserver(([entry]) => {
-      const size = `${Math.round(entry.contentRect.width)}x${Math.round(
-        entry.contentRect.height,
-      )}`;
-      if (size !== last) {
-        last = size;
-        setMeasureTick((value) => value + 1);
-      }
-    });
-    observer.observe(frame);
-    return () => observer.disconnect();
-  }, []);
-
-  /* ---------------------------------------------------------- controls */
+  /* ------------------------------------------------------------ controls */
 
   const goTo = useCallback((next: number) => {
-    remaining.current = 0;
+    const target = Math.min(LAST, Math.max(0, next));
+    // A scene reached by hand shows its end state; nothing has to travel.
+    elapsedRef.current = durationOf(SCENES[target]);
+    setElapsed(elapsedRef.current);
     setPlaying(false);
-    setStarted(true);
-    setManual(true);
-    setIndex(next);
-    setAnnouncement(`${next + 1} of ${SCENES.length} · ${SCENES[next].title}`);
+    setIndex(target);
+    setAnnouncement(
+      `${target + 1} of ${SCENES.length} · ${SCENES[target].title}`,
+    );
   }, []);
 
-  const start = () => {
-    remaining.current = 0;
-    setManual(reduced);
-    setStarted(true);
+  const replay = useCallback(() => {
+    elapsedRef.current = 0;
+    setElapsed(0);
     setIndex(0);
-    setAnnouncement("");
+    setAnnouncement(reduced ? `1 of ${SCENES.length} · ${SCENES[0].title}` : "");
     setPlaying(!reduced);
-  };
+  }, [reduced]);
 
-  const replay = () => {
-    remaining.current = 0;
-    setManual(reduced);
-    setIndex(0);
-    setAnnouncement(
-      reduced ? `1 of ${SCENES.length} · ${SCENES[0].title}` : "",
-    );
-    setPlaying(!reduced);
-  };
+  const atEnd = index >= LAST && settled;
 
   let primaryLabel: string;
   let primaryAction: () => void;
 
-  if (!started) {
-    primaryLabel = "Follow the request";
-    primaryAction = start;
-  } else if (reduced) {
+  if (reduced) {
     primaryLabel = index < LAST ? "Next scene" : "Replay";
     primaryAction = index < LAST ? () => goTo(index + 1) : replay;
   } else if (playing) {
     primaryLabel = "Pause";
     primaryAction = () => setPlaying(false);
-  } else if (index >= LAST) {
+  } else if (atEnd) {
     primaryLabel = "Replay";
     primaryAction = replay;
   } else {
@@ -289,244 +261,245 @@ export default function AgentFlow() {
     primaryAction = () => setPlaying(true);
   }
 
-  /* ------------------------------------------------------------ render */
+  /* -------------------------------------------------------------- expand */
 
-  const focus = (id: ParticipantId) =>
-    scene?.focus.includes(id) ? " is-focus" : "";
+  /*
+   * Expanding keeps one instance of the figure and turns it into a fixed
+   * overlay. Rendering a second copy into a <dialog> would give two elements
+   * the same ref and break the viewport measurement.
+   */
+  const close = useCallback(() => setExpanded(false), []);
 
-  const transfer = scene?.transfer;
-  /* Reduced motion and manual steps both land the card on its destination. */
-  const settled = reduced || manual;
-  const travel =
-    transfer && geometry
-      ? {
-          left: settled ? geometry.to.x : geometry.from.x,
-          top: settled ? geometry.to.y : geometry.from.y,
-          dx: settled ? 0 : geometry.to.x - geometry.from.x,
-          dy: settled ? 0 : geometry.to.y - geometry.from.y,
-        }
-      : null;
+  useEffect(() => {
+    if (!expanded) {
+      returnFocusTo.current?.focus();
+      returnFocusTo.current = null;
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        close();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    expandRef.current?.focus();
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [expanded, close]);
+
+  const toggleExpanded = () => {
+    if (!expanded) {
+      returnFocusTo.current = document.activeElement as HTMLElement;
+    }
+    setExpanded((value) => !value);
+  };
+
+  /* -------------------------------------------------------- derived state */
+
+  const motion = Math.max(0, elapsed - CAMERA_MS);
+
+  const lit = useMemo(() => {
+    const set = new Set(scene.lit);
+    for (const id of ALWAYS_LIT) {
+      set.add(id);
+    }
+    return set;
+  }, [scene]);
+
+  /** The model pulses between an outgoing question and the decision returning. */
+  const thinking = useMemo(() => {
+    const ask = scene.transfers.find((transfer) => transfer.to === "model");
+    const back = scene.transfers.find((transfer) => transfer.from === "model");
+    if (!ask || !back) {
+      return false;
+    }
+    const from = ask.at + TRAVEL_MS;
+    return motion >= from && motion < Math.max(back.at, from + THINK_MS);
+  }, [scene, motion]);
+
+  /** Rows arrive once the chip that fetched them lands. */
+  const rowsFrom = useMemo(() => {
+    const call = scene.transfers.find(
+      (transfer) => transfer.to === "payments" || transfer.to === "policies",
+    );
+    return call ? call.at + TRAVEL_MS : 0;
+  }, [scene]);
+
+  const revealCount =
+    scene.id === "system"
+      ? Math.floor(motion / REVEAL_STAGGER_MS) + 1
+      : NODES.length;
+
+  const wiresDrawn =
+    scene.id === "system" ? Math.min(1, Math.max(0, (motion - 400) / 500)) : 1;
+
+  /* --------------------------------------------------------------- render */
 
   return (
     <figure
-      className={`af${reduced ? " af-static" : ""}${
-        /* Freeze a travel only when playback stopped while it was running. */
-        !playing && !settled ? " is-paused" : ""
-      }`}
+      className={`af${reduced ? " af-static" : ""}${expanded ? " is-expanded" : ""}`}
     >
-      <div className="af-frame">
-        <div className="af-stage" ref={frameRef}>
-          <p className="af-run" aria-hidden={!started}>
-            <span className="af-run-label">
-              {started ? `Request · ${REQUEST_LABEL}` : "Request"}
-            </span>
-            {findings.map((finding) => (
-              <span className="af-finding" key={finding.label}>
-                {finding.label}
-              </span>
+      {expanded ? (
+        <div className="af-scrim" onClick={close} aria-hidden="true" />
+      ) : null}
+
+      <div
+        className="af-shell"
+        role={expanded ? "dialog" : undefined}
+        aria-modal={expanded ? true : undefined}
+        aria-label={expanded ? "The multi-agent run, expanded" : undefined}
+      >
+        <div className="af-viewport" ref={viewportRef}>
+          <div
+            className={`af-canvas${far ? " is-far" : ""}`}
+            style={{ width: CANVAS.w, height: CANVAS.h, transform }}
+            aria-hidden="true"
+          >
+            <Wires lit={lit} drawn={wiresDrawn} />
+
+            {NODES.map((node) => (
+              <NodeView
+                key={node.id}
+                node={node}
+                index={index}
+                elapsed={
+                  CLOCKED.has(node.kind)
+                    ? node.kind === "summary" && !summaryVisibleAt(index)
+                      ? 0
+                      : motion
+                    : 0
+                }
+                lit={lit.has(node.id)}
+                revealed={node.reveal < revealCount}
+                thinking={node.kind === "model" ? thinking : undefined}
+                rowsVisible={rowsVisibleAt(node.id, index)}
+                rowsFrom={rowsFrom}
+              />
             ))}
-          </p>
 
-          <div className="af-columns">
-            <section className={`af-convo${focus("user")}`}>
-              <p className="af-col-label">You</p>
-
-              <p className="af-bubble">{PROMPT}</p>
-
-              <div className="af-slot" ref={setSlot("user")} />
-
-              {showAnswer ? (
-                <div className="af-answer">
-                  <p className="af-answer-text">{FINAL_ANSWER}</p>
-                  <p className="af-answer-sources">
-                    {ANSWER_SOURCES.map((source) => (
-                      <span key={source}>{source}</span>
-                    ))}
-                  </p>
-                </div>
-              ) : null}
-            </section>
-
-            <section className="af-workspace">
-              <p className="af-col-label af-col-label--ws">{WORKSPACE_LABEL}</p>
-
-              <div className="af-workspace-grid">
-                <div className={`af-card af-card--orch${focus("orch")}`}>
-                  <p className="af-card-name">Orchestrator</p>
-                  <p className="af-card-job">Coordinates the task</p>
-                  <div className="af-slot" ref={setSlot("orch")} />
-                </div>
-
-                <div className="af-specialists">
-                  {started && index >= SPECIALISTS[0].appearsAt ? null : (
-                    <p className="af-hint">
-                      The orchestrator picks a specialist for each part of the
-                      question. Each specialist uses tools that read your own
-                      business records.
-                    </p>
-                  )}
-                  {SPECIALISTS.map((specialist) => {
-                    const present = started && index >= specialist.appearsAt;
-                    const tool = toolStateAt(specialist, index);
-
-                    return (
-                      <div
-                        key={specialist.id}
-                        className={`af-card af-card--agent${focus(
-                          specialist.id,
-                        )}${present ? " is-present" : ""}`}
-                      >
-                        <p className="af-card-name">{specialist.name}</p>
-                        <p className="af-card-job">{specialist.job}</p>
-                        <div className="af-slot" ref={setSlot(specialist.id)} />
-                        {/*
-                        Both tool states occupy the same grid cell, so the card
-                        reserves the height of the taller one as soon as the
-                        specialist appears. The frame then holds one height from
-                        scene 2 to the end, and the caption and the controls
-                        never move under the reader.
-                      */}
-                        <div className="af-tool-stack">
-                          <div
-                            className={`af-tool-layer${
-                              tool === "open" ? " is-shown" : ""
-                            }`}
-                          >
-                            <ToolCard specialist={specialist} state="open" />
-                          </div>
-                          <div
-                            className={`af-tool-layer${
-                              tool === "summary" ? " is-shown" : ""
-                            }`}
-                          >
-                            <ToolCard specialist={specialist} state="summary" />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
+            <Transfers
+              transfers={scene.transfers}
+              motion={motion}
+              settled={reduced || settled}
+            />
           </div>
 
-          {geometry ? (
-            <svg
-              className="af-wire"
-              width={geometry.width}
-              height={geometry.height}
-              viewBox={`0 0 ${geometry.width} ${geometry.height}`}
-              aria-hidden="true"
-            >
-              <line
-                x1={geometry.from.x}
-                y1={geometry.from.y}
-                x2={geometry.to.x}
-                y2={geometry.to.y}
-              />
-            </svg>
-          ) : null}
-
-          {transfer && travel ? (
-            <div
-              // Keyed on the scene only, so a pause does not restart the motion.
-              key={index}
-              className={`af-travel af-travel--${transfer.kind}${
-                settled ? " is-settled" : ""
-              }`}
-              style={
-                {
-                  left: `${travel.left}px`,
-                  top: `${travel.top}px`,
-                  "--af-dx": `${travel.dx}px`,
-                  "--af-dy": `${travel.dy}px`,
-                  "--af-travel": `${settled ? 0 : TRAVEL_MS}ms`,
-                } as React.CSSProperties
-              }
-              aria-hidden="true"
-            >
-              <span className="af-travel-inner">{transfer.label}</span>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <figcaption className="af-caption">
-        {scene ? (
-          <p className={`af-caption-text${scene.quote ? " is-quote" : ""}`}>
+          <p
+            className={`af-caption${scene.quote ? " is-quote" : ""}`}
+            aria-live="off"
+          >
             {scene.quote ? `“${scene.caption}”` : scene.caption}
           </p>
-        ) : (
-          <p className="af-caption-text af-caption-text--idle">
-            A customer asks one question. Follow it through the agents that
-            answer it.
-          </p>
-        )}
-        {showAnswer ? <p className="af-closing">{CLOSING}</p> : null}
-      </figcaption>
 
-      <div className="af-controls">
-        <button type="button" className="af-primary" onClick={primaryAction}>
-          {primaryLabel}
-        </button>
+          <button
+            type="button"
+            className="af-expand"
+            onClick={toggleExpanded}
+            ref={expandRef}
+          >
+            {expanded ? "Close" : "Expand"}
+          </button>
+        </div>
 
-        {started ? (
-          <>
-            <button
-              type="button"
-              className="af-secondary"
-              onClick={() => goTo(index - 1)}
-              disabled={index === 0}
-            >
-              Previous
-            </button>
-            <button
-              type="button"
-              className="af-secondary"
-              onClick={() => goTo(index + 1)}
-              disabled={index >= LAST}
-            >
-              Next
-            </button>
-            {primaryLabel === "Replay" ? null : (
-              <button type="button" className="af-secondary" onClick={replay}>
-                Replay
-              </button>
-            )}
-            <p className="af-progress">
-              {index + 1} of {SCENES.length} · {SCENES[index].title}
-            </p>
-          </>
-        ) : null}
+        <div className="af-controls">
+          <button type="button" className="af-primary" onClick={primaryAction}>
+            {primaryLabel}
+          </button>
+          <button
+            type="button"
+            className="af-secondary"
+            onClick={() => goTo(index - 1)}
+            disabled={index === 0}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            className="af-secondary"
+            onClick={() => goTo(index + 1)}
+            disabled={index >= LAST}
+          >
+            Next
+          </button>
+
+          <ol className="af-rail">
+            {SCENES.map((entry, position) => (
+              <li key={entry.id}>
+                <button
+                  type="button"
+                  className={`af-rail-dot${
+                    position === index ? " is-current" : ""
+                  }${position < index ? " is-done" : ""}`}
+                  onClick={() => goTo(position)}
+                  aria-label={`Scene ${position + 1} of ${SCENES.length}: ${entry.title}`}
+                  aria-current={position === index ? "step" : undefined}
+                >
+                  <span className="af-rail-label">{entry.title}</span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
 
       <details className="af-transcript">
         <summary>Read the story</summary>
+
+        <p>
+          A customer asks: “{PROMPT}” Everything below runs inside an Oracle
+          database, except the AI model, which the database calls over HTTPS.
+        </p>
+
         <ol>
           {SCENES.map((entry) => (
             <li key={entry.id}>
               <strong>{entry.title}.</strong>{" "}
               {entry.quote ? `“${entry.caption}”` : entry.caption}
-              {entry.transfer ? (
+              {entry.transfers.length > 0 ? (
                 <span className="af-transcript-note">
                   {" "}
-                  ({entry.transfer.kind === "task" ? "Task" : "Result"}:{" "}
-                  {entry.transfer.label})
+                  (
+                  {entry.transfers
+                    .map((transfer) => `${transfer.kind}: ${transfer.label}`)
+                    .join("; ")}
+                  )
                 </span>
               ) : null}
             </li>
           ))}
         </ol>
+
         <p>
-          Payment records read by the Billing agent:{" "}
-          {PAYMENTS.map(
-            (row) => `${row.id}, ${row.invoice}, ${row.amount}, ${row.status}`,
+          The orchestrator's plan:{" "}
+          {PLAN_ITEMS.map((item) => item.label).join(", then ")}.
+        </p>
+        <p>
+          The Billing agent has three of your functions: get_payments,
+          get_invoice and issue_refund. The model chose get_payments. The other
+          two stayed unused.
+        </p>
+        <p>
+          PAYMENTS rows read:{" "}
+          {PAYMENT_ROWS.map(
+            (row) =>
+              `${row.id}, ${row.amount}, ${row.status}${
+                row.match ? " (matches INV-1003)" : ""
+              }`,
           ).join("; ")}
           .
         </p>
-        <p>Refund rule read by the Policy agent: {POLICY_RULE}</p>
         <p>
-          Answer: {FINAL_ANSWER} Sources: {ANSWER_SOURCES.join(", ")}.
+          The Policy agent has find_policy and get_customer_tier. The model
+          chose find_policy. REFUND_POLICIES rows read:{" "}
+          {POLICY_ROWS.map((row) => `${row.id}, ${row.title}`).join("; ")}. The
+          rule that applies: {POLICY_RULE}
+        </p>
+        <p>Answer: {FINAL_ANSWER}</p>
+        <p>
+          The run in total:{" "}
+          {SESSION_STATS.map((stat) => `${stat.value} ${stat.label}`).join(", ")}
+          . {CLOSING}
         </p>
       </details>
 
