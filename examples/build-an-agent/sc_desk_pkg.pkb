@@ -149,8 +149,7 @@ as
   as
     l_contract_id number;
     l_rows        pls_integer;
-    l_calls       json_array_t := json_array_t();
-    l_result      json_object_t := json_object_t();
+    l_result      clob;
   begin
     l_contract_id := bound_contract_id(p_arguments);
 
@@ -161,45 +160,45 @@ as
 
     l_rows := requested_rows(p_arguments);
 
-    <<call_rows>>
-    for r in (
-      select sc.id
-           , sc.called_on
-           , sc.summary
-           , sc.parts_cost
-           , sc.labour_cost
-           , a.asset_tag
-           , case
-               when sc.called_on between c.starts_on and c.ends_on then 'Y'
-               else 'N'
-             end as in_coverage
-        from sc_service_calls sc
-        join sc_contracts c on c.id = sc.contract_id
-        join sc_assets a on a.id = sc.asset_id
-       -- The contract comes from the run context. A call of another contract can
-       -- never appear here, whatever the model asked for.
-       where sc.contract_id = l_contract_id
-       order by sc.called_on desc
-       fetch first l_rows rows only
-    ) loop
-      l_calls.append(
-        json_object_t(
-          json_object(
-            'call_id'     value r.id
-          , 'called_on'   value to_char(r.called_on, 'YYYY-MM-DD')
-          , 'asset'       value r.asset_tag
-          , 'summary'     value r.summary
-          , 'parts_cost'  value r.parts_cost
-          , 'labour_cost' value r.labour_cost
-          , 'in_coverage' value case r.in_coverage when 'Y' then 'true' else 'false' end
-          )
-        )
-      );
-    end loop call_rows;
+    select json_object(
+             'count' value count(*)
+           , 'calls' value coalesce(
+               json_arrayagg(
+                 json_object(
+                   'call_id'     value x.id
+                 , 'called_on'   value to_char(x.called_on, 'YYYY-MM-DD')
+                 , 'asset'       value x.asset_tag
+                 , 'summary'     value x.summary
+                 , 'parts_cost'  value x.parts_cost
+                 , 'labour_cost' value x.labour_cost
+                 , 'in_coverage' value x.in_coverage format json
+                 )
+                 order by x.called_on desc
+                 returning clob
+               )
+             , to_clob('[]')) format json
+           returning clob)
+      into l_result
+      from ( select sc.id
+                  , sc.called_on
+                  , sc.summary
+                  , sc.parts_cost
+                  , sc.labour_cost
+                  , a.asset_tag
+                  , case
+                      when sc.called_on between c.starts_on and c.ends_on then 'true'
+                      else 'false'
+                    end as in_coverage
+               from sc_service_calls sc
+               join sc_contracts c on c.id = sc.contract_id
+               join sc_assets a on a.id = sc.asset_id
+              -- The contract comes from the run context. A call of another contract
+              -- can never appear here, whatever the model asked for.
+              where sc.contract_id = l_contract_id
+              order by sc.called_on desc
+              fetch first l_rows rows only ) x;
 
-    l_result.put('service_calls', l_calls);
-    l_result.put('count', l_calls.get_size);
-    return l_result.to_clob;
+    return l_result;
   end list_calls;
 
 
@@ -207,8 +206,7 @@ as
   as
     l_contract_id number;
     l_rows        pls_integer;
-    l_invoices    json_array_t := json_array_t();
-    l_result      json_object_t := json_object_t();
+    l_result      clob;
   begin
     l_contract_id := bound_contract_id(p_arguments);
 
@@ -219,46 +217,46 @@ as
 
     l_rows := requested_rows(p_arguments);
 
-    <<invoice_rows>>
-    for r in (
-      select i.invoice_no
-           , i.invoiced_on
-           , i.parts_amount
-           , i.labour_amount
-           , i.parts_amount + i.labour_amount as total_amount
-           , nvl((select sum(cn.amount)
-                    from sc_credit_notes cn
-                   where cn.invoice_id = i.id), 0) as credited_amount
-           , case
-               when sc.called_on between c.starts_on and c.ends_on then 'Y'
-               else 'N'
-             end as in_coverage
-        from sc_invoices i
-        join sc_contracts c on c.id = i.contract_id
-        join sc_service_calls sc on sc.id = i.service_call_id
-       where i.contract_id = l_contract_id
-       order by i.invoiced_on desc
-       fetch first l_rows rows only
-    ) loop
-      l_invoices.append(
-        json_object_t(
-          json_object(
-            'invoice_no'        value r.invoice_no
-          , 'invoiced_on'       value to_char(r.invoiced_on, 'YYYY-MM-DD')
-          , 'parts_amount'      value r.parts_amount
-          , 'labour_amount'     value r.labour_amount
-          , 'total_amount'      value r.total_amount
-          , 'credited_amount'   value r.credited_amount
-          , 'uncredited_amount' value r.total_amount - r.credited_amount
-          , 'in_coverage'       value case r.in_coverage when 'Y' then 'true' else 'false' end
-          )
-        )
-      );
-    end loop invoice_rows;
+    select json_object(
+             'count'    value count(*)
+           , 'invoices' value coalesce(
+               json_arrayagg(
+                 json_object(
+                   'invoice_no'        value x.invoice_no
+                 , 'invoiced_on'       value to_char(x.invoiced_on, 'YYYY-MM-DD')
+                 , 'parts_amount'      value x.parts_amount
+                 , 'labour_amount'     value x.labour_amount
+                 , 'total_amount'      value x.total_amount
+                 , 'credited_amount'   value x.credited_amount
+                 , 'uncredited_amount' value x.total_amount - x.credited_amount
+                 , 'in_coverage'       value x.in_coverage format json
+                 )
+                 order by x.invoiced_on desc
+                 returning clob
+               )
+             , to_clob('[]')) format json
+           returning clob)
+      into l_result
+      from ( select i.invoice_no
+                  , i.invoiced_on
+                  , i.parts_amount
+                  , i.labour_amount
+                  , i.parts_amount + i.labour_amount as total_amount
+                  , nvl((select sum(cn.amount)
+                           from sc_credit_notes cn
+                          where cn.invoice_id = i.id), 0) as credited_amount
+                  , case
+                      when sc.called_on between c.starts_on and c.ends_on then 'true'
+                      else 'false'
+                    end as in_coverage
+               from sc_invoices i
+               join sc_contracts c on c.id = i.contract_id
+               join sc_service_calls sc on sc.id = i.service_call_id
+              where i.contract_id = l_contract_id
+              order by i.invoiced_on desc
+              fetch first l_rows rows only ) x;
 
-    l_result.put('invoices', l_invoices);
-    l_result.put('count', l_invoices.get_size);
-    return l_result.to_clob;
+    return l_result;
   end list_invoices;
 
 

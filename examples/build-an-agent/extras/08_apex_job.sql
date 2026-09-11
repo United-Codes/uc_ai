@@ -1,5 +1,5 @@
 -- ============================================================================
--- UC AI tutorial — "Build an Agent" — Lesson 8
+-- UC AI tutorial — "Build an Agent" — Extra: a background job
 -- Run the desk from a page, without making the page wait
 -- ============================================================================
 -- A run of this agent takes about 4 seconds, and a run that uses more tools takes

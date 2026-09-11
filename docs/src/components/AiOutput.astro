@@ -27,7 +27,10 @@ interface Props {
   label?: string;
   /** Mark the output as WRONG. Use it where the lesson shows a bad answer. */
   wrong?: boolean;
-  /** Leave out the closing note. Use it on the second of two blocks in a row. */
+  /**
+   * Leave out the closing note. The stylesheet already hides it on every block
+   * after the first one of a page, so this is for the first block itself.
+   */
   quiet?: boolean;
 }
 
@@ -226,6 +229,13 @@ const heading = label ?? (wrong ? "Recorded answer, and it is wrong" : "Recorded
     .ai-output-body :global(dd) {
       margin-bottom: 0.5rem;
     }
+  }
+
+  /* The note says the same thing under every block, so one page shows it once:
+     under the first recorded answer. A WRONG answer keeps its own note, because
+     that note says something different. */
+  :global(.sl-markdown-content) .ai-output:not(.ai-output--wrong) ~ .ai-output:not(.ai-output--wrong) .ai-output-note {
+    display: none;
   }
 
   .ai-output-note {

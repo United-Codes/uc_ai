@@ -48,6 +48,21 @@ begin
 end;
 /
 
+-- The credit-note sequence is not a table, so the loop above does not reach it.
+-- Without this block a second run stops with ORA-00955 on the create below.
+declare
+  e_sequence_missing exception;
+  pragma exception_init(e_sequence_missing, -2289);
+begin
+  -- @dblinter ignore(g-6010): the sequence name is a fixed literal, not user input
+  execute immediate 'drop sequence sc_credit_notes_no_seq';
+exception
+  when e_sequence_missing then
+    -- @dblinter ignore(g-5080): an absent sequence is the normal case on a first run
+    null;
+end;
+/
+
 -- ---------------------------------------------------------------------------
 -- Tables
 -- ---------------------------------------------------------------------------

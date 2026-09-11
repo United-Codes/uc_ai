@@ -28,14 +28,15 @@ see which tool ran, what it returned, and what the model did next.
 
 UC AI records two things for each run:
 
-- **`uc_ai_agent_executions`** — one row for each run. Who ran it, the status, the
-  tokens, and the run context that was in force.
-- **`uc_ai_agent_messages`** — one row for each message item, in order. This
+- **`uc_ai_agent_executions`** holds one row for each run. Who ran it, the status,
+  the tokens, and the run context that was in force.
+- **`uc_ai_agent_messages`** holds one row for each message item, in order. This
   includes a row for each tool call and each tool result.
 
-Both tables are keyed on the session. `execute_agent` returns the `session_id` of
-the run in its result, and the newest row of `uc_ai_agent_executions` carries it
-too.
+Both tables are keyed on the session. The block in lesson 3 printed the session id
+of its run after `SESSION:`. Every query below binds it as `:session_id`. If you
+did not keep it, the newest row of `uc_ai_agent_executions` for this agent
+carries it too.
 
 Read the messages of the lesson 3 run:
 
@@ -51,23 +52,26 @@ select seq
 
 ```
 SEQ  ROLE         TOOL_NAME           DETAIL
-1    user         -                   How much can I still credit on INV-1003, and is th
+1    user         -                   How much can I still credit on INV-1003, and is the call ins
 2    reasoning    -
-3    tool_call    SC_LIST_INVOICES    {"max_rows":20}
-4    tool_call    SC_LIST_CALLS       {"max_rows":20}
-5    tool_result  SC_LIST_INVOICES
-6    tool_result  SC_LIST_CALLS
-7    assistant    -                   INV-1003 has $0 still available to credit; its full
+3    tool_call    SC_GET_CONTRACT     {}
+4    tool_call    SC_LIST_INVOICES    {"max_rows":20}
+5    tool_call    SC_LIST_CALLS       {"max_rows":20}
+6    tool_result  SC_GET_CONTRACT
+7    tool_result  SC_LIST_INVOICES
+8    tool_result  SC_LIST_CALLS
+9    assistant    -                   INV-1003 has **€0** left to credit; its full €200 has alread
 ```
 
 Three facts you can read straight off that list:
 
-- The model asked for two tools **in one round** (`seq` 3 and 4), then read both
-  results. A round can hold more than one call.
-- The arguments were `{"max_rows":20}`. There is no contract in them, because no
-  tool declares one. `tool_input` is what the **model** sent, and UC AI adds `_ctx`
-  after that point. The next query reads the run context from the execution row.
-- The answer at `seq` 7 came after the results at 5 and 6.
+- The model asked for three tools **in one round** (`seq` 3 to 5), then read all
+  three results. A round can hold more than one call.
+- The arguments were `{}` and `{"max_rows":20}`. There is no contract in them,
+  because no tool declares one. `tool_input` is what the **model** sent, and UC AI
+  adds `_ctx` after that point. The next query reads the run context from the
+  execution row.
+- The answer at `seq` 9 came after the results at 6 to 8.
 
 ## The diagnostic query
 
@@ -94,24 +98,20 @@ For the lesson 3 run it returns:
 
 ```
 STATUS      CREATED_BY   AUDIENCE   TOOL_CALLS_COUNT   IN     OUT   RUN_CONTEXT
-completed   UC_AI        db                        2   1027    48   {"contract_id":"88"}
+completed   UC_AI        db                        3   1854   172   {"contract_id":"88"}
 ```
 
 `run_context` is the column that proves which contract the run was bound to. When
 somebody asks "why did the agent see contract 88?", this row is the answer.
 
-## Three faults, and how the trace shows each one
+## Three common faults
 
 ### The model called no tool
 
 You ask for a number and get prose with no `tool_call` row anywhere. Check these
-three things, in this order:
-
-<Aside type="caution" title="Check the profile, not the globals">
-The most common cause is the first one, and it is invisible from your code: the
-tool tag lives in the **model configuration of the prompt profile**, not in the
-package globals, when you run through an agent.
-</Aside>
+three things, in this order. The first one is the most common cause, and it is
+invisible from your code: through an agent, the tool tag lives in the **model
+configuration of the prompt profile**, not in the package globals.
 
 1. **The tag did not reach the profile.** Read it back:
 
@@ -202,9 +202,8 @@ right:
 
 - `run_context` holds `{"contract_id":"88"}`. If it is empty, the run was not
   bound, and every tool refused.
-- `tool_calls_count` is `2` for the lesson 3 question, and the trace holds two
-  `tool_call` rows to match.
-
+- `tool_calls_count` matches the number of `tool_call` rows in the trace. The
+  recorded run has `3` in both places. Your model can ask for two or three.
 
 ## Key takeaways
 

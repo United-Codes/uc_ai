@@ -5,7 +5,7 @@ sidebar:
   order: 3
 ---
 
-import { Aside, LinkCard } from "@astrojs/starlight/components";
+import { LinkCard } from "@astrojs/starlight/components";
 import LessonHeader from "../../../../components/LessonHeader.astro";
 import AiOutput from "../../../../components/AiOutput.astro";
 
@@ -48,7 +48,9 @@ contract. **With the run context,** the model cannot name a contract at all.
 ## Register the three read tools
 
 `03_tools_read.sql` registers `SC_GET_CONTRACT`, `SC_LIST_CALLS` and
-`SC_LIST_INVOICES`. This is one of them:
+`SC_LIST_INVOICES`. Each one carries the tag `scdesk`. A tag groups tools, and
+the agent selects its tools by tag later in this lesson. This is one of the
+three:
 
 ```sql
 declare
@@ -78,18 +80,11 @@ model cannot ask for a contract, because the arguments have nowhere to put one.
 
 ## The contract comes from the run context
 
-When you start the run, you pass a **run context**. UC AI adds it to the arguments
-of every tool in that run, under the reserved key `_ctx`, **after** the model
-produced them. No model sees that key, and no model can set it.
-
-```sql
-l_result := uc_ai_agents_api.execute_agent(
-  p_agent_code       => 'SC_DESK'
-, p_input_parameters => json_object_t('{"engineer_name":"Petra","today":"2026-08-24",
-      "question":"How much can I still credit on INV-1003, and is the call inside the coverage window?"}')
-, p_run_context      => json_object_t('{"contract_id":"88"}')
-);
-```
+The contract travels a different way. When your application starts the run, it
+passes a **run context**: a small JSON object with the values this run is bound
+to, here `{"contract_id":"88"}`. UC AI adds it to the arguments of every tool in
+that run, under the reserved key `_ctx`, **after** the model produced them. No
+model sees that key, and no model can set it.
 
 The handler reads the contract from `_ctx`, never from the model. The whole tool,
 shortened to its shape:
@@ -100,45 +95,36 @@ as
   l_args     json_object_t := json_object_t(p_arguments);
   l_ctx      json_object_t := l_args.get_object(uc_ai.c_run_context_key);
   l_contract number;
-  l_invoices json_array_t  := json_array_t();
-  l_result   json_object_t := json_object_t();
+  l_result   clob;
 begin
   -- The contract comes from the run context, never from the arguments.
   l_contract := to_number(l_ctx.get_string('contract_id'));
 
-  <<invoice_rows>>
-  for r in ( select i.invoice_no
-                  , i.parts_amount + i.labour_amount as total_amount
-               from sc_invoices i
-              where i.contract_id = l_contract )   -- the one contract this run sees
-  loop
-    l_invoices.append(json_object_t(json_object(
-      'invoice_no' value r.invoice_no, 'total_amount' value r.total_amount)));
-  end loop invoice_rows;
+  select json_object(
+           'count'    value count(*)
+         , 'invoices' value json_arrayagg(
+                              json_object('invoice_no'   value i.invoice_no
+                                        , 'total_amount' value i.parts_amount + i.labour_amount)
+                              order by i.invoice_no)
+           returning clob)
+    into l_result
+    from sc_invoices i
+   where i.contract_id = l_contract;   -- the one contract this run sees
 
-  l_result.put('invoices', l_invoices);
-  l_result.put('count', l_invoices.get_size);
-  return l_result.to_clob;   -- the model reads this JSON as text
+  return l_result;   -- the model reads this JSON as text
 end list_invoices;
 ```
 
-`sc_desk_pkg.list_invoices` returns four more columns than that, and it refuses
+`sc_desk_pkg.list_invoices` returns six more columns than that, and it refuses
 with a reason when the run carries no contract at all. The shape is this one: read
-`_ctx`, filter on it, return JSON.
-
-<Aside type="caution" title="Read the arguments by name">
-Never count the keys of the argument object, and never walk all of them. Every tool
-now receives `_ctx` as one extra key. A handler that reasons about the *shape* of
-the arguments therefore means something else, with no change to its signature and
-no error. The `MEMORY` tool that UC AI ships had this defect. Read
-`l_args.get_string('max_rows')`, not the shape. The [tools
-guide](/products/uc-ai/docs/guides/tools/#what-you-must-know) has the details.
-</Aside>
+`_ctx`, filter on it, build the JSON in SQL, return it.
 
 ## Give the tools to the agent
 
 Tools reach the model through the model configuration of the prompt profile. The
-tag `scdesk` selects exactly these three, so the desk never sees another tool in
+three keys below are named after the package globals they override, but through
+an agent they live on the profile row, not in the package. The tag `scdesk`
+selects exactly the three tools above, so the desk never sees another tool in
 your schema.
 
 ```sql
@@ -161,30 +147,47 @@ end;
 This changes **version 1**, the version the agent already resolves to. It does not
 make a version 2, so the agent needs no change.
 
-## What changed
+## Run it
 
-The desk now answers from your tables:
+The same question as lesson 1, with the run bound to contract 88. The block makes
+its own session id and prints it. Write that id down: lesson 4 reads the trace of
+this run by it.
 
-<AiOutput model="gpt-5.6-terra" date="2026-08-24" seconds={4.2}>
+```sql
+declare
+  l_result  json_object_t;
+  l_session varchar2(255 char) := uc_ai_agents_api.generate_session_id;
+begin
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'SC_DESK'
+  , p_input_parameters => json_object_t('{"engineer_name":"Petra"
+      ,"today":"' || to_char(sysdate, 'YYYY-MM-DD') || '"
+      ,"question":"How much can I still credit on INV-1003, and is the call inside the coverage window?"}')
+  , p_session_id       => l_session
+  , p_run_context      => json_object_t('{"contract_id":"88"}')
+  );
 
-The desk asked for two tools before it answered, and neither call names a
-contract:
-
+  sys.dbms_output.put_line('SESSION: ' || l_session);
+  sys.dbms_output.put_line(l_result.get_clob('final_message'));
+end;
+/
 ```
-tool_call    SC_LIST_INVOICES   {"max_rows":20}
-tool_call    SC_LIST_CALLS      {"max_rows":20}
-```
 
-INV-1003 has $0 still available to credit; its full $200 has already been credited.
+<AiOutput model="gpt-5.6-terra" date="2026-09-10" seconds={9.4}>
+INV-1003 has **€0** left to credit; its full €200 has already been credited.
 
-The related call (2026-08-14) is inside the coverage window.
+The related call (31 Aug 2026) is **inside** the coverage window.
 </AiOutput>
 
-Lesson 4 reads those two rows back out of the database, with the results they
-returned.
+## What changed
 
 Lesson 1 answered "up to 200" to the same question, from rows pasted into the
 prompt. The number is right now because the model called a tool.
+
+The desk called three tools before it answered, and no call named a contract. The
+recorded run asked for `SC_GET_CONTRACT`, `SC_LIST_INVOICES` and `SC_LIST_CALLS`
+in one round, then read the three results. Lesson 4 reads those calls back out of
+the database, with the arguments the model sent and the results they returned.
 
 ## Verification, part 1: no tool declares a contract
 
@@ -208,13 +211,8 @@ SC_LIST_INVOICES     max_rows
 
 No row names a contract, and none can. `_ctx` is a reserved name: a tool that
 declares it is refused at registration with `ORA-20503`. That holds for a nested
-property, and it ignores upper and lower case.
-
-<Aside type="note" title="Roll back after a refused registration">
-`create_tool_from_schema` writes the tool row first, then checks the parameters. So
-a refused registration leaves a tool row with no parameters behind, until you roll
-back. If you try the `_ctx` rejection yourself, run `rollback` afterwards.
-</Aside>
+property, and it ignores upper and lower case. If you try it, run `rollback`
+afterwards, because the tool row is written before the parameters are checked.
 
 ## Verification, part 2: prove the isolation without a model
 
@@ -249,17 +247,6 @@ handler never reads it.
 Keep this check. A model that declines to ask proves nothing about what the
 handler returns when something does ask.
 
-<Aside type="caution" title="The run context binds arguments, not tool lists">
-`_ctx` decides what a tool answers. It does not decide which tools the agent has.
-A carefully bound `SC_LIST_INVOICES` gives no protection when the same tag set also
-holds a tool that can read any table. Give the desk only tools that the run context
-can bind.
-
-[Lesson 2 of Secure an
-Agent](/products/uc-ai/docs/tutorial/secure-an-agent/02-least-privilege/) shows what
-a run is really offered, and why an empty tag set is not a safe default.
-</Aside>
-
 ## Key takeaways
 
 - Leave the scoped value out of the tool schema. Then the model cannot name it, and
@@ -268,6 +255,8 @@ a run is really offered, and why an empty tag set is not a safe default.
   not to ask has proved nothing.
 - `p_run_context => json_object_t('{"contract_id":"88"}')` reaches every tool of the
   run under `uc_ai.c_run_context_key`.
+- `_ctx` decides what a tool answers, not which tools the agent has. Give the desk
+  only tools that the run context can bind.
 
 **Full reference:** [Tools and function
 calling](/products/uc-ai/docs/guides/tools/) covers registration, the JSON schema
@@ -275,7 +264,6 @@ and handler patterns, and the [Quickstart](/products/uc-ai/docs/guides/quickstar
 registers a small tool from nothing in five minutes. [The run
 context](/products/uc-ai/docs/guides/tools/#the-run-context) covers `_ctx`, the
 reserved name, and where else the run context applies.
-
 
 <LinkCard
   title="Next lesson: See what your agent did"

@@ -213,6 +213,16 @@ with `get_prompt_profile`, set `system_prompt_template`, and pass the row back.
 Memory](/products/uc-ai/docs/tutorial/give-an-agent-a-memory/03-decide-what-it-writes/)
 is a whole lesson on this, with the file layout and a note that goes out of date.
 
+## When a memory change takes effect
+
+A memory change reaches the **next new session**. An open conversation keeps the
+system prompt it started with, so it also keeps the memory rules it started with.
+
+`enable_for_agent` writes the memory tag into the profile version the agent
+resolves to now. `uc_ai_prompt_profiles_api.create_new_version` copies
+`model_config_json`, so a version made that way carries the tag with it. A version
+you build from scratch carries whatever configuration you pass it.
+
 <Aside type="note" title="A store is created at its first use">
 `resolve_store_id` reports `ORA-20423` for a contract whose agent has never run,
 because the store does not exist yet. A script that clears the memory before it
@@ -230,16 +240,6 @@ exception
 end;
 ```
 </Aside>
-
-## When a memory change takes effect
-
-A memory change reaches the **next new session**. An open conversation keeps the
-system prompt it started with, so it also keeps the memory rules it started with.
-
-`enable_for_agent` writes the memory tag into the profile version the agent
-resolves to now. `uc_ai_prompt_profiles_api.create_new_version` copies
-`model_config_json`, so a version made that way carries the tag with it. A version
-you build from scratch carries whatever configuration you pass it.
 
 ## Key takeaways
 

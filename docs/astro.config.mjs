@@ -56,6 +56,21 @@ export default defineConfig({
 					items: ["index"],
 				},
 				{
+					// ONE menu entry for everything: tutorial/index.mdx lists the
+					// tutorials, and each one links straight to its lesson 1. The
+					// lessons themselves never appear in the menu, so a nine-lesson
+					// course does not flood it. A new tutorial is a new directory
+					// under tutorial/ plus a card on that index page — no config
+					// change at all.
+					label: "Tutorials",
+					collapsed: false,
+					badge: {
+						text: "New",
+						variant: "success",
+					},
+					items: ["tutorial"],
+				},
+				{
 					label: "Guides",
 					collapsed: false,
 					items: [
@@ -75,10 +90,6 @@ export default defineConfig({
 						"guides/agentic-ai",
 						{
 							label: "Multi-Agent Systems",
-							badge: {
-								text: "WIP",
-								variant: "caution",
-							},
 							items: [
 								{ autogenerate: { directory: "guides/multi-agent-systems" } },
 							],
@@ -102,21 +113,6 @@ export default defineConfig({
 							items: [{ autogenerate: { directory: "guides/guardrails" } }],
 						},
 					],
-				},
-				{
-					// ONE menu entry for everything: tutorial/index.mdx lists the
-					// tutorials, and each one links straight to its lesson 1. The
-					// lessons themselves never appear in the menu, so a nine-lesson
-					// course does not flood it. A new tutorial is a new directory
-					// under tutorial/ plus a card on that index page — no config
-					// change at all.
-					label: "Tutorials",
-					collapsed: false,
-					badge: {
-						text: "New",
-						variant: "success",
-					},
-					items: ["tutorial"],
 				},
 				{
 					label: "Provider Setup",

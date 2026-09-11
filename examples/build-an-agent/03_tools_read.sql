@@ -148,3 +148,28 @@ prompt No row above may name a contract. The contract comes from the run context
 prompt
 
 set feedback on
+
+-- ---------------------------------------------------------------------------
+-- Run it
+-- ---------------------------------------------------------------------------
+-- The same question as lesson 1, through the agent, with the run bound to
+-- contract 88. The block generates the session id itself and prints it, because
+-- lesson 4 reads the trace of this run by that id.
+set serveroutput on
+declare
+  l_result  json_object_t;
+  l_session varchar2(255 char) := uc_ai_agents_api.generate_session_id;
+begin
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'SC_DESK'
+  , p_input_parameters => json_object_t('{"engineer_name":"Petra"
+      ,"today":"' || to_char(sysdate, 'YYYY-MM-DD') || '"
+      ,"question":"How much can I still credit on INV-1003, and is the call inside the coverage window?"}')
+  , p_session_id       => l_session
+  , p_run_context      => json_object_t('{"contract_id":"88"}')
+  );
+
+  sys.dbms_output.put_line('SESSION: ' || l_session);
+  sys.dbms_output.put_line(l_result.get_clob('final_message'));
+end;
+/

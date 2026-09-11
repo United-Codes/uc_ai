@@ -1,5 +1,5 @@
 -- ============================================================================
--- UC AI tutorial — "Build an Agent" — Lesson 7
+-- UC AI tutorial — "Build an Agent" — Extra: structured output
 -- Structured output your user interface can use
 -- ============================================================================
 -- Puts a response schema on the prompt profile, so the desk answers with a JSON

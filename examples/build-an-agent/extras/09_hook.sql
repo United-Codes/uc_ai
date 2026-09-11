@@ -1,5 +1,5 @@
 -- ============================================================================
--- UC AI tutorial — "Build an Agent" — Lesson 9
+-- UC AI tutorial — "Build an Agent" — Extra: an execution hook
 -- A hook that can stop a tool call
 -- ============================================================================
 -- An execution hook is a package YOU write. UC AI calls it around every run, and

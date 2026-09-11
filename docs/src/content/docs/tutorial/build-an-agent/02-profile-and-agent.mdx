@@ -72,10 +72,10 @@ The system prompt already tells the desk to read numbers with a tool. It has no
 tools yet. Lesson 3 adds them.
 
 <Aside type="caution" title="Every placeholder needs a value, every time">
-If a template holds `{today}` and a call does not supply `today`, the run stops
-with an error. UC AI does not leave a placeholder unfilled. The
-`p_parameters_schema` above writes down what the profile expects, so the rule is
-visible to the next reader.
+  If a template holds `{today}` and a call does not supply `today`, the run
+  stops with an error. UC AI does not leave a placeholder unfilled. The
+  `p_parameters_schema` above writes down what the profile expects, so the rule
+  is visible to the next reader.
 </Aside>
 
 ## Wrap the profile in an agent
@@ -89,8 +89,9 @@ adds three things the profile alone does not have:
 - **A record of every run.** UC AI writes one row for each run and one row for
   each message of it. Nothing in your code has to do that. The verification below
   reads the first of those rows, and lesson 4 reads the rest.
-- **The place the rest of the course attaches to.** Tools, the run context and
-  memory are configured on the agent and its profile, not on the call.
+- **The place the rest of the course attaches to.** Tools, memory, and the run
+  context that lesson 3 introduces are configured on the agent and its profile,
+  not on the call.
 
 A **profile agent** is the simplest kind. It runs one prompt profile.
 
@@ -103,7 +104,6 @@ begin
   , p_description         => 'Service-contract desk agent'
   , p_agent_type          => uc_ai_agents_api.c_type_profile
   , p_prompt_profile_code => 'SC_DESK_PROFILE'
-  , p_timeout_seconds     => 120
   );
 end;
 /
@@ -127,10 +127,10 @@ end;
 ```
 
 <Aside type="caution" title="Do not skip the two change_status calls">
-`create_prompt_profile` and `create_agent` both make a **draft**. A call that does
-not name a version resolves the latest **active** version. So a draft is invisible.
-If you miss either call, the next lesson stops with `NO_DATA_FOUND`, and nothing
-tells you why.
+  `create_prompt_profile` and `create_agent` both make a **draft**. A call that
+  does not name a version resolves the latest **active** version. So a draft is
+  invisible. If you miss either call, the next lesson stops with
+  `NO_DATA_FOUND`, and nothing tells you why.
 </Aside>
 
 ## Run it
@@ -153,9 +153,14 @@ end;
 /
 ```
 
-The call names no session. UC AI generates one and returns it, and every run
-above is therefore a conversation of one turn. Lesson 6 passes a session id of
-its own, so that two turns belong to the same conversation.
+<AiOutput model="gpt-5.6-terra" date="2026-08-24" seconds={2.5}>
+  I can't access the contract records right now, so I can't verify the remaining
+  credit amount for INV-1003.
+</AiOutput>
+
+The call names no session, so UC AI generates one, and the run is a conversation
+of one turn. Lesson 6 passes a session id of its own, so that two turns belong to
+the same conversation.
 
 ## What changed
 
@@ -163,15 +168,8 @@ Your application no longer holds a prompt. It calls `SC_DESK` and passes three
 values. You can change the prompt, or release a new version of it, without a code
 change.
 
-The answer does not improve on lesson 1:
-
-<AiOutput model="gpt-5.6-terra" date="2026-08-24" seconds={2.5}>
-I can't access the contract records right now, so I can't verify the remaining
-credit amount for INV-1003.
-</AiOutput>
-
-The desk now has an identity, a version, and a name. It still cannot read your
-database. Lesson 3 corrects that.
+The answer does not improve on lesson 1. The desk now has an identity, a version,
+and a name. It still cannot read your database. Lesson 3 corrects that.
 
 ## Verification
 
@@ -212,7 +210,6 @@ completed                   283                    84                  0
 
 `uc_ai_agent_messages` holds the conversation behind that row, one message at a
 time. Lesson 4 reads both tables and shows what the desk did on each run.
-
 
 ## Key takeaways
 

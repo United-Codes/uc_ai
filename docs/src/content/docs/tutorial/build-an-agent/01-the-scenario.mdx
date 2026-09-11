@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={1}
   of={7}
   minutes={10}
-  promise="call generate_text with contract rows in the prompt, then ask a question those rows cannot answer."
+  promise="you can call a model from PL/SQL, and you know why rows pasted into a prompt give a wrong number."
   scripts={["00_setup.sql", "00_precheck.sql"]}
 />
 
@@ -26,33 +26,23 @@ A support engineer opens a contract and asks the agent about it. The agent reads
 the contract, its service calls, and its invoices. When the engineer asks for a
 credit note, the **database** decides whether the contract allows it.
 
-Two words from this domain, because the lessons use them:
+Four words from this domain, because the lessons use them:
 
+- A **service call** is one visit of a technician to a machine under contract.
+  Each call produces one invoice.
 - A **credit note** cancels part of an invoice. It is money the customer does not
   pay.
 - A contract has a **coverage level**. `GOLD` covers parts and labour. `SILVER`
   covers labour only.
+- A contract has a **coverage window**: the dates between which it covers service
+  calls. A call outside the window is not covered.
 
 ## Before you start
 
-You need a UC AI installation that can reach a provider. The [installation
+You need a UC AI installation that can reach OpenAI. The [installation
 guide](/products/uc-ai/docs/guides/installation/) covers the API key, and the
 [network setup guide](/products/uc-ai/docs/guides/network-setup/) covers the
-network grants a DBA has to give. `00_precheck.sql` below tests both in one call.
-
-Three more facts, before you run anything:
-
-- **Contract data leaves your network.** Every lesson sends part of your prompt to
-  OpenAI over HTTPS. If your data cannot leave your network, run
-  [Ollama](/products/uc-ai/docs/providers/ollama/) on a host you own, and change
-  the provider constant and the model constant. The rest of the course is the
-  same.
-- **Cost.** Every lesson together costs well below one dollar at current prices.
-  One recorded lesson used 574 input tokens and 27 output tokens.
-- **The recorded output comes from `gpt-5.6-terra`.** A smaller model works, but it
-  needs better tool descriptions when you register the tools.
-
-## Set up the demo schema
+network grants a DBA has to give. The precheck below tests both in one call.
 
 <Steps>
 
@@ -74,7 +64,16 @@ The precheck prints this when your database is ready:
 ```
 
 If step 2 failed, correct that before you continue. Every lesson calls a model.
-The script prints the usual errors and the fix for each one.
+
+Three facts about the runs you are about to make:
+
+- **Contract data leaves your network.** Every lesson sends part of your prompt to
+  OpenAI over HTTPS. If your data cannot leave your network, run
+  [Ollama](/products/uc-ai/docs/providers/ollama/) on a host you own and change
+  the two constants. The rest of the course is the same.
+- **The whole course costs well below one dollar** at current prices.
+- **The recorded output comes from `gpt-5.6-terra`.** A smaller model works, but it
+  needs better tool descriptions when you register the tools.
 
 <Aside type="tip" title="Remove the demo schema">
 `00_teardown.sql` deletes the six tables and every row this course registers in
@@ -132,12 +131,9 @@ and a total. They do not hold how much of each invoice is already credited:
 You can still credit up to 200 on INV-1003.
 </AiOutput>
 
-That answer is wrong. The correct answer is **0**. Invoice INV-1003 is already
-credited in full, and the database knows it. The next `select` on this page proves
-it.
-
-The prompt sent a total of 200 and no credit data. The model answered 200. The
-remaining credit on INV-1003 is 0.
+The correct answer is **0**. The prompt sent a total of 200 and no credit data, so
+the model answered 200. The query under [Verification](#verification) shows that
+INV-1003 is credited in full.
 
 This approach has three limits:
 
@@ -187,6 +183,12 @@ INV-2001     SILVER                     850          0
 `INV-1003` has 200 of 200 credited. So the answer the model gave above was wrong
 by the full amount.
 
+<Aside type="note" title="This course trusts every row it reads">
+Every table in this tutorial holds data your own company wrote. When a model reads
+a row that an outsider wrote, such as a supplier email, an uploaded file, or a
+portal field, the rules change. That is the subject of [Secure an
+Agent](/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/).
+</Aside>
 
 ## Key takeaways
 
@@ -205,10 +207,3 @@ every parameter and the whole result structure.
   description="Move the prompt out of your PL/SQL into a versioned prompt profile, then give it a name your application can call."
   href="/products/uc-ai/docs/tutorial/build-an-agent/02-profile-and-agent/"
 />
-
-<Aside type="note" title="This course trusts every row it reads">
-Every table in this tutorial holds data your own company wrote. When a model reads
-a row that an outsider wrote — a supplier email, an uploaded file, a portal field —
-the rules change. That is the subject of [Secure an
-Agent](/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/).
-</Aside>

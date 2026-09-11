@@ -10,11 +10,13 @@ import { getCollection } from "astro:content";
  *   the position   which lesson this is, out of how many
  *   the time       how long the lesson takes
  *
- * It also carries the ONE way back. A course lives in a single sidebar entry, so
- * Starlight's own previous/next links cannot work here: they are built from the
- * sidebar, and the sidebar does not list the lessons. The back link is therefore
- * read from the content collection instead of a list kept by hand, so a renamed
- * or inserted lesson cannot make it wrong.
+ * It also carries the course outline and the ONE way back. A course lives in a
+ * single sidebar entry, so Starlight's own previous/next links cannot work here:
+ * they are built from the sidebar, and the sidebar does not list the lessons.
+ * The outline row under the meta line is one segment for each lesson, each a
+ * link, with the done ones and the current one filled. Both it and the back
+ * link are read from the content collection instead of a list kept by hand, so
+ * a renamed or inserted lesson cannot make them wrong.
  *
  * Usage:
  *   <LessonHeader
@@ -58,29 +60,34 @@ const {
   course = "build-an-agent",
 } = Astro.props;
 
-// Progress at the START of this lesson: nothing is done yet on lesson 1, and the
-// last lesson does not claim 100% before it is read.
-const percent = Math.round(((lesson - 1) / of) * 100);
 const repoBase = `https://github.com/United-Codes/uc_ai/blob/main/examples/${course}/`;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Every lesson of this course, in order. The file names are zero padded
+// (01..09), so the id sorts into lesson order. The list feeds two things: the
+// back link, and the outline under the meta row, so a reader in lesson 4 can see
+// the seven titles and jump to one. Neither is kept by hand, so a renamed or
+// inserted lesson cannot make them wrong.
+const inCourse = await getCollection("docs", (entry) =>
+  entry.id.startsWith(`tutorial/${course}/`),
+);
+const outline = inCourse
+  .sort((a, b) => a.id.localeCompare(b.id))
+  .map((entry, index) => ({
+    number: index + 1,
+    title: entry.data.title,
+    href: `${base}/${entry.id.replace(/\.mdx?$/, "")}/`,
+  }));
 
 // Where "back" goes. Lesson 1 has no previous lesson, so it returns to the list
 // of tutorials. Every other lesson returns to the one before it, by name.
-const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 let backHref = `${base}/tutorial/`;
 let backLabel = "All tutorials";
 
-if (lesson > 1) {
-  const inCourse = await getCollection("docs", (entry) =>
-    entry.id.startsWith(`tutorial/${course}/`),
-  );
-  // The file names are zero padded (01..09), so the id sorts into lesson order.
-  const ordered = inCourse.sort((a, b) => a.id.localeCompare(b.id));
-  const previous = ordered[lesson - 2];
-
-  if (previous) {
-    backHref = `${base}/${previous.id.replace(/\.mdx?$/, "")}/`;
-    backLabel = previous.data.title;
-  }
+const previous = outline[lesson - 2];
+if (lesson > 1 && previous) {
+  backHref = previous.href;
+  backLabel = previous.title;
 }
 ---
 
@@ -139,13 +146,24 @@ if (lesson > 1) {
     }
   </div>
 
-  <div
-    class="lesson-progress"
-    role="img"
-    aria-label={`Lesson ${lesson} of ${of}, ${percent} percent of the course`}
-  >
-    <span class="lesson-progress-fill" style={`width: ${percent}%`}></span>
-  </div>
+  <nav class="lesson-outline" aria-label="Lessons of this course">
+    <ol>
+      {
+        outline.map((item) => (
+          <li>
+            <a
+              href={item.href}
+              title={`Lesson ${item.number}: ${item.title}`}
+              aria-current={item.number === lesson ? "page" : undefined}
+              class:list={[{ "is-done": item.number < lesson }]}
+            >
+              <span class="sr-only">Lesson {item.number}: {item.title}</span>
+            </a>
+          </li>
+        ))
+      }
+    </ol>
+  </nav>
 </div>
 
 <style>
@@ -254,18 +272,56 @@ if (lesson > 1) {
     font-size: 0.9em;
   }
 
-  .lesson-progress {
+  /* The outline is the divider and the progress bar in one. Each segment is one
+     lesson and a link to it. Done lessons and the current one are filled, so the
+     row also reads as "how far am I". */
+  .lesson-outline {
     margin-top: 0.9rem;
-    height: 3px;
-    border-radius: 999px;
-    background: var(--sl-color-gray-5);
-    overflow: hidden;
   }
 
-  .lesson-progress-fill {
+  .lesson-outline ol {
+    display: flex;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .lesson-outline li {
+    flex: 1;
+    margin: 0;
+  }
+
+  .lesson-outline a {
     display: block;
-    height: 100%;
+    height: 4px;
     border-radius: 999px;
+    background: var(--sl-color-gray-5);
+    transition: background 0.15s ease;
+  }
+
+  .lesson-outline a.is-done {
+    background: var(--sl-color-accent-low);
+  }
+
+  .lesson-outline a[aria-current="page"] {
     background: var(--sl-color-accent);
+  }
+
+  .lesson-outline a:hover,
+  .lesson-outline a:focus-visible {
+    background: var(--sl-color-accent-high);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
   }
 </style>
