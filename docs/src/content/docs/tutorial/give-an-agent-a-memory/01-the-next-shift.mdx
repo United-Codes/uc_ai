@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={1}
   of={4}
   minutes={15}
-  promise="one conversation can read what an earlier conversation recorded, and you can say which facts belong in a memory and which belong in a column."
+  promise="you can retain conversation notes and choose which information belongs in memory or database columns."
   scripts={["00_setup.sql", "00_precheck.sql", "01_recall.sql"]}
   course="give-an-agent-a-memory"
 />
@@ -64,7 +64,7 @@ guide](/products/uc-ai/docs/guides/network-setup/) has the grants a DBA must giv
 
 `00_teardown.sql` removes everything this course creates, at any point.
 
-## The problem
+## Run two conversations without memory
 
 Run the first block of `01_recall.sql`. It holds two conversations about the pump
 `AS-14`, and each one gets a **new** session id.
@@ -199,23 +199,21 @@ both coupling repairs from `mx_work_orders`, and that is correct. What has no ta
 is what the conversation produced: the instruction Petra got from the reliability
 engineer.
 
-Every maintenance system has a free-text notes field for that kind of fact. Almost
-nobody fills it in, because it is a second job after the repair. A memory is that
-field, written as a by-product of asking for help.
+Memory can retain notes from a conversation, such as an instruction passed
+between maintenance shifts.
 
-Three lines draw the border:
+Choose storage based on how the application uses the information:
 
 - **If you know the question in advance, use a column.** `downtime_minutes` is a
   column, because somebody reports on it every month.
 - **If the fact must be enforced, use a table and a rule.** A model that reads a
   note can decide to leave it out of an answer. A check constraint cannot.
-- **If the fact only has to reach a model as prose, a memory is the cheapest place
-  it can live.** No DDL, no screen, and nobody to fill it in.
+- **Use memory for information the model needs as prose.** The agent can store
+  notes during the conversation.
 
-<Aside type="note" title="A system prompt cannot hold this fact">
-A system prompt is the same text for every machine and every run. It needs a new
-profile version to change. And the run that learns the fact cannot write it. A
-memory is per machine, and the run itself writes it.
+<Aside type="note" title="Profile instructions and memory notes">
+The system prompt defines the agent instructions. Memory stores notes from
+individual conversations. Lesson 2 scopes that memory to each machine.
 </Aside>
 
 One more case: somebody wants to count a remembered fact. Then it needs a column,

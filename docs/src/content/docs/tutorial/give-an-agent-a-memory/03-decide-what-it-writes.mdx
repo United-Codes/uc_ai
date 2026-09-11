@@ -13,12 +13,12 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={3}
   of={4}
   minutes={15}
-  promise="the desk files its notes under names you chose, and it reads a reference note that a planner wrote and the desk cannot change."
+  promise="you can define filenames and instruct the agent to preserve a reference note."
   scripts={["03_shape.sql"]}
   course="give-an-agent-a-memory"
 />
 
-## The problem
+## Inspect the existing filenames
 
 Block 1 of `03_shape.sql` lists what the desk has filed so far:
 
@@ -236,14 +236,16 @@ And `site_rules.txt` is still 411 characters, byte for byte what the planner see
 The desk read it twice and did not write to it.
 
 <Aside type="caution" title="A prompt rule is not a control">
-Everything in this lesson is an instruction to a model. The desk obeyed it in the
-recorded runs, and a model can leave an instruction out of any run.
+The prompt asks the agent to preserve `site_rules.txt`. The recorded runs
+followed that instruction, but this example does not enforce read-only access
+to the file. The agent still has a tool that can write it.
 
-If a file must not be written, the control is not a sentence in a prompt. It is
-`clear_store_files` on a schedule, a review of the store, or an agent with no
-memory at all. For the case where the untrusted text comes from outside your company,
-read [What to do about a poisoned
-memory](/products/uc-ai/docs/tutorial/secure-an-agent/05-confused-deputy/#what-to-do-about-a-poisoned-memory).
+A store review can detect unwanted changes. `clear_store_files` deletes files
+afterward. Neither prevents a write. If the reference must remain unchanged,
+keep it outside the writable memory store and expose it through a read-only tool.
+
+For external content stored in memory, read
+[What to do about a poisoned memory](/products/uc-ai/docs/tutorial/secure-an-agent/05-confused-deputy/#what-to-do-about-a-poisoned-memory).
 </Aside>
 
 ## Key takeaways

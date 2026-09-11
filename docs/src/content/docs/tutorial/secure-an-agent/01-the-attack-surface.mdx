@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={1}
   of={7}
   minutes={20}
-  promise="run the payables desk against a covering email, then call the bank-update tool directly and see that it accepts a forged IBAN."
+  promise="you can reproduce the bank-update example and test the handler with a forged IBAN."
   scripts={["00_setup.sql", "00_precheck.sql", "ap_naive_pkg.pkb", "01_naive_agent.sql"]}
   course="secure-an-agent"
 />
@@ -123,7 +123,7 @@ One full pass through the course made **15 agent runs, which used 18,523 input a
 tokens** for the whole course. Lesson 4 is the only lesson that repeats a run.
 </Aside>
 
-## The problem
+## Identify tools that accept untrusted values
 
 The first draft gives the agent tools to read invoices, approve them, update
 bank accounts, and send replies.

@@ -60,43 +60,37 @@ The tutorial's unique value is:
 So: teach the mechanic in the smallest form that serves the thread, then link
 out with "Full reference: [guide]". Spend the reclaimed space on the four gaps.
 
-## Voice: read the `docs-voice` skill
+## Voice and lesson outcomes
 
-**The voice rules moved.** Register, heading rules, the sentence shapes that mean
-a draft has slipped into essay voice, and the self-check greps now live in
-`.claude/skills/docs-voice.md`, because they apply to every page under
-`docs/src/content/docs/` and not only to tutorials. Read that skill before you
-write a lesson, and run its self-check before you ship one.
+Use [docs-voice.md](docs-voice.md) for tone and headings, and `simple-english`
+for sentence mechanics. The voice guide takes precedence over older examples
+and review notes in this file.
 
-Two things it says that decide most of a tutorial draft:
+Write as a helpful colleague. Explain the task and the relevant behavior in
+plain language. A lesson can start with its task, a short concept explanation,
+or an example that establishes why a step is needed. Do not manufacture a
+failure or repeat “Without X ... With X ...” to motivate every lesson.
 
-- Headings are navigation, not commentary. `Where this approach stops` fails;
-  `A question the pasted rows cannot answer` works.
-- Motivation is a **recorded failure**, not a paragraph that tells the reader to
-  feel the pain.
+Name tasks and topics in headings: “Ask about remaining credit,” “Read the
+execution log,” or “Test the contract filter.” Avoid generic headings such as
+“The problem” and “What changed.” Search for inbound anchors before renaming
+headings and repair affected links.
 
-What stays here, because it is specific to a course:
+The `LessonHeader` promise names a concrete action the reader can perform by the
+end of the lesson. It must agree with the procedure and its limitations.
 
-**The promise line.** It names what the reader can do at the end of the lesson,
-in one clause, with no trailer:
+- Use “you can inspect generated JavaScript and diagnose common program errors.”
+- Avoid “you know what happens to every kind of mistake.”
+- Use “you can instruct the agent to preserve a reference note.”
+- Do not claim that a prompt prevents writes when the agent retains write access.
 
-- Bad: `a model answers a question about your own data — and you can see exactly
-  where that approach stops.`
-- Good: `call generate_text with contract rows in the prompt, then ask a
-  question those rows cannot answer.`
+Apply these rules to frontmatter descriptions, callout titles, and next-lesson
+links as well as body text. Keep recorded responses unchanged during a language
+edit. Distinguish model observations from enforced behavior.
 
-An em-dash inside a `promise=` prop is nearly always the trailer:
-
-```bash
-grep -n 'promise="[^"]*—' docs/src/content/docs/tutorial/*/*.mdx
-```
-
-**Lesson titles and `Aside` titles** follow the same heading rule as `##`
-headings, and a tutorial has many more of them than a guide does.
-
-**Renaming a lesson heading is cheap; renaming a guide heading is not.** The
-whole `tutorial/` tree is the target of 2 cross-page anchors. `docs-voice` has
-the grep and the numbers.
+For edits to an existing course, use the steps below that fit the request. A
+language correction does not require a new course plan or new model recordings.
+Run technical checks when code or the behavior taught by an example changes.
 
 ## Steps
 
@@ -264,9 +258,9 @@ What the reviews converged on, and what to reuse as defaults:
   reference guides already own — as of writing these tables are mentioned in
   passing by the multi-agent pages but no page teaches them, so it is new
   content and worth a lesson of its own.
-- **Motivate before mechanics.** Let the reader feel the pain before the fix —
-  hard-code a prompt in three places, *then* introduce prompt profiles. This
-  usually means tools come before prompt profiles, not after.
+- **Introduce the task before its implementation.** Explain why the next step is
+  needed in one or two sentences. Order lessons by their dependencies. Do not
+  add duplicated prompts or a staged failure merely to motivate a feature.
 - **Cut the "going further" page.** A page of teasers for features you did not
   teach is a link farm, and every item already has a guide. End on the payoff
   and put "what to read next" in a box.
@@ -355,70 +349,44 @@ doing it reads as one model being sloppy.
   companies, and a table as the only outbound channel. Then a reader can run the
   course on a machine that has real credentials.
 
-### 6. Write each lesson to one fixed skeleton
+### 6. Use a consistent, flexible lesson structure
 
-Style: unexcited, reference-grade. Write like a well-edited Oracle manual, not
-like a course trailer. The reader has SQL Developer on the second monitor and is
-trying to finish the page. Do not win their attention; do not waste it. See
-**Voice** above. The density is what they actually use.
+Keep recurring elements in familiar places. Adapt the body to the task rather
+than requiring the same problem statement and recap on every page.
 
-Per lesson, in this order every time — predictable beats elegant, because the
-reader learns where to skip to:
+1. **Title and outcome.** Name the topic and what the reader can do afterward.
+   Use the existing `LessonHeader` component for the outcome, lesson position,
+   estimated time, and script links.
+2. **Required context.** State prerequisites, starting data, and the task. Add a
+   brief explanation when the reader needs a new concept. Use a topic-specific
+   heading rather than “The problem.”
+3. **Procedure and examples.** Say which scripts or blocks to run and which are
+   excerpts. Keep excerpts focused, but link the complete implementation. Do not
+   omit a required action to meet a block or line-count target.
+4. **Results and verification.** Show recorded output with its model and date.
+   State which values are fixed and which can vary. Use direct checks of the
+   handler or data where the lesson teaches an enforced rule. Do not require an
+   exact model response or tool-call sequence unless that is the behavior under
+   test. Explain a result where it appears; a separate recap is optional.
+5. **Takeaways and references.** Include a short takeaway list only when it helps
+   retain distinct lessons. Do not impose a minimum bullet count or repeat the
+   introduction. Link the relevant reference guide and the next lesson with a
+   `LinkCard`.
 
-1. **Title**, then one promise line: "By the end, your agent can file a return
-   request and refuse one that is out of window." Not an objectives block.
-2. **`Lesson N of M · ~20 min`** on its own line.
-3. **The problem, first.** What breaks without this lesson's capability. Use the
-   "Without X … With X" contrast; it is the strongest device in the format.
-4. **The code that IS the lesson.** At most **5 blocks the reader types**, none
-   over ~40 lines. If a handler body runs 90 lines, inline the 12 that make the
-   point. The cap is on typed code (`sql`, `js`), **not** on fenced blocks: recorded
-   output is what makes the page usable, and lessons that ran 3-7 typed blocks
-   against 11-21 output blocks read well. The pairing — type this, compare against
-   that — is the format.
-5. **"What changed"** — a short prose or bulleted read of the block.
-6. **A verification section, in two parts** (this is the highest-trust element
-   of the whole series):
-   - the **real recorded output**, verbatim, stamped with model and date, plus
-     "your wording will differ — the tool-call sequence is what must match"
-   - a **deterministic check the reader runs themselves**:
-     `select rma_number, status from uc_demo_returns where ...`. With an LLM the
-     reader cannot tell "wrong" from "differently phrased"; a SQL assertion they
-     can.
-7. **Key Takeaways** — 3 to 5 bullets, and make one of them a line of code. Three
-   is the floor, not the target: a lesson that taught five distinct mechanisms is
-   better served by five bullets than by three that merge two ideas each.
-8. **Full reference** link to the relevant guide (this is how lessons stay short
-   without losing the reader), then one **`LinkCard`**: "Next lesson: …".
+Use `Steps` for instructions and `Aside` for information that belongs beside
+those instructions. `AiOutput` presents recorded model responses. Use the
+existing component implementations and nearby lessons as examples.
 
-Starlight components available in this repo: `Aside`, `Steps`, `Card`,
-`CardGrid`, `LinkCard` (see usage counts with a grep over
-`docs/src/content/docs/`). There is no reading-time or progress component —
-write the `Lesson N of M · ~20 min` line as plain text.
+Read the headings as a table of contents before completing the page. Each one
+must identify a task or topic without requiring the section body. For example:
 
-**Every heading says what the section is about. No clever headings, and no
-editorial headings.** This is the single most-repeated review comment on this
-repo's tutorials. A heading is navigation, not a riddle and not a verdict: it
-appears in **On this page**, and the reader uses that list to jump. A heading
-that only makes sense *after* the section, or that comments on the section
-(`Where this approach stops`), fails at its one job.
-
-Real headings the owner rejected:
-
-| Rejected | Why | Write instead |
-| --- | --- | --- |
-| "Why this answer cannot be posted" | "posted" is not the reader's word | "Why the answer is not saved" |
-| "final_message is text here, and an object elsewhere" | states a fact, not a topic | "What the answer looks like" |
-| "Two entry points, one schema, two types" | unparseable before reading | "Where the schema applies" |
-| "What OpenAI receives" | no point visible | "What is sent to the model" |
-| "A date that means two things" | a puzzle | "How the date is read" |
-| "One transaction, or none" | a puzzle | "When the row is written" |
-| "Where this approach stops" | a verdict, not a topic | "A question the pasted rows cannot answer" |
-| "Two things that will surprise you" | tease | name the two facts |
-
-The test: read the heading alone, as a TOC entry. If you cannot say what is in
-the section, or you only know the writer's opinion of it, rename it. See
-**Voice** above.
+| Avoid | Use |
+| --- | --- |
+| What the answer looks like | Read the response fields |
+| The transaction is yours | Commit or roll back the changes |
+| Where this approach stops | Ask about remaining credit |
+| What you get | Response for the selected contract |
+| Two things that will surprise you | Name the two topics |
 
 ### Layout for more than one course
 
@@ -1059,12 +1027,15 @@ Two traps found this way, both invisible from the database:
   fails at the first run with `PLS-00201`, inside a background job, where the
   reader cannot see it. Verify handlers in the setup script's report.
 
-**One setup command, even when the course builds on another.** If your course
-needs a previous course's schema, agent and tools, concatenate those scripts into
-a single `00_setup.sql` rather than telling the reader to do the other course
-first, and say plainly: "If you already did that course, run this anyway. It
-changes nothing." End it with a report that names every object and prints
-`Setup OK`.
+**Provide a complete setup for a dependent course.** If a course needs another
+course's schema, agent, and tools, provide a setup script with its own object
+report. Explain which objects it creates, replaces, updates, or deletes.
+
+Inspect the script before describing a repeat run. Recreating tables resets
+stored data; updating a profile changes configuration. Neither means “it changes
+nothing.” State these effects before the setup command. Explain when a reader
+needs a separate demo schema to preserve earlier work, and keep script comments
+consistent with the page.
 
 Note that inlining a `.pkb` into a `.sql` changes which dblinter rules fire —
 G-7220 (forward declarations) starts complaining about a body that was clean as

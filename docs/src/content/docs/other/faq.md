@@ -72,12 +72,6 @@ The `p_model` parameter accepts any `varchar2` value, so you are not limited to 
 
 ## Why doesn't UC AI have a table of providers and models instead of constants?
 
-UC AI provides package constants for common models. It does not maintain a provider and model table for these reasons:
+UC AI provides constants for common model names. The `p_model` parameter also accepts a model name as a string, so a model needs no catalog row before use.
 
-- **You can use any model immediately** — as explained [above](#custom-model-strings), you can pass any model name as a string to `p_model` without waiting for a UC AI update.
-- **The model landscape changes too fast** — new models are released constantly. A configuration table would always be outdated unless maintained by the user anyway.
-- **Some providers have hundreds of models** — OpenRouter alone supports over 600 models. Maintaining a complete list is not feasible.
-- **Override scenarios make it impractical** — OpenAI-compatible providers like DeepSeek work through base URL overrides without first-class support. There is no way to provide constants for all possible override combinations.
-- **Organizations want their own governance** — most teams want to restrict which providers and models are available to their users. This kind of policy logic is better owned by your application.
-
-The focus of UC AI is on making LLMs work reliably across providers. If you need a model catalog or approval workflow, we recommend implementing that in your own application layer.
+Your application can maintain its own model catalog, including display names, permitted providers, and approval status.

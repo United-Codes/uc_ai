@@ -13,12 +13,12 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={2}
   of={4}
   minutes={15}
-  promise="each machine has its own memory, and you can prove that one machine cannot read another one's notes without asking the model."
+  promise="you can give each machine a separate memory store and test the store selection."
   scripts={["02_stores.sql"]}
   course="give-an-agent-a-memory"
 />
 
-## The problem
+## Inspect the shared memory store
 
 Lesson 1 called `enable_for_agent` with no scope. That took the default, and the
 default is **one store for the whole agent**:

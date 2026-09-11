@@ -48,8 +48,14 @@ This course uses the service-contract desk from [Build an
 Agent](/products/uc-ai/docs/tutorial/build-an-agent/01-the-scenario/). The
 setup script below creates all of it, so you can start here.
 
-If you already did that course, run the script anyway. It creates what is absent
-and updates what is there, so it changes nothing.
+If you completed Build an Agent, this setup resets its demo data. It drops and
+recreates the six `sc_*` tables and replaces `sc_desk_pkg`. It also updates
+`SC_DESK_PROFILE` version 1, its model configuration, and the four tool
+registrations. It activates version 1 of the profile and agent.
+
+Use a separate demo schema if you need to retain your earlier data or
+configuration. The script sets the profile tool tags to `scdesk`, which removes
+the memory tag added in Build an Agent.
 </Aside>
 
 Run the setup script once:
@@ -169,7 +175,7 @@ Run the page and ask the desk a question about the contract:
 
 > Which invoices on this contract still have an uncredited amount?
 
-## What you get
+## Response without a contract ID
 
 <AiOutput model="gpt-5.6-terra" date="2026-08-25" seconds={3.3}>
 I can't list invoices because this conversation isn't bound to a service contract.

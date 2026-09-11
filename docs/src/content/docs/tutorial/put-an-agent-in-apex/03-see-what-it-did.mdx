@@ -13,12 +13,12 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={3}
   of={6}
   minutes={25}
-  promise="you can tell a stuck turn from a failed one from an empty one, with one query."
+  promise="you can use chat records to diagnose failed, incomplete, or empty responses."
   scripts={["00_setup.sql", "03_faults.sql"]}
   course="put-an-agent-in-apex"
 />
 
-## The problem
+## Diagnose incomplete chat turns
 
 A user says "the chat is broken". The page shows nothing you can act on. There is
 no stack trace, because nothing raised an error where you can see it: the agent

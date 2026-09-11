@@ -1,6 +1,6 @@
 ---
 title: Read the program the model wrote
-description: Pull the generated JavaScript out of the result, then run seven programs through the sandbox with no model and learn what every kind of mistake does.
+description: Inspect the generated JavaScript and run seven sandbox examples to diagnose common program errors.
 sidebar:
   order: 3
 ---
@@ -13,12 +13,12 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={3}
   of={6}
   minutes={20}
-  promise="you can print the JavaScript your model wrote, and you know what happens to every kind of mistake in it."
+  promise="you can inspect generated JavaScript and diagnose common program errors."
   scripts={["03_inspect_program.sql"]}
   course="analyze-data-at-scale"
 />
 
-## The problem
+## Inspect generated calculations
 
 Lesson 2 gave a correct answer through code that you did not write and did not
 see. One day that answer is wrong. The prompt looks fine, the tools look fine, and
