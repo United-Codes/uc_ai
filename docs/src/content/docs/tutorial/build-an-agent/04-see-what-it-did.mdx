@@ -1,6 +1,6 @@
 ---
-title: See what your agent did
-description: Read the trace of a run, find out why an agent called the wrong tool or no tool, and keep one diagnostic query you can paste anywhere.
+title: Read execution logs and diagnose errors
+description: Read execution records and tool messages to diagnose missing tool calls, refusals, and failed runs.
 sidebar:
   order: 4
 ---
@@ -12,31 +12,31 @@ import LessonHeader from "../../../../components/LessonHeader.astro";
   lesson={4}
   of={7}
   minutes={15}
-  promise="you can answer “what did this run do?” with a <code>select</code>."
+  promise="you can read execution logs to diagnose tool-call problems."
 />
 
-## The problem
+## Execution records and messages
 
-Lesson 3 gave the desk three tools and a correct answer. One day the answer is wrong
-or slow. Then you need to know what happened, and the answer text does not tell
-you. It is the **output** of the run, not a record of it.
+The execution log shows which tools ran, what they returned, and whether the run
+completed. Use it to investigate incorrect answers, slow responses, and errors.
+This lesson reads the run from lesson 3.
 
-**Without the trace,** you change the prompt and hope. **With the trace,** you can
-see which tool ran, what it returned, and what the model did next.
-
-## Every run writes its own history
+## Read the execution log
 
 UC AI records two things for each run:
 
-- **`uc_ai_agent_executions`** holds one row for each run. Who ran it, the status,
-  the tokens, and the run context that was in force.
+- **`uc_ai_agent_executions`** holds one row per run, with the caller, status,
+  token counts, and run context.
 - **`uc_ai_agent_messages`** holds one row for each message item, in order. This
   includes a row for each tool call and each tool result.
 
-Both tables are keyed on the session. The block in lesson 3 printed the session id
-of its run after `SESSION:`. Every query below binds it as `:session_id`. If you
-did not keep it, the newest row of `uc_ai_agent_executions` for this agent
-carries it too.
+Both tables include the session ID. Lesson 3 printed it after `SESSION:`.
+In SQLcl, run `variable session_id varchar2(255)`. Then run
+`execute :session_id := 'PASTE_SESSION_ID_HERE'`, with your ID in place of the
+placeholder. The queries below use this bind variable.
+
+If you did not keep the ID, read `session_id` from the latest execution record
+for `SC_DESK` in `uc_ai_agent_executions`.
 
 Read the messages of the lesson 3 run:
 
@@ -63,7 +63,7 @@ SEQ  ROLE         TOOL_NAME           DETAIL
 9    assistant    -                   INV-1003 has **€0** left to credit; its full €200 has alread
 ```
 
-Three facts you can read straight off that list:
+The recorded trace shows:
 
 - The model asked for three tools **in one round** (`seq` 3 to 5), then read all
   three results. A round can hold more than one call.
@@ -73,10 +73,9 @@ Three facts you can read straight off that list:
   execution row.
 - The answer at `seq` 9 came after the results at 6 to 8.
 
-## The diagnostic query
+## Read recent execution details
 
-Save this. It answers "what did the last run of this agent do", and it drops
-straight into an APEX report region:
+Run this query to read the five most recent executions of `SC_DESK`:
 
 ```sql
 select e.id            as execution_id
@@ -94,24 +93,21 @@ select e.id            as execution_id
  fetch first 5 rows only;
 ```
 
-For the lesson 3 run it returns:
+Selected columns from the lesson 3 execution:
 
 ```
 STATUS      CREATED_BY   AUDIENCE   TOOL_CALLS_COUNT   IN     OUT   RUN_CONTEXT
 completed   UC_AI        db                        3   1854   172   {"contract_id":"88"}
 ```
 
-`run_context` is the column that proves which contract the run was bound to. When
-somebody asks "why did the agent see contract 88?", this row is the answer.
+`run_context` records the contract ID supplied by the application.
 
-## Three common faults
+## Diagnose tool-call problems
 
 ### The model called no tool
 
-You ask for a number and get prose with no `tool_call` row anywhere. Check these
-three things, in this order. The first one is the most common cause, and it is
-invisible from your code: through an agent, the tool tag lives in the **model
-configuration of the prompt profile**, not in the package globals.
+If the trace contains no `tool_call` row, inspect the profile configuration,
+tool tags, and descriptions:
 
 1. **The tag did not reach the profile.** Read it back:
 
@@ -132,17 +128,16 @@ configuration of the prompt profile**, not in the package globals.
     where g.tag = 'scdesk';
    ```
 
-3. **The description does not say when to use the tool.** The model reads only the
-   description. "Lists invoices" tells it what the tool is. "Use this before you
-   raise a credit note" tells it when to call it. Weaker models need the second
-   kind.
+3. **The description does not say when to use the tool.** The description must explain
+   both the returned data and when to request it. For example: "List invoice
+   amounts and existing credits. Use this before you raise a credit note."
 
 ### The tool ran and the model ignored it
 
-The trace looks healthy in this case. There is a `tool_call`, a `tool_result`,
-and then an answer that does not use the result.
+The trace contains a `tool_call` and a `tool_result`, but the answer does not
+use the returned data.
 
-Read `tool_output` before you blame the model:
+Read `tool_output` to see what the handler returned:
 
 ```sql
 select seq, tool_name, substr(tool_output, 1, 200) as tool_output
@@ -152,16 +147,14 @@ select seq, tool_name, substr(tool_output, 1, 200) as tool_output
  order by seq;
 ```
 
-The usual cause is a handler that returns a refusal instead of data. The desk's
-handlers return a `status` of `refused` and a `reason` when they decline, so the
-cause is in that column. The model then reports what it was told, and the answer is
-about your data access, not about your data.
+One possible cause is a handler refusal. The demo handlers return
+`"status":"refused"` and a `reason` when they cannot process a request. The model
+can report that refusal instead of the requested invoice data.
 
 ### The run stopped early
 
-`g_max_tool_calls` bounds how far the tool loop goes. Read the true count from
-`tool_calls_count` and from the count of `tool_call` rows. Do not assume the
-configured number:
+`g_max_tool_calls` sets a stopping threshold for the tool loop. To read the
+actual number of requested calls, run this query:
 
 ```sql
 select count(*) as tool_calls
@@ -175,13 +168,14 @@ UC AI tests the limit before each new round of tool calls, and one round can hol
 several calls. So the number of calls that actually run can pass the configured
 number by the size of the last round. A recorded run with `g_max_tool_calls` set to
 `1` executed **three** calls, because the model asked for three at once. Treat the
-value as a bound on rounds, and read the trace for the true count.
+value as a call threshold checked between rounds. Read the trace for the actual count.
 </Aside>
 
 ## What a failed run records
 
-A run that raises does **not** record tokens or tool calls. The framework has no
-result object to read them from, so both stay `0`:
+On a failed execution record, the token and tool-call counts remain `0`.
+The framework has no result object from which to read the totals.
+Run this query to inspect failed execution records:
 
 ```sql
 select status, error_message, total_input_tokens, tool_calls_count
@@ -192,25 +186,22 @@ select status, error_message, total_input_tokens, tool_calls_count
 ```
 
 So `tool_calls_count = 0` on a failed row does not mean "no tool ran". Count the
-`tool_call` rows in `uc_ai_agent_messages` instead. On a **completed** row the
-column is true.
+`tool_call` rows in `uc_ai_agent_messages` instead. On a **completed** row, the
+column records the tool-call count.
 
 ## Verification
 
-Run the diagnostic query above against your own last run. Two columns must be
-right:
+Run the recent-executions query for your lesson 3 run. Inspect these columns:
 
-- `run_context` holds `{"contract_id":"88"}`. If it is empty, the run was not
-  bound, and every tool refused.
+- `run_context` holds `{"contract_id":"88"}`. A missing contract ID causes the
+  demo handlers to refuse requests.
 - `tool_calls_count` matches the number of `tool_call` rows in the trace. The
   recorded run has `3` in both places. Your model can ask for two or three.
 
 ## Key takeaways
 
-- The answer is the output of a run. The trace is the record of it. Debug from the
-  trace.
-- `tool_output` is the first column to read when a tool ran and the answer ignored
-  it. A refusal from your handler reads like a failure of the model.
+- Use execution records and messages to diagnose a run.
+- Read `tool_output` to distinguish a handler refusal from returned invoice data.
 - `select seq, role, tool_name, tool_input from uc_ai_agent_messages where session_id = :s order by seq;`
 
 **Full reference:** [Conversation message
@@ -218,7 +209,7 @@ log](/products/uc-ai/docs/guides/multi-agent-systems/#conversation-message-log) 
 every column and the attribution rules for multi-agent patterns.
 
 <LinkCard
-  title="Next lesson: Tools that write, rules in the database"
+  title="Next lesson: Add a tool that creates credit notes"
   description="Let the desk raise a credit note, and make the database decide whether it is allowed."
   href="/products/uc-ai/docs/tutorial/build-an-agent/05-tools-that-write/"
 />

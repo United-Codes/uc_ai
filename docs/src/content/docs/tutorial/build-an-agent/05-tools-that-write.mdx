@@ -1,5 +1,5 @@
 ---
-title: Tools that write, rules in the database
+title: Add a tool that creates credit notes
 description: Let the desk raise a credit note, keep the four rules in PL/SQL, and return a refusal the model can explain to the engineer.
 sidebar:
   order: 5
@@ -13,38 +13,36 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={5}
   of={7}
   minutes={15}
-  promise="the desk can raise a credit note, and the database refuses the cases it must refuse."
+  promise="you can add a credit-note tool that checks business rules before inserting a row."
   scripts={["05_tool_write.sql"]}
 />
 
-## The problem
+## Credit-note validation
 
-A tool that reads is safe to get wrong. A tool that writes is not. The desk is
-about to insert a row that means money, so one question decides the design of this
-lesson:
+The credit-note tool changes invoice data. Its PL/SQL handler checks the
+contract, coverage, and amount before inserting a row. The model requests a
+credit note and receives either a creation result or a refusal.
 
-**Who decides whether a credit note is allowed?**
+Run `@05_tool_write.sql` once. It registers the tool, tests the rules directly,
+and sends three requests through the agent. The first request creates and commits
+a credit for `INV-1001`. The following sections explain the script.
 
-If the answer is "the prompt", you have written your business rules in English, in a
-place no test can reach, and a customer can argue with them. If the answer is "the
-database", the model can ask for anything and the answer is still correct.
+If you repeat the script, `INV-1001` is already credited. Its first test and
+agent response will differ. Keep this state for lesson 6.
 
-**Without the rule in PL/SQL,** a good prompt is your only control. **With the rule
-in PL/SQL,** the model asks and the database decides.
-
-## The four conditions
+## Check the credit-note rules
 
 A credit note is created only when all four hold:
 
 1. The invoice belongs to the contract bound to this run.
 2. The service call falls inside the coverage window of the contract.
-3. The coverage level entitles the amount. `GOLD` covers parts and labour.
-   `SILVER` covers labour only.
+3. The coverage level entitles the amount. `GOLD` covers parts and labor.
+   `SILVER` covers labor only.
 4. The amount does not exceed what is still uncredited on that invoice.
 
-That list is the specification. It lives in `sc_desk_pkg.raise_credit_note`. The
-handler reads the contract from the run context first, then the two values the
-model chose, and then each condition is a few lines of PL/SQL:
+`sc_desk_pkg.raise_credit_note` implements these conditions. The following
+excerpt shows the contract and coverage checks. The package also checks the
+coverage level and remaining amount.
 
 ```sql
 -- The contract comes from the run context: _ctx.contract_id, never an argument.
@@ -83,13 +81,11 @@ Condition 1 compares a value the model chose, the invoice, against a value it
 could not choose, the contract. That comparison is what makes the run context a
 security boundary on a write.
 
-## A refusal is a result, not an error
+## Return a business refusal
 
-Those branches do not raise.
-
-An exception stops the run, and the engineer sees a stack trace. A returned
-sentence reaches the model, which reads it and explains it. So each refusal returns
-JSON with two fields for two readers:
+The handler returns a business refusal as JSON so the model can explain the
+reason. Unexpected errors can still raise exceptions. The refusal contains
+three fields:
 
 ```json
 {
@@ -99,7 +95,8 @@ JSON with two fields for two readers:
 }
 ```
 
-- `message` is for the model, and through it for the engineer.
+- `status` identifies the result as a refusal.
+- `message` explains the refusal to the model and the engineer.
 - `reason` is for your code and your tests. Assert on `reason`, never on `message`.
 
 `05_tool_write.sql` registers the tool. It declares three parameters, and no
@@ -127,11 +124,11 @@ l_tool_id := uc_ai_tools_api.merge_tool_from_schema(
 );
 ```
 
-## Every branch, with no model
+## Test the credit-note rules
 
 The script then calls the handler directly, eight times, with a `_ctx` it builds
-itself. No model is involved and no token is spent, so the result cannot vary
-between runs:
+itself. These tests make no provider calls. With the original demo data, they
+return these statuses and reasons:
 
 ```
 gold, inside window, full amount       -> created  CN-9042
@@ -144,19 +141,17 @@ silver contract, labour only           -> created  CN-9043
 no contract bound to the run           -> refused  NO_CONTRACT
 ```
 
-`WRONG_CONTRACT` is the row to read twice. The check asked to credit `INV-2001`,
-which belongs to contract 99, while `_ctx` said 88. The run context of lesson 3
-does the same work on a **write**.
+The `WRONG_CONTRACT` result shows that the handler rejected `INV-2001` from
+contract 99 when the run context specified contract 88.
 
-The script rolls back the two created rows, so the table still holds the one
-credit note the setup script seeded. The numbers differ on your database. A
-sequence does not roll back, so every attempt consumes a number.
+The direct tests roll back their inserts before the agent requests run.
+The existing credit notes remain unchanged. Generated credit numbers can differ
+because sequence values are not restored by a rollback.
 
 ## Record who asked
 
-A credit note needs a name on it. The engineer travels the same way the contract
-does, in the run context, so the run now carries two values and the model chooses
-neither:
+The application supplies the engineer ID in the run context alongside the
+contract ID. In an application, obtain this value from the authenticated user:
 
 ```sql
 p_run_context => json_object_t('{"contract_id":"88","engineer":"petra.k"}')
@@ -178,12 +173,12 @@ values (l_invoice_id, l_contract_id, l_credit_no, l_amount
 Do not read `APEX$SESSION` for this: inside a run it holds a session UC AI made
 for itself, not the person who asked. Lesson 7 comes back to that column.
 
-## Run it
+## Create a credit note through the agent
 
-Three runs, each in a new session. The first is allowed. The second asks for an
-invoice outside the coverage window. The third asks the model to ignore its
-instructions. The block commits after the first run, because the handler does
-not commit, and the section after the verification says why.
+The script runs the following block. Each request starts a new session. The
+first requests an allowed credit, and the other two request an uncovered invoice.
+The caller commits after the first request.
+[Transaction handling](#commit-or-roll-back-the-changes) is explained later in this lesson.
 
 ```sql
 declare
@@ -233,14 +228,10 @@ Credit note refused: INV-1002 is outside the contract coverage window, so it is
 not covered.
 </AiOutput>
 
-In run 2 the model asked for a legal-looking credit note, the database refused,
-and the model explained the reason in the engineer's language. No exception and no
-stack trace.
-
-Run 3 ends the same way. The model was free to call `SC_RAISE_CREDIT_NOTE` with
-any arguments it liked, and it did. The handler still read the contract from
-`_ctx`, still checked the coverage window, and still returned `OUT_OF_WINDOW`. The
-boundary is in the PL/SQL, so no wording moves it.
+In the recorded runs, both requests for `INV-1002` reached the handler and
+returned `OUT_OF_WINDOW`. The instruction to ignore the prompt did not change
+the coverage check. Your model can also decline without calling the tool.
+The direct handler tests exercise the rule in either case.
 
 The other case is text the engineer did **not** write: a supplier email, an
 uploaded document, a ticket body that reaches the model through a tool result.
@@ -251,7 +242,7 @@ payment.
 
 ## Verification
 
-The row, and who is on it:
+Run this query to read the credit notes and their creator IDs:
 
 ```sql
 select credit_no, amount, created_by from sc_credit_notes order by id;
@@ -267,8 +258,9 @@ CN-9001        200   UC_AI
 script seeded, so it carries the database user. If your new row says
 `UC_AI_AGENT_EXEC`, your handler is reading `APEX$SESSION`.
 
-Run 3 left no row, and the trace of its session shows what it did ask for. Bind
-the session id the block printed for run 3:
+Run 3 must leave no new credit note. Assign its printed session ID to
+`:session_id` as in lesson 4, then run this query. It shows whether the model
+requested the write tool:
 
 ```sql
 select seq, role, tool_name, substr(coalesce(tool_input, tool_output), 1, 70) as detail
@@ -284,9 +276,11 @@ SEQ  ROLE         TOOL_NAME              DETAIL
 9    tool_result  SC_RAISE_CREDIT_NOTE   {"status":"refused","reason":"OUT_OF_WINDOW","message":"The ...
 ```
 
-The model did ask for the full amount on `INV-1002`. The database said no.
+This recorded trace contains a request for the full amount and an
+`OUT_OF_WINDOW` refusal. If your model declines without calling the tool, the
+query returns no rows.
 
-## The transaction is yours
+## Commit or roll back the changes
 
 The handler does not commit, and that has two consequences:
 
@@ -294,11 +288,11 @@ The handler does not commit, and that has two consequences:
   application decides when it becomes permanent, and it can roll the whole run back.
 - If the run fails **after** the insert, because the next provider call times out
   or a later tool raises, the insert is still in your transaction. Roll back, or
-  you keep a credit note that the engineer never saw and the model never
-  confirmed.
+  the transaction retains a credit note even though the run did not return
+  a final answer.
 
-A handler that commits by itself removes that choice and creates the orphan instead
-of preventing it. Leave the commit to the caller, and make the caller decide:
+Keep transaction handling in the caller. This fragment shows the commit and
+rollback structure around an agent call:
 
 ```sql
 begin
@@ -313,12 +307,11 @@ end;
 
 ## Key takeaways
 
-- Put the rule in PL/SQL, not in the prompt. Then the model asks, the database
-  decides, and no wording changes the answer.
+- Check the business rules in the handler before inserting a credit note.
 - Return a refusal as data, with a `message` for the model and a `reason` for your
-  tests. Never raise for a business refusal.
+  tests.
 - `p_run_context => json_object_t('{"contract_id":"88","engineer":"petra.k"}')`
-  binds the write to the contract, and the engineer signs it.
+  supplies the contract ID and the creator ID recorded on the credit note.
 
 **Full reference:** [Write data and
 parameters](/products/uc-ai/docs/guides/tools/#examples) covers handler patterns and

@@ -1,6 +1,6 @@
 ---
-title: The scenario, and your first answer
-description: Set up the demo schema, make your first call to a model from PL/SQL, and see why a prompt alone cannot run a service desk.
+title: Set up the demo and call a model
+description: Create the demo schema and call a model from PL/SQL with invoice data in the prompt.
 sidebar:
   order: 1
 ---
@@ -13,8 +13,8 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={1}
   of={7}
   minutes={10}
-  promise="you can call a model from PL/SQL, and you know why rows pasted into a prompt give a wrong number."
-  scripts={["00_setup.sql", "00_precheck.sql"]}
+  promise="you can call a model from PL/SQL with invoice data in the prompt."
+  scripts={["00_setup.sql", "sc_desk_pkg.pks", "sc_desk_pkg.pkb", "00_precheck.sql"]}
 />
 
 ## What you build in this course
@@ -26,14 +26,14 @@ A support engineer opens a contract and asks the agent about it. The agent reads
 the contract, its service calls, and its invoices. When the engineer asks for a
 credit note, the **database** decides whether the contract allows it.
 
-Four words from this domain, because the lessons use them:
+The examples use these terms:
 
 - A **service call** is one visit of a technician to a machine under contract.
   Each call produces one invoice.
 - A **credit note** cancels part of an invoice. It is money the customer does not
   pay.
-- A contract has a **coverage level**. `GOLD` covers parts and labour. `SILVER`
-  covers labour only.
+- A contract has a **coverage level**. `GOLD` covers parts and labor. `SILVER`
+  covers labor only.
 - A contract has a **coverage window**: the dates between which it covers service
   calls. A call outside the window is not covered.
 
@@ -42,15 +42,28 @@ Four words from this domain, because the lessons use them:
 You need a UC AI installation that can reach OpenAI. The [installation
 guide](/products/uc-ai/docs/guides/installation/) covers the API key, and the
 [network setup guide](/products/uc-ai/docs/guides/network-setup/) covers the
-network grants a DBA has to give. The precheck below tests both in one call.
+network grants a DBA must give. The precheck below tests the connection and API key.
+
+Download the files from
+[examples/build-an-agent](https://github.com/United-Codes/uc_ai/tree/main/examples/build-an-agent)
+into one local directory. Open SQLcl in that directory and connect to your demo
+schema. Use the same schema for lessons 1–6.
+
+Each lesson states which scripts to run. Code labeled as an excerpt explains part
+of a script. Run additional blocks only where the page asks you to. Recorded model
+answers can differ in wording, tool calls, and token counts.
 
 <Steps>
 
-1. Run `00_setup.sql`. It creates six tables and fills them with data. You can run
-   it more than one time, because it deletes the objects of an earlier run first.
+1. `00_setup.sql` deletes any existing demo tables and their data.
+   Run `@00_setup.sql` in SQLcl to create and populate the six demo tables.
 
-2. Run `00_precheck.sql`. It checks the three things every lesson needs, and it
-   names the fix for each failure.
+2. Run `@sc_desk_pkg.pks`. Then run `@sc_desk_pkg.pkb`. These files compile the
+   tool handlers used in later lessons. Use `show errors` after each file to
+   read any compilation errors.
+
+3. Run `@00_precheck.sql`. It tests the UC AI installation, provider connection,
+   and demo tables. It prints a suggested fix for each failure.
 
 </Steps>
 
@@ -63,30 +76,31 @@ The precheck prints this when your database is ready:
 3. The demo schema is in place (6 tables).
 ```
 
-If step 2 failed, correct that before you continue. Every lesson calls a model.
+If compilation or the precheck fails, correct the reported error before you continue.
 
-Three facts about the runs you are about to make:
+Provider configuration:
 
-- **Contract data leaves your network.** Every lesson sends part of your prompt to
+- **Contract data leaves your network.** The example provider calls send data to
   OpenAI over HTTPS. If your data cannot leave your network, run
   [Ollama](/products/uc-ai/docs/providers/ollama/) on a host you own and change
-  the two constants. The rest of the course is the same.
-- **The whole course costs well below one dollar** at current prices.
-- **The recorded output comes from `gpt-5.6-terra`.** A smaller model works, but it
-  needs better tool descriptions when you register the tools.
+  the provider and model values in the examples and scripts. Select a model that
+  supports tool calls for lessons 3–7.
+- **Provider calls incur charges.** Usage depends on the model, the number of tool
+  calls, and how often you repeat the examples.
+- **The recorded output comes from `gpt-5.6-terra`.** Other models can produce
+  different results. Use the verification sections to assess their answers.
 
 <Aside type="tip" title="Remove the demo schema">
 `00_teardown.sql` deletes the six tables and every row this course registers in
 UC AI. Run it when you are finished.
 </Aside>
 
-## Your first answer
+## Call the model with invoice data
 
-`uc_ai.generate_text` is the smallest thing UC AI does. Give it a prompt, a
-provider, and a model. It returns the answer of the model.
+`uc_ai.generate_text` sends a prompt to a provider and returns the model response.
 
-The model knows nothing about your database. The first idea is to put the rows
-into the prompt:
+The model has no database connection. Run this block to include invoice numbers
+and totals in the prompt:
 
 ```sql
 declare
@@ -114,16 +128,16 @@ end;
 /
 ```
 
-The call works:
+Recorded response:
 
 <AiOutput model="gpt-5.6-terra" date="2026-08-24">
 There are 3 invoices on this contract.
 </AiOutput>
 
-## A question the pasted rows cannot answer
+## Ask about remaining credit
 
-Now ask a question the pasted rows do not answer. The rows hold an invoice number
-and a total. They do not hold how much of each invoice is already credited:
+Replace the question in `p_user_prompt` with the following text, then run the
+block again. Keep the query unchanged:
 
 > **Q:** How much can I still credit on INV-1003?
 
@@ -140,23 +154,21 @@ This approach has three limits:
 - You had to choose which rows to paste before the engineer asked.
 - The pasted rows have invoice numbers and totals only. Credits, coverage
   windows, service calls, and assets are missing.
-- A wrong number here becomes a second credit note on an invoice that is already
-  credited in full.
+- Acting on the incorrect amount can produce a duplicate credit unless the
+  application checks the remaining amount.
 
-More pasted rows do not fix this. A real contract joins six tables, and a prompt
-cannot hold all of them. The model must ask the database instead. The next
-lessons give it tools that query those tables.
+Credit data supplies the missing information for this question. Other questions can
+need different data from the six demo tables. The next lessons add tools so the
+model can request data during a run.
 
-<Aside type="note" title="The model can also refuse">
+<Aside type="note" title="Responses can vary">
 Sometimes the same question gets "the remaining creditable amount cannot be
-determined" instead. Both answers prove the same point: the model cannot know.
-Never build on an answer the model had no data for.
+determined" instead. The supplied rows do not contain the remaining credit amount.
 </Aside>
 
 ## Verification
 
-Run this to see the four invoices, and what the credit-note rule must decide for
-each one. Lesson 5 makes the database enforce this column:
+Run this query to compare each invoice total with its existing credits:
 
 ```sql
 select i.invoice_no
@@ -180,30 +192,28 @@ INV-1003     GOLD                       200        200
 INV-2001     SILVER                     850          0
 ```
 
-`INV-1003` has 200 of 200 credited. So the answer the model gave above was wrong
-by the full amount.
+`INV-1003` has 200 of 200 credited. Its remaining credit amount is 0.
 
-<Aside type="note" title="This course trusts every row it reads">
-Every table in this tutorial holds data your own company wrote. When a model reads
-a row that an outsider wrote, such as a supplier email, an uploaded file, or a
-portal field, the rules change. That is the subject of [Secure an
-Agent](/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/).
+<Aside type="note" title="Demo data and external content">
+This tutorial uses fixed demo data. External content, such as supplier emails
+or uploaded files, can contain instructions that redirect the model.
+[Secure an Agent](/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/)
+explains how to handle that content.
 </Aside>
 
 ## Key takeaways
 
-- A model that reads your data from the prompt can answer only the question you
-  prepared for. Every other question needs data you did not paste.
+- The prompt must include the data needed to answer the question.
 - Incomplete rows can return a plausible wrong number. The remaining credit on
   INV-1003 is an example.
-- `uc_ai.generate_text` needs four things: `p_user_prompt`, `p_system_prompt`,
+- This example passes four parameters to `uc_ai.generate_text`: `p_user_prompt`, `p_system_prompt`,
   `p_provider`, `p_model`.
 
 **Full reference:** [generate_text](/products/uc-ai/docs/api/generate_text/) has
-every parameter and the whole result structure.
+the parameters and result structure.
 
 <LinkCard
-  title="Next lesson: From a prompt in your code to an agent"
-  description="Move the prompt out of your PL/SQL into a versioned prompt profile, then give it a name your application can call."
+  title="Next lesson: Create a prompt profile and agent"
+  description="Store the prompt in a profile and create an agent that uses it."
   href="/products/uc-ai/docs/tutorial/build-an-agent/02-profile-and-agent/"
 />

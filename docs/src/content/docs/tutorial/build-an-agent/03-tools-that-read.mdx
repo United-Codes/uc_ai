@@ -1,6 +1,6 @@
 ---
-title: Tools that read, bound to one contract
-description: Give the desk three tools that read your tables, and make sure that it can read one contract only, whatever the model asks for.
+title: Add tools that read contract data
+description: Register three read tools and filter their queries with the contract ID supplied by the application.
 sidebar:
   order: 3
 ---
@@ -13,27 +13,26 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={3}
   of={7}
   minutes={15}
-  promise="the desk answers from your tables, and it cannot read a contract other than the one you bound the run to."
+  promise="you can add read tools that filter their results by the contract ID in the run context."
   scripts={["03_tools_read.sql"]}
 />
 
-## The problem
+## Tool calls and contract access
 
-The desk of lesson 2 has a name and a version, and it still says "I can't access
-the contract records". It has no way to reach your tables.
+The agent from lesson 2 needs tools to retrieve contract data.
 
 A **tool** is a PL/SQL function that a model can ask you to run. You register it
 one time, with three things: a code, a description, and a JSON schema that names
 the arguments it takes. UC AI then offers it to the model on every run of that
 agent.
 
-One run then works like this. The model reads the descriptions, decides that it
+During a run, the model reads the descriptions, decides that it
 needs `SC_LIST_INVOICES`, and returns the arguments for it instead of an answer.
 UC AI calls your function with those arguments as JSON, sends what the function
 returned back to the model, and the model carries on. Your function is ordinary
 PL/SQL, and it runs in your schema with your privileges.
 
-Two facts follow, and the rest of this lesson is about the second one:
+The tool interface separates two responsibilities:
 
 - The model never reads your tables. It asks your function, and your function
   reads your tables.
@@ -42,15 +41,19 @@ Two facts follow, and the rest of this lesson is about the second one:
 If one of those arguments is the contract, then the model chooses the contract. An
 engineer on contract 88 must never get an answer about contract 99.
 
-**Without the run context,** you have to trust the model to name the right
-contract. **With the run context,** the model cannot name a contract at all.
+The application supplies the contract ID through the run context. The handler
+uses that ID to filter its query and ignores a model-supplied contract ID.
+The application must first establish that the caller can access the selected
+contract.
 
 ## Register the three read tools
 
-`03_tools_read.sql` registers `SC_GET_CONTRACT`, `SC_LIST_CALLS` and
-`SC_LIST_INVOICES`. Each one carries the tag `scdesk`. A tag groups tools, and
-the agent selects its tools by tag later in this lesson. This is one of the
-three:
+Run `@03_tools_read.sql`. It registers three tools, updates the profile, and
+runs the agent. Keep the value printed after `SESSION:` for lesson 4.
+
+The script registers `SC_GET_CONTRACT`, `SC_LIST_CALLS`, and `SC_LIST_INVOICES`.
+Each tool has the tag `scdesk`, which the profile uses to select tools.
+The following registration is an excerpt from the script:
 
 ```sql
 declare
@@ -76,18 +79,18 @@ end;
 ```
 
 There is no `contract_id` in that schema, and there is none in the other two. The
-model cannot ask for a contract, because the arguments have nowhere to put one.
+model has no declared contract parameter. The handler enforces the restriction
+by reading the contract ID from the run context.
 
-## The contract comes from the run context
+## Read the contract ID from the run context
 
-The contract travels a different way. When your application starts the run, it
-passes a **run context**: a small JSON object with the values this run is bound
-to, here `{"contract_id":"88"}`. UC AI adds it to the arguments of every tool in
-that run, under the reserved key `_ctx`, **after** the model produced them. No
-model sees that key, and no model can set it.
+The application passes a **run context** when it starts the run. This JSON
+object contains application-supplied values, here `{"contract_id":"88"}`. UC AI
+adds it to the tool arguments under the reserved key `_ctx` after the model
+returns those arguments. The handler uses this application-supplied context.
 
-The handler reads the contract from `_ctx`, never from the model. The whole tool,
-shortened to its shape:
+The handler reads the contract from `_ctx`, never from the model. This excerpt shows
+the query structure. The package compiled in lesson 1 contains the full handler:
 
 ```sql
 function list_invoices(p_arguments in clob) return clob
@@ -115,17 +118,16 @@ begin
 end list_invoices;
 ```
 
-`sc_desk_pkg.list_invoices` returns six more columns than that, and it refuses
-with a reason when the run carries no contract at all. The shape is this one: read
-`_ctx`, filter on it, build the JSON in SQL, return it.
+The full `sc_desk_pkg.list_invoices` handler also returns credit amounts and
+coverage information. It returns a refusal when the run context has no contract ID.
 
 ## Give the tools to the agent
 
 Tools reach the model through the model configuration of the prompt profile. The
 three keys below are named after the package globals they override, but through
 an agent they live on the profile row, not in the package. The tag `scdesk`
-selects exactly the three tools above, so the desk never sees another tool in
-your schema.
+selects the tools with that tag. At this point in the tutorial, those are the
+three read tools.
 
 ```sql
 declare
@@ -147,11 +149,11 @@ end;
 This changes **version 1**, the version the agent already resolves to. It does not
 make a version 2, so the agent needs no change.
 
-## Run it
+## Run the agent with a contract ID
 
-The same question as lesson 1, with the run bound to contract 88. The block makes
-its own session id and prints it. Write that id down: lesson 4 reads the trace of
-this run by it.
+The script runs the following block with contract 88 in the run context.
+It asks about both remaining credit and coverage. You can run this block again
+to repeat the request.
 
 ```sql
 declare
@@ -179,17 +181,14 @@ INV-1003 has **€0** left to credit; its full €200 has already been credited.
 The related call (31 Aug 2026) is **inside** the coverage window.
 </AiOutput>
 
-## What changed
+In this recorded run, the model called `SC_GET_CONTRACT`, `SC_LIST_INVOICES`,
+and `SC_LIST_CALLS` before answering. The tool results included the existing
+credit, so the model reported the correct remaining amount. Lesson 4 shows the trace.
 
-Lesson 1 answered "up to 200" to the same question, from rows pasted into the
-prompt. The number is right now because the model called a tool.
+## Check the declared tool parameters
 
-The desk called three tools before it answered, and no call named a contract. The
-recorded run asked for `SC_GET_CONTRACT`, `SC_LIST_INVOICES` and `SC_LIST_CALLS`
-in one round, then read the three results. Lesson 4 reads those calls back out of
-the database, with the arguments the model sent and the results they returned.
-
-## Verification, part 1: no tool declares a contract
+The script displays the declared parameters. You can repeat this query to
+inspect them:
 
 ```sql
 select t.code
@@ -209,16 +208,15 @@ SC_LIST_CALLS        max_rows
 SC_LIST_INVOICES     max_rows
 ```
 
-No row names a contract, and none can. `_ctx` is a reserved name: a tool that
-declares it is refused at registration with `ORA-20503`. That holds for a nested
-property, and it ignores upper and lower case. If you try it, run `rollback`
-afterwards, because the tool row is written before the parameters are checked.
+None of these tools declares a contract parameter. UC AI also reserves `_ctx`
+and rejects tool schemas that declare it, including nested properties and case
+variations. This returns `ORA-20503`. If you try that registration, run `rollback`
+to undo the tool row created before parameter validation.
 
-## Verification, part 2: prove the isolation without a model
+## Test the contract filter
 
-The answer above proves the model *did not* ask for another contract. It does not
-prove it *could not*. So call the handler directly, and lie to it: put contract 99
-in the arguments, where a model would put it, and bind the run to 88.
+Run this block to test the handler directly. It supplies contract 99 as a tool
+argument and contract 88 in the run context. The handler must use contract 88.
 
 ```sql
 declare
@@ -235,24 +233,20 @@ end;
 ```
 
 ```
-arguments said contract_id=99, _ctx said 88
 invoices returned: 3
-{"invoices":[{"invoice_no":"INV-1003", ... "credited_amount":200, ...
 ```
 
 Three invoices, and all three belong to contract 88. Contract 99 has one invoice,
 `INV-2001`, and it does not appear. The forged argument was ignored, because the
 handler never reads it.
 
-Keep this check. A model that declines to ask proves nothing about what the
-handler returns when something does ask.
+This check exercises the handler without depending on the model to request
+another contract.
 
 ## Key takeaways
 
-- Leave the scoped value out of the tool schema. Then the model cannot name it, and
-  there is one place the value can come from.
-- Prove isolation by calling the handler with a forged value. A model that chooses
-  not to ask has proved nothing.
+- Read the contract ID from the application-supplied run context in each handler.
+- Test the handler directly with a conflicting contract ID in the tool arguments.
 - `p_run_context => json_object_t('{"contract_id":"88"}')` reaches every tool of the
   run under `uc_ai.c_run_context_key`.
 - `_ctx` decides what a tool answers, not which tools the agent has. Give the desk
@@ -261,12 +255,12 @@ handler returns when something does ask.
 **Full reference:** [Tools and function
 calling](/products/uc-ai/docs/guides/tools/) covers registration, the JSON schema
 and handler patterns, and the [Quickstart](/products/uc-ai/docs/guides/quickstart/)
-registers a small tool from nothing in five minutes. [The run
+provides a shorter registration example. [The run
 context](/products/uc-ai/docs/guides/tools/#the-run-context) covers `_ctx`, the
 reserved name, and where else the run context applies.
 
 <LinkCard
-  title="Next lesson: See what your agent did"
+  title="Next lesson: Read execution logs and diagnose errors"
   description="Read the trace of this run, and learn how to find out why an agent called the wrong tool or no tool at all."
   href="/products/uc-ai/docs/tutorial/build-an-agent/04-see-what-it-did/"
 />

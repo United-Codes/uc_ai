@@ -1,5 +1,5 @@
 ---
-title: From a prompt in your code to an agent
+title: Create a prompt profile and agent
 description: Move the prompt into a versioned prompt profile, create the agent that runs it, and learn why both must be activated.
 sidebar:
   order: 2
@@ -13,21 +13,19 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={2}
   of={7}
   minutes={15}
-  promise="your application calls one name, <code>SC_DESK</code>, instead of holding a prompt."
+  promise="you can create and run the <code>SC_DESK</code> agent."
   scripts={["02_profile_agent.sql"]}
 />
 
-## The problem with the prompt in lesson 1
+## Store the prompt in a profile
 
-The call in [lesson 1](/products/uc-ai/docs/tutorial/build-an-agent/01-the-scenario/) works. The
-prompt lives inside one PL/SQL block. So:
+A prompt profile stores the prompt, model, and configuration in a versioned
+database row. The application passes input values to an agent that uses this
+profile. You can update the profile without editing the application code.
 
-- A second page that needs the same desk copies the prompt. Now you have two.
-- A better prompt means a code change, a build, and a release.
-- Nothing records which prompt produced yesterday's answer.
-
-**Without a profile,** the prompt is code. **With a profile,** the prompt is data:
-one row, with a version and a status, that your application calls by name.
+Run `@02_profile_agent.sql` in SQLcl. It creates and activates the profile and
+agent, then displays their status. The next two sections explain the script.
+After those sections, run the block under [Run the agent](#run-the-agent).
 
 ## Create the prompt profile
 
@@ -71,29 +69,26 @@ end;
 The system prompt already tells the desk to read numbers with a tool. It has no
 tools yet. Lesson 3 adds them.
 
-<Aside type="caution" title="Every placeholder needs a value, every time">
+<Aside type="caution" title="Required placeholder values">
   If a template holds `{today}` and a call does not supply `today`, the run
   stops with an error. UC AI does not leave a placeholder unfilled. The
   `p_parameters_schema` above writes down what the profile expects, so the rule
   is visible to the next reader.
 </Aside>
 
-## Wrap the profile in an agent
+## Create the agent
 
-A profile is a prompt. An **agent** is the thing your application calls, and it
-adds three things the profile alone does not have:
+The application calls an **agent**, which selects a prompt profile and records
+the run. The agent provides:
 
-- **One name to call.** The application calls `SC_DESK`. Which profile version it
-  resolves to, and which model that version uses, are rows you change without
-  touching the application.
+- **An agent code.** The application calls `SC_DESK`. You can change its profile
+  version or model through configuration.
 - **A record of every run.** UC AI writes one row for each run and one row for
-  each message of it. Nothing in your code has to do that. The verification below
-  reads the first of those rows, and lesson 4 reads the rest.
-- **The place the rest of the course attaches to.** Tools, memory, and the run
-  context that lesson 3 introduces are configured on the agent and its profile,
-  not on the call.
+  each message. Lesson 4 shows how to read these records.
+- **Tools and memory.** Later lessons configure these on the agent and its
+  profile. The application supplies the contract ID through the run context.
 
-A **profile agent** is the simplest kind. It runs one prompt profile.
+A **profile agent** runs one prompt profile.
 
 ```sql
 declare
@@ -109,7 +104,7 @@ end;
 /
 ```
 
-The profile and the agent are both **drafts** now. Activate both:
+Both creation calls produce drafts. The script activates them with these calls:
 
 ```sql
 begin
@@ -126,14 +121,16 @@ end;
 /
 ```
 
-<Aside type="caution" title="Do not skip the two change_status calls">
+<Aside type="caution" title="Activate both objects">
   `create_prompt_profile` and `create_agent` both make a **draft**. A call that
   does not name a version resolves the latest **active** version. So a draft is
-  invisible. If you miss either call, the next lesson stops with
-  `NO_DATA_FOUND`, and nothing tells you why.
+  unavailable to that call. If either object remains a draft, the agent call can
+  return `NO_DATA_FOUND`.
 </Aside>
 
-## Run it
+## Run the agent
+
+After the setup script completes, run this block:
 
 ```sql
 declare
@@ -158,18 +155,10 @@ end;
   credit amount for INV-1003.
 </AiOutput>
 
-The call names no session, so UC AI generates one, and the run is a conversation
-of one turn. Lesson 6 passes a session id of its own, so that two turns belong to
-the same conversation.
+This call omits the session ID, so UC AI generates one. Lesson 6 reuses a
+session ID to keep two turns in the same conversation.
 
-## What changed
-
-Your application no longer holds a prompt. It calls `SC_DESK` and passes three
-values. You can change the prompt, or release a new version of it, without a code
-change.
-
-The answer does not improve on lesson 1. The desk now has an identity, a version,
-and a name. It still cannot read your database. Lesson 3 corrects that.
+The agent cannot read invoice data yet. Lesson 3 adds the tools that retrieve it.
 
 ## Verification
 
@@ -192,7 +181,8 @@ prompt profile    SC_DESK_PROFILE            1   active
 agent             SC_DESK                    1   active
 ```
 
-UC AI also recorded the run, and nothing in the block above asked it to:
+Run this query to read the latest execution record. In a shared schema, the
+latest record can belong to another agent:
 
 ```sql
 select status, total_input_tokens, total_output_tokens, tool_calls_count
@@ -213,12 +203,11 @@ time. Lesson 4 reads both tables and shows what the desk did on each run.
 
 ## Key takeaways
 
-- A prompt profile makes the prompt data instead of code. Your application calls
-  the agent by name and passes values for the placeholders.
+- A prompt profile stores reusable prompt templates and model configuration.
 - `create_prompt_profile` and `create_agent` both make a draft. Activate both, or
-  nothing resolves.
-- `uc_ai_agents_api.execute_agent(p_agent_code => 'SC_DESK', ...)` is now the only
-  entry point your application needs.
+  the application cannot run the agent by name.
+- `uc_ai_agents_api.execute_agent(p_agent_code => 'SC_DESK', ...)` runs
+  the agent from your application.
 
 **Full reference:** [Prompt
 profiles](/products/uc-ai/docs/guides/prompt-profiles/) covers versions, model
@@ -227,7 +216,7 @@ agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/) covers 
 agent side.
 
 <LinkCard
-  title="Next lesson: Tools that read, bound to one contract"
-  description="Give the desk three tools that read your tables, and make sure that it can read one contract only."
+  title="Next lesson: Add tools that read contract data"
+  description="Register read tools and filter their queries with the contract ID from the run context."
   href="/products/uc-ai/docs/tutorial/build-an-agent/03-tools-that-read/"
 />
