@@ -125,14 +125,14 @@ tokens** for the whole course. Lesson 4 is the only lesson that repeats a run.
 
 ## The problem
 
-A first draft gives the agent every tool the job seems to need. Each one is
-obvious on its own, and the set is not.
+The first draft gives the agent tools to read invoices, approve them, update
+bank accounts, and send replies.
 
 A **threat model** is a short, written answer to one question: what can somebody
 outside this company make my agent do?
 
-**Without one,** you build the desk that is convenient. **With one,** you notice
-that one of your five tools takes a bank account number from whoever is talking.
+In this example, one tool accepts a model-supplied bank account number. The
+threat model examines how external input can influence that value.
 
 Here is what the first draft handed the model:
 

@@ -149,7 +149,8 @@ end if;
 The guard is needed, and so is the field it guards on. A delivery note is all
 zeros, and zeros add up perfectly, so the check has to skip it.
 
-The obvious way to write that is `if l_total != 0`, and it is a hole.
+A condition of `if l_total != 0` skips invoices with an incorrectly extracted
+zero total.
 `SUM_MISMATCH` exists for the invoice a model read so wrong that it returned a
 total of 0. That version lets exactly that case pass. Guard on the typed field,
 which the model cannot make disappear.
@@ -200,8 +201,7 @@ check finds the documents where a person has to decide. It can do that because
 month.
 
 <Aside type="caution" title="A date type in the schema">
-The obvious idea is to stop treating the date as a string and let the schema do the
-work:
+You can add a date format to the string field in the schema:
 
 ```json
 "invoice_date": { "type": "string", "format": "date" }
@@ -227,8 +227,8 @@ the model tell you what it saw as well as what it decided.
 
 ## Check the invoice against the order you placed
 
-This is the check no prompt can reach. The purchase order is not printed on the
-invoice in any form the model can test, because the answer is in your database.
+The invoice alone cannot establish whether the purchase order exists. This
+check compares the extracted order number with records in your database.
 
 `halvorsen.pdf` names `PO-4500199003`. Nobody raised it. And `nordwind.pdf` names a
 purchase order that does exist, for 6,300.00 EUR, against an invoice of 6,450.85

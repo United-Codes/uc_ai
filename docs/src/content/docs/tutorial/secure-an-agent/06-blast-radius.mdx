@@ -184,7 +184,7 @@ failed                  0                    0                     0   ORA-20991
 All three counters are `0`, and the run called tools before the veto.
 UC AI has no result object to read them from when a run raises, so
 `tool_calls_count = 0` on a failed row does **not** mean no tool ran. Count the
-`tool_call` rows in `uc_ai_agent_messages` when you need the truth. This is the
+`tool_call` rows in `uc_ai_agent_messages` to inspect the calls. This is the
 same point as [lesson 4 of the first
 course](/products/uc-ai/docs/tutorial/build-an-agent/04-see-what-it-did/).
 </Aside>

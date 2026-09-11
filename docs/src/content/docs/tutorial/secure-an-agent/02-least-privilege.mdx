@@ -37,7 +37,7 @@ there cannot.
 ## Find out which tools a run is offered
 
 Tools reach a model through the model configuration of the prompt profile. The
-tag selects them. This is the check to keep, and it needs no model and no tokens:
+tag selects them. Run this check without a provider call:
 
 ```sql
 declare
@@ -175,13 +175,13 @@ UC AI 26.3 stores the value and reads it nowhere. It records what somebody asked
 for. It is not a permission. The controls that work are the tag set, the `active`
 flag, and the [execution hook](/products/uc-ai/docs/guides/execution-hooks/).
 
-Keep the probe rather than this paragraph. If a later release starts to enforce
-the column, your own probe tells you, and this page does not have to.
+Repeat the probe after an upgrade to detect changes in how UC AI enforces
+the column.
 </Aside>
 
 ## Three ways to remove a capability
 
-They are not equal. This is the order to prefer them in:
+The methods differ in which configuration changes can restore access:
 
 | How | What it survives | What it does not survive |
 | --- | --- | --- |
@@ -189,8 +189,8 @@ They are not equal. This is the order to prefer them in:
 | `p_active => 0` | a tag somebody adds later | a merge that passes `p_active => 1` |
 | Leave it out of the tag set | nothing | one word added to `g_tool_tags` |
 
-The third is a configuration. The first is a fact. For a tool that moves money to
-a new bank account, take the fact.
+Delete the bank-account tool registration to make it unavailable across all
+profiles and tag sets.
 
 ```sql
 delete from uc_ai_tools
@@ -325,8 +325,7 @@ refusing. It is **absent**.
 
 Run this query again after lesson 4 and the `TAGS` column has more in it: that
 lesson registers a second tag on each of these three tools so it can select them
-one at a time. The rows you see are always the current truth, which is the reason
-to run the query rather than to remember it.
+one at a time. The query shows the current registrations.
 
 Point the lesson 1 email at `AP_TRIAGE` now and it reports what the supplier
 asked for and changes nothing. The three rows above are the proof.

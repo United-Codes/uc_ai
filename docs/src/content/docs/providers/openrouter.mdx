@@ -40,7 +40,7 @@ To use the web credential in your PL/SQL code, set the package variable `uc_ai_o
 uc_ai_openrouter.g_apex_web_credential := 'OPENROUTER';
 ```
 
-Note: OpenRouter uses the OpenAI-compatible API format, so the `uc_ai_openai` package is used under the hood. Even so, set the credential on the `uc_ai_openrouter` package — it is resolved specifically for the OpenRouter provider.
+OpenRouter uses the OpenAI-compatible API format, which UC AI handles through `uc_ai_openai`. Set the credential on `uc_ai_openrouter`, where UC AI resolves credentials for this provider.
 
 ## Models
 

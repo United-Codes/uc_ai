@@ -7,7 +7,7 @@ sidebar:
 
 import { Steps, Aside } from "@astrojs/starlight/components";
 
-This guide takes you from a new installation to a working AI agent in three steps. Every example is the **simplest version** of its task. The [Tools](/products/uc-ai/docs/guides/tools/) and [Agentic AI](/products/uc-ai/docs/guides/agentic-ai/) guides then show the full picture.
+This guide takes you from a new installation to a working AI agent in three steps. The examples cover text generation and tool calls. The [Tools](/products/uc-ai/docs/guides/tools/) and [Agentic AI](/products/uc-ai/docs/guides/agentic-ai/) guides provide more detail.
 
 <Aside type="note">
 The [Glossary](/products/uc-ai/docs/other/glossary/) explains the terms *token*, *tool*, and *structured output*.
@@ -46,7 +46,7 @@ The examples use OpenAI, but every [provider](/products/uc-ai/docs/guides/provid
 
 2. ### Give the AI a tool
 
-   Alone, the model knows only its training data. A **tool** is a PL/SQL function that the model can call. The model uses a tool to get live information, or to do an action. This step creates the simplest tool: it returns the current date.
+   Alone, the model knows only its training data. A **tool** is a PL/SQL function that the model can call. The model uses a tool to get live information, or to do an action. This step creates a tool that returns the current date.
 
    First, create the function. It takes no input and **returns a `CLOB`**, because the AI communicates in text:
 
@@ -110,13 +110,13 @@ The examples use OpenAI, but every [provider](/products/uc-ai/docs/guides/provid
 
 </Steps>
 
-## What just happened
+## Agent execution
 
 You built a small agent. The model reasoned about your question, chose a tool, and used the output of that tool for its answer. Everything ran in your database. You controlled what the AI can do.
 
 ## Where to go next
 
-- **Build a complete agent** — the [Build an Agent](/products/uc-ai/docs/tutorial/build-an-agent/01-the-scenario/) tutorial takes this loop to a desk that reads your tables, writes a row the database polices, and records every run. Seven lessons, with recorded output.
+- **Build a complete agent** — the [Build an Agent](/products/uc-ai/docs/tutorial/build-an-agent/01-the-scenario/) tutorial takes this loop to an agent that reads your tables, checks business rules before writing a row, and records every run. Seven lessons, with recorded output.
 - **Give it real data** — register tools that query your tables. See the [Tools guide](/products/uc-ai/docs/guides/tools/).
 - **Get structured results** — force JSON output you can insert into columns with the [Structured Output guide](/products/uc-ai/docs/guides/structured_output/).
 - **Reuse prompts** — manage versioned prompt templates with [Prompt Profiles](/products/uc-ai/docs/guides/prompt-profiles/).

@@ -166,8 +166,8 @@ select a.code as agent
 ```
 
 On the schema that recorded this course it returned 28 rows, from four unrelated
-projects, and every one of them said `scoped`. That is the answer you want. Run it
-after every deployment, not once.
+projects, and every one of them said `scoped`. Run the query after each
+deployment to inspect the current registrations.
 
 ## 2. Who can change what a tool does
 
@@ -272,10 +272,9 @@ clerk with a 2,000 limit, an invoice of 5,712, and the database saying no.
 One row is all the course has produced **so far**. The batch at the end of this
 lesson adds more.
 
-In production this is the query to put on a dashboard, and the shape to watch for
-is not the row. **It is the cluster: many refusals in a short time, against one
-vendor, or all carrying the same `reason`.** One refusal is a model reading an
-optimistic email. Twenty against one supplier is that supplier probing you.
+Use this query in a production dashboard to identify repeated refusals for one
+vendor or with the same `reason`. Investigate these patterns; the records alone
+do not establish their cause.
 
 The fifteen refusals in
 [lesson 3](/products/uc-ai/docs/tutorial/secure-an-agent/03-bound-write/) do not

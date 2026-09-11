@@ -190,8 +190,8 @@ ORA-20999: Policy: CC_GET_READINGS is not allowed now.
 ```
 
 This is the one code-mode failure that is **not** handed to the model as data. UC
-AI records the veto and raises it after the sandbox returns. A program can catch
-the rejected promise, and it cannot catch its way past the decision.
+AI records the veto and raises it after the sandbox returns. Catching the rejected
+promise in JavaScript does not prevent UC AI from raising the veto.
 
 ## Check 5: the call budget
 

@@ -108,10 +108,10 @@ select run_context
 session is live. The browser never sends these values, so a user cannot change
 them.
 
-## Prove it, without asking the model
+## Test the contract filter
 
-"Ask for another contract and watch it refuse" proves only that the model
-declined. That is not a control.
+A model refusal does not test whether the handler restricts access to the
+selected contract.
 
 Call the tool handler yourself, twice, with a different contract in `_ctx` each
 time. The tool has no contract parameter, so `_ctx` is the only thing that

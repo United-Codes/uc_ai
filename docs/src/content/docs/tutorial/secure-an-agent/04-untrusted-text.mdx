@@ -1,6 +1,6 @@
 ---
 title: Label the text you cannot trust
-description: Mark untrusted text at the tool boundary, turn a reader with no write tool into an injection detector, and measure honestly what the label is worth.
+description: Label untrusted tool results and compare how the model handles embedded instructions.
 sidebar:
   order: 4
 ---
@@ -13,7 +13,7 @@ import AiOutput from "../../../../components/AiOutput.astro";
   lesson={4}
   of={7}
   minutes={20}
-  promise="untrusted text arrives marked, the desk reports the instructions in it instead of obeying them, and you know what that is worth."
+  promise="you can label untrusted text and test how the agent responds to instructions in it."
   scripts={["04_untrusted_text.sql"]}
   course="secure-an-agent"
 />
@@ -214,7 +214,7 @@ the model believed. Run both measurements on your own model, and publish the
 numbers you get, including numbers that do not flatter the mechanism.
 </Aside>
 
-## Verification: the wrapper is there, and it stops nothing
+## Verification: inspect the untrusted-text wrapper
 
 The wrapper is in the tool result:
 

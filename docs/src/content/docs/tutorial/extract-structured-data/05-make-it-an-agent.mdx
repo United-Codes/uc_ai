@@ -128,9 +128,9 @@ get_object   -> an object
 get_clob len -> -1
 ```
 
-That is the exact opposite of lesson 2. The profile carries the response schema, so
+The profile carries the response schema, so
 `execute_agent` parses the answer for you. `final_message` is a JSON object, and
-`get_clob` gives you nothing:
+`get_clob` returns no value:
 
 ```sql
 -- lesson 2, with generate_text
@@ -360,7 +360,7 @@ With the checks, a cheaper model is a **cost** decision, because you find out wh
 it failed. Without them it is a risk nobody can see.
 </Aside>
 
-## The trace UC AI kept for you
+## Read the execution trace
 
 UC AI records every run: what the agent was sent, what came back, and what it used.
 That record is the **trace**. None of the queries below read a table you created,

@@ -210,7 +210,7 @@ end if;
 The first two are the control. The third is a smoke alarm. It catches a template
 or a vendor name with an account number in it, and the grouped form and lower case
 with it. It does not catch an attacker who writes the account in base64, or spells
-it out in words. Ship it, and never count it as a control.
+it out in words. Use this check as a supplement to the first two controls.
 
 <Aside type="caution" title="An enum is a hint, not a check">
 The `enum` in a tool schema is serialized into the definition sent to the
@@ -354,14 +354,14 @@ context:AP_DESK:vendor_no:V-1001   /memories/vendors/V-1001.txt             283
    `uc_ai_memory.expire_files(p_days => 7, p_store_id => ...)` deletes files that
    nobody touched, and it does not commit.
 
-<Aside type="caution" title="expire_files cannot expire a poison that is working">
+<Aside type="caution" title="Frequently read files do not expire">
 `expire_files` deletes on `greatest(last_accessed_at, updated_at)`, and reading a
 file through the `MEMORY` tool touches `last_accessed_at`. So a poisoned file the
 model keeps reading never ages out, and the file that does age out is the one
 nobody read.
 
-That is the wrong way round for this threat. Schedule it to keep the store small.
-Do not schedule it and then believe the risk has a shelf life.
+Use expiration to limit store size. It does not remove malicious content
+that the agent continues to read.
 </Aside>
 
 Sessions and memory scopes are

@@ -7,7 +7,7 @@ sidebar:
 
 ## What is UC AI?
 
-UC AI is a comprehensive Oracle PL/SQL framework that enables direct integration with AI models (OpenAI GPT, Anthropic Claude, Google Gemini, Ollama) from within your Oracle database. It allows AI models to execute database functions through a structured tool system, bringing AI capabilities directly to where your data lives.
+UC AI is an Oracle PL/SQL framework for calling AI models from your database. Its tool system lets models request database functions.
 
 ## Which Oracle Database versions are supported?
 
@@ -18,6 +18,7 @@ The one exception is [Programmatic Tool Calling (Code Mode)](/products/uc-ai/doc
 ## Which AI providers are supported?
 
 Currently, UC AI supports eight AI providers:
+
 - **OpenAI** (GPT models)
 - **Anthropic** (Claude models)
 - **Google** (Gemini models)
@@ -27,7 +28,7 @@ Currently, UC AI supports eight AI providers:
 - **Mistral** (Mistral Large/Medium/Small, Magistral, Codestral models)
 - **OpenRouter** (Unified access to models from many providers)
 
-The framework is designed to make it easy to switch between providers without changing your code.
+The framework provides a common API for calls to different providers.
 
 ## Do I need to install additional dependencies?
 
@@ -35,7 +36,7 @@ The only dependency is the Logger package, which is included in the project. You
 
 ## Can AI models interact with my database data?
 
-Yes! One of UC AI's key features is function calling (tools). You can register database functions that the AI can call during conversations to look up data, perform calculations, or interact with your database - making your AI assistant truly powerful.
+Yes. You can register database functions as tools that a model can request during a conversation. These functions can retrieve data or perform calculations.
 
 ## How do I get started quickly?
 
@@ -45,13 +46,13 @@ Yes! One of UC AI's key features is function calling (tools). You can register d
 4. Set up your API keys for your chosen AI provider
 5. Start using `uc_ai.generate_text()` in your PL/SQL code
 
-Check out the [Installation Guide](/products/uc-ai/docs/guides/installation/) for detailed steps.
+Read the [Installation Guide](/products/uc-ai/docs/guides/installation/) for detailed steps.
 
 <a id="custom-model-strings"></a>
 
 ## What if UC AI doesn't have a constant for a new model?
 
-AI providers frequently release new models. If UC AI doesn't yet offer a constant for a model, you can simply pass the model name as a string directly to the `p_model` parameter:
+If UC AI has no constant for a model, pass its name as a string to `p_model`:
 
 ```sql
 declare
@@ -71,7 +72,7 @@ The `p_model` parameter accepts any `varchar2` value, so you are not limited to 
 
 ## Why doesn't UC AI have a table of providers and models instead of constants?
 
-This is a deliberate design decision. UC AI provides package constants for common models as a convenience, but intentionally does not maintain a configuration table of providers and models. Here's why:
+UC AI provides package constants for common models. It does not maintain a provider and model table for these reasons:
 
 - **You can use any model immediately** — as explained [above](#custom-model-strings), you can pass any model name as a string to `p_model` without waiting for a UC AI update.
 - **The model landscape changes too fast** — new models are released constantly. A configuration table would always be outdated unless maintained by the user anyway.

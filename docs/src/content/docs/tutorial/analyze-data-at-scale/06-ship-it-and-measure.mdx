@@ -188,7 +188,7 @@ them. The rate in the prose was invented afterwards. Read row 3 when the numbers
 matter, and never grade a run on its explanation.
 </Aside>
 
-## The whole comparison, on real numbers
+## Compare recorded usage and timing
 
 Five runs, one fixture, one question. The first four ask only for the answer. The
 last one also files the claims, so it does more work than the rows above it:
@@ -285,7 +285,7 @@ SHP-2061               210          960   UC_AI
 
 `filed_by` says `UC_AI`, the schema, and that took one extra step in the handler.
 
-The obvious way to write an audit column is
+Consider this expression for an audit column:
 `coalesce(sys_context('APEX$SESSION','app_user'), sys_context('userenv','session_user'))`.
 Inside an agent run that returns **`UC_AI_AGENT_EXEC`**. UC AI needs an APEX
 session to make an HTTPS call, so it creates one and gives it that name. The name
@@ -341,8 +341,7 @@ other code-mode user of the database.
 - Write `g_tool_tags` in lower case. A wrong case matches no tool and raises no
   error.
 - UC AI keeps the generated program in `uc_ai_agent_messages.tool_input`, as a
-  CLOB. That is the audit trail, and it records what ran, not what the model said
-  about it.
+  CLOB. The message log retains the code that ran.
 - The saving comes from data that stops crossing the wire. Most of it came from
   `code_mode_access`, not from the flag.
 - Measure before you decide. One tool call gains nothing from a program.

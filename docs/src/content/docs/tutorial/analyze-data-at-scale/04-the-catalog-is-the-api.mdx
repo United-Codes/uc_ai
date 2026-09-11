@@ -53,8 +53,7 @@ Callable tools (await callTool code -> arguments):
   await callTool("CC_GET_LIMITS", {  })  // Return the temperature limit and the claim rule of each product class.
 ```
 
-That is the whole contract. One line for each tool: the tool code, the **names** of
-the arguments, and the full description.
+Each catalog line contains the tool code, argument names, and description.
 
 What is not there:
 
@@ -126,9 +125,8 @@ no path exists that puts them there.
 <Aside type="caution" title="merge_tool_from_schema keeps the access value you leave out">
 `merge_tool_from_schema` defaults `p_code_mode_access` to null, which **keeps** the
 value the tool already has. So a later script that re-registers these tools
-without the parameter leaves them at `code`. That is the safe direction — a merge
-never widens a tool you narrowed — but it means a deployment script must state the
-value. `01_tools_classic.sql` passes `'both'` for exactly this reason.
+without the parameter leaves them at `code`. To change that value, a deployment
+script must pass it explicitly. `01_tools_classic.sql` passes `'both'` for exactly this reason.
 `create_tool_from_schema` is different: it defaults to `'both'`.
 </Aside>
 

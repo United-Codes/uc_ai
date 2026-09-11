@@ -81,9 +81,9 @@ The plug-in passes null there for this reason, and does its own check against
 `uc_ai_chat_messages.created_by` instead.
 </Aside>
 
-## Prove it
+## Test the owner filter
 
-Do not ask the model. Query the way a second user would, and count the rows:
+Run this query to count the conversation rows visible to a second user:
 
 ```sql
 select count(*) as rows_user_b_can_see

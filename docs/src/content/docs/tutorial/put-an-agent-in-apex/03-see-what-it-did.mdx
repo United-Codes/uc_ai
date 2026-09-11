@@ -106,7 +106,7 @@ start. Lesson 6 uses the same function for the rest of the flags.
 the fifth.
 </Aside>
 
-## Fault 2: the turn never finishes, and nothing says so
+## Fault 2: the background job stops
 
 A background job can die. The database is restarted, the job slot runs out, the
 session is killed. The `user` row is then left at `pending` or `processing` for
@@ -116,8 +116,7 @@ The plug-in sweeps these. On the next fetch, a turn with no job in
 `user_scheduler_jobs` that is older than its grace window is set to `error`. The
 window is **2 minutes** for `pending` and **1 minute** for `processing`.
 
-You do not have to do anything. You do need to know it happens, or the status
-changes under you while you look at it.
+The plug-in updates this status automatically on the next fetch.
 
 ## Fault 3: the answer is empty
 

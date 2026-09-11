@@ -24,10 +24,9 @@ Lesson 2 gave a correct answer through code that you did not write and did not
 see. One day that answer is wrong. The prompt looks fine, the tools look fine, and
 there is no error anywhere.
 
-**Without the program,** you change the prompt and hope. **With the program,** you
-read the JavaScript that produced the number.
+Read the generated JavaScript to inspect how the program calculated the number.
 
-Lesson 4 needs what this lesson teaches, so it comes first.
+Lesson 4 uses this inspection method to diagnose incorrect field names.
 
 ## The program is an ordinary tool call
 
@@ -116,7 +115,7 @@ well-formed wrong answer.
 The model guessed those names because nothing told it the real ones. That is the
 subject of lesson 4.
 
-## Seven programs you run yourself
+## Run seven sandbox examples
 
 Part 1 of `03_inspect_program.sql` makes one model call, so it costs tokens. Part 2
 makes none, and you can run it as often as you like.
@@ -131,8 +130,8 @@ l_out := uc_ai_tools_api.execute_agent_tool(
            uc_ai_tools_api.c_code_mode_tool_code, l_args, l_settings);
 ```
 
-This is the cheapest way to learn the sandbox. No provider, no tokens, and the
-same behavior. Part 2 of `03_inspect_program.sql` runs seven programs through it.
+Part 2 of `03_inspect_program.sql` runs seven programs directly in the sandbox.
+These runs make no provider calls and use no tokens.
 
 <AiOutput label="Output of the seven programs, no model called">
 <div>

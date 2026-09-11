@@ -244,11 +244,10 @@ No row names an invoice, an amount, a clerk or an entity. None of them can:
 `_ctx` is a reserved name, and a tool that declares it is refused at registration
 with `ORA-20503`.
 
-## Verification, part 3: every branch, with no model
+## Verification, part 3: test the handler branches
 
-This is the part to keep. Eighteen cases through the handler, each one building
-the arguments the way UC AI builds them, then asserting on `reason` and never on
-`message`. It costs nothing, it needs no provider, and it ends with a rollback:
+These eighteen tests call the handler with arguments in the UC AI format.
+They assert on `reason`, make no provider calls, and end with a rollback:
 
 ```
 CASE                                           RESULT
@@ -357,6 +356,6 @@ reserved name and where else the run context applies.
 
 <LinkCard
   title="Next lesson: Label the text you cannot trust"
-  description="Mark untrusted text at the tool boundary, turn the reader into a reporter, and measure what the label is worth."
+  description="Label untrusted tool results and compare how the model handles embedded instructions."
   href="/products/uc-ai/docs/tutorial/secure-an-agent/04-untrusted-text/"
 />

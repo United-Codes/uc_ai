@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-**Token-Oriented Object Notation (TOON)** is a compact and readable encoding of the JSON data model. It uses fewer tokens, and a model can follow its structure easily. TOON is a lossless representation of your existing JSON, for LLM input.
+**Token-Oriented Object Notation (TOON)** is a compact and readable encoding of the JSON data model. Its layout can reduce the tokens needed to represent the data. TOON is a lossless representation of your existing JSON, for LLM input.
 
 TOON takes the indentation structure of YAML for a nested object, and a CSV-style table layout for a uniform array. TOON works best for a uniform array of objects, that is several fields per row and the same structure in every item. Such an array is as compact as CSV, and its explicit structure helps an LLM parse and validate the data.
 
@@ -42,7 +42,7 @@ name: Alice
 age: 30
 ```
 
-This is the same as the JSON `{"name": "Alice", "age": 30}`
+This represents the same data as the JSON `{"name": "Alice", "age": 30}`.
 
 ### Nested Objects
 
