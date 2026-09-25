@@ -1,0 +1,249 @@
+---
+title: Answer questions from the handbook
+description: Send the closest handbook chunks and the question to a model with uc_ai.generate_text, and make it name the article of each fact.
+sidebar:
+  order: 3
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={3}
+  of={3}
+  minutes={15}
+  promise="you can answer a question from your own documents with one PL/SQL function, and see which text the model got."
+  scripts={["03_answer.sql"]}
+  course="answer-from-documents"
+/>
+
+## Turn search results into a handbook answer
+
+Lesson 2 found the handbook chunks closest to a question. Those chunks are still
+text, not an answer. This lesson sends them with the question to a model. The
+model can then write an answer and name the article that supports each fact.
+
+This lesson uses the chunks of lesson 1 and the function `HB_EMBED` of lesson 2.
+If you did not run `02_search.sql`, run it first.
+
+Run `@03_answer.sql`. It creates two more functions and then asks four questions.
+The last two sections call the chat model four times.
+
+## Combine four search results for the model
+
+`HB_RETRIEVE` is the search of lesson 2 in a function. It returns the four closest
+chunks as one text. Each chunk starts with the title of its article in square
+brackets, so that the model can say where a fact comes from:
+
+```sql
+create or replace function hb_retrieve (
+  p_question in varchar2
+, p_top_k    in pls_integer default 4
+) return clob
+as
+  l_question vector;
+  l_excerpts clob;
+begin
+  l_question := hb_embed(p_question);
+
+  <<chunk_loop>>
+  for r in (
+    select d.title
+         , c.chunk_text
+      from hb_chunks c
+      join hb_documents d on d.doc_id = c.doc_id
+     order by vector_distance(c.embedding, l_question, cosine)
+     fetch first p_top_k rows only
+  ) loop
+    l_excerpts := l_excerpts
+               || '[' || r.title || ']' || chr(10)
+               || r.chunk_text || chr(10) || chr(10);
+  end loop chunk_loop;
+
+  return l_excerpts;
+end hb_retrieve;
+/
+```
+
+The function returns four chunks because one chunk can omit a step of a procedure.
+Lesson 2 showed the damage procedure across two chunks. Returning more chunks also
+adds unrelated text to the prompt. Four is a choice for this handbook, not a rule
+for every set of documents.
+
+## Ask the model to answer from those chunks
+
+`HB_ANSWER` puts the excerpts and the question into one prompt, and calls
+`uc_ai.generate_text`:
+
+```sql
+create or replace function hb_answer (
+  p_question in varchar2
+) return clob
+as
+  c_system_prompt constant varchar2(1000 char) :=
+       'You answer questions of field engineers about the company handbook.' || chr(10)
+    || 'Use only the handbook excerpts in the user message.' || chr(10)
+    || 'After each fact, name its article in square brackets, for example [Company vans].' || chr(10)
+    || 'If the excerpts do not contain the answer, say that the handbook does not cover it. '
+    || 'Do not guess.';
+
+  l_result json_object_t;
+begin
+  l_result := uc_ai.generate_text(
+    p_system_prompt => c_system_prompt
+  , p_user_prompt   => 'Handbook excerpts:' || chr(10) || chr(10)
+                    || hb_retrieve(p_question)
+                    || 'Question: ' || p_question
+  , p_provider      => uc_ai.c_provider_openai
+  , p_model         => uc_ai_openai.c_model_gpt_5_6_terra
+  );
+
+  return l_result.get_clob('final_message');
+end hb_answer;
+/
+```
+
+The system prompt has three rules:
+
+- **Use only the excerpts.** The model must not add a rule that is not in the
+  handbook, for example a typical hotel limit of other companies.
+- **Name the article of each fact.** A reader can then open the article and read
+  the full text.
+- **Say when the handbook does not cover a question.** The search always returns
+  four chunks, also for a question that the handbook does not answer.
+
+These rules are instructions to the model. The database does not enforce them. A
+citation shows which article the model named, but it does not prove that the
+article supports the answer. Read the retrieved text when an answer matters.
+
+## See which handbook text the model receives
+
+The script prints what `HB_RETRIEVE` returns for the hotel question of lesson 1.
+This is the text that the model gets. This step calls only the embedding model:
+
+```
+[Travel and expenses]
+Book hotels through the travel desk whenever you can. The standard limit for a hotel is 110 EUR per night, breakfast included. In Munich, Frankfurt, Hamburg and Paris the limit is 150 EUR per night.
+
+[Travel and expenses]
+You receive a meal allowance of 28 EUR for each day on which you are away from home for more than 8 hours. For a day with 8 hours or less there is no meal allowance. Do not submit restaurant receipts, because the allowance replaces them.
+
+[On-call duty]
+For each weekday night on standby you receive an allowance of 45 EUR. For each Saturday, Sunday or public holiday on standby the allowance is 90 EUR. Time spent on an actual call-out is paid as overtime in addition to the allowance.
+
+[Travel and expenses]
+If no room is available under the limit, ask your team lead for approval before you book, and add the approval email to the expense report.
+```
+
+The first chunk has the answer. The second and third chunks are about allowances,
+not hotels. The search returns them because they are the next closest of the 18
+chunks.
+
+If an answer is wrong, call `HB_RETRIEVE` with the same question first. If the
+correct chunk is absent, inspect the cuts and the search results. The model cannot
+use a rule it never received. If the correct chunk is present, inspect the prompt
+and the model's use of that chunk.
+
+## Ask about hotels, standby pay, and vacation
+
+The last block calls `HB_ANSWER` for three questions. The third question is about
+a topic that is not in the handbook.
+
+<AiOutput model="gpt-5.6-terra" date="2026-09-25" label="Three answers from the handbook">
+**Q:** I stay in Munich next week. How much can I spend on a hotel per night?
+
+**A:** You can spend up to 150 EUR per night in Munich, including breakfast.
+[Travel and expenses]
+
+**Q:** I am on standby this Saturday and Sunday. What allowance do I get?
+
+**A:** You receive 90 EUR for Saturday and 90 EUR for Sunday, for a total standby
+allowance of 180 EUR. Actual call-out time is paid separately as overtime.
+[On-call duty]
+
+**Q:** How many days of vacation do I get per year?
+
+**A:** The handbook excerpts do not cover annual vacation entitlement.
+</AiOutput>
+
+The first answer is the question of lesson 1. Without the handbook, the model gave
+a range of €150–€250 that other companies use. With the excerpts, it gives the
+limit of the handbook, 150 EUR, and names the article.
+
+The second answer adds two days of 90 EUR. The handbook gives only the rate for
+each day. The total of 180 EUR is a calculation of the model, not a sentence from
+the handbook.
+
+For the third question, the excerpts contained four chunks that do not answer it.
+In this run, the model said that the handbook does not cover the topic, as the
+system prompt told it.
+
+Your wording can be different. The facts in the first two answers come from the
+handbook, so they are the values to compare.
+
+## Call the answer function from an application
+
+`HB_ANSWER` is a PL/SQL function, so you can call it from an APEX process, a
+job, or a query:
+
+```sql
+select hb_answer('Where do I report damage to my van?') as answer
+  from dual;
+```
+
+<AiOutput model="gpt-5.6-terra" date="2026-09-25" label="Answer from a query">
+Stop in a safe place, take photos of the damage and scene, then call dispatch on
++49 89 555 0100. [Company vans]
+
+Also complete form VAN-7 in the fleet portal within 24 hours. [Company vans]
+</AiOutput>
+
+The answer combines the two chunks of the damage procedure from lesson 2.
+
+Each call makes one embedding call and one chat call. When a document changes,
+delete its chunks and repeat the steps of lesson 1 for this document.
+
+<Aside type="note" title="What to read next">
+An agent can call the search as a tool, so that it decides when to read the
+handbook. [Tools](/products/uc-ai/docs/guides/tools/) shows how to register a PL/SQL
+function as a tool, and [Build an
+Agent](/products/uc-ai/docs/tutorial/build-an-agent/01-the-scenario/) builds an agent
+with tools from the start.
+
+Run `00_teardown.sql` when you are finished. It drops the three functions and the
+two tables.
+</Aside>
+
+## What a production RAG system needs
+
+This course shows the basic path from a question to a handbook answer. A production
+system must also handle longer documents, changes to those documents, follow-up
+questions, and different access rights. The following techniques can improve it,
+but each one needs a test against your own questions:
+
+- **Chunk overlap:** Repeat some text across chunk boundaries so a rule does not
+  lose the sentence that explains it. Repeated text also increases storage and
+  the text sent to the model.
+- **Neighboring chunks:** After a match, fetch the chunks before and after it from
+  the same article. This can restore a procedure split across chunks.
+- **Query rewriting:** Turn a follow-up such as "What about Munich?" into a search
+  question that includes the missing subject from the conversation.
+- **Reranking:** Retrieve more candidate chunks, score them against the question
+  again, and send only the best few to the answer model.
+- **Conversation memory:** Keep earlier turns to understand follow-up questions.
+  Use the current handbook as the source for factual answers.
+- **Hybrid search:** Combine keyword and vector search. Exact terms such as
+  `VAN-7` can be easier to find by keyword. Oracle's [hybrid search
+  guide](https://docs.oracle.com/en/database/oracle/oracle-database/26/vecse/understand-hybrid-search.html)
+  explains this option.
+- **Access and updates:** Search only documents that the user can read. When a
+  document changes, replace its chunks and embeddings so answers use current text.
+- **Test suite:** Keep questions with known answers and relevant chunks. Include
+  paraphrases, split procedures, follow-ups, and questions that the handbook does
+  not answer.
+
+For each change, measure whether the right chunk appears in the first few results
+(`recall@k`). Also measure answer correctness, support from cited text, correct
+refusals, response time, and model cost. A better search score alone does not prove
+that the final answer improved. Use the same test suite to compare changes.

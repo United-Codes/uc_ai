@@ -1,0 +1,180 @@
+---
+title: Search the handbook by meaning
+description: Embed a question with UC AI and use VECTOR_DISTANCE to find the closest handbook chunks.
+sidebar:
+  order: 2
+---
+
+import { LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+
+<LessonHeader
+  lesson={2}
+  of={3}
+  minutes={15}
+  promise="you can find the handbook chunks that are closest in meaning to a question."
+  scripts={["02_search.sql"]}
+  course="answer-from-documents"
+/>
+
+## Use the chunks and embeddings from lesson 1
+
+Lesson 1 stored 18 chunks and their embeddings. Now an engineer describes a dented
+bumper, but the handbook uses different words. This lesson finds the damage rule
+by comparing meanings instead of requiring the same words.
+
+This lesson needs the chunks and embeddings from `01_chunk_embed.sql`. If you ran
+`00_setup.sql` again after lesson 1, run `01_chunk_embed.sql` again first.
+
+Run `@02_search.sql`. The sections below explain it in order. The script calls only
+the embedding model, never a chat model.
+
+## Give the question an embedding too
+
+A search compares the question with the stored chunks. Their text cannot go into
+`VECTOR_DISTANCE` directly, so the question needs an embedding too. `HB_EMBED`
+creates it with the same model that embedded the chunks:
+
+```sql
+create or replace function hb_embed (
+  p_text in clob
+) return vector
+as
+  l_input   json_array_t := json_array_t();
+  l_vectors json_array_t;
+begin
+  l_input.append(p_text);
+
+  l_vectors := uc_ai.generate_embeddings(
+    p_input    => l_input
+  , p_provider => uc_ai.c_provider_openai
+  , p_model    => uc_ai_openai.c_model_text_embedding_3_small
+  );
+
+  return to_vector(l_vectors.get(0).to_clob, 1536, float32);
+end hb_embed;
+/
+```
+
+Use the same embedding model for the question and for the chunks. The embeddings
+of two different models cannot be compared, also when they have the same number of
+dimensions.
+
+## See why a keyword search misses the damage rule
+
+The question of this lesson:
+
+> I reversed into a bollard and the bumper is dented. What do I do now?
+
+The handbook tells the engineer what to do after damage to the van. A keyword
+search for the words of the question finds nothing:
+
+```sql
+select count(*) as keyword_hits
+  from hb_chunks
+ where lower(chunk_text) like '%bollard%'
+    or lower(chunk_text) like '%bumper%'
+    or lower(chunk_text) like '%dented%'
+    or lower(chunk_text) like '%reversed%';
+```
+
+```
+KEYWORD_HITS
+------------
+           0
+```
+
+The handbook says "damaged" and "van". The engineer says "dented" and "bumper".
+A keyword search for these words misses the procedure, although it answers the
+engineer's question.
+
+## Find the damage rule by meaning
+
+`VECTOR_DISTANCE` compares two embeddings. With the `COSINE` metric, a smaller
+distance means a closer meaning. The query sorts the chunks by distance and keeps
+the first three:
+
+```sql
+declare
+  l_question vector;
+begin
+  -- One embedding call, for the question.
+  l_question := hb_embed('I reversed into a bollard and the bumper is dented. '
+                      || 'What do I do now?');
+
+  -- The rest is SQL. A smaller cosine distance means a closer meaning.
+  <<chunk_loop>>
+  for r in (
+    select d.title
+         , c.chunk_text
+         , vector_distance(c.embedding, l_question, cosine) as distance
+      from hb_chunks c
+      join hb_documents d on d.doc_id = c.doc_id
+     order by distance
+     fetch first 3 rows only
+  ) loop
+    sys.dbms_output.put_line(to_char(r.distance, '0.0000') || '  ' || r.title);
+    sys.dbms_output.put_line('        ' || sys.dbms_lob.substr(r.chunk_text, 90, 1) || '...');
+  end loop chunk_loop;
+end;
+/
+```
+
+```
+ 0.5940  Company vans
+        If the van is damaged, stop in a safe place first. Take photos of the damage and of the sc...
+ 0.6545  Company vans
+        Then complete form VAN-7 in the fleet portal within 24 hours, also when nobody else was in...
+ 0.7068  Returning parts
+        Return every faulty part that was replaced under warranty. Put it in the box of the new pa...
+```
+
+The first two rows contain the damage procedure: stop, take photos, call dispatch,
+then complete form VAN-7. The procedure crosses a chunk boundary. A search that
+keeps only the first row loses the form. Lesson 3 keeps four chunks for this reason.
+
+The third row is about returning parts, and it does not help. A search always
+returns the number of rows that you ask for, also when some of them are not
+related. In lesson 3, the model gets all rows and uses the ones that answer the
+question.
+
+Your distances can be slightly different, because an embedding is not always
+identical between two calls.
+
+## See why search misses the workshop answer
+
+Lesson 1 found the chunk "You get an email with the date and the workshop." This
+question needs that chunk to answer "where":
+
+> When is the next service of my van, and where?
+
+```
+ 0.5365  Company vans
+        Then complete form VAN-7 in the fleet portal within 24 hours, also when nobody else was in...
+ 0.5682  Returning parts
+        Book the return in the parts portal first, so that the stock of your van is correct....
+ 0.6262  Company vans
+        If the van is damaged, stop in a safe place first. Take photos of the damage and of the sc...
+```
+
+The first row has the service interval ("The fleet team books a service every
+30,000 km."). The chunk about the email and workshop is not in the first three
+rows. A model that gets these rows cannot say where the service is. That chunk
+does not mention a service, so its embedding gives the search too little context.
+Changing the chunk size or overlap in lesson 1 can keep the service and workshop
+details together.
+
+## When the handbook grows
+
+The searches in this lesson compare the question with all 18 chunks. This is an
+exact search, and the sample does not need a vector index. For a larger handbook,
+an index can reduce search work, but its memory needs and behavior under document
+changes matter. Choose one after you measure the size and update rate of your own
+data. Oracle's [vector index guidelines](https://docs.oracle.com/en/database/oracle/oracle-database/26/vecse/guidelines-using-vector-indexes.html)
+cover the choices.
+
+<LinkCard
+  title="Next lesson: Answer questions from the handbook"
+  description="Send the closest chunks and the question to a model, and make it name the article of each fact."
+  href="/products/uc-ai/docs/tutorial/answer-from-documents/03-answer-from-the-handbook/"
+/>

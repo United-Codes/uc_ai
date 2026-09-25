@@ -1,0 +1,301 @@
+---
+title: Split a handbook into chunks and embed them
+description: Split five handbook articles into chunks with VECTOR_CHUNKS, get an embedding for each chunk with one UC AI call, and store it in a VECTOR column.
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={1}
+  of={3}
+  minutes={20}
+  promise="you can split documents into chunks in SQL and store an embedding for each chunk in a <code>VECTOR</code> column."
+  scripts={["00_setup.sql", "00_precheck.sql", "01_chunk_embed.sql"]}
+  course="answer-from-documents"
+/>
+
+## Use the handbook to answer employee questions
+
+You build a question desk for a field-service company's **handbook**. An engineer
+asks how much a hotel in Munich can cost. The handbook says 150 EUR per night, but
+a model that does not see the handbook cannot know that limit. It can give a
+plausible answer from general knowledge and still get the company rule wrong.
+
+The desk must find the rule before it asks the model to answer. This pattern is
+called **RAG** (retrieval-augmented generation). The database finds relevant
+handbook text, and the model writes an answer from that text:
+
+```
+articles ──► chunks ──► embeddings        lesson 1, once for each document
+question ──► embedding ──► nearest chunks lesson 2, once for each question
+nearest chunks + question ──► answer      lesson 3
+```
+
+Two terms describe how the desk finds that text:
+
+- A **chunk** is a short part of a document. A question usually needs only one or
+  two parts of a long handbook.
+- An **embedding** is a list of numbers that represents a text's meaning. The
+  desk compares the question's embedding with those of the chunks to find relevant
+  text, even when the words differ.
+
+Oracle does the chunking, the storage and the search. UC AI gets the embeddings
+and the answer from a model. The recordings use OpenAI: `text-embedding-3-small`
+for embeddings and `gpt-5.6-terra` for answers.
+
+## Set up the sample handbook and check model access
+
+You need Oracle 23ai or 26ai, because the course uses the `VECTOR` data type. You
+also need a UC AI installation that can reach OpenAI. If a call fails with
+`ORA-24247` or `ORA-29024`, the [network setup
+guide](/products/uc-ai/docs/guides/network-setup/) has the grants a DBA must give.
+
+Download the files from
+[examples/answer-from-documents](https://github.com/United-Codes/uc_ai/tree/main/examples/answer-from-documents)
+into one local directory. Open SQLcl in that directory and connect to your demo
+schema.
+
+<Steps>
+
+1. Run `@00_setup.sql`. It creates the tables `HB_DOCUMENTS` and `HB_CHUNKS`, and
+   inserts five handbook articles. If the tables exist, it drops them first.
+
+2. Run `@00_precheck.sql`. It reports four lines. Lines 3 and 4 call OpenAI.
+
+</Steps>
+
+```
+1. UC AI is installed. Version 26.3.
+2. The handbook is in place (5 articles).
+3. An embedding came back with 1536 dimensions.
+4. A model answered: ready (0.94 seconds).
+```
+
+`00_teardown.sql` removes everything this course creates, at any point.
+
+Now run `@01_chunk_embed.sql`. The sections below explain its output in order.
+
+## See what the model says without the hotel rule
+
+The first block asks a model a question that only the handbook can answer:
+
+> I am a field engineer at our company and I stay in Munich next week. How much can
+> I spend on a hotel per night?
+
+<AiOutput model="gpt-5.6-terra" date="2026-09-25" label="Answer without the handbook" wrong>
+That depends on your company’s travel policy and any client/project-specific
+limits. Germany does not set a universal legal hotel-cost cap for business
+travelers; employers typically reimburse actual reasonable costs, often with a
+city-specific nightly ceiling.
+
+For Munich, many companies set a higher cap than for other German cities due to
+high rates—commonly around **€150–€250 per night**, sometimes excluding breakfast
+and taxes—but you should check your internal travel policy or booking tool for the
+approved limit.
+</AiOutput>
+
+The model does not know the policy of your company. In this run, it gave a typical
+range of other companies. An engineer who reads "€150–€250" can book a hotel for
+200 EUR, and the handbook allows 150 EUR. In four earlier runs of the same block,
+the model said that it had no access to the policy and gave no number.
+
+The handbook has the answer, but the model did not receive it. The next step is
+to find the hotel rule and include it with the question.
+
+## Split the handbook so each question gets relevant text
+
+These five articles fit into one prompt. A real handbook can contain hundreds of
+pages. Sending every page for each question adds unrelated text and makes each
+model call larger. Selecting whole articles still includes rules the question does
+not need, such as meal allowances and receipt deadlines.
+
+Chunks let the desk select a few sentences. For the Munich question, it needs the
+hotel limit, not the rest of the travel article. To find those sentences later,
+the desk stores each chunk and an embedding of its text. Lesson 2 compares those
+embeddings with an embedding of the question.
+
+The cuts matter. A very short chunk can lose the sentence that explains what it
+means. A long chunk can mix unrelated rules. This lesson uses a 50-word limit so
+you can see both useful chunks and a cut that loses context.
+
+## See how Oracle splits the travel article
+
+`VECTOR_CHUNKS` is a SQL function of Oracle 23ai that splits a text into chunks. It
+returns one row for each chunk:
+
+```sql
+select c.chunk_offset
+     , c.chunk_length
+     , c.chunk_text
+  from hb_documents d
+ cross join vector_chunks(
+         d.body by words max 50 overlap 0 split by sentence
+       ) c
+ where d.title = 'Travel and expenses';
+```
+
+The parameters say how to split the text:
+
+- `by words max 50` makes a chunk 50 words long at most.
+- `split by sentence` cuts only at the end of a sentence. A chunk is then shorter
+  than 50 words, but no sentence is cut in half.
+- `overlap 0` repeats no text from the previous chunk. An overlap can help when
+  the answer to a question is split across two chunks.
+
+```
+CHUNK_OFFSET CHUNK_LENGTH CHUNK_TEXT
+------------ ------------ --------------------------------------------------------------------------------------------------------------
+           1          198 Book hotels through the travel desk whenever you can. The standard limit for a hotel is 110 EUR per night,
+                          breakfast included. In Munich, Frankfurt, Hamburg and Paris the limit is 150 EUR per night.
+
+         200          139 If no room is available under the limit, ask your team lead for approval before you book, and add the approval
+                          email to the expense report.
+
+         340          237 You receive a meal allowance of 28 EUR for each day on which you are away from home for more than 8 hours. For
+                          a day with 8 hours or less there is no meal allowance. Do not submit restaurant receipts, because the
+                          allowance replaces them.
+
+         578          205 Submit all receipts in the expense app within 30 days of the trip. Receipts that are older than 30 days are
+                          not paid. Take a photo of each receipt with the app. You do not need to send the paper originals.
+```
+
+The first chunk contains the Munich limit. The next chunks cover approval, meals,
+and receipts. A search for the hotel limit can now return the first chunk without
+sending the whole article to the model.
+
+`CHUNK_OFFSET` is the position of the chunk in the article, in characters.
+
+## Save the chunks from all five articles
+
+The same function in an `insert ... select` splits all five articles in one
+statement:
+
+```sql
+insert into hb_chunks (doc_id, chunk_offset, chunk_text)
+select d.doc_id
+     , c.chunk_offset
+     , c.chunk_text
+  from hb_documents d
+ cross join vector_chunks(
+         d.body by words max 50 overlap 0 split by sentence
+       ) c;
+```
+
+```
+TITLE                    CHUNKS
+-------------------- ----------
+Company vans                  4
+On-call duty                  3
+Returning parts               3
+Safety on site                4
+Travel and expenses           4
+```
+
+The script also prints the shortest chunk:
+
+```
+TITLE                CHUNK_TEXT
+-------------------- ----------------------------------------------------------------------
+Company vans         You get an email with the date and the workshop.
+```
+
+In the article, this sentence comes after "The fleet team books a service every
+30,000 km." The cut separates those sentences. Alone, "the date" does not say
+that it is the date of a service. Lesson 2 asks where the service takes place.
+The search misses the chunk with the workshop because that chunk has lost its
+context.
+
+The parameters of `VECTOR_CHUNKS` decide where the cuts fall. A larger `max` can
+keep the service sentences together. An `overlap` can repeat text across a cut.
+If you change either parameter, split and embed the articles again. Then compare
+the chunks and search results.
+
+## Give each chunk an embedding for search
+
+Splitting gives the desk pieces of text, but it still needs a way to find pieces
+that match a question. `uc_ai.generate_embeddings` turns each chunk into numbers
+that the database can compare. It takes an array of texts and returns one
+embedding for each text, in the same order. The 18 chunks go to OpenAI in one
+call. This excerpt is the core of the block in the script:
+
+```sql
+-- 1. Collect the text of every chunk into one JSON array.
+select chunk_id, chunk_text
+  bulk collect into l_chunk_id_arr, l_text_arr
+  from hb_chunks
+ order by chunk_id;
+
+<<text_loop>>
+for i in 1 .. l_text_arr.count loop
+  l_texts.append(l_text_arr(i));
+end loop text_loop;
+
+-- 2. One call. The result is an array of vectors, in the order of the input.
+l_vectors := uc_ai.generate_embeddings(
+  p_input    => l_texts
+, p_provider => uc_ai.c_provider_openai
+, p_model    => uc_ai_openai.c_model_text_embedding_3_small
+);
+
+-- 3. Store each vector with its chunk.
+l_vector_arr.extend(l_chunk_id_arr.count);
+<<vector_loop>>
+for i in 1 .. l_chunk_id_arr.count loop
+  l_vector_arr(i) := l_vectors.get(i - 1).to_clob;
+end loop vector_loop;
+
+forall i in 1 .. l_chunk_id_arr.count
+  update hb_chunks
+     set embedding = to_vector(l_vector_arr(i), 1536, float32)
+   where chunk_id = l_chunk_id_arr(i);
+```
+
+The result is a JSON array of JSON arrays. Element 0 is the embedding of the first
+chunk. `json_array_t` starts at 0, and the PL/SQL collections start at 1, which is
+why the loop reads `get(i - 1)`.
+
+SQL cannot read a `json_array_t`. The script therefore converts each embedding to
+a CLOB first, and `TO_VECTOR` converts the CLOB to a `VECTOR` of 1536 numbers. The
+column `HB_CHUNKS.EMBEDDING` has the type `vector(1536, float32)`, because
+`text-embedding-3-small` returns 1536 numbers for each text.
+
+<Aside type="note" title="Another embedding model needs another column size">
+Each embedding model returns a fixed number of dimensions. If you use another
+model, change the `1536` in the table and in `TO_VECTOR` to the number that the
+model returns. The precheck prints this number.
+</Aside>
+
+## Check that every chunk has an embedding
+
+```
+  CHUNK_ID DIMENSIONS FIRST_NUMBERS
+---------- ---------- ------------------------------------------------------------
+         1       1536 [7.8086853E-003,-9.44519043E-003,3.97338867E-002,-5.611...
+         2       1536 [-7.83538818E-003,2.66723633E-002,3.91845703E-002,-2.02...
+         3       1536 [-6.76879883E-002,9.00268555E-003,4.68139648E-002,-2.83...
+
+    CHUNKS WITH_EMBEDDING
+---------- --------------
+        18             18
+```
+
+All 18 chunks have an embedding. Your numbers can be slightly different. Nobody
+reads these numbers. Lesson 2 compares them.
+
+When an article changes, delete its old chunks. Then split the article again and
+embed the new chunks. A stored embedding still represents the old text until you
+replace it.
+
+**Full reference:** [Generate
+embeddings](/products/uc-ai/docs/api/generate_embeddings/) has every parameter and
+the call with `p_config`.
+
+<LinkCard
+  title="Next lesson: Search the handbook by meaning"
+  description="Embed a question and find the closest handbook chunks with VECTOR_DISTANCE."
+  href="/products/uc-ai/docs/tutorial/answer-from-documents/02-search-by-meaning/"
+/>
