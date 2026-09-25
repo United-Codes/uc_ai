@@ -20,7 +20,7 @@ repository.
 
 ## At a glance
 
-Six courses, in the order to take them. Each row is one course, with what it
+Seven courses, in the order to take them. Each row is one course, with what it
 builds and how long it takes. The section under [the courses in
 detail](#the-courses-in-detail) says what each one teaches that no guide covers.
 
@@ -37,8 +37,14 @@ detail](#the-courses-in-detail) says what each one teaches that no guide covers.
 />
 
 <LinkCard
+  title="Answer from Your Documents →"
+  description="3 lessons · 50 min · Oracle 23ai · OpenAI. No agent. Split a handbook into chunks, embed them, search them by meaning, and answer questions from the closest chunks."
+  href="/products/uc-ai/docs/tutorial/answer-from-documents/01-chunk-and-embed/"
+/>
+
+<LinkCard
   title="Give an Agent a Memory →"
-  description="4 lessons · 60 min · OpenAI. The shortest course here. A maintenance desk that carries what the night shift recorded into the next shift’s conversation, and four failure modes."
+  description="4 lessons · 60 min · OpenAI. A maintenance desk that carries what the night shift recorded into the next shift’s conversation, and four failure modes."
   href="/products/uc-ai/docs/tutorial/give-an-agent-a-memory/01-the-next-shift/"
 />
 
@@ -127,9 +133,41 @@ onwards it uses structured output, which OCI does not support, and it relies on
   href="/products/uc-ai/docs/tutorial/extract-structured-data/01-the-pdf-in-the-inbox/"
 />
 
+### Answer from Your Documents
+
+A field engineer asks a question in plain words, and the answer comes from the
+company handbook. This pattern is called RAG (retrieval-augmented generation). The
+course builds it in three short lessons, with the vector features of Oracle 23ai
+and 26ai and two UC AI calls: `generate_embeddings` and `generate_text`.
+
+There is no tool and no agent in it. Oracle splits the documents with
+`VECTOR_CHUNKS`, stores the embeddings in a `VECTOR` column and finds the closest
+chunks with `VECTOR_DISTANCE`. UC AI gets the embeddings and the answer.
+
+Three things it teaches that no guide covers:
+
+- **How to find a bad chunk.** One sentence of the handbook ends up alone in a
+  chunk, and a question that needs it does not find it. The search works as
+  designed, and the rows it returns cannot answer the question.
+- **Why the search must return more than one chunk.** A procedure in the handbook
+  is split across two chunks, and a search that keeps one chunk loses the last
+  step.
+- **Where to look when an answer is wrong.** One function returns the exact text
+  that the model got, so you can tell a search failure from a model failure.
+
+<Aside type="caution" title="This course needs Oracle 23ai or 26ai">
+The `VECTOR` data type and `VECTOR_CHUNKS` are not available in older releases.
+</Aside>
+
+<LinkCard
+  title="Start: Split a handbook into chunks and embed them"
+  description="Ask a model a question that only your handbook can answer, then split five articles into chunks and store an embedding for each one."
+  href="/products/uc-ai/docs/tutorial/answer-from-documents/01-chunk-and-embed/"
+/>
+
 ### Give an Agent a Memory
 
-The shortest course here, at four lessons, and the one to take after **Build an Agent**. You build the
+Four lessons, and the one to take after **Build an Agent**. You build the
 maintenance desk of a beverage plant: one bottling line, six machines, and a
 technician who stands at one of them and asks about it.
 
