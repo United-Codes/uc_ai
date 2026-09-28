@@ -9,6 +9,11 @@ import { Aside } from "@astrojs/starlight/components";
 
 **Token-Oriented Object Notation (TOON)** is a compact and readable encoding of the JSON data model. Its layout can reduce the tokens needed to represent the data. TOON is a lossless representation of your existing JSON, for LLM input.
 
+<Aside type="note">
+  The `uc_ai_toon` package encodes TOON specification version 4.1, with the
+  default comma delimiter. It does not decode TOON.
+</Aside>
+
 TOON takes the indentation structure of YAML for a nested object, and a CSV-style table layout for a uniform array. TOON works best for a uniform array of objects, that is several fields per row and the same structure in every item. Such an array is as compact as CSV, and its explicit structure helps an LLM parse and validate the data.
 
 <Aside type="tip">
@@ -77,6 +82,28 @@ An array of objects with the same structure uses a CSV-style column format:
 
 This is `[{"id": 1, "active": true}, {"id": 2, "active": false}]`.
 
+A column that holds objects with the same structure folds into the header:
+
+```
+orders[2]{id,customer{name,country}}:
+  1,Ada,DE
+  2,Bob,FR
+```
+
+This is `[{"id": 1, "customer": {"name": "Ada", "country": "DE"}}, {"id": 2, "customer": {"name": "Bob", "country": "FR"}}]`.
+
+### Keyed tabular objects
+
+An object whose values share the same structure uses a keyed header. The entry count carries a colon:
+
+```
+users[2:]{id,name}:
+  u1: 1,Ada
+  u2: 2,Bob
+```
+
+This is `{"users": {"u1": {"id": 1, "name": "Ada"}, "u2": {"id": 2, "name": "Bob"}}}`.
+
 ### Irregular Arrays
 
 An array with mixed structures uses the dash notation:
@@ -93,9 +120,11 @@ An array with mixed structures uses the dash notation:
 
 - **Null values**: `null`
 - **Booleans**: `true` or `false`
-- **Empty arrays**: `key[0]:`
+- **Empty arrays**: `key: []`
 - **Empty objects**: `key:`
 - **Strings with special characters**: in quotes, with escapes, for example `"He said \"hello\""`
+- **Strings that start with `#` or `-`**: in quotes, for example `tag: "#hello"`
+- **Keys outside letters, digits, `_`, and `.`**: in quotes, for example `"my-key": 1`
 
 ## Using TOON in UC AI
 

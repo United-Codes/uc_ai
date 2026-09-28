@@ -91,8 +91,9 @@ create or replace package body test_uc_ai_toon as
     l_json.put('metadata', l_obj);
 
     l_result := uc_ai_toon.to_toon(l_json);
-    
-    l_expected := 'data[0]:' || chr(10) || 'metadata:';
+
+    -- Empty arrays use the explicit [] form (TOON spec 4.x, section 9.1)
+    l_expected := 'data: []' || chr(10) || 'metadata:';
     
     ut.expect(l_result).to_equal(l_expected);
     sys.dbms_output.put_line('Result:' || chr(10) || l_result);
@@ -1102,6 +1103,356 @@ create or replace package body test_uc_ai_toon as
 
     ut.expect(l_result).to_equal(l_expected);
   end products_array;
+
+  procedure hash_strings
+  as
+    l_json json_object_t;
+    l_result clob;
+    l_expected clob;
+  begin
+    -- Strings starting with "#" must be quoted: a decoder strips
+    -- "#..." lines as comments (TOON spec 4.x, sections 5.1 and 7.2)
+    l_json := json_object_t();
+    l_json.put('tag', '#hello');
+    l_json.put('solo', '#');
+
+    l_result := uc_ai_toon.to_toon(l_json);
+
+    l_expected := 'tag: "#hello"' || chr(10)
+               || 'solo: "#"';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end hash_strings;
+
+
+  procedure key_quoting
+  as
+    l_json json_object_t;
+    l_result clob;
+    l_expected clob;
+  begin
+    -- Keys outside ^[A-Za-z_][A-Za-z0-9_.]*$ must be quoted
+    -- (TOON spec 4.x, section 7.3)
+    l_json := json_object_t();
+    l_json.put('my-key', 1);
+    l_json.put('my key', 2);
+    l_json.put('a:b', 3);
+    l_json.put('normal', 4);
+    l_json.put('user.name', 5);
+
+    l_result := uc_ai_toon.to_toon(l_json);
+
+    l_expected := '"my-key": 1' || chr(10)
+               || '"my key": 2' || chr(10)
+               || '"a:b": 3' || chr(10)
+               || 'normal: 4' || chr(10)
+               || 'user.name: 5';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end key_quoting;
+
+
+  procedure plus_number_strings
+  as
+    l_json json_object_t;
+    l_result clob;
+    l_expected clob;
+  begin
+    -- Numeric-like strings incl. leading "+" must be quoted
+    -- (TOON spec 4.x, section 7.2)
+    l_json := json_object_t();
+    l_json.put('v', '+1');
+    l_json.put('w', '+3.14');
+
+    l_result := uc_ai_toon.to_toon(l_json);
+
+    l_expected := 'v: "+1"' || chr(10)
+               || 'w: "+3.14"';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end plus_number_strings;
+
+
+  procedure tabular_key_order_varies
+  as
+    l_json json_array_t;
+    l_obj1 json_object_t;
+    l_obj2 json_object_t;
+    l_result clob;
+    l_expected clob;
+  begin
+    -- Same key SET in different order is still tabular; the header uses
+    -- the first object's order and rows are reordered to match it
+    -- (TOON spec 4.x, section 9.3)
+    l_obj1 := json_object_t();
+    l_obj1.put('a', 1);
+    l_obj1.put('b', 2);
+
+    l_obj2 := json_object_t();
+    l_obj2.put('b', 3);
+    l_obj2.put('a', 4);
+
+    l_json := json_array_t();
+    l_json.append(l_obj1);
+    l_json.append(l_obj2);
+
+    l_result := uc_ai_toon.to_toon(l_json);
+
+    l_expected := '[2]{a,b}:' || chr(10)
+               || '  1,2' || chr(10)
+               || '  4,3';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end tabular_key_order_varies;
+
+
+  procedure empty_object_list_item
+  as
+    l_json json_array_t;
+    l_obj json_object_t;
+    l_result clob;
+    l_expected clob;
+  begin
+    -- An empty object as list item is a bare dash without trailing space
+    -- (TOON spec 4.x, sections 10 and 12)
+    l_obj := json_object_t();
+    l_obj.put('a', 1);
+
+    l_json := json_array_t();
+    l_json.append(json_object_t());
+    l_json.append(l_obj);
+
+    l_result := uc_ai_toon.to_toon(l_json);
+
+    l_expected := '[2]:' || chr(10)
+               || '  -' || chr(10)
+               || '  - a: 1';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end empty_object_list_item;
+
+
+  procedure nested_uniform_columns
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    -- Object-typed columns whose values are uniform fold into nested
+    -- field groups (TOON spec 4.x, section 9.3)
+    l_result := uc_ai_toon.to_toon(q'!{"orders": [{"id": 1, "customer": {"name": "Ada", "country": "DE"}}, {"id": 2, "customer": {"name": "Bob", "country": "FR"}}]}!');
+
+    l_expected := 'orders[2]{id,customer{name,country}}:' || chr(10)
+               || '  1,Ada,DE' || chr(10)
+               || '  2,Bob,FR';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end nested_uniform_columns;
+
+
+  procedure nested_uniform_single_row
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    l_result := uc_ai_toon.to_toon(q'![{"id": 1, "customer": {"name": "Ada", "country": "DE"}}]!');
+
+    l_expected := '[1]{id,customer{name,country}}:' || chr(10)
+               || '  1,Ada,DE';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end nested_uniform_single_row;
+
+
+  procedure nested_uniform_deep
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    l_result := uc_ai_toon.to_toon(q'!{"o": [{"id": 1, "l1": {"l2": {"x": "a", "y": "b"}}}, {"id": 2, "l1": {"l2": {"x": "c", "y": "d"}}}]}!');
+
+    l_expected := 'o[2]{id,l1{l2{x,y}}}:' || chr(10)
+               || '  1,a,b' || chr(10)
+               || '  2,c,d';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end nested_uniform_deep;
+
+
+  procedure keyed_tabular
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    -- Objects whose values are uniform objects use the keyed tabular
+    -- form (TOON spec 4.x, section 9.5)
+    l_result := uc_ai_toon.to_toon(q'!{"users": {"u1": {"id": 1, "name": "Ada"}, "u2": {"id": 2, "name": "Bob"}}}!');
+
+    l_expected := 'users[2:]{id,name}:' || chr(10)
+               || '  u1: 1,Ada' || chr(10)
+               || '  u2: 2,Bob';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end keyed_tabular;
+
+
+  procedure keyed_tabular_root
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    -- Keyed tabular form also applies at the document root (keyless header)
+    l_result := uc_ai_toon.to_toon(q'!{"u1": {"id": 1, "name": "Ada"}, "u2": {"id": 2, "name": "Bob"}}!');
+
+    l_expected := '[2:]{id,name}:' || chr(10)
+               || '  u1: 1,Ada' || chr(10)
+               || '  u2: 2,Bob';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end keyed_tabular_root;
+
+
+  procedure keyed_tabular_single_fallback
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    -- A single entry does not use the keyed tabular form
+    l_result := uc_ai_toon.to_toon(q'!{"users": {"u1": {"id": 1}}}!');
+
+    l_expected := 'users:' || chr(10)
+               || '  u1:' || chr(10)
+               || '    id: 1';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end keyed_tabular_single_fallback;
+
+
+  procedure keyed_tabular_nonuniform_fallback
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    -- Values with different key sets stay nested
+    l_result := uc_ai_toon.to_toon(q'!{"users": {"u1": {"id": 1}, "u2": {"id": 1, "extra": 2}}}!');
+
+    l_expected := 'users:' || chr(10)
+               || '  u1:' || chr(10)
+               || '    id: 1' || chr(10)
+               || '  u2:' || chr(10)
+               || '    id: 1' || chr(10)
+               || '    extra: 2';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end keyed_tabular_nonuniform_fallback;
+
+
+  procedure keyed_tabular_entry_key_quoting
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    -- Entry keys follow the same quoting rules as object keys
+    l_result := uc_ai_toon.to_toon(q'!{"my-key": {"id": 1}, "normal": {"id": 2}}!');
+
+    l_expected := '[2:]{id}:' || chr(10)
+               || '  "my-key": 1' || chr(10)
+               || '  normal: 2';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end keyed_tabular_entry_key_quoting;
+
+
+  procedure keyed_tabular_nested_columns
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    -- Nested field groups compose with the keyed tabular form
+    l_result := uc_ai_toon.to_toon(q'!{"users": {"u1": {"id": 1, "c": {"x": "a", "y": "b"}}, "u2": {"id": 2, "c": {"x": "c", "y": "d"}}}}!');
+
+    l_expected := 'users[2:]{id,c{x,y}}:' || chr(10)
+               || '  u1: 1,a,b' || chr(10)
+               || '  u2: 2,c,d';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end keyed_tabular_nested_columns;
+
+
+  procedure control_escapes
+  as
+    l_json json_object_t;
+    l_result clob;
+    l_expected clob;
+  begin
+    -- TOON allows only \\ \" \n \r \t \uXXXX: the JSON-only escapes
+    -- \b \f (and \/) must be translated (TOON spec 4.x, section 7.1)
+    l_json := json_object_t();
+    l_json.put('v', 'a' || chr(8) || chr(12) || 'c');
+    l_json.put('w', 'x' || chr(92) || 'bc');
+
+    l_result := uc_ai_toon.to_toon(l_json);
+
+    l_expected := 'v: "a\u0008\u000cc"' || chr(10)
+               || 'w: "x\\bc"';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end control_escapes;
+
+
+  procedure unicode_tabular
+  as
+    l_result clob;
+    l_expected clob;
+  begin
+    -- Multibyte values must survive tabular row rendering
+    l_result := uc_ai_toon.to_toon(q'![{"id": 1, "e": "🚀"}, {"id": 2, "e": "ok"}]!');
+
+    l_expected := '[2]{id,e}:' || chr(10)
+               || '  1,🚀' || chr(10)
+               || '  2,ok';
+
+    ut.expect(l_result).to_equal(l_expected);
+    sys.dbms_output.put_line('Result:' || chr(10) || l_result);
+  end unicode_tabular;
+
+
+  procedure root_primitives
+  as
+    l_result clob;
+  begin
+    -- A JSON string holding a single primitive converts to its TOON value
+    l_result := uc_ai_toon.to_toon(to_clob('"hello"'));
+    ut.expect(l_result).to_equal(to_clob('hello'));
+
+    l_result := uc_ai_toon.to_toon(to_clob('42'));
+    ut.expect(l_result).to_equal(to_clob('42'));
+
+    l_result := uc_ai_toon.to_toon(to_clob('true'));
+    ut.expect(l_result).to_equal(to_clob('true'));
+
+    l_result := uc_ai_toon.to_toon(to_clob('null'));
+    ut.expect(l_result).to_equal(to_clob('null'));
+
+    l_result := uc_ai_toon.to_toon(to_clob('"#tagged"'));
+    ut.expect(l_result).to_equal(to_clob('"#tagged"'));
+
+    sys.dbms_output.put_line('Root primitives test passed');
+  end root_primitives;
 
 end test_uc_ai_toon;
 /
