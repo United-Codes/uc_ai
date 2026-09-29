@@ -32,6 +32,10 @@ as
   c_model_mistral_embed    constant uc_ai.model_type := 'mistral-embed';
   c_model_codestral_embed  constant uc_ai.model_type := 'codestral-embed';
 
+  -- OCR models: use with uc_ai.ocr, not with generate_text
+  c_model_mistral_ocr      constant uc_ai.model_type := 'mistral-ocr-latest';
+  c_model_mistral_ocr_4_1  constant uc_ai.model_type := 'mistral-ocr-4-1';
+
   -- Note: Mistral has no reasoning effort parameter; the magistral models reason by default.
 
   -- type: HTTP-Header, credential-name: Authorization, value: Bearer <token>

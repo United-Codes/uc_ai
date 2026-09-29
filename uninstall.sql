@@ -51,6 +51,7 @@ DROP PACKAGE uc_ai_utils;
 DROP PACKAGE uc_ai_agent_workflow_api;
 DROP PACKAGE uc_ai_agent_exec_api;
 DROP PACKAGE uc_ai_agents_api;
+DROP PACKAGE uc_ai_ocr;
 DROP PACKAGE uc_ai_toon;
 DROP PACKAGE uc_ai_http;
 DROP PACKAGE uc_ai_error;

@@ -984,6 +984,26 @@ create or replace package body uc_ai_test_samples as
 }
 ~';
 
+      when 'mistral/ocr-invalid-model-response' then
+        return q'~{"object":"error","message":"Invalid model: no-such-ocr-model","type":"invalid_model","param":null,"code":"1500","raw_status_code":400}
+~';
+
+      when 'mistral/ocr-pdf-response' then
+        return q'~{"pages":[{"index":0,"markdown":"List of users:\n\n|  First Name | Last Name | Email  |\n| --- | --- | --- |\n|  Michael | Scott | michael.scott@dundermifflin.com  |\n|  Pam | Beesly | pam.beesly@dundermifflin.com  |\n|  Jim | Halpert | jim.halpert@dundermifflin.com  |\n|  Angela | Martin | angela.martin@dundermifflin.com  |\n|  Dwight | Schrute | dwight.schrute@dundermifflin.com  |\n|  Kevin | Malone | kevin.malone@dundermifflin.com  |","images":[],"tables":[],"hyperlinks":[],"header":null,"footer":null,"dimensions":{"dpi":87,"height":1018,"width":720},"confidence_scores":null,"blocks":[{"top_left_x":66,"top_left_y":67,"bottom_right_x":148,"bottom_right_y":87,"content":"List of users:","confidence_scores":null,"type":"text"},{"top_left_x":66,"top_left_y":85,"bottom_right_x":650,"bottom_right_y":248,"content":"|  First Name | Last Name | Email  |\n| --- | --- | --- |\n|  Michael | Scott | michael.scott@dundermifflin.com  |\n|  Pam | Beesly | pam.beesly@dundermifflin.com  |\n|  Jim | Halpert | jim.halpert@dundermifflin.com  |\n|  Angela | Martin | angela.martin@dundermifflin.com  |\n|  Dwight | Schrute | dwight.schrute@dundermifflin.com  |\n|  Kevin | Malone | kevin.malone@dundermifflin.com  |","confidence_scores":null,"type":"table","table_id":null}]}],"model":"mistral-ocr-latest","document_annotation":null,"usage_info":{"pages_processed":1,"doc_size_bytes":34116}}
+~';
+
+      when 'mistral/ocr-pdf-tables-response' then
+        return q'~{"pages":[{"index":0,"markdown":"List of users:\n\n[tbl-0.md](tbl-0.md)","images":[],"tables":[{"id":"tbl-0.md","content":"|  First Name | Last Name | Email  |\n| --- | --- | --- |\n|  Michael | Scott | michael.scott@dundermifflin.com  |\n|  Pam | Beesly | pam.beesly@dundermifflin.com  |\n|  Jim | Halpert | jim.halpert@dundermifflin.com  |\n|  Angela | Martin | angela.martin@dundermifflin.com  |\n|  Dwight | Schrute | dwight.schrute@dundermifflin.com  |\n|  Kevin | Malone | kevin.malone@dundermifflin.com  |","format":"markdown","word_confidence_scores":null}],"hyperlinks":[],"header":null,"footer":null,"dimensions":{"dpi":87,"height":1018,"width":720},"confidence_scores":null,"blocks":[{"top_left_x":66,"top_left_y":67,"bottom_right_x":148,"bottom_right_y":87,"content":"List of users:","confidence_scores":null,"type":"text"},{"top_left_x":66,"top_left_y":85,"bottom_right_x":652,"bottom_right_y":248,"content":"|  First Name | Last Name | Email  |\n| --- | --- | --- |\n|  Michael | Scott | michael.scott@dundermifflin.com  |\n|  Pam | Beesly | pam.beesly@dundermifflin.com  |\n|  Jim | Halpert | jim.halpert@dundermifflin.com  |\n|  Angela | Martin | angela.martin@dundermifflin.com  |\n|  Dwight | Schrute | dwight.schrute@dundermifflin.com  |\n|  Kevin | Malone | kevin.malone@dundermifflin.com  |","confidence_scores":null,"type":"table","table_id":"tbl-0.md"}]}],"model":"mistral-ocr-latest","document_annotation":null,"usage_info":{"pages_processed":1,"doc_size_bytes":34116}}
+~';
+
+      when 'mistral/ocr-png-response' then
+        return q'~{"pages":[{"index":0,"markdown":"![img-0.jpeg](img-0.jpeg)\n\n2","images":[{"id":"img-0.jpeg","top_left_x":42,"top_left_y":32,"bottom_right_x":167,"bottom_right_y":165,"image_base64":null,"image_annotation":null}],"tables":[],"hyperlinks":[],"header":null,"footer":null,"dimensions":{"dpi":200,"height":200,"width":200},"confidence_scores":null,"blocks":[{"top_left_x":42,"top_left_y":32,"bottom_right_x":167,"bottom_right_y":165,"content":"![img-0.jpeg](img-0.jpeg)","confidence_scores":null,"type":"image","image_id":"img-0.jpeg"},{"top_left_x":99,"top_left_y":186,"bottom_right_x":101,"bottom_right_y":188,"content":"2","confidence_scores":null,"type":"footer"}]}],"model":"mistral-ocr-latest","document_annotation":null,"usage_info":{"pages_processed":1,"doc_size_bytes":32865}}
+~';
+
+      when 'mistral/ocr-webp-empty-response' then
+        return q'~{"pages":[{"index":0,"markdown":"","images":[],"tables":[],"hyperlinks":[],"header":null,"footer":null,"dimensions":{"dpi":200,"height":130,"width":130},"confidence_scores":null,"blocks":[]}],"model":"mistral-ocr-latest","document_annotation":null,"usage_info":{"pages_processed":1,"doc_size_bytes":1906}}
+~';
+
       when 'oci_cohere/1-simple-request' then
         return q'~{
   "compartmentId": "ocid1.tenancy.oc1..aaaaaaaaXXXX...",

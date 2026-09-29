@@ -29,11 +29,14 @@ as
   /*
    * POST p_body to p_url and return the response body.
    * With no transport registered this is apex_web_service.make_rest_request.
+   * p_transfer_timeout is in seconds; null keeps the apex_web_service default
+   * (180). A registered transport does not receive it.
    */
   function post(
     p_url                  in varchar2
   , p_body                 in clob
   , p_credential_static_id in varchar2 default null
+  , p_transfer_timeout     in number   default null
   ) return clob;
 
   /*

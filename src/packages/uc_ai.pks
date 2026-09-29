@@ -237,6 +237,56 @@ as
   ) return json_array_t;
 
   /*
+   * OCR: extract text from a PDF or an image.
+   *
+   * Returns a provider-neutral JSON object: markdown (all pages joined with a
+   * blank line), pages (index, markdown, blocks with normalized boxes, dimensions),
+   * usage (only what the provider reports), model, warnings and raw (the provider
+   * response). See uc_ai_ocr for the full shape.
+   *
+   * p_provider is required. p_model null uses the provider default (Mistral:
+   * uc_ai_mistral.c_model_mistral_ocr). p_options holds provider options, passed
+   * on as they are. Neutral keys: pages, tables. The key extra_body (an object)
+   * is merged into the request body; the keys model and document always win.
+   *
+   * An unsupported media type raises -20508 before any request is sent. A
+   * provider error raises -20302.
+   *
+   * Settings such as g_apex_web_credential come from the package globals, like in
+   * generate_text.
+   */
+  function ocr (
+    p_document   in blob
+  , p_media_type in varchar2
+  , p_provider   in provider_type
+  , p_model      in model_type default null
+  , p_options    in json_object_t default null
+  ) return json_object_t;
+
+  /*
+   * OCR of a document behind a public URL or a data: URL (Mistral only). A
+   * data: URL is limited by the varchar2 size; use the blob overload for a
+   * larger file.
+   */
+  function ocr (
+    p_url        in varchar2
+  , p_provider   in provider_type
+  , p_model      in model_type default null
+  , p_options    in json_object_t default null
+  ) return json_object_t;
+
+  /*
+   * Same as ocr, returns only the text (result.markdown).
+   */
+  function ocr_text (
+    p_document   in blob
+  , p_media_type in varchar2
+  , p_provider   in provider_type
+  , p_model      in model_type default null
+  , p_options    in json_object_t default null
+  ) return clob;
+
+  /*
    * Resets all global variables in uc_ai and provider packages to their default values.
    * Note: g_event_callback is intentionally preserved across resets (long-lived registration).
    */
