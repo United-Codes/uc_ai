@@ -244,6 +244,25 @@ create or replace package body test_uc_ai_ocr_wire as
   end mistral_url_and_model;
 
 
+  procedure mistral_base_url
+  as
+    l_result json_object_t;
+  begin
+    test_uc_ai_wire.enqueue_sample(c_sample_pdf);
+    test_uc_ai_wire.enqueue_sample(c_sample_pdf);
+
+    uc_ai.g_base_url := 'https://proxy.example.test/mistral/v1';
+    l_result := pdf_ocr;
+
+    uc_ai.g_base_url := 'https://proxy.example.test/mistral/v1/';
+    l_result := pdf_ocr;
+
+    test_uc_ai_wire.expect_url(1, 'https://proxy.example.test/mistral/v1/ocr');
+    test_uc_ai_wire.expect_url(2, 'https://proxy.example.test/mistral/v1/ocr');
+    test_uc_ai_wire.expect_all_consumed(2);
+  end mistral_base_url;
+
+
   procedure mistral_pdf_document_url
   as
     l_result   json_object_t;

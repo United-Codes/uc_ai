@@ -66,7 +66,7 @@ function ocr_text (
 | `p_model` | `model_type` | Depends on the provider | `null` selects the default model of the provider. OCI ignores it. Ollama requires it. |
 | `p_options` | `json_object_t` | No | Options for the call. See [Options](#options). |
 
-The configuration that `generate_text` reads from the package globals applies to OCR too. This includes `uc_ai.g_apex_web_credential`, the credential of the provider, `uc_ai.g_extra_headers` and, for Ollama and OCI, `uc_ai.g_base_url`. A Mistral OCR request always goes to `https://api.mistral.ai/v1/ocr`. `uc_ai.g_extra_body` does not apply to OCR. Use the `extra_body` option instead.
+The configuration that `generate_text` reads from the package globals applies to OCR too. This includes `uc_ai.g_apex_web_credential`, the credential of the provider, `uc_ai.g_extra_headers` and `uc_ai.g_base_url`. Without `uc_ai.g_base_url`, a Mistral OCR request goes to `https://api.mistral.ai/v1/ocr`. `uc_ai.g_extra_body` does not apply to OCR. Use the `extra_body` option instead.
 
 UC AI checks the provider, the media type and the options before it sends a request. A document with an unsupported media type costs no request. UC AI never writes the request body to the log, because the body holds the whole document in Base64. The log holds the provider, the media type, the size in bytes and the names of the options.
 

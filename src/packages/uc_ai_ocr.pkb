@@ -493,8 +493,9 @@ create or replace package body uc_ai_ocr as
     l_usage_in       json_object_t;
     l_usage          json_object_t := json_object_t();
     l_resp_model     varchar2(255 char);
-    l_url            varchar2(4000 char) := c_mistral_base_url || '/ocr';
+    l_url            varchar2(4000 char);
   begin
+    l_url   := rtrim(coalesce(p_settings.base_url, c_mistral_base_url), '/') || '/ocr';
     l_model := coalesce(p_model, uc_ai_mistral.c_model_mistral_ocr);
     l_body  := mistral_body(p_options, l_scope);
     l_body.put('model', l_model);

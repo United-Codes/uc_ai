@@ -30,6 +30,9 @@ create or replace package test_uc_ai_ocr_wire as
   --%test(Mistral: the request goes to /ocr with the default OCR model)
   procedure mistral_url_and_model;
 
+  --%test(Mistral: base_url replaces the host and a trailing slash does not double)
+  procedure mistral_base_url;
+
   --%test(Mistral: a PDF is sent as document_url with a data URL that holds the base64 of the blob)
   procedure mistral_pdf_document_url;
 
