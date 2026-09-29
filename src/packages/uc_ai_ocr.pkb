@@ -17,6 +17,21 @@ create or replace package body uc_ai_ocr as
   c_types_oci     constant varchar2(1000 char) := c_mime_pdf || ',image/png,image/jpeg,image/tiff';
   c_types_ollama  constant varchar2(1000 char) := 'image/png,image/jpeg,image/webp';
 
+  -- OCI Document Understanding
+  c_oci_url_prefix   constant varchar2(100 char) := 'https://document.aiservice.';
+  c_oci_analyze_path constant varchar2(100 char) := '/20221109/actions/analyzeDocument';
+  c_oci_model        constant varchar2(100 char) := 'oci-document-understanding';
+  -- limit of a synchronous analyzeDocument call; more needs an async job
+  c_oci_max_bytes    constant pls_integer := 8388608;
+  -- a table cell index above this is not a real cell; it would only grow the grid
+  c_oci_max_index    constant pls_integer := 9999;
+
+  type t_num_tab   is table of number index by pls_integer;
+  type t_bool_tab  is table of boolean index by pls_integer;
+  type t_clob_tab  is table of clob index by pls_integer;
+  type t_cell_tab  is table of varchar2(32767 char) index by pls_integer;
+  type t_obj_tab   is table of json_object_t index by pls_integer;
+
   -- ---- shared helpers ---------------------------------------------------------
 
   /*
@@ -557,6 +572,688 @@ create or replace package body uc_ai_ocr as
   end ocr_mistral;
 
 
+  -- ---- OCI Document Understanding adapter -------------------------------------
+
+  function oci_url (
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
+  as
+  begin
+    if p_settings.base_url is not null then
+      return rtrim(p_settings.base_url, '/') || c_oci_analyze_path;
+    end if;
+
+    -- same default region as uc_ai_oci
+    return c_oci_url_prefix || coalesce(p_settings.oc_region, 'us-ashburn-1') || '.oci.oraclecloud.com' || c_oci_analyze_path;
+  end oci_url;
+
+
+  /*
+   * The box (min and max of the vertices, rounded to 6 decimals) and the polygon
+   * ([{x,y}]) of an OCI element with a boundingPolygon. Both are null when the
+   * element has no usable vertex.
+   */
+  procedure oci_geometry (
+    p_element    in  json_object_t
+  , po_box       out json_object_t
+  , po_polygon   out json_array_t
+  )
+  as
+    l_vertices json_array_t;
+    l_vertex   json_object_t;
+    l_point    json_object_t;
+    l_x        number;
+    l_y        number;
+    l_min_x    number;
+    l_min_y    number;
+    l_max_x    number;
+    l_max_y    number;
+  begin
+    po_box     := null;
+    po_polygon := null;
+
+    if p_element is null
+      or not p_element.has('boundingPolygon') or not p_element.get('boundingPolygon').is_object
+    then
+      return;
+    end if;
+
+    if not p_element.get_object('boundingPolygon').has('normalizedVertices')
+      or not p_element.get_object('boundingPolygon').get('normalizedVertices').is_array
+    then
+      return;
+    end if;
+
+    l_vertices := p_element.get_object('boundingPolygon').get_array('normalizedVertices');
+    po_polygon := json_array_t();
+
+    <<vertex_loop>>
+    for i in 0 .. l_vertices.get_size - 1 loop
+      continue when not l_vertices.get(i).is_object;
+      l_vertex := treat(l_vertices.get(i) as json_object_t);
+      continue when not l_vertex.has('x') or not l_vertex.get('x').is_number
+                 or not l_vertex.has('y') or not l_vertex.get('y').is_number;
+
+      l_x := l_vertex.get_number('x');
+      l_y := l_vertex.get_number('y');
+      l_min_x := least(nvl(l_min_x, l_x), l_x);
+      l_max_x := greatest(nvl(l_max_x, l_x), l_x);
+      l_min_y := least(nvl(l_min_y, l_y), l_y);
+      l_max_y := greatest(nvl(l_max_y, l_y), l_y);
+
+      l_point := json_object_t();
+      l_point.put('x', l_x);
+      l_point.put('y', l_y);
+      po_polygon.append(l_point);
+    end loop vertex_loop;
+
+    if l_min_x is null then
+      po_polygon := null;
+      return;
+    end if;
+
+    po_box := json_object_t();
+    po_box.put('x1', round(l_min_x, 6));
+    po_box.put('y1', round(l_min_y, 6));
+    po_box.put('x2', round(l_max_x, 6));
+    po_box.put('y2', round(l_max_y, 6));
+  end oci_geometry;
+
+
+  /*
+   * A cell of a Markdown table: a pipe is escaped and a line break becomes a space.
+   */
+  function markdown_cell (
+    p_text in varchar2
+  ) return varchar2
+  as
+  begin
+    return trim(replace(replace(replace(replace(p_text, '|', '\|'), chr(13) || chr(10), ' '), chr(10), ' '), chr(13), ' '));
+  end markdown_cell;
+
+
+  /*
+   * A Markdown table from an OCI table. The cells of headerRows, bodyRows and
+   * footerRows are put in a grid by rowIndex and columnIndex; a position without
+   * a cell (a merged cell, a gap) stays empty. Markdown needs a header row, so
+   * grid row 0 is the header row, whether OCI calls it a header row or not.
+   * Returns null when the table holds no usable cell.
+   */
+  function oci_table_markdown (
+    p_table in json_object_t
+  ) return clob
+  as
+    l_groups   json_key_list;
+    l_rows     json_array_t;
+    l_row      json_object_t;
+    l_cells    json_array_t;
+    l_cell     json_object_t;
+    l_grid_arr     t_cell_tab;
+    l_row_idx  number;
+    l_col_idx  number;
+    l_max_row  pls_integer := -1;
+    l_max_col  pls_integer := -1;
+    l_line     varchar2(32767 char);
+    l_result   clob;
+  begin
+    l_groups := json_key_list('headerRows', 'bodyRows', 'footerRows');
+
+    <<group_loop>>
+    for g in 1 .. l_groups.count loop
+      continue when not p_table.has(l_groups(g)) or not p_table.get(l_groups(g)).is_array;
+      l_rows := p_table.get_array(l_groups(g));
+
+      <<row_loop>>
+      for r in 0 .. l_rows.get_size - 1 loop
+        continue when not l_rows.get(r).is_object;
+        l_row := treat(l_rows.get(r) as json_object_t);
+        continue when not l_row.has('cells') or not l_row.get('cells').is_array;
+        l_cells := l_row.get_array('cells');
+
+        <<cell_loop>>
+        for c in 0 .. l_cells.get_size - 1 loop
+          continue when not l_cells.get(c).is_object;
+          l_cell := treat(l_cells.get(c) as json_object_t);
+          continue when not l_cell.has('rowIndex') or not l_cell.get('rowIndex').is_number
+                     or not l_cell.has('columnIndex') or not l_cell.get('columnIndex').is_number;
+
+          l_row_idx := l_cell.get_number('rowIndex');
+          l_col_idx := l_cell.get_number('columnIndex');
+          continue when l_row_idx not between 0 and c_oci_max_index or l_col_idx not between 0 and c_oci_max_index
+                     or l_row_idx != trunc(l_row_idx) or l_col_idx != trunc(l_col_idx);
+
+          l_grid_arr(l_row_idx * (c_oci_max_index + 1) + l_col_idx) :=
+            case when l_cell.has('text') and l_cell.get('text').is_string
+                 then markdown_cell(l_cell.get_string('text')) end;
+          l_max_row := greatest(l_max_row, l_row_idx);
+          l_max_col := greatest(l_max_col, l_col_idx);
+        end loop cell_loop;
+      end loop row_loop;
+    end loop group_loop;
+
+    if l_max_row < 0 then
+      return null;
+    end if;
+
+    -- the stated size can be larger than the cells that came back
+    if p_table.has('columnCount') and p_table.get('columnCount').is_number then
+      l_max_col := least(greatest(l_max_col, p_table.get_number('columnCount') - 1), c_oci_max_index);
+    end if;
+
+    sys.dbms_lob.createtemporary(l_result, true);
+
+    <<grid_row_loop>>
+    for r in 0 .. l_max_row loop
+      l_line := '|';
+      <<grid_col_loop>>
+      for c in 0 .. l_max_col loop
+        l_line := l_line || ' '
+          || case when l_grid_arr.exists(r * (c_oci_max_index + 1) + c) then l_grid_arr(r * (c_oci_max_index + 1) + c) end
+          || ' |';
+      end loop grid_col_loop;
+
+      sys.dbms_lob.writeappend(l_result, length(l_line) + 1, l_line || chr(10));
+
+      if r = 0 then
+        l_line := '|';
+        <<separator_loop>>
+        for c in 0 .. l_max_col loop
+          l_line := l_line || ' --- |';
+        end loop separator_loop;
+        sys.dbms_lob.writeappend(l_result, length(l_line) + 1, l_line || chr(10));
+      end if;
+    end loop grid_row_loop;
+
+    -- no trailing line break
+    sys.dbms_lob.trim(l_result, sys.dbms_lob.getlength(l_result) - 1);
+    return l_result;
+  end oci_table_markdown;
+
+
+  /*
+   * Append text to the markdown, after the separator unless the markdown is empty.
+   */
+  procedure md_append (
+    pio_markdown in out nocopy clob
+  , p_text       in            clob
+  , p_sep        in            varchar2
+  )
+  as
+  begin
+    if sys.dbms_lob.getlength(pio_markdown) > 0 then
+      sys.dbms_lob.writeappend(pio_markdown, length(p_sep), p_sep);
+    end if;
+    sys.dbms_lob.append(pio_markdown, p_text);
+  end md_append;
+
+
+  /*
+   * One OCI page in the neutral shape. The markdown holds the text lines (a wider
+   * vertical gap than one line height starts a new paragraph) and the tables. A
+   * table sits where its polygon starts, in reading order, and replaces the lines
+   * inside its polygon (they repeat its cells). A table without a polygon comes
+   * after the text.
+   * Blocks: the text lines first (all of them, also the ones inside a table),
+   * then the tables.
+   */
+  function oci_page (
+    p_page     in json_object_t
+  , p_position in pls_integer
+  ) return json_object_t
+  as
+    l_page       json_object_t := json_object_t();
+    l_dim        json_object_t;
+    l_dimensions json_object_t;
+    l_lines      json_array_t := json_array_t();
+    l_tables     json_array_t := json_array_t();
+    l_blocks     json_array_t := json_array_t();
+    l_line       json_object_t;
+    l_table      json_object_t;
+    l_block      json_object_t;
+    l_box        json_object_t;
+    l_polygon    json_array_t;
+    l_text       clob;
+    l_markdown   clob;
+    l_t_md_arr t_clob_tab;
+    l_t_has_box_arr  t_bool_tab;
+    l_t_x1_arr       t_num_tab;
+    l_t_y1_arr       t_num_tab;
+    l_t_x2_arr       t_num_tab;
+    l_t_y2_arr       t_num_tab;
+    l_t_done_arr     t_bool_tab;
+    l_t_block_arr    t_obj_tab;
+    l_cx         number;
+    l_cy         number;
+    l_inside     boolean;
+    l_next       pls_integer;
+    l_prev_y2    number;
+    l_prev_h     number;
+    l_after_gap  boolean := false;
+    l_index      number;
+  begin
+    sys.dbms_lob.createtemporary(l_markdown, true);
+
+    if p_page.has('lines') and p_page.get('lines').is_array then
+      l_lines := p_page.get_array('lines');
+    end if;
+    if p_page.has('tables') and p_page.get('tables').is_array then
+      l_tables := p_page.get_array('tables');
+    end if;
+
+    -- tables first: their markdown and boxes decide where the lines go
+    <<table_loop>>
+    for t in 0 .. l_tables.get_size - 1 loop
+      continue when not l_tables.get(t).is_object;
+      l_table := treat(l_tables.get(t) as json_object_t);
+      l_text  := oci_table_markdown(l_table);
+      continue when l_text is null;
+
+      l_t_md_arr(t) := l_text;
+      l_t_done_arr(t) := false;
+      oci_geometry(l_table, l_box, l_polygon);
+      l_t_has_box_arr(t) := l_box is not null;
+      if l_box is not null then
+        l_t_x1_arr(t) := l_box.get_number('x1');
+        l_t_y1_arr(t) := l_box.get_number('y1');
+        l_t_x2_arr(t) := l_box.get_number('x2');
+        l_t_y2_arr(t) := l_box.get_number('y2');
+      end if;
+
+      l_block := json_object_t();
+      l_block.put('type', 'table');
+      l_block.put('text', l_text);
+      if l_table.has('confidence') and l_table.get('confidence').is_number then
+        l_block.put('confidence', l_table.get_number('confidence'));
+      end if;
+      if l_box is not null then
+        l_block.put('box', l_box);
+        l_block.put('polygon', l_polygon);
+      end if;
+      -- appended after the text blocks below
+      l_t_block_arr(t) := l_block;
+    end loop table_loop;
+
+    <<line_loop>>
+    for i in 0 .. l_lines.get_size - 1 loop
+      continue when not l_lines.get(i).is_object;
+      l_line := treat(l_lines.get(i) as json_object_t);
+      continue when not l_line.has('text') or not l_line.get('text').is_string;
+      l_text := l_line.get_clob('text');
+      continue when sys.dbms_lob.getlength(l_text) = 0;
+
+      oci_geometry(l_line, l_box, l_polygon);
+
+      l_block := json_object_t();
+      l_block.put('type', 'text');
+      l_block.put('text', l_text);
+      if l_line.has('confidence') and l_line.get('confidence').is_number then
+        l_block.put('confidence', l_line.get_number('confidence'));
+      end if;
+      if l_box is not null then
+        l_block.put('box', l_box);
+        l_block.put('polygon', l_polygon);
+      end if;
+      l_blocks.append(l_block);
+
+      if l_box is not null then
+        l_cx := (l_box.get_number('x1') + l_box.get_number('x2')) / 2;
+        l_cy := (l_box.get_number('y1') + l_box.get_number('y2')) / 2;
+
+        -- tables that start above this line, the highest first
+        <<pending_loop>>
+        loop
+          l_next := null;
+          <<pending_search_loop>>
+          for t in 0 .. l_tables.get_size - 1 loop
+            if l_t_done_arr.exists(t) and not l_t_done_arr(t) and l_t_has_box_arr(t) and l_t_y1_arr(t) <= l_cy
+              and (l_next is null or l_t_y1_arr(t) < l_t_y1_arr(l_next))
+            then
+              l_next := t;
+            end if;
+          end loop pending_search_loop;
+          exit pending_loop when l_next is null;
+          l_t_done_arr(l_next) := true;
+          md_append(l_markdown, l_t_md_arr(l_next), chr(10) || chr(10));
+          l_after_gap := true;
+          l_prev_y2   := null;
+        end loop pending_loop;
+
+        -- a line inside a table repeats its cells
+        l_inside := false;
+        <<inside_loop>>
+        for t in 0 .. l_tables.get_size - 1 loop
+          if l_t_done_arr.exists(t) and l_t_has_box_arr(t)
+            and l_cx between l_t_x1_arr(t) and l_t_x2_arr(t) and l_cy between l_t_y1_arr(t) and l_t_y2_arr(t)
+          then
+            l_inside := true;
+            exit inside_loop;
+          end if;
+        end loop inside_loop;
+        continue when l_inside;
+      end if;
+
+      md_append(
+        l_markdown
+      , l_text
+      , case when l_after_gap or (l_prev_y2 is not null and l_box is not null and l_prev_h > 0
+                                  and l_box.get_number('y1') - l_prev_y2 > l_prev_h)
+             then chr(10) || chr(10) else chr(10) end
+      );
+      l_after_gap := false;
+      if l_box is not null then
+        l_prev_y2 := l_box.get_number('y2');
+        l_prev_h  := l_box.get_number('y2') - l_box.get_number('y1');
+      else
+        l_prev_y2 := null;
+      end if;
+    end loop line_loop;
+
+    -- tables not placed yet: no polygon, or below the last line
+    <<rest_loop>>
+    for t in 0 .. l_tables.get_size - 1 loop
+      if l_t_done_arr.exists(t) and not l_t_done_arr(t) then
+        l_t_done_arr(t) := true;
+        md_append(l_markdown, l_t_md_arr(t), chr(10) || chr(10));
+        l_after_gap := true;
+        l_prev_y2   := null;
+      end if;
+    end loop rest_loop;
+
+    <<table_block_loop>>
+    for t in 0 .. l_tables.get_size - 1 loop
+      if l_t_done_arr.exists(t) then
+        l_blocks.append(l_t_block_arr(t));
+      end if;
+    end loop table_block_loop;
+
+    l_index := case when p_page.has('pageNumber') and p_page.get('pageNumber').is_number
+                    then p_page.get_number('pageNumber') - 1 else p_position end;
+    l_page.put('index', l_index);
+    l_page.put('markdown', l_markdown);
+    l_page.put('blocks', l_blocks);
+
+    if p_page.has('dimensions') and p_page.get('dimensions').is_object then
+      l_dim := p_page.get_object('dimensions');
+      if l_dim.has('width') and l_dim.get('width').is_number and l_dim.has('height') and l_dim.get('height').is_number then
+        l_dimensions := json_object_t();
+        l_dimensions.put('width', l_dim.get_number('width'));
+        l_dimensions.put('height', l_dim.get_number('height'));
+        if l_dim.has('unit') and l_dim.get('unit').is_string then
+          l_dimensions.put('unit', l_dim.get_string('unit'));
+        end if;
+        l_page.put('dimensions', l_dimensions);
+      end if;
+    end if;
+
+    return l_page;
+  end oci_page;
+
+
+  /*
+   * The request body. Options are passed on (language, documentType, features and
+   * any other key); the neutral keys pages and tables and the key extra_body are
+   * not OCI keys. A passed features array wins over the default. compartmentId and
+   * document are reserved and set by the caller after this.
+   */
+  function oci_body (
+    p_options in json_object_t
+  , p_scope   in varchar2
+  ) return json_object_t
+  as
+    l_body       json_object_t := json_object_t();
+    l_keys       json_key_list;
+    l_extra      json_object_t;
+    l_extra_keys json_key_list;
+    l_features   json_array_t := json_array_t();
+    l_feature    json_object_t;
+  begin
+    if p_options is not null then
+      l_keys := p_options.get_keys;
+      <<option_loop>>
+      for i in 1 .. l_keys.count loop
+        continue when l_keys(i) in ('extra_body', 'tables', 'pages');
+        l_body.put(l_keys(i), p_options.get(l_keys(i)));
+      end loop option_loop;
+    end if;
+
+    if l_body.has('features') then
+      if not l_body.get('features').is_array then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => p_scope
+        , p0           => 'OCR option features'
+        , p1           => 'it must be an array of {"featureType": ...} objects'
+        );
+      end if;
+    else
+      l_feature := json_object_t();
+      l_feature.put('featureType', 'TEXT_EXTRACTION');
+      l_features.append(l_feature);
+
+      if p_options is not null and p_options.has('tables') and p_options.get('tables').is_true then
+        l_feature := json_object_t();
+        l_feature.put('featureType', 'TABLE_EXTRACTION');
+        l_features.append(l_feature);
+      end if;
+
+      l_body.put('features', l_features);
+    end if;
+
+    if p_options is not null and p_options.has('extra_body') and not p_options.get('extra_body').is_null then
+      if not p_options.get('extra_body').is_object then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => p_scope
+        , p0           => 'OCR option extra_body'
+        , p1           => 'it must be a JSON object'
+        );
+      end if;
+
+      l_extra      := p_options.get_object('extra_body');
+      l_extra_keys := l_extra.get_keys;
+      <<extra_loop>>
+      for i in 1 .. l_extra_keys.count loop
+        l_body.put(l_extra_keys(i), l_extra.get(l_extra_keys(i)));
+      end loop extra_loop;
+    end if;
+
+    return l_body;
+  end oci_body;
+
+
+  /*
+   * True when p_index is in the 0-based index list of the neutral option pages.
+   */
+  function page_selected (
+    p_pages in json_array_t
+  , p_index in number
+  ) return boolean
+  as
+  begin
+    <<selected_loop>>
+    for i in 0 .. p_pages.get_size - 1 loop
+      if p_pages.get(i).is_number and p_pages.get(i).to_number = p_index then
+        return true;
+      end if;
+    end loop selected_loop;
+    return false;
+  end page_selected;
+
+
+  function ocr_oci (
+    p_document   in blob
+  , p_media_type in varchar2
+  , p_options    in json_object_t
+  , p_settings   in uc_ai_settings.t_settings
+  ) return json_object_t
+  as
+    l_scope       uc_ai_logger.scope := c_scope_prefix || 'ocr_oci';
+    l_url         varchar2(4000 char);
+    l_web_credential varchar2(255 char);
+    l_body        json_object_t;
+    l_doc         json_object_t := json_object_t();
+    l_data        clob;
+    l_selection   json_array_t;
+    l_resp        clob;
+    l_resp_json   json_object_t;
+    l_pages_in    json_array_t;
+    l_pages       json_array_t := json_array_t();
+    l_page        json_object_t;
+    l_errors      json_array_t;
+    l_error       json_object_t;
+    l_warnings    json_array_t := json_array_t();
+    l_usage       json_object_t := json_object_t();
+    l_model       varchar2(255 char);
+    l_warning     varchar2(4000 char);
+  begin
+    l_url := oci_url(p_settings);
+
+    if sys.dbms_lob.getlength(p_document) > c_oci_max_bytes then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'OCR document'
+      , p1           => sys.dbms_lob.getlength(p_document) || ' bytes are more than the 8 MB limit of OCI Document Understanding'
+      );
+    end if;
+
+    if p_settings.oc_compartment_id is null then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_missing_config
+      , p_scope      => l_scope
+      , p0           => 'OCI provider'
+      , p1           => 'g_compartment_id to be configured'
+      );
+    end if;
+
+    if p_options is not null and p_options.has('pages') and not p_options.get('pages').is_null then
+      if not p_options.get('pages').is_array then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'OCR option pages'
+        , p1           => 'it must be an array of 0-based page indexes'
+        );
+      end if;
+      l_selection := p_options.get_array('pages');
+    end if;
+
+    l_body := oci_body(p_options, l_scope);
+    l_body.put('compartmentId', p_settings.oc_compartment_id);
+
+    l_data := to_base64(p_document);
+    l_doc.put('source', 'INLINE');
+    l_doc.put('data', l_data);
+    l_body.put('document', l_doc);
+
+    -- OCI signs the Content-Type header: with a charset added every call fails with
+    -- 401 "Failed to verify the HTTP(S) Signature". Do not copy the header of uc_ai_oci.
+    apex_web_service.clear_request_headers;
+    apex_web_service.set_request_headers('Content-Type', 'application/json');
+    uc_ai_settings.apply_extra_headers(p_settings);
+
+    l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.oc_apex_web_credential);
+
+    -- Never log l_body: it holds the whole document as base64
+    uc_ai_logger.log(
+      'Calling OCI Document Understanding at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null')
+    , l_scope
+    , 'source=' || p_media_type || ', ' || sys.dbms_lob.getlength(p_document) || ' bytes'
+      || ', option keys=' || nvl(option_keys(p_options), 'none')
+    );
+
+    l_resp := uc_ai_http.post(
+      p_url                  => l_url
+    , p_body                 => l_body.to_clob
+    , p_credential_static_id => l_web_credential
+    , p_transfer_timeout     => c_transfer_timeout
+    );
+
+    l_resp_json := parse_response(l_resp, 'OCI', l_scope);
+
+    if l_resp_json.has('pages') and l_resp_json.get('pages').is_array then
+      l_pages_in := l_resp_json.get_array('pages');
+    end if;
+
+    -- errors inside a 200 (for example FEATURE_NOT_SUPPORTED for an image without text)
+    -- are warnings; without any page the request gave nothing, so that raises
+    if l_resp_json.has('errors') and l_resp_json.get('errors').is_array then
+      l_errors := l_resp_json.get_array('errors');
+      <<error_loop>>
+      for i in 0 .. l_errors.get_size - 1 loop
+        if l_errors.get(i).is_object then
+          l_error   := treat(l_errors.get(i) as json_object_t);
+          l_warning := case when l_error.has('code') and l_error.get('code').is_string then l_error.get_string('code') end
+                       || case when l_error.has('code') and l_error.get('code').is_string
+                                and l_error.has('message') and l_error.get('message').is_string then ': ' end
+                       || case when l_error.has('message') and l_error.get('message').is_string then l_error.get_string('message') end;
+        elsif l_errors.get(i).is_string then
+          l_warning := substr(l_errors.get_string(i), 1, 4000);
+        else
+          l_warning := null;
+        end if;
+        l_warnings.append(nvl(l_warning, 'unknown error'));
+      end loop error_loop;
+
+      if l_errors.get_size > 0 and (l_pages_in is null or l_pages_in.get_size = 0) then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_provider_response
+        , p_scope      => l_scope
+        , p0           => 'OCI'
+        , p1           => l_warnings.get_string(0)
+        , p_extra      => l_resp
+        );
+      end if;
+    end if;
+
+    if l_pages_in is null then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'OCI'
+      , p1           => 'response has no pages array'
+      , p_extra      => l_resp
+      );
+    end if;
+
+    <<page_loop>>
+    for i in 0 .. l_pages_in.get_size - 1 loop
+      continue when not l_pages_in.get(i).is_object;
+      l_page := oci_page(treat(l_pages_in.get(i) as json_object_t), i);
+
+      if l_selection is null or page_selected(l_selection, l_page.get_number('index')) then
+        l_pages.append(l_page);
+      end if;
+    end loop page_loop;
+
+    if l_resp_json.has('documentMetadata') and l_resp_json.get('documentMetadata').is_object then
+      if l_resp_json.get_object('documentMetadata').has('pageCount')
+        and l_resp_json.get_object('documentMetadata').get('pageCount').is_number
+      then
+        l_usage.put('pages', l_resp_json.get_object('documentMetadata').get_number('pageCount'));
+      end if;
+    end if;
+
+    l_model := case when l_resp_json.has('textExtractionModelVersion') and l_resp_json.get('textExtractionModelVersion').is_string
+                    then l_resp_json.get_string('textExtractionModelVersion') else c_oci_model end;
+
+    uc_ai_logger.log(
+      'OCI Document Understanding response'
+    , l_scope
+    , 'pages=' || l_pages.get_size || ', warnings=' || l_warnings.get_size
+      || ', response length=' || sys.dbms_lob.getlength(l_resp)
+    );
+
+    return new_result(
+      p_pages    => l_pages
+    , p_usage    => l_usage
+    , p_model    => l_model
+    , p_warnings => l_warnings
+    , p_raw      => l_resp_json
+    );
+  end ocr_oci;
+
+
   -- ---- dispatcher -------------------------------------------------------------
 
   function ocr (
@@ -575,7 +1272,7 @@ create or replace package body uc_ai_ocr as
   begin
     l_media_type := normalize_media_type(p_media_type);
 
-    -- 1. provider: null and unknown first, then the ones without an adapter yet
+    -- 1. provider: null and unknown first, then the one without an adapter yet
     if p_provider is null or p_provider not in (uc_ai.c_provider_mistral, uc_ai.c_provider_oci, uc_ai.c_provider_ollama) then
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_unknown_provider
@@ -584,7 +1281,7 @@ create or replace package body uc_ai_ocr as
       );
     end if;
 
-    if p_provider != uc_ai.c_provider_mistral then
+    if p_provider = uc_ai.c_provider_ollama then
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_unknown_provider
       , p_scope      => l_scope
@@ -595,6 +1292,15 @@ create or replace package body uc_ai_ocr as
 
     -- 2. input: one source, not empty, a media type the provider accepts
     if p_url is not null then
+      -- only Mistral fetches a document from a URL
+      if p_provider != uc_ai.c_provider_mistral then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_unsupported_content
+        , p_scope      => l_scope
+        , p0           => 'a document URL for OCR with provider ' || p_provider || '. Pass the document as a blob'
+        );
+      end if;
+
       if p_document is not null then
         uc_ai_error.raise_error(
           p_error_code => uc_ai_error.c_err_invalid_config
@@ -623,6 +1329,15 @@ create or replace package body uc_ai_ocr as
     end if;
 
     -- 3. adapter
+    if p_provider = uc_ai.c_provider_oci then
+      return ocr_oci(
+        p_document   => p_document
+      , p_media_type => l_media_type
+      , p_options    => p_options
+      , p_settings   => p_settings
+      );
+    end if;
+
     return ocr_mistral(
       p_document   => p_document
     , p_url        => p_url

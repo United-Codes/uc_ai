@@ -11,6 +11,32 @@ create or replace package body test_uc_ai_ocr as
   end reset_state;
 
 
+  /*
+   * OCI needs a compartment and a signing credential; both are named on the OCI
+   * globals only, so a Mistral call in the same test does not see them.
+   */
+  procedure setup_oci
+  as
+  begin
+    uc_ai_oci.g_compartment_id      := get_oci_compratment_id;
+    uc_ai_oci.g_region              := 'eu-frankfurt-1';
+    uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+  end setup_oci;
+
+
+  function oci_pdf_ocr(p_options in json_object_t default null) return json_object_t
+  as
+  begin
+    setup_oci;
+    return uc_ai.ocr(
+      p_document   => uc_ai_test_utils.get_emp_pdf
+    , p_media_type => 'application/pdf'
+    , p_provider   => uc_ai.c_provider_oci
+    , p_options    => p_options
+    );
+  end oci_pdf_ocr;
+
+
   function pdf_ocr(p_options in json_object_t default null, p_model in varchar2 default null) return json_object_t
   as
   begin
@@ -205,6 +231,126 @@ create or replace package body test_uc_ai_ocr as
 
     ut.expect(l_text).to_be_like('%Dwight%');
   end mistral_ocr_text;
+
+
+  procedure oci_pdf
+  as
+    l_result json_object_t;
+    l_blocks json_array_t;
+    l_box    json_object_t;
+  begin
+    l_result := oci_pdf_ocr;
+
+    sys.dbms_output.put_line('markdown: ' || l_result.get_clob('markdown'));
+
+    ut.expect(l_result.get_clob('markdown'), 'markdown').to_be_like('%Dwight%');
+    ut.expect(l_result.get_clob('markdown'), 'markdown, last name').to_be_like('%Schrute%');
+    ut.expect(l_result.get_object('usage').get_number('pages'), 'usage.pages').to_equal(1);
+    ut.expect(l_result.get_array('pages').get_size, 'pages').to_equal(1);
+    ut.expect(l_result.get_array('warnings').get_size, 'warnings').to_equal(0);
+    ut.expect(l_result.get_string('model'), 'model').to_be_not_null();
+    ut.expect(l_result.get_object('raw').has('documentMetadata'), 'raw is the provider response').to_be_true();
+    ut.expect(first_page(l_result).get_number('index'), 'index is 0-based').to_equal(0);
+
+    l_blocks := first_page(l_result).get_array('blocks');
+    ut.expect(l_blocks.get_size, 'blocks').to_be_greater_than(0);
+    <<block_loop>>
+    for i in 0 .. l_blocks.get_size - 1 loop
+      l_box := treat(l_blocks.get(i) as json_object_t).get_object('box');
+      ut.expect(l_box.get_number('x1') between 0 and 1 and l_box.get_number('y1') between 0 and 1
+            and l_box.get_number('x2') between 0 and 1 and l_box.get_number('y2') between 0 and 1
+        , 'box ' || i || ' is inside 0..1').to_be_true();
+    end loop block_loop;
+  end oci_pdf;
+
+
+  procedure oci_pdf_tables
+  as
+    l_result json_object_t;
+  begin
+    l_result := oci_pdf_ocr(json_object_t('{"tables":true}'));
+
+    sys.dbms_output.put_line('markdown: ' || l_result.get_clob('markdown'));
+
+    ut.expect(l_result.get_clob('markdown'), 'table row with Scott').to_be_like('%| Michael | Scott |%');
+    ut.expect(l_result.get_clob('markdown'), 'table separator').to_be_like('%| --- | --- | --- |%');
+    ut.expect(l_result.get_object('usage').get_number('pages'), 'usage.pages').to_equal(1);
+  end oci_pdf_tables;
+
+
+  procedure oci_png_no_text
+  as
+    l_result json_object_t;
+  begin
+    setup_oci;
+    l_result := uc_ai.ocr(uc_ai_test_utils.get_apple_png, 'image/png', uc_ai.c_provider_oci);
+
+    ut.expect(l_result.get_array('warnings').get_size, 'warnings').to_be_greater_than(0);
+    ut.expect(l_result.get_array('warnings').get_string(0), 'warning').to_be_like('FEATURE_NOT_SUPPORTED%');
+    ut.expect(sys.dbms_lob.getlength(l_result.get_clob('markdown')), 'no text').to_equal(0);
+    ut.expect(l_result.get_array('pages').get_size, 'pages').to_equal(1);
+  end oci_png_no_text;
+
+
+  procedure oci_webp_raises
+  as
+    l_result json_object_t;
+    l_code   number;
+  begin
+    setup_oci;
+    begin
+      l_result := uc_ai.ocr(uc_ai_test_utils.get_apple_webp, 'image/webp', uc_ai.c_provider_oci);
+      l_code := 0;
+    exception
+      when others then
+        l_code := sqlcode;
+    end;
+
+    ut.expect(l_code).to_equal(-20508);
+  end oci_webp_raises;
+
+
+  procedure oci_pages_option
+  as
+    l_result json_object_t;
+  begin
+    l_result := oci_pdf_ocr(json_object_t('{"pages":[0]}'));
+    ut.expect(l_result.get_array('pages').get_size, 'page 0 is kept').to_equal(1);
+    ut.expect(l_result.get_clob('markdown')).to_be_like('%Dwight%');
+
+    l_result := oci_pdf_ocr(json_object_t('{"pages":[1]}'));
+    ut.expect(l_result.get_array('pages').get_size, 'page 1 does not exist').to_equal(0);
+    ut.expect(sys.dbms_lob.getlength(l_result.get_clob('markdown')), 'no text').to_equal(0);
+  end oci_pages_option;
+
+
+  procedure oci_ocr_text
+  as
+    l_text clob;
+  begin
+    setup_oci;
+    l_text := uc_ai.ocr_text(uc_ai_test_utils.get_emp_pdf, 'application/pdf', uc_ai.c_provider_oci);
+
+    ut.expect(l_text).to_be_like('%Dwight%');
+  end oci_ocr_text;
+
+
+  procedure cross_provider_pdf
+  as
+    l_mistral json_object_t;
+    l_oci     json_object_t;
+  begin
+    -- the same words, not the same text: OCR output is not exact and the two differ in layout
+    l_mistral := pdf_ocr;
+    l_oci     := oci_pdf_ocr(json_object_t('{"tables":true}'));
+
+    ut.expect(l_mistral.get_clob('markdown'), 'Mistral: Dwight').to_be_like('%Dwight%');
+    ut.expect(l_mistral.get_clob('markdown'), 'Mistral: Scott').to_be_like('%Scott%');
+    ut.expect(l_oci.get_clob('markdown'), 'OCI: Dwight').to_be_like('%Dwight%');
+    ut.expect(l_oci.get_clob('markdown'), 'OCI: Scott').to_be_like('%Scott%');
+    ut.expect(l_mistral.get_object('usage').get_number('pages'), 'same page count')
+      .to_equal(l_oci.get_object('usage').get_number('pages'));
+  end cross_provider_pdf;
 
 
   procedure unsupported_media_type

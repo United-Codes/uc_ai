@@ -31,7 +31,7 @@ as
 
   /*
    * Run OCR. Pass exactly one of p_document (with p_media_type) or p_url.
-   * p_url is supported by Mistral only.
+   * p_url is supported by Mistral only; the other providers raise -20508.
    *
    * Errors before any HTTP call:
    *   -20306  p_provider is null, unknown or has no OCR adapter (yet)
@@ -42,6 +42,12 @@ as
    * p_options is passed on as provider options (see docs). Neutral keys:
    * pages, tables. The key extra_body (an object) is merged into the request
    * body; the keys model and document are reserved and always win.
+   *
+   * OCI Document Understanding: p_model is ignored. tables => true adds the
+   * TABLE_EXTRACTION feature; the keys language, documentType and features are
+   * passed on (a features array replaces the default); pages (0-based) filters
+   * the result. The keys compartmentId and document are reserved. A document over
+   * 8 MB raises -20503.
    */
   function ocr (
     p_document   in blob

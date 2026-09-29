@@ -7,9 +7,12 @@ create or replace package test_uc_ai_ocr_wire as
   -- Every test runs uc_ai.ocr or uc_ai.ocr_text end to end and stops one step
   -- short of the network: uc_ai_http hands the request to uc_ai_test_http_mock,
   -- which records it and answers with a queued body. The Mistral responses in
-  -- test/samples/mistral are real ones, recorded from the API. The error bodies
-  -- for 429 and 502 and the multi-page response are written out here, because
-  -- they need a state nobody can ask the API for.
+  -- test/samples/mistral and test/samples/oci are real ones, recorded from the
+  -- APIs. The OCI samples keep only the first three entries of each words array
+  -- (the rest is word-level data the mapping does not read); everything else is
+  -- as OCI sent it. The error bodies for 429 and 502, the multi-page responses
+  -- and the odd table and polygon shapes are written out here, because they need
+  -- a state nobody can ask the API for.
   --
   -- Except for the one test that names it, no test reads uc_ai_get_key: every
   -- call names an APEX web credential.
@@ -105,6 +108,106 @@ create or replace package test_uc_ai_ocr_wire as
   --%test(ocr_text returns the markdown of ocr)
   procedure ocr_text_equals_markdown;
 
+  -- OCI Document Understanding ---------------------------------------------------
+  --%test(OCI: the URL is built from the region, and base_url replaces the host)
+  procedure oci_url_from_region;
+
+  --%test(OCI: Content-Type is exactly application/json, without a charset, also with extra headers)
+  procedure oci_content_type_exact;
+
+  --%test(OCI: the body holds compartmentId and the document as INLINE base64 of the exact bytes)
+  procedure oci_compartment_and_document;
+
+  --%test(OCI: the default features are TEXT_EXTRACTION only)
+  procedure oci_default_features;
+
+  --%test(OCI: tables => true adds TABLE_EXTRACTION, and a features option wins over it)
+  procedure oci_tables_feature;
+
+  --%test(OCI: language, documentType, features and unknown keys are passed on; pages, tables and extra_body are not OCI keys)
+  procedure oci_options_pass_through;
+
+  --%test(OCI: extra_body is merged and cannot replace compartmentId or document)
+  procedure oci_extra_body_merge;
+
+  --%test(OCI: options of the wrong shape raise -20503 before any request)
+  procedure oci_invalid_options;
+
+  --%test(OCI: a missing compartment raises -20502 before any request)
+  procedure oci_missing_compartment;
+
+  --%test(OCI: the web credential of the OCI globals is used when no general one is set, and no Authorization header is added)
+  procedure oci_credential;
+
+  --%test(OCI: a JPEG alias and TIFF are accepted)
+  procedure oci_media_types;
+
+  --%test(OCI: WebP, GIF and other types raise -20508 and no request is sent)
+  procedure oci_unsupported_media_type;
+
+  --%test(OCI: a document over 8 MB raises -20503 before the request, exactly 8 MB is sent)
+  procedure oci_document_size_limit;
+
+  --%test(OCI: the URL overload raises -20508 for a public URL and for a data URL, and no request is sent)
+  procedure oci_url_overload_raises;
+
+  --%test(OCI: the text lines become markdown, one line each, and the neutral result has all keys)
+  procedure oci_result_shape;
+
+  --%test(OCI: the box is the min and max of the polygon, the polygon is kept, boxes are inside 0..1)
+  procedure oci_box_from_polygon;
+
+  --%test(OCI: a table becomes a Markdown table at the place of its polygon and replaces the lines inside it)
+  procedure oci_table_markdown_recorded;
+
+  --%test(OCI: text above and below a table keep the reading order, a gap starts a paragraph)
+  procedure oci_reading_order;
+
+  --%test(OCI: a table without a polygon comes after the text and has no box)
+  procedure oci_table_without_polygon;
+
+  --%test(OCI: pipes in a cell are escaped and line breaks become a space)
+  procedure oci_table_cell_escaping;
+
+  --%test(OCI: missing cells, cells out of range, a wrong column count and an empty table do not raise)
+  procedure oci_table_edge_cases;
+
+  --%test(OCI: a null polygon, a missing polygon, a missing confidence and empty lines are tolerated)
+  procedure oci_line_edge_cases;
+
+  --%test(OCI: usage.pages is pageCount, the model is textExtractionModelVersion or a fixed name)
+  procedure oci_usage_and_model;
+
+  --%test(OCI: FEATURE_NOT_SUPPORTED inside a 200 for an image without text is a warning, not an error)
+  procedure oci_no_text_is_warning;
+
+  --%test(OCI: errors next to pages are warnings)
+  procedure oci_errors_with_pages;
+
+  --%test(OCI: errors without any page raise -20302, and so does a response without pages)
+  procedure oci_errors_without_pages;
+
+  --%test(OCI: an empty pages array without errors gives an empty result)
+  procedure oci_empty_pages_array;
+
+  --%test(OCI: the pages option keeps the requested 0-based pages only)
+  procedure oci_pages_option;
+
+  --%test(OCI: pages are joined with a blank line and an empty page adds nothing)
+  procedure oci_pages_are_joined;
+
+  --%test(OCI: ocr_text returns the markdown of ocr)
+  procedure oci_ocr_text;
+
+  --%test(OCI: a recorded 401 signature error raises -20302 with the OCI message)
+  procedure oci_error_401;
+
+  --%test(OCI: a recorded 400 unsupported input error raises -20302 with the OCI message)
+  procedure oci_error_400;
+
+  --%test(OCI: the request body and the base64 never appear in the log)
+  procedure oci_body_is_not_logged;
+
   -- errors -------------------------------------------------------------------------
   --%test(A 429 flat error body raises -20302 with the provider message)
   procedure rate_limit_error;
@@ -133,7 +236,7 @@ create or replace package test_uc_ai_ocr_wire as
   --%test(A null or unknown provider raises -20306 and no request is sent)
   procedure null_and_unknown_provider;
 
-  --%test(OCI and Ollama raise -20306 not supported yet and send no request)
+  --%test(Ollama raises -20306 not supported yet and sends no request)
   procedure providers_without_adapter;
 
   -- logging ------------------------------------------------------------------------

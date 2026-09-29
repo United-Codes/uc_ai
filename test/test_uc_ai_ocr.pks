@@ -1,10 +1,12 @@
 create or replace package test_uc_ai_ocr as
 
-  --%suite(OCR tests: live Mistral calls and provider-neutral checks)
+  --%suite(OCR tests: live Mistral and OCI calls and provider-neutral checks)
   --%suitepath(uc_ai)
 
-  -- The live tests call the Mistral OCR API with the key of uc_ai_get_key and cost
-  -- a few pages of OCR. The wire tests in test_uc_ai_ocr_wire cover the request
+  -- The Mistral tests call the Mistral OCR API with the key of uc_ai_get_key and
+  -- cost a few pages of OCR. The OCI tests call OCI Document Understanding with
+  -- the web credential OCI_KEY in region eu-frankfurt-1 and the compartment of
+  -- get_oci_compratment_id. The wire tests in test_uc_ai_ocr_wire cover the request
   -- and response shapes without a network.
 
   --%beforeeach
@@ -46,6 +48,29 @@ create or replace package test_uc_ai_ocr as
 
   --%test(ocr_text returns the text of the PDF)
   procedure mistral_ocr_text;
+
+  -- OCI Document Understanding, live -----------------------------------------------
+  --%test(OCI: a PDF gives markdown with the names, one page, usage.pages 1 and boxes inside the page)
+  procedure oci_pdf;
+
+  --%test(OCI: the tables option gives a Markdown table row)
+  procedure oci_pdf_tables;
+
+  --%test(OCI: an image without text returns a warning and does not raise)
+  procedure oci_png_no_text;
+
+  --%test(OCI: a WebP raises -20508 before the call)
+  procedure oci_webp_raises;
+
+  --%test(OCI: the pages option filters the result)
+  procedure oci_pages_option;
+
+  --%test(OCI: ocr_text returns the text of the PDF)
+  procedure oci_ocr_text;
+
+  -- cross provider ----------------------------------------------------------------
+  --%test(Mistral and OCI both read the names of the PDF)
+  procedure cross_provider_pdf;
 
   -- neutral, no network --------------------------------------------------------------
   --%test(A media type that Mistral does not accept raises -20508 before the call)
