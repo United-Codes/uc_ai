@@ -54,6 +54,9 @@ create or replace package test_uc_ai_ocr as
   procedure mistral_ocr_text;
 
   -- OCI Document Understanding, live -----------------------------------------------
+  -- A test that cannot reach OCI because of the environment (no compartment, no
+  -- credential, HTTP 401, 403 or 404) prints a skip message and returns without
+  -- an expectation. Any other error, and any wrong content, still fails the test.
   --%test(OCI: a PDF gives markdown with the names, one page, usage.pages 1 and boxes inside the page)
   procedure oci_pdf;
 
@@ -79,7 +82,7 @@ create or replace package test_uc_ai_ocr as
   --%test(Ollama: a PDF raises -20508 without a request)
   procedure ollama_pdf_raises;
 
-  --%test(Ollama: a null model raises -20503)
+  --%test(Ollama: a null model raises -20502)
   procedure ollama_null_model;
 
   --%test(Ollama: an unknown model raises -20302 with the Ollama message)

@@ -214,7 +214,7 @@ For more information about the `generate_embeddings` function, visit its [docume
 
 Document Understanding uses the same web credential as the other OCI requests and the compartment of `uc_ai_oci.g_compartment_id`. If the compartment is not set, the call raises `ORA-20502`. The user of the API key needs a policy that allows Document Understanding in the compartment. See the [Document Understanding documentation](https://docs.oracle.com/en-us/iaas/Content/document-understanding/using/home.htm) for the policy.
 
-UC AI sends the document inline in one synchronous call. UC AI raises `ORA-20503` for a document over 8 MB. Oracle documents a limit of 5 pages for a synchronous call.
+UC AI sends the document inline in one synchronous call. Oracle documents a limit of 5 pages for a synchronous call. UC AI checks only the size of the document (8 MB of raw bytes) and not the number of pages. A larger document raises `ORA-20503`. The URL comes from `uc_ai_oci.g_region`. `uc_ai.g_base_url` does not apply to OCR with OCI.
 
 ```sql
 declare

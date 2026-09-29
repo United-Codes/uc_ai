@@ -37,7 +37,9 @@ as
    *   -20306  p_provider is null, unknown or has no OCR support (the message lists mistral, oci, ollama)
    *   -20508  the media type is null or not supported by the provider
    *   -20503  the document is empty, or an option has the wrong shape
+   *   -20502  OCI without uc_ai_oci.g_compartment_id, Ollama without p_model
    * -20302 (c_err_provider_response) is raised when the provider reports an error.
+   * OCI raises it also when the response has an error and no page.
    *
    * p_options is passed on as provider options (see docs). Neutral keys:
    * pages, tables. The key extra_body (an object) is merged into the request
@@ -45,12 +47,15 @@ as
    *
    * OCI Document Understanding: p_model is ignored. tables => true adds the
    * TABLE_EXTRACTION feature; the keys language, documentType and features are
-   * passed on (a features array replaces the default); pages (0-based) filters
-   * the result. The keys compartmentId and document are reserved. A document over
-   * 8 MB raises -20503.
+   * passed on (a features array replaces the default; features that is not an
+   * array raises -20503); pages (0-based) filters the result. The keys
+   * compartmentId and document are reserved. The URL comes from
+   * uc_ai_oci.g_region; uc_ai.g_base_url does not apply. Oracle documents a limit
+   * for synchronous calls; UC AI checks only the size: a document of more than
+   * 8 MB of raw bytes raises -20503. It does not check the page count.
    *
    * Ollama: a vision model reads one image over /api/chat. p_model is required
-   * (-20503 when null); PDF and other types raise -20508, as PL/SQL cannot make an
+   * (-20502 when null); PDF and other types raise -20508, as PL/SQL cannot make an
    * image of a PDF page. Use an opaque image: Ollama flattens an alpha channel on
    * black without an error. The result has one page (index 0) with the text of the
    * model, no blocks and no dimensions; a Markdown code fence around the whole

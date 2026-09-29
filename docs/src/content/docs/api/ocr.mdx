@@ -66,7 +66,7 @@ function ocr_text (
 | `p_model` | `model_type` | Depends on the provider | `null` selects the default model of the provider. OCI ignores it. Ollama requires it. |
 | `p_options` | `json_object_t` | No | Options for the call. See [Options](#options). |
 
-The configuration that `generate_text` reads from the package globals applies to OCR too. This includes `uc_ai.g_apex_web_credential`, the credential of the provider, `uc_ai.g_extra_headers` and `uc_ai.g_base_url`. Without `uc_ai.g_base_url`, a Mistral OCR request goes to `https://api.mistral.ai/v1/ocr`. `uc_ai.g_extra_body` does not apply to OCR. Use the `extra_body` option instead.
+The configuration that `generate_text` reads from the package globals applies to OCR too. This includes `uc_ai.g_apex_web_credential`, the credential of the provider, `uc_ai.g_extra_headers` and `uc_ai.g_base_url`. `uc_ai.g_base_url` applies to Mistral and Ollama only. OCI builds its URL from `uc_ai_oci.g_region`, as `uc_ai_oci` does. Without `uc_ai.g_base_url`, a Mistral OCR request goes to `https://api.mistral.ai/v1/ocr`. `uc_ai.g_extra_body` does not apply to OCR. Use the `extra_body` option instead.
 
 UC AI checks the provider, the media type and the options before it sends a request. A document with an unsupported media type costs no request. UC AI never writes the request body to the log, because the body holds the whole document in Base64. The log holds the provider, the media type, the size in bytes and the names of the options.
 
@@ -133,8 +133,9 @@ A warning describes a problem that did not stop the call. The call still returns
 
 - OCI returns an error inside a successful response, for example `FEATURE_NOT_SUPPORTED` for an image without text. UC AI adds the code and the message to `warnings`.
 - Ollama can reply that the image has no readable text, or return no text. The page then has empty `markdown`, and `warnings` holds a message.
+- A page in the Mistral response is not an object. UC AI adds an empty page at the same index and a warning such as `Page 0 was not an object`.
 
-If the provider reports an error and no page has text, the call raises `ORA-20302`.
+If OCI reports an error and returns no page, the call raises `ORA-20302`. A page without text is not an error.
 
 ## Providers
 
@@ -147,7 +148,7 @@ If the provider reports an error and no page has text, the call raises `ORA-2030
 | Confidence | If you request it | Block | No |
 | Usage | Pages and bytes | Pages | Tokens |
 | URL overload | Yes | No | No |
-| Limit | | Synchronous call: 8 MB and 5 pages | One image, one page. An image with transparency is flattened on a black background. |
+| Limit | | UC AI checks the size only: 8 MB of raw bytes | One image, one page. An image with transparency is flattened on a black background. |
 
 ### Mistral
 
@@ -170,7 +171,7 @@ If `table_format` is set, Mistral puts a link such as `[tbl-0.md](tbl-0.md)` in 
 
 OCI Document Understanding needs a compartment. Set `uc_ai_oci.g_compartment_id` and the region in `uc_ai_oci.g_region`. If the compartment is not set, the call raises `ORA-20502`. The setup of the credential and of the policy for Document Understanding is in the [OCI provider page](/products/uc-ai/docs/providers/oci/#ocr-with-document-understanding).
 
-UC AI sends the document inline, so it works with a synchronous call only. A document with more than 8 MB raises `ORA-20503`. Oracle documents a limit of 5 pages for a synchronous call. UC AI does not check the number of pages. See the [Document Understanding documentation](https://docs.oracle.com/en-us/iaas/Content/document-understanding/using/home.htm) for the current limits.
+UC AI sends the document inline, so it works with a synchronous call only. Oracle documents a limit of 5 pages for a synchronous call. UC AI checks only the size of the document and not the number of pages. A document with more than 8 MB of raw bytes raises `ORA-20503`. See the [Document Understanding documentation](https://docs.oracle.com/en-us/iaas/Content/document-understanding/using/home.htm) for the current limits.
 
 UC AI builds `markdown` from the text lines of each page. A larger gap between two lines starts a new paragraph. A table appears in reading order, as a Markdown table, in place of the lines that lie inside it. The first row of the grid is the header row.
 
@@ -184,7 +185,7 @@ Without `features`, UC AI requests `TEXT_EXTRACTION`. The option `tables` adds `
 
 ### Ollama
 
-Ollama reads one image with a vision model. Ollama has no OCR model by default, so `p_model` is required. A null model raises `ORA-20503`.
+Ollama reads one image with a vision model. Ollama has no OCR model by default, so `p_model` is required. A null model raises `ORA-20502`.
 
 A PDF raises `ORA-20508`, because PL/SQL cannot make an image of a PDF page. Use an image with an opaque background. Ollama flattens a transparent image on a black background and returns no error. Then the model can report that it sees no text, or it can return text that is not in the image.
 
@@ -213,7 +214,7 @@ The prompt asks for Markdown and for tables as Markdown tables. It also asks the
 
 ### Extra request body
 
-`extra_body` is a JSON object for Mistral and OCI. UC AI merges its keys into the request body for parameters that UC AI does not wrap. A key in `extra_body` replaces a key from the other options. The keys `model` and `document` (Mistral) and `compartmentId` and `document` (OCI) always keep the value from UC AI. A value that is not an object raises `ORA-20503`.
+`extra_body` is a JSON object for Mistral and OCI. UC AI merges its keys into the request body for parameters that UC AI does not wrap. A key in `extra_body` replaces a key from the other options. The keys `model` and `document` (Mistral) and `compartmentId` and `document` (OCI) always keep the value from UC AI. A value that is not an object raises `ORA-20503`. For OCI, `features` must be an array, also when it comes from `extra_body`. Otherwise the call raises `ORA-20503`.
 
 ```sql
 l_result := uc_ai.ocr(
@@ -230,8 +231,8 @@ l_result := uc_ai.ocr(
 | --- | --- |
 | `ORA-20306` | `p_provider` is null, unknown, or has no OCR support. The message lists `mistral`, `oci` and `ollama`. |
 | `ORA-20508` | The media type is null or not supported by the provider. A URL for OCI or Ollama. A PDF for Ollama. A page other than 0 for Ollama. UC AI raises it before any request. |
-| `ORA-20503` | The document is null or empty. Ollama without `p_model`. An OCI document over 8 MB. An option with the wrong type, for example `extra_body` that is not an object. |
-| `ORA-20502` | OCI without `uc_ai_oci.g_compartment_id`. |
+| `ORA-20503` | The document is null or empty. An OCI document over 8 MB. An option with the wrong type, for example `extra_body` that is not an object. |
+| `ORA-20502` | OCI without `uc_ai_oci.g_compartment_id`. Ollama without `p_model`. |
 | `ORA-20302` | The provider returned an error, or OCI returned an error and no page. The message holds the HTTP status and the message of the provider. |
 
 ## Examples

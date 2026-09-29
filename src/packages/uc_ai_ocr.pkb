@@ -33,11 +33,12 @@ create or replace package body uc_ai_ocr as
   c_oci_max_bytes    constant pls_integer := 8388608;
   -- a table cell index above this is not a real cell; it would only grow the grid
   c_oci_max_index    constant pls_integer := 9999;
+  -- rows x columns of one table; a larger grid is not a real table
+  c_oci_max_grid     constant pls_integer := 250000;
 
   type t_num_tab   is table of number index by pls_integer;
   type t_bool_tab  is table of boolean index by pls_integer;
   type t_clob_tab  is table of clob index by pls_integer;
-  type t_cell_tab  is table of varchar2(32767 char) index by pls_integer;
   type t_obj_tab   is table of json_object_t index by pls_integer;
 
   -- ---- shared helpers ---------------------------------------------------------
@@ -145,6 +146,69 @@ create or replace package body uc_ai_ocr as
 
     return l_result;
   end join_pages;
+
+
+  /*
+   * Merge the keys of the option extra_body into the request body. A key of
+   * extra_body replaces a key that is already in the body. A value that is not
+   * an object raises -20503; a missing or null extra_body changes nothing.
+   */
+  procedure merge_extra_body (
+    pio_body  in out nocopy json_object_t
+  , p_options in            json_object_t
+  , p_scope   in            varchar2
+  )
+  as
+    l_extra      json_object_t;
+    l_extra_keys json_key_list;
+  begin
+    if p_options is null or not p_options.has('extra_body') or p_options.get('extra_body').is_null then
+      return;
+    end if;
+
+    if not p_options.get('extra_body').is_object then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => p_scope
+      , p0           => 'OCR option extra_body'
+      , p1           => 'it must be a JSON object'
+      );
+    end if;
+
+    l_extra      := p_options.get_object('extra_body');
+    l_extra_keys := l_extra.get_keys;
+    <<extra_loop>>
+    for i in 1 .. l_extra_keys.count loop
+      pio_body.put(l_extra_keys(i), l_extra.get(l_extra_keys(i)));
+    end loop extra_loop;
+  end merge_extra_body;
+
+
+  /*
+   * The option pages as an array. Null when the option is missing or JSON null;
+   * a value that is not an array raises -20503.
+   */
+  function pages_option (
+    p_options in json_object_t
+  , p_scope   in varchar2
+  ) return json_array_t
+  as
+  begin
+    if p_options is null or not p_options.has('pages') or p_options.get('pages').is_null then
+      return null;
+    end if;
+
+    if not p_options.get('pages').is_array then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => p_scope
+      , p0           => 'OCR option pages'
+      , p1           => 'it must be an array of 0-based page indexes'
+      );
+    end if;
+
+    return p_options.get_array('pages');
+  end pages_option;
 
 
   /*
@@ -324,6 +388,7 @@ create or replace package body uc_ai_ocr as
       l_tables := p_page.get_array('tables');
       <<table_loop>>
       for i in 0 .. l_tables.get_size - 1 loop
+        continue when not l_tables.get(i).is_object;
         l_table := treat(l_tables.get(i) as json_object_t);
         if l_table.has('id') and l_table.get('id').is_string and l_table.has('content') and l_table.get('content').is_string then
           l_markdown := replace(
@@ -363,6 +428,7 @@ create or replace package body uc_ai_ocr as
 
       <<block_loop>>
       for i in 0 .. l_blocks_in.get_size - 1 loop
+        continue when not l_blocks_in.get(i).is_object;
         l_block_in := treat(l_blocks_in.get(i) as json_object_t);
         l_block    := json_object_t();
         l_block.put('type', case when l_block_in.has('type') and l_block_in.get('type').is_string then l_block_in.get_string('type') else 'text' end);
@@ -432,8 +498,6 @@ create or replace package body uc_ai_ocr as
   as
     l_body       json_object_t := json_object_t();
     l_keys       json_key_list;
-    l_extra      json_object_t;
-    l_extra_keys json_key_list;
   begin
     if p_options is null then
       return l_body;
@@ -451,23 +515,7 @@ create or replace package body uc_ai_ocr as
       l_body.put('table_format', 'markdown');
     end if;
 
-    if p_options.has('extra_body') and not p_options.get('extra_body').is_null then
-      if not p_options.get('extra_body').is_object then
-        uc_ai_error.raise_error(
-          p_error_code => uc_ai_error.c_err_invalid_config
-        , p_scope      => p_scope
-        , p0           => 'OCR option extra_body'
-        , p1           => 'it must be a JSON object'
-        );
-      end if;
-
-      l_extra      := p_options.get_object('extra_body');
-      l_extra_keys := l_extra.get_keys;
-      <<extra_loop>>
-      for i in 1 .. l_extra_keys.count loop
-        l_body.put(l_extra_keys(i), l_extra.get(l_extra_keys(i)));
-      end loop extra_loop;
-    end if;
+    merge_extra_body(l_body, p_options, p_scope);
 
     return l_body;
   end mistral_body;
@@ -490,6 +538,8 @@ create or replace package body uc_ai_ocr as
     l_resp_json      json_object_t;
     l_pages_in       json_array_t;
     l_pages          json_array_t := json_array_t();
+    l_page           json_object_t;
+    l_warnings       json_array_t := json_array_t();
     l_usage_in       json_object_t;
     l_usage          json_object_t := json_object_t();
     l_resp_model     varchar2(255 char);
@@ -558,7 +608,16 @@ create or replace package body uc_ai_ocr as
     l_pages_in := l_resp_json.get_array('pages');
     <<page_loop>>
     for i in 0 .. l_pages_in.get_size - 1 loop
-      l_pages.append(mistral_page(treat(l_pages_in.get(i) as json_object_t), i));
+      if l_pages_in.get(i).is_object then
+        l_pages.append(mistral_page(treat(l_pages_in.get(i) as json_object_t), i));
+      else
+        -- keep the position: an empty page stands in for the element
+        l_page := json_object_t();
+        l_page.put('index', i);
+        l_page.put('markdown', empty_clob());
+        l_pages.append(l_page);
+        l_warnings.append('Page ' || i || ' was not an object');
+      end if;
     end loop page_loop;
 
     -- usage_info can be missing or JSON null
@@ -585,7 +644,7 @@ create or replace package body uc_ai_ocr as
       p_pages    => l_pages
     , p_usage    => l_usage
     , p_model    => l_resp_model
-    , p_warnings => json_array_t()
+    , p_warnings => l_warnings
     , p_raw      => l_resp_json
     );
   end ocr_mistral;
@@ -598,11 +657,8 @@ create or replace package body uc_ai_ocr as
   ) return varchar2
   as
   begin
-    if p_settings.base_url is not null then
-      return rtrim(p_settings.base_url, '/') || c_oci_analyze_path;
-    end if;
-
-    -- same default region as uc_ai_oci
+    -- uc_ai.g_base_url does not apply: as in uc_ai_oci the URL comes from the region.
+    -- Same default region as uc_ai_oci.
     return c_oci_url_prefix || coalesce(p_settings.oc_region, 'us-ashburn-1') || '.oci.oraclecloud.com' || c_oci_analyze_path;
   end oci_url;
 
@@ -681,10 +737,11 @@ create or replace package body uc_ai_ocr as
 
   /*
    * A cell of a Markdown table: a pipe is escaped and a line break becomes a space.
+   * A clob, so a long cell cannot overflow a varchar2.
    */
   function markdown_cell (
-    p_text in varchar2
-  ) return varchar2
+    p_text in clob
+  ) return clob
   as
   begin
     return trim(replace(replace(replace(replace(p_text, '|', '\|'), chr(13) || chr(10), ' '), chr(10), ' '), chr(13), ' '));
@@ -696,7 +753,10 @@ create or replace package body uc_ai_ocr as
    * footerRows are put in a grid by rowIndex and columnIndex; a position without
    * a cell (a merged cell, a gap) stays empty. Markdown needs a header row, so
    * grid row 0 is the header row, whether OCI calls it a header row or not.
-   * Returns null when the table holds no usable cell.
+   * The stated columnCount adds empty columns, as long as the grid stays within
+   * c_oci_max_grid positions. Returns null when the table holds no usable cell,
+   * or when its cells would make a grid of more than c_oci_max_grid positions.
+   * The result is built in a clob, so no line can overflow a varchar2.
    */
   function oci_table_markdown (
     p_table in json_object_t
@@ -707,12 +767,12 @@ create or replace package body uc_ai_ocr as
     l_row      json_object_t;
     l_cells    json_array_t;
     l_cell     json_object_t;
-    l_grid_arr     t_cell_tab;
+    l_grid_arr     t_clob_tab;
     l_row_idx  number;
     l_col_idx  number;
     l_max_row  pls_integer := -1;
     l_max_col  pls_integer := -1;
-    l_line     varchar2(32767 char);
+    l_columns  number;
     l_result   clob;
   begin
     l_groups := json_key_list('headerRows', 'bodyRows', 'footerRows');
@@ -743,43 +803,47 @@ create or replace package body uc_ai_ocr as
 
           l_grid_arr(l_row_idx * (c_oci_max_index + 1) + l_col_idx) :=
             case when l_cell.has('text') and l_cell.get('text').is_string
-                 then markdown_cell(l_cell.get_string('text')) end;
+                 then markdown_cell(l_cell.get_clob('text')) end;
           l_max_row := greatest(l_max_row, l_row_idx);
           l_max_col := greatest(l_max_col, l_col_idx);
         end loop cell_loop;
       end loop row_loop;
     end loop group_loop;
 
-    if l_max_row < 0 then
+    if l_max_row < 0 or (l_max_row + 1) * (l_max_col + 1) > c_oci_max_grid then
       return null;
     end if;
 
     -- the stated size can be larger than the cells that came back
     if p_table.has('columnCount') and p_table.get('columnCount').is_number then
-      l_max_col := least(greatest(l_max_col, p_table.get_number('columnCount') - 1), c_oci_max_index);
+      l_columns := trunc(p_table.get_number('columnCount'));
+      if l_columns > l_max_col + 1 and (l_max_row + 1) * l_columns <= c_oci_max_grid then
+        l_max_col := l_columns - 1;
+      end if;
     end if;
 
     sys.dbms_lob.createtemporary(l_result, true);
 
     <<grid_row_loop>>
     for r in 0 .. l_max_row loop
-      l_line := '|';
+      sys.dbms_lob.writeappend(l_result, 1, '|');
       <<grid_col_loop>>
       for c in 0 .. l_max_col loop
-        l_line := l_line || ' '
-          || case when l_grid_arr.exists(r * (c_oci_max_index + 1) + c) then l_grid_arr(r * (c_oci_max_index + 1) + c) end
-          || ' |';
+        sys.dbms_lob.writeappend(l_result, 1, ' ');
+        if l_grid_arr.exists(r * (c_oci_max_index + 1) + c) and sys.dbms_lob.getlength(l_grid_arr(r * (c_oci_max_index + 1) + c)) > 0 then
+          sys.dbms_lob.append(l_result, l_grid_arr(r * (c_oci_max_index + 1) + c));
+        end if;
+        sys.dbms_lob.writeappend(l_result, 2, ' |');
       end loop grid_col_loop;
-
-      sys.dbms_lob.writeappend(l_result, length(l_line) + 1, l_line || chr(10));
+      sys.dbms_lob.writeappend(l_result, 1, chr(10));
 
       if r = 0 then
-        l_line := '|';
+        sys.dbms_lob.writeappend(l_result, 1, '|');
         <<separator_loop>>
         for c in 0 .. l_max_col loop
-          l_line := l_line || ' --- |';
+          sys.dbms_lob.writeappend(l_result, 6, ' --- |');
         end loop separator_loop;
-        sys.dbms_lob.writeappend(l_result, length(l_line) + 1, l_line || chr(10));
+        sys.dbms_lob.writeappend(l_result, 1, chr(10));
       end if;
     end loop grid_row_loop;
 
@@ -1011,7 +1075,8 @@ create or replace package body uc_ai_ocr as
   /*
    * The request body. Options are passed on (language, documentType, features and
    * any other key); the neutral keys pages and tables and the key extra_body are
-   * not OCI keys. A passed features array wins over the default. compartmentId and
+   * not OCI keys. A passed features array wins over the default; features that is
+   * not an array (also through extra_body) raises -20503. compartmentId and
    * document are reserved and set by the caller after this.
    */
   function oci_body (
@@ -1021,8 +1086,6 @@ create or replace package body uc_ai_ocr as
   as
     l_body       json_object_t := json_object_t();
     l_keys       json_key_list;
-    l_extra      json_object_t;
-    l_extra_keys json_key_list;
     l_features   json_array_t := json_array_t();
     l_feature    json_object_t;
   begin
@@ -1035,16 +1098,7 @@ create or replace package body uc_ai_ocr as
       end loop option_loop;
     end if;
 
-    if l_body.has('features') then
-      if not l_body.get('features').is_array then
-        uc_ai_error.raise_error(
-          p_error_code => uc_ai_error.c_err_invalid_config
-        , p_scope      => p_scope
-        , p0           => 'OCR option features'
-        , p1           => 'it must be an array of {"featureType": ...} objects'
-        );
-      end if;
-    else
+    if not l_body.has('features') then
       l_feature := json_object_t();
       l_feature.put('featureType', 'TEXT_EXTRACTION');
       l_features.append(l_feature);
@@ -1058,22 +1112,16 @@ create or replace package body uc_ai_ocr as
       l_body.put('features', l_features);
     end if;
 
-    if p_options is not null and p_options.has('extra_body') and not p_options.get('extra_body').is_null then
-      if not p_options.get('extra_body').is_object then
-        uc_ai_error.raise_error(
-          p_error_code => uc_ai_error.c_err_invalid_config
-        , p_scope      => p_scope
-        , p0           => 'OCR option extra_body'
-        , p1           => 'it must be a JSON object'
-        );
-      end if;
+    merge_extra_body(l_body, p_options, p_scope);
 
-      l_extra      := p_options.get_object('extra_body');
-      l_extra_keys := l_extra.get_keys;
-      <<extra_loop>>
-      for i in 1 .. l_extra_keys.count loop
-        l_body.put(l_extra_keys(i), l_extra.get(l_extra_keys(i)));
-      end loop extra_loop;
+    -- checked after the merge: extra_body can replace the features too
+    if not l_body.get('features').is_array then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => p_scope
+      , p0           => 'OCR option features'
+      , p1           => 'it must be an array of {"featureType": ...} objects'
+      );
     end if;
 
     return l_body;
@@ -1145,17 +1193,7 @@ create or replace package body uc_ai_ocr as
       );
     end if;
 
-    if p_options is not null and p_options.has('pages') and not p_options.get('pages').is_null then
-      if not p_options.get('pages').is_array then
-        uc_ai_error.raise_error(
-          p_error_code => uc_ai_error.c_err_invalid_config
-        , p_scope      => l_scope
-        , p0           => 'OCR option pages'
-        , p1           => 'it must be an array of 0-based page indexes'
-        );
-      end if;
-      l_selection := p_options.get_array('pages');
-    end if;
+    l_selection := pages_option(p_options, l_scope);
 
     l_body := oci_body(p_options, l_scope);
     l_body.put('compartmentId', p_settings.oc_compartment_id);
@@ -1322,6 +1360,22 @@ create or replace package body uc_ai_ocr as
 
 
   /*
+   * Put the option p_key in the body when it is set and not JSON null.
+   */
+  procedure copy_option (
+    pio_body  in out nocopy json_object_t
+  , p_options in            json_object_t
+  , p_key     in            varchar2
+  )
+  as
+  begin
+    if p_options is not null and p_options.has(p_key) and not p_options.get(p_key).is_null then
+      pio_body.put(p_key, p_options.get(p_key));
+    end if;
+  end copy_option;
+
+
+  /*
    * The request body without the image: the model, stream false, the messages
    * and the passthrough keys options, keep_alive and think.
    */
@@ -1374,14 +1428,9 @@ create or replace package body uc_ai_ocr as
     l_body.put('stream', false);
     l_body.put('messages', l_messages);
 
-    if p_options is not null then
-      <<key_loop>>
-      for r in (select column_value as key_name from table(sys.odcivarchar2list('options', 'keep_alive', 'think'))) loop
-        if p_options.has(r.key_name) and not p_options.get(r.key_name).is_null then
-          l_body.put(r.key_name, p_options.get(r.key_name));
-        end if;
-      end loop key_loop;
-    end if;
+    copy_option(l_body, p_options, 'options');
+    copy_option(l_body, p_options, 'keep_alive');
+    copy_option(l_body, p_options, 'think');
 
     return l_body;
   end ollama_body;
@@ -1450,24 +1499,16 @@ create or replace package body uc_ai_ocr as
   begin
     if p_model is null then
       uc_ai_error.raise_error(
-        p_error_code => uc_ai_error.c_err_invalid_config
+        p_error_code => uc_ai_error.c_err_missing_config
       , p_scope      => l_scope
-      , p0           => 'OCR model'
-      , p1           => 'Ollama has no default OCR model; pass a vision model in p_model'
+      , p0           => 'OCR with provider ' || uc_ai.c_provider_ollama
+      , p1           => 'p_model: Ollama has no default OCR model, pass a vision model'
       );
     end if;
 
     -- the model reads one image, so only page 0 exists
-    if p_options is not null and p_options.has('pages') and not p_options.get('pages').is_null then
-      if not p_options.get('pages').is_array then
-        uc_ai_error.raise_error(
-          p_error_code => uc_ai_error.c_err_invalid_config
-        , p_scope      => l_scope
-        , p0           => 'OCR option pages'
-        , p1           => 'it must be an array of 0-based page indexes'
-        );
-      end if;
-      l_pages_opt := p_options.get_array('pages');
+    l_pages_opt := pages_option(p_options, l_scope);
+    if l_pages_opt is not null then
       <<page_check_loop>>
       for i in 0 .. l_pages_opt.get_size - 1 loop
         if not l_pages_opt.get(i).is_number or l_pages_opt.get(i).to_number != 0 then
@@ -1536,11 +1577,12 @@ create or replace package body uc_ai_ocr as
       l_content := strip_fence(l_message.get_clob('content'));
     end if;
 
+    -- an empty page has the markdown "" as in the other adapters, not JSON null
     if l_content is null or sys.dbms_lob.getlength(l_content) = 0 then
-      l_content := null;
+      l_content := empty_clob();
       l_warnings.append('The model returned no text');
     elsif is_unreadable(l_content) then
-      l_content := null;
+      l_content := empty_clob();
       l_warnings.append('The model reported that the image is blank or unreadable');
     end if;
 

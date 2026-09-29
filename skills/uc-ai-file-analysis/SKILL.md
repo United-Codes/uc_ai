@@ -66,8 +66,12 @@ declare
   l_content       json_array_t := json_array_t();
   l_result        json_object_t;
   l_final_message clob;
+  l_blob          blob;
 begin
   -- API key: uc_ai_get_key function or uc_ai_google.g_apex_web_credential := 'GOOGLE';
+
+  -- A subquery is not allowed as a parameter of a PL/SQL call: select the BLOB first
+  select blob_content into l_blob from your_table where id = 1;
 
   -- system message sets the context
   l_messages.append(uc_ai_message_api.create_system_message(
@@ -77,7 +81,7 @@ begin
 
   l_content.append(uc_ai_message_api.create_file_content(
     p_media_type => 'application/pdf',
-    p_data_blob  => (select blob_content from your_table where id = 1),
+    p_data_blob  => l_blob,
     p_filename   => 'characters.pdf'
   ));
 
@@ -109,15 +113,18 @@ declare
   l_messages json_array_t := json_array_t();
   l_content  json_array_t := json_array_t();
   l_result   json_object_t;
+  l_blob     blob;
 begin
   -- API key: uc_ai_get_key function or uc_ai_anthropic.g_apex_web_credential := 'ANTHROPIC';
+
+  select image_blob into l_blob from product_images where id = 42;
 
   l_messages.append(uc_ai_message_api.create_system_message(
     'You are an image analysis assistant.'));
 
   l_content.append(uc_ai_message_api.create_file_content(
     p_media_type => 'image/webp',
-    p_data_blob  => (select image_blob from product_images where id = 42),
+    p_data_blob  => l_blob,
     p_filename   => 'product.webp'
   ));
   l_content.append(uc_ai_message_api.create_text_content(
@@ -146,11 +153,14 @@ When the goal is the text or structure of a document (ingestion, search, storage
 declare
   l_result json_object_t;
   l_text   clob;
+  l_blob   blob;
 begin
   -- API key: uc_ai_get_key function or uc_ai_mistral.g_apex_web_credential := 'MISTRAL';
 
+  select blob_content into l_blob from your_table where id = 1;
+
   l_result := uc_ai.ocr(
-    p_document   => (select blob_content from your_table where id = 1),
+    p_document   => l_blob,
     p_media_type => 'application/pdf',
     p_provider   => uc_ai.c_provider_mistral   -- or c_provider_oci, c_provider_ollama
   );
@@ -160,7 +170,7 @@ begin
 
   -- only the text:
   l_text := uc_ai.ocr_text(
-    p_document   => (select blob_content from your_table where id = 1),
+    p_document   => l_blob,
     p_media_type => 'application/pdf',
     p_provider   => uc_ai.c_provider_mistral
   );
@@ -173,12 +183,12 @@ The result object holds `markdown`, `pages` (each with `index` starting at 0, `m
 | Provider | Accepts | Notes |
 |----------|---------|-------|
 | `c_provider_mistral` | PDF, PNG, JPEG, WebP, AVIF, and a URL overload (`p_url`) | Default model `uc_ai_mistral.c_model_mistral_ocr`. Options such as `pages`, `table_format`, `confidence_scores_granularity` pass through. |
-| `c_provider_oci` | PDF, PNG, JPEG, TIFF | Needs `uc_ai_oci.g_compartment_id` and the web credential. UC AI builds the Markdown from lines and tables. Synchronous calls: 8 MB and 5 pages at most. Option `tables => true` adds table extraction. |
-| `c_provider_ollama` | PNG, JPEG, WebP (no PDF) | `p_model` is required and must be a vision model. Use an image with an opaque background. No boxes and no confidence, so review the result. |
+| `c_provider_oci` | PDF, PNG, JPEG, TIFF | Needs `uc_ai_oci.g_compartment_id`, `uc_ai_oci.g_region` and the web credential. UC AI builds the Markdown from lines and tables. Oracle documents a limit of 5 pages for synchronous calls. UC AI checks only the size of the document (8 MB of raw bytes) and not the page count. Option `tables => true` adds table extraction. |
+| `c_provider_ollama` | PNG, JPEG, WebP (no PDF) | `p_model` is required (`ORA-20502` when null) and must be a vision model. Use an image with an opaque background. No boxes and no confidence, so review the result. |
 
-Use the neutral options in `p_options` (a `json_object_t`): `pages` (0-based indexes) and `tables` (boolean). UC AI passes other keys on to the provider; use the key `extra_body` to add fields to the request body. `uc_ai.g_base_url` overrides the endpoint.
+Use the neutral options in `p_options` (a `json_object_t`): `pages` (0-based indexes) and `tables` (boolean). UC AI passes other keys on to the provider; use the key `extra_body` to add fields to the request body. `uc_ai.g_base_url` overrides the endpoint for Mistral and Ollama only. OCI builds its URL from `uc_ai_oci.g_region`.
 
-An unsupported media type raises `ORA-20508` before any request. A provider error raises `ORA-20302`. A provider without OCR support raises `ORA-20306`. `warnings` holds non-fatal problems, for example OCI reporting that a page has no text.
+An unsupported media type raises `ORA-20508` before any request. A provider error raises `ORA-20302`. A provider without OCR support raises `ORA-20306`. `warnings` holds non-fatal problems, for example OCI reporting that a page has no text. OCI raises `ORA-20302` only when the provider reports an error and returns no page.
 
 ## Sending files to an agent
 
@@ -191,7 +201,7 @@ declare
 begin
   l_files.extend;
   l_files(1).media_type := 'application/pdf';
-  l_files(1).data_blob  := (select blob_content from your_table where id = 1);
+  select blob_content into l_files(1).data_blob from your_table where id = 1;
   l_files(1).filename   := 'characters.pdf';
 
   l_result := uc_ai_agents_api.execute_agent(

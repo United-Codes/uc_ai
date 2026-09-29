@@ -15,25 +15,88 @@ create or replace package body test_uc_ai_ocr as
    * OCI needs a compartment and a signing credential; both are named on the OCI
    * globals only, so a Mistral call in the same test does not see them.
    */
-  procedure setup_oci
+  procedure skip_oci(p_reason in varchar2)
+  as
+  begin
+    sys.dbms_output.put_line('SKIPPED: OCI is not available here (' || p_reason || ')');
+  end skip_oci;
+
+
+  /*
+   * Sets the OCI globals. False, with a skip message, when the test setup has no
+   * compartment id: then no OCI call is possible.
+   */
+  function setup_oci return boolean
   as
   begin
     uc_ai_oci.g_compartment_id      := get_oci_compratment_id;
     uc_ai_oci.g_region              := 'eu-frankfurt-1';
     uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+
+    if uc_ai_oci.g_compartment_id is null or uc_ai_oci.g_compartment_id not like 'ocid1.%' then
+      skip_oci('no compartment id from get_oci_compratment_id');
+      return false;
+    end if;
+
+    return true;
   end setup_oci;
+
+
+  /*
+   * True when an error comes from the environment and not from the code: OCI
+   * answered 401, 403 or 404 (no access, no policy, a compartment that does not
+   * exist), or the web credential does not exist.
+   */
+  function is_oci_environment_error(p_code in number, p_message in varchar2) return boolean
+  as
+  begin
+    return (p_code = uc_ai_error.c_err_provider_response and regexp_like(p_message, 'HTTP 40[134]'))
+        or (lower(p_message) like '%credential%' and lower(p_message) like '%oci_key%');
+  end is_oci_environment_error;
+
+
+  /*
+   * uc_ai.ocr with OCI. Null, with a skip message, when the environment stops the
+   * call (see setup_oci and is_oci_environment_error). Every other error is raised.
+   */
+  function oci_ocr(
+    p_document   in blob
+  , p_media_type in varchar2
+  , p_options    in json_object_t default null
+  ) return json_object_t
+  as
+    l_code   number;
+    l_msg    varchar2(4000 char);
+  begin
+    if not setup_oci then
+      return null;
+    end if;
+
+    begin
+      return uc_ai.ocr(
+        p_document   => p_document
+      , p_media_type => p_media_type
+      , p_provider   => uc_ai.c_provider_oci
+      , p_options    => p_options
+      );
+    exception
+      when others then
+        l_code := sqlcode;
+        l_msg  := substr(sqlerrm, 1, 4000);
+        if not is_oci_environment_error(l_code, l_msg) then
+          raise;
+        end if;
+    end;
+
+    skip_oci(substr(l_msg, 1, 200));
+    return null;
+  end oci_ocr;
 
 
   function oci_pdf_ocr(p_options in json_object_t default null) return json_object_t
   as
   begin
-    setup_oci;
-    return uc_ai.ocr(
-      p_document   => uc_ai_test_utils.get_emp_pdf
-    , p_media_type => 'application/pdf'
-    , p_provider   => uc_ai.c_provider_oci
-    , p_options    => p_options
-    );
+    return oci_ocr(uc_ai_test_utils.get_emp_pdf, 'application/pdf', p_options);
   end oci_pdf_ocr;
 
 
@@ -251,6 +314,9 @@ create or replace package body test_uc_ai_ocr as
     l_box    json_object_t;
   begin
     l_result := oci_pdf_ocr;
+    if l_result is null then
+      return;
+    end if;
 
     sys.dbms_output.put_line('markdown: ' || l_result.get_clob('markdown'));
 
@@ -280,6 +346,9 @@ create or replace package body test_uc_ai_ocr as
     l_result json_object_t;
   begin
     l_result := oci_pdf_ocr(json_object_t('{"tables":true}'));
+    if l_result is null then
+      return;
+    end if;
 
     sys.dbms_output.put_line('markdown: ' || l_result.get_clob('markdown'));
 
@@ -293,8 +362,10 @@ create or replace package body test_uc_ai_ocr as
   as
     l_result json_object_t;
   begin
-    setup_oci;
-    l_result := uc_ai.ocr(uc_ai_test_utils.get_apple_png, 'image/png', uc_ai.c_provider_oci);
+    l_result := oci_ocr(uc_ai_test_utils.get_apple_png, 'image/png');
+    if l_result is null then
+      return;
+    end if;
 
     ut.expect(l_result.get_array('warnings').get_size, 'warnings').to_be_greater_than(0);
     ut.expect(l_result.get_array('warnings').get_string(0), 'warning').to_be_like('FEATURE_NOT_SUPPORTED%');
@@ -308,7 +379,7 @@ create or replace package body test_uc_ai_ocr as
     l_result json_object_t;
     l_code   number;
   begin
-    setup_oci;
+    -- raises before any request: no OCI setup and no skip guard needed
     begin
       l_result := uc_ai.ocr(uc_ai_test_utils.get_apple_webp, 'image/webp', uc_ai.c_provider_oci);
       l_code := 0;
@@ -326,10 +397,16 @@ create or replace package body test_uc_ai_ocr as
     l_result json_object_t;
   begin
     l_result := oci_pdf_ocr(json_object_t('{"pages":[0]}'));
+    if l_result is null then
+      return;
+    end if;
     ut.expect(l_result.get_array('pages').get_size, 'page 0 is kept').to_equal(1);
     ut.expect(l_result.get_clob('markdown')).to_be_like('%Dwight%');
 
     l_result := oci_pdf_ocr(json_object_t('{"pages":[1]}'));
+    if l_result is null then
+      return;
+    end if;
     ut.expect(l_result.get_array('pages').get_size, 'page 1 does not exist').to_equal(0);
     ut.expect(sys.dbms_lob.getlength(l_result.get_clob('markdown')), 'no text').to_equal(0);
   end oci_pages_option;
@@ -338,9 +415,25 @@ create or replace package body test_uc_ai_ocr as
   procedure oci_ocr_text
   as
     l_text clob;
+    l_code number;
+    l_msg  varchar2(4000 char);
   begin
-    setup_oci;
-    l_text := uc_ai.ocr_text(uc_ai_test_utils.get_emp_pdf, 'application/pdf', uc_ai.c_provider_oci);
+    if not setup_oci then
+      return;
+    end if;
+
+    begin
+      l_text := uc_ai.ocr_text(uc_ai_test_utils.get_emp_pdf, 'application/pdf', uc_ai.c_provider_oci);
+    exception
+      when others then
+        l_code := sqlcode;
+        l_msg  := substr(sqlerrm, 1, 4000);
+        if not is_oci_environment_error(l_code, l_msg) then
+          raise;
+        end if;
+        skip_oci(substr(l_msg, 1, 200));
+        return;
+    end;
 
     ut.expect(l_text).to_be_like('%Dwight%');
   end oci_ocr_text;
@@ -414,7 +507,7 @@ create or replace package body test_uc_ai_ocr as
         l_code := sqlcode;
     end;
 
-    ut.expect(l_code).to_equal(-20503);
+    ut.expect(l_code).to_equal(-20502);
   end ollama_null_model;
 
 
@@ -447,6 +540,9 @@ create or replace package body test_uc_ai_ocr as
     -- the same words, not the same text: OCR output is not exact and the two differ in layout
     l_mistral := pdf_ocr;
     l_oci     := oci_pdf_ocr(json_object_t('{"tables":true}'));
+    if l_oci is null then
+      return;
+    end if;
 
     ut.expect(l_mistral.get_clob('markdown'), 'Mistral: Dwight').to_be_like('%Dwight%');
     ut.expect(l_mistral.get_clob('markdown'), 'Mistral: Scott').to_be_like('%Scott%');

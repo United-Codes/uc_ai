@@ -787,13 +787,13 @@ create or replace package body test_uc_ai_ocr_wire as
     uc_ai_oci.g_region := 'eu-frankfurt-1';
     l_result := oci_ocr;
 
-    -- base_url replaces the host; a trailing slash does not double
+    -- uc_ai.g_base_url is for other providers: uc_ai_oci does not read it, so OCR does not either
     uc_ai.g_base_url := 'https://example.test/oci/';
     l_result := oci_ocr;
 
     test_uc_ai_wire.expect_url(1, 'https://document.aiservice.us-ashburn-1.oci.oraclecloud.com/20221109/actions/analyzeDocument');
     test_uc_ai_wire.expect_url(2, 'https://document.aiservice.eu-frankfurt-1.oci.oraclecloud.com/20221109/actions/analyzeDocument');
-    test_uc_ai_wire.expect_url(3, 'https://example.test/oci/20221109/actions/analyzeDocument');
+    test_uc_ai_wire.expect_url(3, 'https://document.aiservice.eu-frankfurt-1.oci.oraclecloud.com/20221109/actions/analyzeDocument');
     test_uc_ai_wire.expect_all_consumed(3);
   end oci_url_from_region;
 
@@ -2025,8 +2025,8 @@ create or replace package body test_uc_ai_ocr_wire as
         l_code    := sqlcode;
         l_message := sqlerrm;
     end;
-    ut.expect(l_code, 'code').to_equal(-20503);
-    ut.expect(l_message, 'message').to_be_like('%p_model%');
+    ut.expect(l_code, 'code').to_equal(-20502);
+    ut.expect(l_message, 'message').to_be_like('%requires p_model%');
     test_uc_ai_wire.expect_all_consumed(0);
   end ollama_null_model;
 
@@ -2492,6 +2492,201 @@ create or replace package body test_uc_ai_ocr_wire as
        and (sys.dbms_lob.instr(extra, '"document_url"') > 0 or sys.dbms_lob.instr(extra, '"model":"mistral-ocr') > 0);
     ut.expect(l_count, 'no log row holds the request body').to_equal(0);
   end body_is_not_logged;
+
+
+  -- ---- robustness of the response parsers -------------------------------------
+
+  procedure mistral_page_not_object
+  as
+    l_result json_object_t;
+    l_page   json_object_t;
+  begin
+    uc_ai_test_http_mock.enqueue('{"pages":[null]}');
+    uc_ai_test_http_mock.enqueue('{"pages":[' || page(0, 'A') || ',5,"x",' || page(3, 'B') || ']}');
+
+    l_result := pdf_ocr;
+    ut.expect(l_result.get_array('pages').get_size, 'one page for the null element').to_equal(1);
+    l_page := first_page_of(l_result);
+    ut.expect(l_page.get_number('index'), 'index').to_equal(0);
+    ut.expect(l_page.get('markdown').is_string, 'markdown is a string').to_be_true();
+    ut.expect(l_result.get_array('warnings').get_size, 'warnings').to_equal(1);
+    ut.expect(l_result.get_array('warnings').get_string(0), 'warning').to_equal('Page 0 was not an object');
+
+    l_result := pdf_ocr;
+    ut.expect(l_result.get_array('pages').get_size, 'the position of every element is kept').to_equal(4);
+    ut.expect(treat(l_result.get_array('pages').get(1) as json_object_t).get_number('index'), 'index of the scalar').to_equal(1);
+    ut.expect(l_result.get_array('warnings').get_size, 'two warnings').to_equal(2);
+    ut.expect(l_result.get_clob('markdown')).to_equal(to_clob('A' || chr(10) || chr(10) || 'B'));
+  end mistral_page_not_object;
+
+
+  procedure mistral_block_table_not_object
+  as
+    l_result json_object_t;
+    l_page   json_object_t;
+  begin
+    uc_ai_test_http_mock.enqueue('{"pages":[{"index":0,"markdown":"A [tbl-0.md](tbl-0.md)","dimensions":{"width":10,"height":10},'
+      || '"blocks":[5,null,"x",{"top_left_x":0,"top_left_y":0,"bottom_right_x":5,"bottom_right_y":5,"content":"A","type":"text"}],'
+      || '"tables":[5,null,"x",{"id":"tbl-0.md","content":"| h |"}]}]}');
+
+    l_result := pdf_ocr(json_object_t('{"tables":true}'));
+
+    l_page := first_page_of(l_result);
+    ut.expect(l_page.get_array('blocks').get_size, 'only the block object is kept').to_equal(1);
+    ut.expect(treat(l_page.get_array('blocks').get(0) as json_object_t).get_string('text'), 'block text').to_equal('A');
+    ut.expect(l_result.get_clob('markdown'), 'the table is put back').to_equal(to_clob('A | h |'));
+    ut.expect(l_result.get_array('warnings').get_size, 'no warning').to_equal(0);
+  end mistral_block_table_not_object;
+
+
+  procedure mistral_block_without_dimensions
+  as
+    c_block constant varchar2(200 char) :=
+      '{"top_left_x":0,"top_left_y":0,"bottom_right_x":5,"bottom_right_y":5,"content":"A","type":"text"}';
+    l_result json_object_t;
+    l_page   json_object_t;
+  begin
+    -- no dimensions, dimensions of 0, a block without coordinates on a page with dimensions
+    uc_ai_test_http_mock.enqueue('{"pages":[{"index":0,"markdown":"A","blocks":[' || c_block || ']}'
+      || ',{"index":1,"markdown":"A","dimensions":{"width":0,"height":0},"blocks":[' || c_block || ']}'
+      || ',{"index":2,"markdown":"A","dimensions":{"width":10,"height":10},"blocks":[{"content":"A","type":"text"},'
+      || '{"top_left_x":null,"top_left_y":0,"bottom_right_x":5,"bottom_right_y":5,"content":"B"}]}]}');
+
+    l_result := pdf_ocr;
+
+    <<page_loop>>
+    for i in 0 .. 2 loop
+      l_page := treat(l_result.get_array('pages').get(i) as json_object_t);
+      ut.expect(treat(l_page.get_array('blocks').get(0) as json_object_t).has('box'), 'page ' || i || ': no box').to_be_false();
+      ut.expect(treat(l_page.get_array('blocks').get(0) as json_object_t).get_string('text'), 'page ' || i || ': text is kept').to_equal('A');
+    end loop page_loop;
+    ut.expect(l_result.get_array('pages').get_size, 'pages').to_equal(3);
+    ut.expect(treat(treat(l_result.get_array('pages').get(2) as json_object_t).get_array('blocks').get(1) as json_object_t).has('box'), 'null coordinate: no box').to_be_false();
+  end mistral_block_without_dimensions;
+
+
+  procedure empty_markdown_is_string
+  as
+    l_result json_object_t;
+    c_replies constant sys.odcivarchar2list := sys.odcivarchar2list('UNREADABLE', null);
+  begin
+    -- Mistral
+    uc_ai_test_http_mock.enqueue(pages_response('{"index":0,"markdown":null,"dimensions":null,"blocks":null}'));
+    l_result := pdf_ocr;
+    ut.expect(first_page_of(l_result).get('markdown').is_string, 'Mistral').to_be_true();
+
+    -- OCI
+    uc_ai_test_http_mock.enqueue(oci_response(oci_page(1, null)));
+    l_result := oci_ocr;
+    ut.expect(first_page_of(l_result).get('markdown').is_string, 'OCI').to_be_true();
+
+    -- Ollama: unreadable, empty and missing content
+    <<reply_loop>>
+    for i in 1 .. c_replies.count loop
+      uc_ai_test_http_mock.enqueue(ollama_response(c_replies(i)));
+    end loop reply_loop;
+    uc_ai_test_http_mock.enqueue('{"model":"m","message":{"role":"assistant"},"done":true}');
+    <<ollama_loop>>
+    for i in 1 .. c_replies.count + 1 loop
+      l_result := ollama_ocr;
+      ut.expect(first_page_of(l_result).get('markdown').is_string, 'Ollama case ' || i).to_be_true();
+      ut.expect(sys.dbms_lob.getlength(first_page_of(l_result).get_clob('markdown')), 'Ollama case ' || i || ' is empty').to_equal(0);
+    end loop ollama_loop;
+  end empty_markdown_is_string;
+
+
+  procedure oci_table_wide_column_count
+  as
+    l_result   json_object_t;
+    l_markdown clob;
+    function table_json(p_column_count in varchar2) return varchar2
+    as
+    begin
+      return '[{"rowCount":1,"columnCount":' || p_column_count || ',"headerRows":['
+        || oci_row('[' || oci_cell('a', 0, 0) || ',' || oci_cell('b', 0, 1) || ']') || '],"bodyRows":[],"footerRows":[]}]';
+    end table_json;
+  begin
+    uc_ai_test_http_mock.enqueue(oci_response(oci_page(1, null, table_json('6000'))));
+    uc_ai_test_http_mock.enqueue(oci_response(oci_page(1, null, table_json('1000000000'))));
+
+    l_result   := oci_ocr;
+    l_markdown := l_result.get_clob('markdown');
+    ut.expect(sys.dbms_lob.substr(l_markdown, 18, 1), 'starts with the two cells').to_equal('| a | b |  |  |  |');
+    ut.expect(regexp_count(l_markdown, ' --- \|'), 'separator cells').to_equal(6000);
+    ut.expect(sys.dbms_lob.getlength(l_markdown), 'no overflow, no cut').to_equal(18004 + 36001);
+
+    -- a columnCount that would make an unreal grid is ignored: only the seen columns stay
+    l_result := oci_ocr;
+    ut.expect(l_result.get_clob('markdown')).to_equal(to_clob('| a | b |' || chr(10) || '| --- | --- |'));
+  end oci_table_wide_column_count;
+
+
+  procedure oci_table_long_cells
+  as
+    l_json     clob;
+    l_result   json_object_t;
+    l_markdown clob;
+    l_cells    clob;
+    c_text     constant varchar2(9000 char) := rpad('a|', 9000, 'a|');
+  begin
+    -- 5 cells of 9000 characters: 45000 in a row, 67500 with the escaped pipes
+    <<cell_loop>>
+    for i in 0 .. 4 loop
+      l_cells := l_cells || case when i > 0 then ',' end || oci_cell(c_text, 0, i);
+    end loop cell_loop;
+    l_json := '{"documentMetadata":{"pageCount":1},"pages":[{"pageNumber":1,"lines":[],"tables":[{"headerRows":[{"cells":['
+           || l_cells || ']}],"bodyRows":[],"footerRows":[]}]}],"errors":null}';
+    uc_ai_test_http_mock.enqueue(l_json);
+
+    l_result   := oci_ocr;
+    l_markdown := l_result.get_clob('markdown');
+
+    ut.expect(sys.dbms_lob.getlength(l_markdown), 'row, line break, separator').to_equal(1 + 5 * (13500 + 3) + 1 + 31);
+    ut.expect(regexp_count(l_markdown, 'a\\\|'), 'every pipe is escaped').to_equal(5 * 4500);
+    ut.expect(sys.dbms_lob.substr(l_markdown, 8, 1), 'start').to_equal('| a\|a\|');
+  end oci_table_long_cells;
+
+
+  procedure oci_table_grid_cap
+  as
+    l_result json_object_t;
+    l_page   json_object_t;
+  begin
+    -- cells at 0,0 and 9999,9999 would make a grid of 10^8 positions
+    uc_ai_test_http_mock.enqueue(oci_response(oci_page(1
+    , oci_line('Line stays', '0.1', '0.1', '0.5', '0.2')
+    , '[{"headerRows":[' || oci_row('[' || oci_cell('a', 0, 0) || ',' || oci_cell('far', 9999, 9999) || ']') || '],"bodyRows":[],"footerRows":[]'
+      || ',"boundingPolygon":' || oci_poly('0', '0', '1', '1') || '}]')));
+
+    l_result := oci_ocr;
+    l_page   := first_page_of(l_result);
+
+    ut.expect(l_result.get_clob('markdown'), 'the line stays as text').to_equal(to_clob('Line stays'));
+    ut.expect(l_page.get_array('blocks').get_size, 'one text block, no table block').to_equal(1);
+  end oci_table_grid_cap;
+
+
+  procedure oci_extra_body_features
+  as
+    l_result  json_object_t;
+    l_code    number;
+    l_message varchar2(4000 char);
+  begin
+    uc_ai_test_http_mock.enqueue(oci_response(oci_page(1, null)));
+
+    l_result := oci_ocr(json_object_t('{"extra_body":{"features":[{"featureType":"KEY_VALUE_EXTRACTION"}]}}'));
+    ut.expect(uc_ai_test_http_mock.request_json(1).get_array('features').to_string, 'extra_body features replace the default')
+      .to_equal('[{"featureType":"KEY_VALUE_EXTRACTION"}]');
+
+    try_ocr(small_blob, 'application/pdf', uc_ai.c_provider_oci, json_object_t('{"extra_body":{"features":"TEXT_EXTRACTION"}}'), l_code, l_message);
+    ut.expect(l_code, 'string code').to_equal(-20503);
+    ut.expect(l_message, 'string message').to_be_like('%features%');
+
+    try_ocr(small_blob, 'application/pdf', uc_ai.c_provider_oci, json_object_t('{"extra_body":{"features":null}}'), l_code, l_message);
+    ut.expect(l_code, 'null code').to_equal(-20503);
+
+    test_uc_ai_wire.expect_all_consumed(1);
+  end oci_extra_body_features;
 
 end test_uc_ai_ocr_wire;
 /

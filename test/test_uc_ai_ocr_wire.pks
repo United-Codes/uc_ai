@@ -112,7 +112,7 @@ create or replace package test_uc_ai_ocr_wire as
   procedure ocr_text_equals_markdown;
 
   -- OCI Document Understanding ---------------------------------------------------
-  --%test(OCI: the URL is built from the region, and base_url replaces the host)
+  --%test(OCI: the URL is built from the region; uc_ai.g_base_url of another provider does not change it)
   procedure oci_url_from_region;
 
   --%test(OCI: Content-Type is exactly application/json, without a charset, also with extra headers)
@@ -261,7 +261,7 @@ create or replace package test_uc_ai_ocr_wire as
   --%test(Ollama: PDF, GIF and TIFF raise -20508 and no request is sent; the PDF message says PDFs are not supported)
   procedure ollama_unsupported_media_type;
 
-  --%test(Ollama: a null model raises -20503 before any request)
+  --%test(Ollama: a null model raises -20502 before any request)
   procedure ollama_null_model;
 
   --%test(Ollama: the URL overload raises -20508 for a public URL and for a data URL, and no request is sent)
@@ -311,6 +311,31 @@ create or replace package test_uc_ai_ocr_wire as
 
   --%test(Providers without OCR raise -20306 and the message lists the OCR providers, no request is sent)
   procedure unsupported_ocr_providers;
+
+  -- robustness of the response parsers ---------------------------------------------
+  --%test(Mistral: a page that is not an object becomes an empty page at its index with a warning)
+  procedure mistral_page_not_object;
+
+  --%test(Mistral: a block or a table that is not an object is skipped)
+  procedure mistral_block_table_not_object;
+
+  --%test(Mistral: blocks without page dimensions, with dimensions of 0 or without coordinates have no box)
+  procedure mistral_block_without_dimensions;
+
+  --%test(An empty page has the markdown "" (a string) for Mistral, OCI and Ollama)
+  procedure empty_markdown_is_string;
+
+  --%test(OCI: a columnCount of 6000 gives a table of 6000 columns and no overflow, a bogus one is ignored)
+  procedure oci_table_wide_column_count;
+
+  --%test(OCI: a row of more than 40000 characters in its cells gives the whole table)
+  procedure oci_table_long_cells;
+
+  --%test(OCI: a table whose cells span a grid of more than 250000 positions is skipped and its lines stay)
+  procedure oci_table_grid_cap;
+
+  --%test(OCI: extra_body can replace features with an array, and a value that is not an array raises -20503)
+  procedure oci_extra_body_features;
 
   -- logging ------------------------------------------------------------------------
   --%test(The request body and the base64 never appear in the log)
