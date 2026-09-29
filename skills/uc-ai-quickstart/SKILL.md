@@ -168,6 +168,10 @@ end;
 
 A config-driven overload `generate_embeddings(p_input, p_provider, p_model, p_config)` exists as well.
 
+## OCR
+
+`uc_ai.ocr(p_document, p_media_type, p_provider, ...)` and `uc_ai.ocr_text(...)` extract text from a PDF or image with Mistral, OCI or Ollama, without a chat model. See the `uc-ai-file-analysis` skill.
+
 ## Pitfalls
 
 - **Globals are session-scoped.** Call `uc_ai.reset_globals;` before configuring a call so settings from earlier activity in the session don't leak in. Exception: the event callback registration (`g_event_callback`) intentionally survives resets.

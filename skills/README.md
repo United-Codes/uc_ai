@@ -42,7 +42,7 @@ The agent discovers them automatically; each skill loads when a task matches its
 | [`uc-ai-prompt-profiles`](./uc-ai-prompt-profiles/SKILL.md) | Versioned, reusable prompt templates stored in the database |
 | [`uc-ai-multi-agent`](./uc-ai-multi-agent/SKILL.md) | Agents, workflows, orchestrators, agent conversations, and reaching an agent as a tool |
 | [`uc-ai-agent-memory`](./uc-ai-agent-memory/SKILL.md) | Persistent agent memory: the MEMORY tool, store scopes, size caps and housekeeping |
-| [`uc-ai-file-analysis`](./uc-ai-file-analysis/SKILL.md) | Sending PDFs and images (BLOBs) to multimodal models |
+| [`uc-ai-file-analysis`](./uc-ai-file-analysis/SKILL.md) | Sending PDFs and images (BLOBs) to multimodal models, and OCR (`uc_ai.ocr`) to extract their text |
 | [`uc-ai-event-callbacks`](./uc-ai-event-callbacks/SKILL.md) | Observing AI activity: streaming-style UIs, audit logging of tool calls |
 
 ## Versioning
