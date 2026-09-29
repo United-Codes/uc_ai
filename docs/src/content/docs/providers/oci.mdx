@@ -207,3 +207,31 @@ end;
 ```
 
 For more information about the `generate_embeddings` function, visit its [documentation page](/products/uc-ai/docs/api/generate_embeddings/).
+
+## OCR with Document Understanding
+
+`uc_ai.ocr` with `uc_ai.c_provider_oci` reads PDFs and images with OCI Document Understanding. This service is not a chat model. `p_model` is ignored. The result holds the text lines as Markdown, and optionally the tables, with the box and the confidence of each block.
+
+Document Understanding uses the same web credential as the other OCI requests and the compartment of `uc_ai_oci.g_compartment_id`. If the compartment is not set, the call raises `ORA-20502`. The user of the API key needs a policy that allows Document Understanding in the compartment. See the [Document Understanding documentation](https://docs.oracle.com/en-us/iaas/Content/document-understanding/using/home.htm) for the policy.
+
+UC AI sends the document inline in one synchronous call. UC AI raises `ORA-20503` for a document over 8 MB. Oracle documents a limit of 5 pages for a synchronous call.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai_oci.g_compartment_id      := 'ocid1.compartment.oc1..your-compartment';
+  uc_ai_oci.g_region              := 'eu-frankfurt-1';
+  uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+
+  l_result := uc_ai.ocr(
+    p_document   => your_pdf_blob,
+    p_media_type => 'application/pdf',
+    p_provider   => uc_ai.c_provider_oci,
+    p_options    => json_object_t('{"tables": true}')
+  );
+end;
+/
+```
+
+The OCR reference describes the [options](/products/uc-ai/docs/api/ocr/#oci), the result and the errors.

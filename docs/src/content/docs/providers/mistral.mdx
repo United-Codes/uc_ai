@@ -177,6 +177,10 @@ end;
 /
 ```
 
+#### PDF Analysis
+
+A chat model reads a PDF that you attach to a message. UC AI sends the PDF to Mistral as a `document_url` content part with a Base64 `data:application/pdf` URL. Use `create_file_content` with the media type `application/pdf`, as in the image example above. See the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for a PDF example. To get the text and the structure of a document instead of an answer, use [OCR](#ocr).
+
 ### Reasoning / Thinking
 
 Mistral handles reasoning through dedicated models instead of a request parameter: pick a Magistral model and it reasons by default. There is no reasoning effort setting for Mistral — `uc_ai.g_enable_reasoning` and `uc_ai.g_reasoning_level` are ignored for this provider.
@@ -264,3 +268,24 @@ begin
 end;
 /
 ```
+
+## OCR
+
+`uc_ai.ocr` reads PDFs and images with the Mistral OCR models. The result holds the text as Markdown, the pages, and the blocks with their positions. The constant `uc_ai_mistral.c_model_mistral_ocr` holds `mistral-ocr-latest`. This model is the default for `uc_ai.ocr`. The constant `uc_ai_mistral.c_model_mistral_ocr_4_1` holds `mistral-ocr-4-1`.
+
+OCR models do not work with `generate_text`. Use them only with `uc_ai.ocr` and `uc_ai.ocr_text`.
+
+```sql
+declare
+  l_text clob;
+begin
+  l_text := uc_ai.ocr_text(
+    p_document   => your_pdf_blob,
+    p_media_type => 'application/pdf',
+    p_provider   => uc_ai.c_provider_mistral
+  );
+end;
+/
+```
+
+The OCR requests use the same credential as the chat requests. See the [OCR reference](/products/uc-ai/docs/api/ocr/) for the result, the options and the URL overload.

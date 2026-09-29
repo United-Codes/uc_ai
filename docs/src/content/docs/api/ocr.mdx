@@ -1,0 +1,510 @@
+---
+title: OCR
+description: Reference for uc_ai.ocr and uc_ai.ocr_text. Extract text, tables, boxes and confidence from PDFs and images with Mistral, OCI Document Understanding or Ollama.
+sidebar:
+  order: 15
+---
+
+`uc_ai.ocr` reads a PDF or an image and returns its text as Markdown. It also returns the pages, the text blocks with their positions, the usage, and the response of the provider. All providers return the same result shape, so the code that reads the result does not depend on the provider.
+
+Three providers support OCR:
+
+| Provider | Constant | What reads the document |
+| --- | --- | --- |
+| Mistral | `uc_ai.c_provider_mistral` | The Mistral OCR models (`/v1/ocr`) |
+| OCI | `uc_ai.c_provider_oci` | OCI Document Understanding (`analyzeDocument`) |
+| Ollama | `uc_ai.c_provider_ollama` | A vision model that you name, over `/api/chat` |
+
+OCR does not go through `generate_text`. The OCR models of Mistral do not work with `generate_text`.
+
+## Choose between OCR and a chat model
+
+A chat model can read a PDF that you attach to a message. See [File analysis](/products/uc-ai/docs/guides/file_analysis/) if you want an answer about the document. The model returns text about the document, and the text can differ between calls.
+
+Use `uc_ai.ocr` when the text or the structure of the document is the result that you need. Examples are ingestion for search, storage of the text, the layout of a page, and the confidence of the reading. An OCR call returns the text of the document without a task or an interpretation.
+
+## Signatures
+
+```sql
+-- A document in a blob
+function ocr (
+  p_document   in blob
+, p_media_type in varchar2
+, p_provider   in provider_type
+, p_model      in model_type default null
+, p_options    in json_object_t default null
+) return json_object_t;
+
+-- A document behind a URL (Mistral only)
+function ocr (
+  p_url        in varchar2
+, p_provider   in provider_type
+, p_model      in model_type default null
+, p_options    in json_object_t default null
+) return json_object_t;
+
+-- Only the text of the blob overload
+function ocr_text (
+  p_document   in blob
+, p_media_type in varchar2
+, p_provider   in provider_type
+, p_model      in model_type default null
+, p_options    in json_object_t default null
+) return clob;
+```
+
+`ocr_text` returns the `markdown` key of the result. It has no URL overload.
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `p_document` | `blob` | Yes (blob overloads) | The document. An empty or null blob raises `ORA-20503`. |
+| `p_url` | `varchar2` | Yes (URL overload) | A public URL or a `data:` URL. A `data:` URL is limited by the size of a `varchar2`. Use the blob overload for a larger file. |
+| `p_media_type` | `varchar2` | Yes (blob overloads) | For example `application/pdf` or `image/png`. UC AI ignores case and parameters such as `; charset=binary`. `image/jpg` is read as `image/jpeg`. |
+| `p_provider` | `provider_type` | Yes | `uc_ai.c_provider_mistral`, `uc_ai.c_provider_oci` or `uc_ai.c_provider_ollama`. |
+| `p_model` | `model_type` | Depends on the provider | `null` selects the default model of the provider. OCI ignores it. Ollama requires it. |
+| `p_options` | `json_object_t` | No | Options for the call. See [Options](#options). |
+
+The configuration that `generate_text` reads from the package globals applies to OCR too. This includes `uc_ai.g_apex_web_credential`, the credential of the provider, `uc_ai.g_extra_headers` and, for Ollama and OCI, `uc_ai.g_base_url`. A Mistral OCR request always goes to `https://api.mistral.ai/v1/ocr`. `uc_ai.g_extra_body` does not apply to OCR. Use the `extra_body` option instead.
+
+UC AI checks the provider, the media type and the options before it sends a request. A document with an unsupported media type costs no request. UC AI never writes the request body to the log, because the body holds the whole document in Base64. The log holds the provider, the media type, the size in bytes and the names of the options.
+
+## Result
+
+`ocr` returns a `json_object_t` with these keys:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `markdown` | CLOB | The text of all pages, joined with a blank line. A page with no text is left out of the joined text. |
+| `pages` | array | One object for each page. See [Pages and blocks](#pages-and-blocks). |
+| `usage` | object | Only the values that the provider reports. See [Usage](#usage). |
+| `model` | string | The model that the provider reports. If the provider reports none, the requested model. |
+| `warnings` | array of strings | Problems that did not stop the call. The array is empty when there are none. |
+| `raw` | object | The response of the provider as it came back. |
+
+`raw` is the only place for data that the neutral shape does not carry. Examples are the words of an OCI page, the images of Mistral and the thinking text of an Ollama model.
+
+### Pages and blocks
+
+Each entry of `pages` has these keys:
+
+| Key | Type | Always present | Description |
+| --- | --- | --- | --- |
+| `index` | number | Yes | The page number, starting at 0. |
+| `markdown` | CLOB | Yes | The text of the page. It is empty when the page has no text. |
+| `blocks` | array | No | The text blocks of the page. Ollama returns no blocks. |
+| `dimensions` | object | No | `width` and `height` of the page. OCI adds `unit`. Ollama returns no dimensions. |
+| `confidence` | number | No | The confidence of the page from 0 to 1. Mistral returns it when the option `confidence_scores_granularity` is set. |
+
+Each entry of `blocks` has these keys:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `type` | string | The kind of block, for example `text` or `table`. |
+| `text` | string | The text of the block. |
+| `confidence` | number | The confidence of the block, if the provider reports it. |
+| `box` | object | The position of the block on the page. See [Box coordinates](#box-coordinates). |
+| `polygon` | array | OCI only. The four points of the block as `{"x":..., "y":...}`. |
+
+Test for optional keys with `has` before you read them.
+
+### Box coordinates
+
+A `box` holds `x1`, `y1`, `x2` and `y2`. The values are fractions of the page from 0 to 1. The point `x1, y1` is the top left corner, and the point `x2, y2` is the bottom right corner. UC AI rounds the values to 6 decimals.
+
+Mistral reports pixels. UC AI divides them by the width and the height of the page. OCI reports normalized vertices. UC AI takes the smallest and the largest values of the vertices. To get pixel positions, multiply the values by `dimensions.width` and `dimensions.height`.
+
+### Usage
+
+`usage` holds a key only when the provider reports it.
+
+| Provider | Keys |
+| --- | --- |
+| Mistral | `pages` (pages processed), `bytes` (size of the document) |
+| OCI | `pages` (page count of the document) |
+| Ollama | `input_tokens`, `output_tokens` |
+
+Mistral and OCI report pages, not tokens. For prices, see the pricing pages of [Mistral](https://mistral.ai/pricing) and [Oracle](https://www.oracle.com/cloud/price-list/).
+
+### Warnings
+
+A warning describes a problem that did not stop the call. The call still returns a result.
+
+- OCI returns an error inside a successful response, for example `FEATURE_NOT_SUPPORTED` for an image without text. UC AI adds the code and the message to `warnings`.
+- Ollama can reply that the image has no readable text, or return no text. The page then has empty `markdown`, and `warnings` holds a message.
+
+If the provider reports an error and no page has text, the call raises `ORA-20302`.
+
+## Providers
+
+| | Mistral | OCI | Ollama |
+| --- | --- | --- | --- |
+| Media types | `application/pdf`, `image/png`, `image/jpeg`, `image/webp`, `image/avif`, DOCX, PPTX | `application/pdf`, `image/png`, `image/jpeg`, `image/tiff` | `image/png`, `image/jpeg`, `image/webp` |
+| Default model | `uc_ai_mistral.c_model_mistral_ocr` (`mistral-ocr-latest`) | None. `p_model` is ignored. `model` in the result is the text extraction model version. | None. `p_model` is required. |
+| `markdown` | From the model | Built from the text lines and the tables | The answer of the model |
+| `blocks` and `box` | Yes | Yes, with `polygon` | No |
+| Confidence | If you request it | Block | No |
+| Usage | Pages and bytes | Pages | Tokens |
+| URL overload | Yes | No | No |
+| Limit | | Synchronous call: 8 MB and 5 pages | One image, one page. An image with transparency is flattened on a black background. |
+
+### Mistral
+
+Mistral reads the document with the model in `p_model`. The default is `uc_ai_mistral.c_model_mistral_ocr`. The constant `uc_ai_mistral.c_model_mistral_ocr_4_1` selects the `mistral-ocr-4-1` model.
+
+UC AI sends images as `image_url` and all other documents as `document_url`. The URL overload sends `image_url` for a `data:image/...` URL and for a path that ends in `.png`, `.jpg`, `.jpeg`, `.webp` or `.avif`. Other URLs go as `document_url`.
+
+UC AI passes every option that it does not use itself on to the request. See the [Mistral OCR API](https://docs.mistral.ai/capabilities/document_ai/basic_ocr) for the options. These options were used in tests:
+
+| Option | Effect |
+| --- | --- |
+| `pages` | The pages to process, as an array of indexes starting at 0. |
+| `table_format` | The table format. UC AI puts the tables back in `markdown`. |
+| `confidence_scores_granularity` | For example `page`. Adds `confidence` to each page. |
+| `include_image_base64` | Return the images of the document in `raw`. |
+
+If `table_format` is set, Mistral puts a link such as `[tbl-0.md](tbl-0.md)` in the Markdown and lists the table separately. UC AI replaces the link with the table.
+
+### OCI
+
+OCI Document Understanding needs a compartment. Set `uc_ai_oci.g_compartment_id` and the region in `uc_ai_oci.g_region`. If the compartment is not set, the call raises `ORA-20502`. The setup of the credential and of the policy for Document Understanding is in the [OCI provider page](/products/uc-ai/docs/providers/oci/#ocr-with-document-understanding).
+
+UC AI sends the document inline, so it works with a synchronous call only. A document with more than 8 MB raises `ORA-20503`. Oracle documents a limit of 5 pages for a synchronous call. UC AI does not check the number of pages. See the [Document Understanding documentation](https://docs.oracle.com/en-us/iaas/Content/document-understanding/using/home.htm) for the current limits.
+
+UC AI builds `markdown` from the text lines of each page. A larger gap between two lines starts a new paragraph. A table appears in reading order, as a Markdown table, in place of the lines that lie inside it. The first row of the grid is the header row.
+
+| Option | Effect |
+| --- | --- |
+| `features` | An array such as `[{"featureType":"TEXT_EXTRACTION"}]`. It replaces the default. |
+| `language` | The language of the document. |
+| `documentType` | The type of the document. |
+
+Without `features`, UC AI requests `TEXT_EXTRACTION`. The option `tables` adds `TABLE_EXTRACTION`. The keys `compartmentId` and `document` are set by UC AI.
+
+### Ollama
+
+Ollama reads one image with a vision model. Ollama has no OCR model by default, so `p_model` is required. A null model raises `ORA-20503`.
+
+A PDF raises `ORA-20508`, because PL/SQL cannot make an image of a PDF page. Use an image with an opaque background. Ollama flattens a transparent image on a black background and returns no error. Then the model can report that it sees no text, or it can return text that is not in the image.
+
+The result has one page with index 0. The text of the model is the `markdown` of the page. If the model wraps the whole answer in one Markdown code fence, UC AI removes the fence. UC AI ignores the thinking text of the model, which stays in `raw`.
+
+The prompt asks for Markdown and for tables as Markdown tables. It also asks the model to reply with the single word `UNREADABLE` when the image is blank or unreadable. UC AI then returns empty `markdown` and a warning.
+
+| Option | Effect |
+| --- | --- |
+| `prompt` | Replaces the default prompt. |
+| `append_unreadable_hint` | `false` leaves the `UNREADABLE` instruction out of the prompt. |
+| `system` | A system message. |
+| `options` | Model options such as `{"temperature":0}`. Passed on. |
+| `keep_alive` | How long Ollama keeps the model loaded. Passed on. |
+| `think` | Turns thinking on or off. Passed on. |
+
+## Options
+
+`p_options` is one JSON object. UC AI passes the keys that it does not use itself to the provider. The neutral keys `pages` and `tables` and the key `extra_body` have the same meaning for all providers that support them.
+
+| Option | Mistral | OCI | Ollama |
+| --- | --- | --- | --- |
+| `pages` | Passed on. Array of indexes starting at 0. | UC AI removes the other pages from `pages` in the result. The provider still reads the whole document. | Accepts `[0]`. Another value raises `ORA-20508`. |
+| `tables` | `true` sets `table_format` to `markdown`, unless you set `table_format`. | `true` adds `TABLE_EXTRACTION`. | Accepted and ignored. The default prompt asks for tables. |
+| `extra_body` | Merged into the request. | Merged into the request. | Ignored. |
+
+### Extra request body
+
+`extra_body` is a JSON object for Mistral and OCI. UC AI merges its keys into the request body for parameters that UC AI does not wrap. A key in `extra_body` replaces a key from the other options. The keys `model` and `document` (Mistral) and `compartmentId` and `document` (OCI) always keep the value from UC AI. A value that is not an object raises `ORA-20503`.
+
+```sql
+l_result := uc_ai.ocr(
+  p_document   => l_pdf
+, p_media_type => 'application/pdf'
+, p_provider   => uc_ai.c_provider_mistral
+, p_options    => json_object_t('{"extra_body": {"table_format": "html"}}')
+);
+```
+
+## Errors
+
+| Code | Cause |
+| --- | --- |
+| `ORA-20306` | `p_provider` is null, unknown, or has no OCR support. The message lists `mistral`, `oci` and `ollama`. |
+| `ORA-20508` | The media type is null or not supported by the provider. A URL for OCI or Ollama. A PDF for Ollama. A page other than 0 for Ollama. UC AI raises it before any request. |
+| `ORA-20503` | The document is null or empty. Ollama without `p_model`. An OCI document over 8 MB. An option with the wrong type, for example `extra_body` that is not an object. |
+| `ORA-20502` | OCI without `uc_ai_oci.g_compartment_id`. |
+| `ORA-20302` | The provider returned an error, or OCI returned an error and no page. The message holds the HTTP status and the message of the provider. |
+
+## Examples
+
+### Read a PDF with Mistral
+
+The example reads a PDF from a blob. `uc_ai_test_utils.get_emp_pdf` returns the PDF of a user list from the UC AI tests. Replace it with your own blob.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.ocr(
+    p_document   => uc_ai_test_utils.get_emp_pdf
+  , p_media_type => 'application/pdf'
+  , p_provider   => uc_ai.c_provider_mistral
+  );
+
+  sys.dbms_output.put_line(l_result.get_clob('markdown'));
+  sys.dbms_output.put_line('model: ' || l_result.get_string('model'));
+  sys.dbms_output.put_line('usage: ' || l_result.get_object('usage').to_string);
+end;
+/
+```
+
+Output of a call on 2026-09-29. The output is complete:
+
+```text
+List of users:
+
+|  First Name | Last Name | Email  |
+| --- | --- | --- |
+|  Michael | Scott | michael.scott@dundermifflin.com  |
+|  Pam | Beesly | pam.beesly@dundermifflin.com  |
+|  Jim | Halpert | jim.halpert@dundermifflin.com  |
+|  Angela | Martin | angela.martin@dundermifflin.com  |
+|  Dwight | Schrute | dwight.schrute@dundermifflin.com  |
+|  Kevin | Malone | kevin.malone@dundermifflin.com  |
+model: mistral-ocr-latest
+usage: {"pages":1,"bytes":34116}
+```
+
+### Get only the text
+
+`ocr_text` returns the `markdown` key as a CLOB.
+
+```sql
+declare
+  l_text clob;
+begin
+  l_text := uc_ai.ocr_text(
+    p_document   => uc_ai_test_utils.get_emp_pdf
+  , p_media_type => 'application/pdf'
+  , p_provider   => uc_ai.c_provider_mistral
+  );
+
+  sys.dbms_output.put_line('characters: ' || length(l_text));
+end;
+/
+```
+
+The call on 2026-09-29 returned a text of 398 characters, the same text as in the previous example.
+
+### Read the pages, blocks and confidence
+
+The example requests the page confidence from Mistral. Then it reads the usage, the warnings, the pages and the blocks of the result.
+
+```sql
+declare
+  l_result json_object_t;
+  l_pages  json_array_t;
+  l_page   json_object_t;
+  l_blocks json_array_t;
+  l_block  json_object_t;
+  l_box    json_object_t;
+begin
+  l_result := uc_ai.ocr(
+    p_document   => uc_ai_test_utils.get_emp_pdf
+  , p_media_type => 'application/pdf'
+  , p_provider   => uc_ai.c_provider_mistral
+  , p_options    => json_object_t('{"confidence_scores_granularity":"page"}')
+  );
+
+  sys.dbms_output.put_line('pages processed: ' || l_result.get_object('usage').get_number('pages'));
+
+  if l_result.get_array('warnings').get_size > 0 then
+    sys.dbms_output.put_line('warning: ' || l_result.get_array('warnings').get_string(0));
+  end if;
+
+  l_pages := l_result.get_array('pages');
+  <<page_loop>>
+  for i in 0 .. l_pages.get_size - 1 loop
+    l_page := treat(l_pages.get(i) as json_object_t);
+    sys.dbms_output.put_line(
+      'page ' || l_page.get_number('index')
+      || ', ' || length(l_page.get_clob('markdown')) || ' characters'
+      || case when l_page.has('confidence')
+           then ', confidence ' || to_char(l_page.get_number('confidence'), 'FM0.00', 'NLS_NUMERIC_CHARACTERS=''.,''')
+         end
+    );
+
+    if l_page.has('blocks') then
+      l_blocks := l_page.get_array('blocks');
+      <<block_loop>>
+      for j in 0 .. l_blocks.get_size - 1 loop
+        l_block := treat(l_blocks.get(j) as json_object_t);
+        l_box   := l_block.get_object('box');
+        sys.dbms_output.put_line(
+          '  ' || l_block.get_string('type') || ' "' || substr(l_block.get_string('text'), 1, 30) || '"'
+          || ' at ' || to_char(l_box.get_number('x1'), 'FM0.00', 'NLS_NUMERIC_CHARACTERS=''.,''')
+          || ',' || to_char(l_box.get_number('y1'), 'FM0.00', 'NLS_NUMERIC_CHARACTERS=''.,''')
+        );
+      end loop block_loop;
+    end if;
+  end loop page_loop;
+end;
+/
+```
+
+Output of a call on 2026-09-29. The output is complete. The page confidence is model-dependent:
+
+```text
+pages processed: 1
+page 0, 398 characters, confidence 0.99
+  text "List of users:" at 0.09,0.07
+  table "|  First Name | Last Name | Em" at 0.09,0.08
+```
+
+The first block of the same call, as UC AI returns it:
+
+```json
+{"type":"text","text":"List of users:","box":{"x1":0.091667,"y1":0.065815,"x2":0.205556,"y2":0.085462}}
+```
+
+### Read a document from a URL
+
+The URL overload sends the URL to Mistral. Mistral fetches the document.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  l_result := uc_ai.ocr(
+    p_url      => 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'
+  , p_provider => uc_ai.c_provider_mistral
+  );
+
+  sys.dbms_output.put_line(l_result.get_clob('markdown'));
+  sys.dbms_output.put_line('usage: ' || l_result.get_object('usage').to_string);
+end;
+/
+```
+
+Output of a call on 2026-09-29. The output is complete:
+
+```text
+Dummy PDF file
+usage: {"pages":1,"bytes":13264}
+```
+
+### Read the tables of a PDF with OCI
+
+Set the compartment, the region and the credential first. The option `tables` adds table extraction.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai_oci.g_compartment_id      := 'ocid1.compartment.oc1..your-compartment';
+  uc_ai_oci.g_region              := 'eu-frankfurt-1';
+  uc_ai_oci.g_apex_web_credential := 'OCI_KEY';
+
+  l_result := uc_ai.ocr(
+    p_document   => uc_ai_test_utils.get_emp_pdf
+  , p_media_type => 'application/pdf'
+  , p_provider   => uc_ai.c_provider_oci
+  , p_options    => json_object_t('{"tables": true}')
+  );
+
+  sys.dbms_output.put_line(l_result.get_clob('markdown'));
+  sys.dbms_output.put_line('usage: ' || l_result.get_object('usage').to_string);
+end;
+/
+```
+
+The output below is not from a live call. The OCI account of the development database was not available when this page was written. The output comes from a response that a live OCI call returned earlier for the same PDF. UC AI converted the recorded response with the same code as in a live call. The output is complete:
+
+```text
+List of users:
+
+| First Name | Last Name | Email |
+| --- | --- | --- |
+| Michael | Scott | michael.scott@dundermifflin.com |
+| Pam | Beesly | pam.beesly@dundermifflin.com |
+| Jim | Halpert | jim.halpert@dundermifflin.com |
+| Angela | Martin | angela.martin@dundermifflin.com |
+| Dwight | Schrute | dwight.schrute@dundermifflin.com |
+| Kevin | Malone | kevin.malone@dundermifflin.com |
+usage: {"pages":1}
+```
+
+The recorded request contained the features `TEXT_EXTRACTION` and `TABLE_EXTRACTION`. The page had 23 blocks, and the last block was the table. Without `tables`, the recorded text response gives one line for each cell, and no Markdown table.
+
+An OCI response for an image without text has an error inside a successful response. UC AI returns the page and adds the error to `warnings`. This recorded response gave:
+
+```text
+FEATURE_NOT_SUPPORTED: [Page 1] Text Extraction feature is not supported on OTHERS documents.
+```
+
+### Read an image with Ollama
+
+Set the URL of the Ollama server and the credential first. Pass a vision model in `p_model`. `uc_ai_test_utils.get_emp_table_jpeg` returns a JPEG of the user table, with an opaque background.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai.g_base_url            := 'https://ai.united-codes.com/api';
+  uc_ai.g_apex_web_credential := 'OLLAMA';
+
+  l_result := uc_ai.ocr(
+    p_document   => uc_ai_test_utils.get_emp_table_jpeg
+  , p_media_type => 'image/jpeg'
+  , p_provider   => uc_ai.c_provider_ollama
+  , p_model      => 'gemma4:26b'
+  );
+
+  sys.dbms_output.put_line(l_result.get_clob('markdown'));
+  sys.dbms_output.put_line('usage: ' || l_result.get_object('usage').to_string);
+end;
+/
+```
+
+Output of a call on 2026-09-29. The output is complete. The wording, the table layout and the token counts depend on the model:
+
+```text
+List of users:
+
+| First Name | Last Name | Email |
+| :--- | :--- | :--- |
+| Michael | Scott | michael.scott@dundermifflin.com |
+| Pam | Beesly | pam.beesly@dundermifflin.com |
+| Jim | Halpert | jim.halpert@dundermifflin.com |
+| Angela | Martin | angela.martin@dundermifflin.com |
+| Dwight | Schrute | dwight.schrute@dundermifflin.com |
+| Kevin | Malone | kevin.malone@dundermifflin.com |
+usage: {"input_tokens":168,"output_tokens":753}
+```
+
+To change what the model returns, pass the option `prompt`. This call asked for the email addresses only:
+
+```sql
+l_result := uc_ai.ocr(
+  p_document   => uc_ai_test_utils.get_emp_table_jpeg
+, p_media_type => 'image/jpeg'
+, p_provider   => uc_ai.c_provider_ollama
+, p_model      => 'gemma4:26b'
+, p_options    => json_object_t('{"prompt":"List only the email addresses in this image, one per line.","options":{"temperature":0}}')
+);
+```
+
+The `markdown` of the call on 2026-09-29 held the six email addresses, one on each line.
+
+### Handle an error
+
+A PDF for Ollama raises `ORA-20508` before UC AI sends a request. The message of the call on 2026-09-29 was:
+
+```text
+ORA-20508: Unsupported content type: application/pdf for OCR with provider ollama. PDFs are not supported: Ollama reads images only and PL/SQL cannot make an image of a PDF page. Pass an image with an opaque background. Supported: image/png, image/jpeg, image/webp
+```
+
+A model name that Mistral does not know raises `ORA-20302` with the message of the provider:
+
+```text
+ORA-20302: Error response from provider Mistral: HTTP 400: Invalid model: no-such-model
+```

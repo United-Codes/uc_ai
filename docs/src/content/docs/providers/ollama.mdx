@@ -145,3 +145,25 @@ end;
 ```
 
 For more information about the `generate_embeddings` function, visit its [documentation page](/products/uc-ai/docs/api/generate_embeddings/).
+
+## OCR
+
+`uc_ai.ocr` with `uc_ai.c_provider_ollama` reads an image with a vision model. Ollama has no default OCR model, so `p_model` is required. Use a model that supports vision, for example `gemma4:26b`. Set `uc_ai.g_base_url` as described in [Configuration](#configuration).
+
+Ollama reads images only. A PDF raises `ORA-20508`, because PL/SQL cannot make an image of a PDF page. Use an image with an opaque background. Ollama flattens a transparent image on a black background and returns no error. The result has one page, no blocks and no confidence, and `usage` holds the token counts.
+
+```sql
+declare
+  l_text clob;
+begin
+  l_text := uc_ai.ocr_text(
+    p_document   => your_jpeg_blob,
+    p_media_type => 'image/jpeg',
+    p_provider   => uc_ai.c_provider_ollama,
+    p_model      => 'gemma4:26b'
+  );
+end;
+/
+```
+
+The OCR reference describes the [options](/products/uc-ai/docs/api/ocr/#ollama) such as `prompt` and `system`, the result and the errors.
