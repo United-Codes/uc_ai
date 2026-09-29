@@ -177,6 +177,54 @@ create or replace package body test_uc_ai_mistral as
   end convert_messages;
 
 
+  procedure pdf_file_input
+  as
+    l_messages json_array_t := json_array_t();
+    l_content json_array_t := json_array_t();
+    l_result json_object_t;
+    l_res_clob clob;
+    l_final_message clob;
+  begin
+    l_messages.append(uc_ai_message_api.create_system_message(
+      'You are an assistant answering trivia questions about TV Shows. Please answeer in super short sentences.'));
+
+    l_content.append(uc_ai_message_api.create_file_content(
+      p_media_type => 'application/pdf',
+      p_data_blob => uc_ai_test_utils.get_emp_pdf,
+      p_filename => 'data.pdf'
+    ));
+
+    l_content.append(uc_ai_message_api.create_text_content(
+      'Which is the TV show of the characters that are inside the attached PDF?'
+    ));
+
+    l_messages.append(uc_ai_message_api.create_user_message(l_content));
+    
+
+    -- Validate message array structure against spec
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'PDF file input before');
+
+    uc_ai.g_enable_tools := false; 
+
+    l_result := uc_ai.generate_text(
+      p_messages => l_messages,
+      p_provider => uc_ai.c_provider_mistral,
+      p_model => c_test_model,
+      p_max_tool_calls => 3
+    );
+
+    l_res_clob := l_result.to_clob;
+    logger.log_info(p_text => 'PDF file input result:', p_extra => l_res_clob);
+
+    l_final_message := l_result.get_clob('final_message');
+    sys.dbms_output.put_line('Last message: ' || l_final_message);
+    ut.expect(lower(l_final_message)).to_be_like('%office%');
+
+    -- Validate message array structure against spec
+    uc_ai_test_message_utils.validate_message_array(l_messages, 'PDF file input response');
+  end pdf_file_input;
+
+
   procedure image_file_input
   as
     l_messages json_array_t := json_array_t();
