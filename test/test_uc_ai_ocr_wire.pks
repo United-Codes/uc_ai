@@ -236,8 +236,78 @@ create or replace package test_uc_ai_ocr_wire as
   --%test(A null or unknown provider raises -20306 and no request is sent)
   procedure null_and_unknown_provider;
 
-  --%test(Ollama raises -20306 not supported yet and sends no request)
-  procedure providers_without_adapter;
+  -- Ollama vision model -----------------------------------------------------------
+  --%test(Ollama: the request goes to {base_url}/chat with stream false, the model, the image as base64 and the default prompt with the UNREADABLE line)
+  procedure ollama_url_and_request_shape;
+
+  --%test(Ollama: without a base URL the request goes to the local default)
+  procedure ollama_default_url;
+
+  --%test(Ollama: the prompt option replaces the default prompt, the UNREADABLE line stays unless append_unreadable_hint is false, system adds a system message)
+  procedure ollama_custom_prompt;
+
+  --%test(Ollama: options, keep_alive and think are passed on; other keys and the neutral tables option are not sent)
+  procedure ollama_options_pass_through;
+
+  --%test(Ollama: the web credential of the Ollama globals is used when no general one is set, and no Authorization header is added)
+  procedure ollama_credential;
+
+  --%test(Ollama: PNG, JPEG (also image/jpg) and WebP are accepted)
+  procedure ollama_media_types;
+
+  --%test(Ollama: PDF, GIF and TIFF raise -20508 and no request is sent; the PDF message says PDFs are not supported)
+  procedure ollama_unsupported_media_type;
+
+  --%test(Ollama: a null model raises -20503 before any request)
+  procedure ollama_null_model;
+
+  --%test(Ollama: the URL overload raises -20508 for a public URL and for a data URL, and no request is sent)
+  procedure ollama_url_overload_raises;
+
+  --%test(Ollama: pages [0] is accepted, another page raises -20508 and a non-array raises -20503, both before any request)
+  procedure ollama_pages_option;
+
+  --%test(Ollama: options of the wrong shape raise -20503 before any request)
+  procedure ollama_invalid_options;
+
+  --%test(Ollama: a recorded response gives the neutral result with one page, no blocks, no dimensions, token usage, model and raw)
+  procedure ollama_recorded_result;
+
+  --%test(Ollama: message.thinking is not part of the markdown and stays in raw)
+  procedure ollama_thinking_is_ignored;
+
+  --%test(Ollama: one wrapping Markdown code fence is removed; a fence inside the text or two fences stay)
+  procedure ollama_fence_is_stripped;
+
+  --%test(Ollama: the UNREADABLE reply, with a period, in lower case or with spaces, gives empty markdown and a warning)
+  procedure ollama_unreadable_is_warning;
+
+  --%test(Ollama: text that only contains the word UNREADABLE is kept)
+  procedure ollama_unreadable_inside_text;
+
+  --%test(Ollama: empty or missing content gives empty markdown and a warning, no error)
+  procedure ollama_empty_content;
+
+  --%test(Ollama: usage has only the token keys the response has)
+  procedure ollama_usage_partial;
+
+  --%test(Ollama: the model of the response is used, the requested model when the response has none)
+  procedure ollama_model_from_response;
+
+  --%test(Ollama: a recorded 404 unknown model error raises -20302 with the Ollama message)
+  procedure ollama_error_recorded;
+
+  --%test(Ollama: an error body in a 200, a 500 error and a response without message raise -20302)
+  procedure ollama_error_shapes;
+
+  --%test(Ollama: ocr_text returns the markdown of ocr)
+  procedure ollama_ocr_text;
+
+  --%test(Ollama: the request body and the base64 never appear in the log)
+  procedure ollama_body_is_not_logged;
+
+  --%test(Providers without OCR raise -20306 and the message lists the OCR providers, no request is sent)
+  procedure unsupported_ocr_providers;
 
   -- logging ------------------------------------------------------------------------
   --%test(The request body and the base64 never appear in the log)

@@ -3,6 +3,10 @@ create or replace package test_uc_ai_ocr as
   --%suite(OCR tests: live Mistral and OCI calls and provider-neutral checks)
   --%suitepath(uc_ai)
 
+  -- The Ollama tests call the Ollama server of test_uc_ai_ollama (base URL
+  -- https://ai.united-codes.com/api, web credential OLLAMA) with a vision model;
+  -- each call takes 8 to 30 seconds.
+  --
   -- The Mistral tests call the Mistral OCR API with the key of uc_ai_get_key and
   -- cost a few pages of OCR. The OCI tests call OCI Document Understanding with
   -- the web credential OCI_KEY in region eu-frankfurt-1 and the compartment of
@@ -67,6 +71,19 @@ create or replace package test_uc_ai_ocr as
 
   --%test(OCI: ocr_text returns the text of the PDF)
   procedure oci_ocr_text;
+
+  -- Ollama, live -----------------------------------------------------------------
+  --%test(Ollama: a JPEG of the PDF table gives markdown with the names, token usage, one page and no blocks)
+  procedure ollama_jpeg;
+
+  --%test(Ollama: a PDF raises -20508 without a request)
+  procedure ollama_pdf_raises;
+
+  --%test(Ollama: a null model raises -20503)
+  procedure ollama_null_model;
+
+  --%test(Ollama: an unknown model raises -20302 with the Ollama message)
+  procedure ollama_unknown_model;
 
   -- cross provider ----------------------------------------------------------------
   --%test(Mistral and OCI both read the names of the PDF)

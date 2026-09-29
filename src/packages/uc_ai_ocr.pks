@@ -34,7 +34,7 @@ as
    * p_url is supported by Mistral only; the other providers raise -20508.
    *
    * Errors before any HTTP call:
-   *   -20306  p_provider is null, unknown or has no OCR adapter (yet)
+   *   -20306  p_provider is null, unknown or has no OCR support (the message lists mistral, oci, ollama)
    *   -20508  the media type is null or not supported by the provider
    *   -20503  the document is empty, or an option has the wrong shape
    * -20302 (c_err_provider_response) is raised when the provider reports an error.
@@ -48,6 +48,20 @@ as
    * passed on (a features array replaces the default); pages (0-based) filters
    * the result. The keys compartmentId and document are reserved. A document over
    * 8 MB raises -20503.
+   *
+   * Ollama: a vision model reads one image over /api/chat. p_model is required
+   * (-20503 when null); PDF and other types raise -20508, as PL/SQL cannot make an
+   * image of a PDF page. Use an opaque image: Ollama flattens an alpha channel on
+   * black without an error. The result has one page (index 0) with the text of the
+   * model, no blocks and no dimensions; a Markdown code fence around the whole
+   * answer is removed. usage has input_tokens and output_tokens. The prompt asks
+   * for Markdown and for the single word UNREADABLE when the image has no text;
+   * that reply gives empty markdown and a warning. An empty reply gives empty
+   * markdown and a warning. message.thinking is ignored (it stays in raw).
+   * Options: prompt (replaces the default prompt), append_unreadable_hint (false
+   * leaves the UNREADABLE line out), system (system message), options, keep_alive
+   * and think (passed on). pages accepts [0] only (another page raises -20508);
+   * tables is accepted and ignored, the default prompt asks for tables.
    */
   function ocr (
     p_document   in blob

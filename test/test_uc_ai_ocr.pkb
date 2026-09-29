@@ -50,6 +50,17 @@ create or replace package body test_uc_ai_ocr as
   end pdf_ocr;
 
 
+  /*
+   * Same server and credential as test_uc_ai_ollama.
+   */
+  procedure setup_ollama
+  as
+  begin
+    uc_ai.g_base_url            := 'https://ai.united-codes.com/api';
+    uc_ai.g_apex_web_credential := 'OLLAMA';
+  end setup_ollama;
+
+
   function first_page(p_result in json_object_t) return json_object_t
   as
   begin
@@ -333,6 +344,99 @@ create or replace package body test_uc_ai_ocr as
 
     ut.expect(l_text).to_be_like('%Dwight%');
   end oci_ocr_text;
+
+
+  procedure ollama_jpeg
+  as
+    l_result json_object_t;
+    l_page   json_object_t;
+  begin
+    setup_ollama;
+
+    l_result := uc_ai.ocr(
+      p_document   => uc_ai_test_utils.get_emp_table_jpeg
+    , p_media_type => 'image/jpeg'
+    , p_provider   => uc_ai.c_provider_ollama
+    , p_model      => 'gemma4:26b'
+    );
+
+    sys.dbms_output.put_line('markdown: ' || l_result.get_clob('markdown'));
+
+    ut.expect(lower(l_result.get_clob('markdown')), 'markdown has the first name').to_be_like('%dwight%');
+    ut.expect(lower(l_result.get_clob('markdown')), 'markdown has the last name').to_be_like('%schrute%');
+    ut.expect(l_result.get_array('pages').get_size, 'pages').to_equal(1);
+
+    l_page := first_page(l_result);
+    ut.expect(l_page.get_number('index'), 'index').to_equal(0);
+    ut.expect(l_page.has('blocks'), 'no blocks').to_be_false();
+    ut.expect(l_result.get_object('usage').has('input_tokens'), 'input_tokens').to_be_true();
+    ut.expect(l_result.get_object('usage').has('output_tokens'), 'output_tokens').to_be_true();
+    ut.expect(l_result.get_object('usage').get_number('output_tokens'), 'output tokens').to_be_greater_than(0);
+    ut.expect(l_result.get_string('model'), 'model').to_be_like('gemma4%');
+    ut.expect(l_result.get_object('raw').has('message'), 'raw is the provider response').to_be_true();
+  end ollama_jpeg;
+
+
+  procedure ollama_pdf_raises
+  as
+    l_result json_object_t;
+    l_code   number;
+  begin
+    setup_ollama;
+    begin
+      l_result := uc_ai.ocr(
+        p_document   => uc_ai_test_utils.get_emp_pdf
+      , p_media_type => 'application/pdf'
+      , p_provider   => uc_ai.c_provider_ollama
+      , p_model      => 'gemma4:26b'
+      );
+      l_code := 0;
+    exception
+      when others then
+        l_code := sqlcode;
+    end;
+
+    ut.expect(l_code).to_equal(-20508);
+  end ollama_pdf_raises;
+
+
+  procedure ollama_null_model
+  as
+    l_result json_object_t;
+    l_code   number;
+  begin
+    setup_ollama;
+    begin
+      l_result := uc_ai.ocr(uc_ai_test_utils.get_emp_table_jpeg, 'image/jpeg', uc_ai.c_provider_ollama);
+      l_code := 0;
+    exception
+      when others then
+        l_code := sqlcode;
+    end;
+
+    ut.expect(l_code).to_equal(-20503);
+  end ollama_null_model;
+
+
+  procedure ollama_unknown_model
+  as
+    l_result  json_object_t;
+    l_code    number;
+    l_message varchar2(4000 char);
+  begin
+    setup_ollama;
+    begin
+      l_result := uc_ai.ocr(uc_ai_test_utils.get_emp_table_jpeg, 'image/jpeg', uc_ai.c_provider_ollama, 'no-such-model:1b');
+      l_code := 0;
+    exception
+      when others then
+        l_code    := sqlcode;
+        l_message := sqlerrm;
+    end;
+
+    ut.expect(l_code, 'code').to_equal(-20302);
+    ut.expect(l_message, 'message').to_be_like('%not found%');
+  end ollama_unknown_model;
 
 
   procedure cross_provider_pdf

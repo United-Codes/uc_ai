@@ -7,6 +7,14 @@ create or replace package body uc_ai_ocr as
 
   c_mistral_base_url constant varchar2(100 char) := 'https://api.mistral.ai/v1';
 
+  -- Ollama, same default as uc_ai_ollama
+  c_ollama_base_url constant varchar2(100 char) := 'http://localhost:11434/api';
+  c_ollama_prompt   constant varchar2(1000 char) :=
+    'Extract all text from this image as Markdown. Preserve tables as Markdown tables.';
+  c_ollama_unreadable_hint constant varchar2(1000 char) :=
+    'If the image is blank or unreadable, reply with exactly UNREADABLE';
+  c_ollama_unreadable_word constant varchar2(20 char) := 'UNREADABLE';
+
   c_mime_pdf  constant varchar2(100 char) := 'application/pdf';
   c_mime_docx constant varchar2(100 char) := 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   c_mime_pptx constant varchar2(100 char) := 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
@@ -86,6 +94,10 @@ create or replace package body uc_ai_ocr as
         p_error_code => uc_ai_error.c_err_unsupported_content
       , p_scope      => p_scope
       , p0           => nvl(p_media_type, 'null') || ' for OCR with provider ' || p_provider
+                        || case when p_provider = uc_ai.c_provider_ollama and p_media_type = c_mime_pdf
+                                then '. PDFs are not supported: Ollama reads images only and PL/SQL cannot make an image of a PDF page.'
+                                     || ' Pass an image with an opaque background'
+                           end
                         || '. Supported: ' || replace(l_supported, ',', ', ')
       );
     end if;
@@ -230,8 +242,14 @@ create or replace package body uc_ai_ocr as
           l_error := l_json.get_object('error');
         end if;
 
-        if l_error.has('message') and l_error.get('message').is_string then
+        if l_json.has('error') and l_json.get('error').is_string then
+          -- Ollama: {"error": "..."}
+          l_message := substr(l_json.get_string('error'), 1, 4000);
+        elsif l_error.has('message') and l_error.get('message').is_string then
           l_message := l_error.get_string('message');
+        end if;
+
+        if l_message is not null then
           uc_ai_error.raise_error(
             p_error_code => uc_ai_error.c_err_provider_response
           , p_scope      => p_scope
@@ -1254,6 +1272,307 @@ create or replace package body uc_ai_ocr as
   end ocr_oci;
 
 
+  -- ---- Ollama adapter ---------------------------------------------------------
+
+  function ollama_url(
+    p_settings in uc_ai_settings.t_settings
+  ) return varchar2
+  as
+  begin
+    return rtrim(coalesce(p_settings.base_url, c_ollama_base_url), '/') || '/chat';
+  end ollama_url;
+
+
+  /*
+   * The text of the user message: the prompt option or the default prompt, and
+   * the line that makes the model answer UNREADABLE for a blank image. The line
+   * is left out when the option append_unreadable_hint is false.
+   */
+  function ollama_prompt(
+    p_options in json_object_t
+  , p_scope   in varchar2
+  ) return varchar2
+  as
+    l_prompt varchar2(32000 char) := c_ollama_prompt;
+    l_hint   boolean := true;
+  begin
+    if p_options is not null and p_options.has('prompt') and not p_options.get('prompt').is_null then
+      if not p_options.get('prompt').is_string then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => p_scope
+        , p0           => 'OCR option prompt'
+        , p1           => 'it must be a string'
+        );
+      end if;
+      l_prompt := p_options.get_string('prompt');
+    end if;
+
+    if p_options is not null and p_options.has('append_unreadable_hint') and p_options.get('append_unreadable_hint').is_false then
+      l_hint := false;
+    end if;
+
+    if l_hint then
+      l_prompt := l_prompt || chr(10) || c_ollama_unreadable_hint;
+    end if;
+
+    return l_prompt;
+  end ollama_prompt;
+
+
+  /*
+   * The request body without the image: the model, stream false, the messages
+   * and the passthrough keys options, keep_alive and think.
+   */
+  function ollama_body(
+    p_model   in varchar2
+  , p_image   in clob
+  , p_options in json_object_t
+  , p_scope   in varchar2
+  ) return json_object_t
+  as
+    l_body     json_object_t := json_object_t();
+    l_messages json_array_t  := json_array_t();
+    l_message  json_object_t;
+    l_images   json_array_t  := json_array_t();
+  begin
+    if p_options is not null then
+      if p_options.has('system') and not p_options.get('system').is_null then
+        if not p_options.get('system').is_string then
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_invalid_config
+          , p_scope      => p_scope
+          , p0           => 'OCR option system'
+          , p1           => 'it must be a string'
+          );
+        end if;
+        l_message := json_object_t();
+        l_message.put('role', 'system');
+        l_message.put('content', p_options.get_string('system'));
+        l_messages.append(l_message);
+      end if;
+
+      if p_options.has('options') and not p_options.get('options').is_null and not p_options.get('options').is_object then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => p_scope
+        , p0           => 'OCR option options'
+        , p1           => 'it must be an object'
+        );
+      end if;
+    end if;
+
+    l_images.append(p_image);
+    l_message := json_object_t();
+    l_message.put('role', 'user');
+    l_message.put('content', ollama_prompt(p_options, p_scope));
+    l_message.put('images', l_images);
+    l_messages.append(l_message);
+
+    l_body.put('model', p_model);
+    l_body.put('stream', false);
+    l_body.put('messages', l_messages);
+
+    if p_options is not null then
+      <<key_loop>>
+      for r in (select column_value as key_name from table(sys.odcivarchar2list('options', 'keep_alive', 'think'))) loop
+        if p_options.has(r.key_name) and not p_options.get(r.key_name).is_null then
+          l_body.put(r.key_name, p_options.get(r.key_name));
+        end if;
+      end loop key_loop;
+    end if;
+
+    return l_body;
+  end ollama_body;
+
+
+  /*
+   * A model that wraps its whole answer in one Markdown code fence gets the fence
+   * removed. Text with more than one fence pair is left as it is.
+   */
+  function strip_fence(
+    p_text in clob
+  ) return clob
+  as
+    l_text clob := p_text;
+  begin
+    if l_text is null then
+      return null;
+    end if;
+
+    l_text := regexp_replace(l_text, '^[[:space:]]+|[[:space:]]+$');
+
+    if regexp_count(l_text, '```') = 2
+      and regexp_like(l_text, '^```[^' || chr(10) || ']*' || chr(10))
+      and regexp_like(l_text, chr(10) || '```$')
+    then
+      l_text := regexp_replace(l_text, '^```[^' || chr(10) || ']*' || chr(10));
+      l_text := regexp_replace(l_text, chr(10) || '```$');
+    end if;
+
+    return l_text;
+  end strip_fence;
+
+
+  function is_unreadable(
+    p_text in clob
+  ) return boolean
+  as
+  begin
+    return sys.dbms_lob.getlength(p_text) <= 30
+      and upper(rtrim(rtrim(p_text), '.')) = c_ollama_unreadable_word;
+  end is_unreadable;
+
+
+  function ocr_ollama(
+    p_document   in blob
+  , p_media_type in varchar2
+  , p_model      in varchar2
+  , p_options    in json_object_t
+  , p_settings   in uc_ai_settings.t_settings
+  ) return json_object_t
+  as
+    l_scope          uc_ai_logger.scope := c_scope_prefix || 'ocr_ollama';
+    l_url            varchar2(4000 char);
+    l_web_credential varchar2(255 char);
+    l_body           json_object_t;
+    l_resp           clob;
+    l_resp_json      json_object_t;
+    l_message        json_object_t;
+    l_content        clob;
+    l_pages_opt      json_array_t;
+    l_pages          json_array_t := json_array_t();
+    l_page           json_object_t := json_object_t();
+    l_usage          json_object_t := json_object_t();
+    l_warnings       json_array_t := json_array_t();
+    l_resp_model     varchar2(255 char);
+  begin
+    if p_model is null then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'OCR model'
+      , p1           => 'Ollama has no default OCR model; pass a vision model in p_model'
+      );
+    end if;
+
+    -- the model reads one image, so only page 0 exists
+    if p_options is not null and p_options.has('pages') and not p_options.get('pages').is_null then
+      if not p_options.get('pages').is_array then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'OCR option pages'
+        , p1           => 'it must be an array of 0-based page indexes'
+        );
+      end if;
+      l_pages_opt := p_options.get_array('pages');
+      <<page_check_loop>>
+      for i in 0 .. l_pages_opt.get_size - 1 loop
+        if not l_pages_opt.get(i).is_number or l_pages_opt.get(i).to_number != 0 then
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_unsupported_content
+          , p_scope      => l_scope
+          , p0           => 'a page other than 0 for OCR with provider ' || uc_ai.c_provider_ollama
+                            || '. An image is one page'
+          );
+        end if;
+      end loop page_check_loop;
+    end if;
+
+    l_url  := ollama_url(p_settings);
+    l_body := ollama_body(p_model, to_base64(p_document), p_options, l_scope);
+
+    apex_web_service.clear_request_headers;
+    apex_web_service.set_request_headers('Content-Type', 'application/json');
+    uc_ai_settings.apply_extra_headers(p_settings);
+
+    l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.ol_apex_web_credential);
+
+    -- Never log l_body: it holds the whole image as base64
+    uc_ai_logger.log(
+      'Calling Ollama OCR at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null')
+    , l_scope
+    , 'model=' || p_model
+      || ', source=' || p_media_type || ', ' || sys.dbms_lob.getlength(p_document) || ' bytes'
+      || ', option keys=' || nvl(option_keys(p_options), 'none')
+    );
+
+    l_resp := uc_ai_http.post(
+      p_url                  => l_url
+    , p_body                 => l_body.to_clob
+    , p_credential_static_id => l_web_credential
+    , p_transfer_timeout     => c_transfer_timeout
+    );
+
+    l_resp_json := parse_response(l_resp, 'Ollama', l_scope);
+
+    -- a 200 can still carry {"error": "..."}
+    if l_resp_json.has('error') and not l_resp_json.get('error').is_null then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'Ollama'
+      , p1           => case when l_resp_json.get('error').is_string
+                             then substr(l_resp_json.get_string('error'), 1, 4000) else 'error response' end
+      , p_extra      => l_resp
+      );
+    end if;
+
+    if not l_resp_json.has('message') or not l_resp_json.get('message').is_object then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'Ollama'
+      , p1           => 'response has no message object'
+      , p_extra      => l_resp
+      );
+    end if;
+
+    -- message.thinking is ignored; it stays in raw
+    l_message := l_resp_json.get_object('message');
+    if l_message.has('content') and l_message.get('content').is_string then
+      l_content := strip_fence(l_message.get_clob('content'));
+    end if;
+
+    if l_content is null or sys.dbms_lob.getlength(l_content) = 0 then
+      l_content := null;
+      l_warnings.append('The model returned no text');
+    elsif is_unreadable(l_content) then
+      l_content := null;
+      l_warnings.append('The model reported that the image is blank or unreadable');
+    end if;
+
+    l_page.put('index', 0);
+    l_page.put('markdown', l_content);
+    l_pages.append(l_page);
+
+    if l_resp_json.has('prompt_eval_count') and l_resp_json.get('prompt_eval_count').is_number then
+      l_usage.put('input_tokens', l_resp_json.get_number('prompt_eval_count'));
+    end if;
+    if l_resp_json.has('eval_count') and l_resp_json.get('eval_count').is_number then
+      l_usage.put('output_tokens', l_resp_json.get_number('eval_count'));
+    end if;
+
+    l_resp_model := case when l_resp_json.has('model') and l_resp_json.get('model').is_string
+                         then l_resp_json.get_string('model') else p_model end;
+
+    uc_ai_logger.log(
+      'Ollama OCR response'
+    , l_scope
+    , 'warnings=' || l_warnings.get_size || ', response length=' || sys.dbms_lob.getlength(l_resp)
+    );
+
+    return new_result(
+      p_pages    => l_pages
+    , p_usage    => l_usage
+    , p_model    => l_resp_model
+    , p_warnings => l_warnings
+    , p_raw      => l_resp_json
+    );
+  end ocr_ollama;
+
+
   -- ---- dispatcher -------------------------------------------------------------
 
   function ocr (
@@ -1272,21 +1591,14 @@ create or replace package body uc_ai_ocr as
   begin
     l_media_type := normalize_media_type(p_media_type);
 
-    -- 1. provider: null and unknown first, then the one without an adapter yet
+    -- 1. provider: null, unknown and providers without OCR raise the same error
     if p_provider is null or p_provider not in (uc_ai.c_provider_mistral, uc_ai.c_provider_oci, uc_ai.c_provider_ollama) then
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_unknown_provider
       , p_scope      => l_scope
+      , p_message    => 'Provider %0 has no OCR support. OCR providers: '
+                        || uc_ai.c_provider_mistral || ', ' || uc_ai.c_provider_oci || ', ' || uc_ai.c_provider_ollama
       , p0           => nvl(p_provider, 'null')
-      );
-    end if;
-
-    if p_provider = uc_ai.c_provider_ollama then
-      uc_ai_error.raise_error(
-        p_error_code => uc_ai_error.c_err_unknown_provider
-      , p_scope      => l_scope
-      , p_message    => 'OCR is not supported yet for provider %0'
-      , p0           => p_provider
       );
     end if;
 
@@ -1333,6 +1645,16 @@ create or replace package body uc_ai_ocr as
       return ocr_oci(
         p_document   => p_document
       , p_media_type => l_media_type
+      , p_options    => p_options
+      , p_settings   => p_settings
+      );
+    end if;
+
+    if p_provider = uc_ai.c_provider_ollama then
+      return ocr_ollama(
+        p_document   => p_document
+      , p_media_type => l_media_type
+      , p_model      => p_model
       , p_options    => p_options
       , p_settings   => p_settings
       );

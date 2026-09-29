@@ -2,6 +2,7 @@ create or replace package body test_uc_ai_ocr_wire as
   -- @dblinter ignore(g-5010): allow logger in test packages
   -- @dblinter ignore(g-2160): allow initialzing variables in declare in test packages
   -- @dblinter ignore(g-5040): the error tests catch the raised error to assert on its code and message
+  -- @dblinter ignore(g-7210): one suite for the whole OCR wire surface; a split would copy the shared builders and try_ocr
   -- @dblinter ignore(g-4395): the fixed size of the large option value is the point of that test
   -- @dblinter ignore(g-5080): the error tests catch the expected exception to assert on its message; a backtrace adds nothing
 
@@ -24,6 +25,10 @@ create or replace package body test_uc_ai_ocr_wire as
   c_oci_sample_png     constant varchar2(100 char) := 'oci/ocr-png-no-text-response';
   c_oci_sample_400     constant varchar2(100 char) := 'oci/ocr-unsupported-type-response';
   c_oci_sample_401     constant varchar2(100 char) := 'oci/ocr-signature-401-response';
+
+  c_ollama_model        constant varchar2(100 char) := 'gemma4:26b';
+  c_ollama_sample_jpeg  constant varchar2(100 char) := 'ollama/ocr-jpeg-table-response';
+  c_ollama_sample_404   constant varchar2(100 char) := 'ollama/ocr-unknown-model-response';
 
 
   -- ---- helpers ---------------------------------------------------------------
@@ -1707,17 +1712,707 @@ create or replace package body test_uc_ai_ocr_wire as
   end null_and_unknown_provider;
 
 
-  procedure providers_without_adapter
+  -- ---- Ollama ----------------------------------------------------------------
+
+  procedure ollama_reset
+  as
+  begin
+    uc_ai.g_base_url := 'https://ollama.wire.test/api';
+  end ollama_reset;
+
+
+  function ollama_ocr(
+    p_options in json_object_t default null
+  , p_model   in varchar2 default c_ollama_model
+  ) return json_object_t
+  as
+  begin
+    ollama_reset;
+    return uc_ai.ocr(
+      p_document   => uc_ai_test_utils.get_emp_table_jpeg
+    , p_media_type => 'image/jpeg'
+    , p_provider   => uc_ai.c_provider_ollama
+    , p_model      => p_model
+    , p_options    => p_options
+    );
+  end ollama_ocr;
+
+
+  /*
+   * A /api/chat response with the given content. The text goes through
+   * json_object_t so quotes and line breaks are escaped.
+   */
+  function ollama_response(
+    p_content in clob
+  , p_extra   in varchar2 default ',"prompt_eval_count":11,"eval_count":7'
+  ) return clob
+  as
+    l_message json_object_t := json_object_t();
+    l_resp    json_object_t;
+  begin
+    l_message.put('role', 'assistant');
+    l_message.put('content', p_content);
+    l_resp := json_object_t('{"model":"wire-vision:1b","done":true' || p_extra || '}');
+    l_resp.put('message', l_message);
+    return l_resp.to_clob;
+  end ollama_response;
+
+
+  /*
+   * The markdown as varchar2, so a test can compare it with a literal; null for
+   * an empty markdown.
+   */
+  function md_text(p_result in json_object_t) return varchar2
+  as
+  begin
+    return sys.dbms_lob.substr(p_result.get_clob('markdown'), 32000, 1);
+  end md_text;
+
+
+  /*
+   * ollama_ocr with the error a test expects; po_code is 0 when it did not raise.
+   */
+  procedure try_ollama(
+    p_options  in json_object_t default null
+  , p_model    in varchar2 default c_ollama_model
+  , po_code    out number
+  , po_message out varchar2
+  )
+  as
+    l_result json_object_t;
+  begin
+    po_code := 0;
+    l_result := ollama_ocr(p_options, p_model);
+  exception
+    when others then
+      po_code    := sqlcode;
+      po_message := sqlerrm;
+  end try_ollama;
+
+
+  function first_page_of(p_result in json_object_t) return json_object_t
+  as
+  begin
+    return treat(p_result.get_array('pages').get(0) as json_object_t);
+  end first_page_of;
+
+
+  function user_message(p_index in pls_integer) return json_object_t
+  as
+    l_messages json_array_t := uc_ai_test_http_mock.request_json(p_index).get_array('messages');
+  begin
+    return treat(l_messages.get(l_messages.get_size - 1) as json_object_t);
+  end user_message;
+
+
+  procedure ollama_url_and_request_shape
+  as
+    l_result  json_object_t;
+    l_body    json_object_t;
+    l_message json_object_t;
+    l_images  json_array_t;
+    l_decoded blob;
+  begin
+    uc_ai_test_http_mock.enqueue(uc_ai_test_samples.get(c_ollama_sample_jpeg));
+
+    l_result := ollama_ocr;
+
+    test_uc_ai_wire.expect_url(1, 'https://ollama.wire.test/api/chat');
+    ut.expect(uc_ai_test_http_mock.request_header(1, 'Content-Type')).to_equal('application/json');
+
+    l_body := uc_ai_test_http_mock.request_json(1);
+    ut.expect(l_body.get_string('model'), 'model').to_equal(c_ollama_model);
+    ut.expect(l_body.get('stream').is_false, 'stream is false').to_be_true();
+    ut.expect(l_body.get_array('messages').get_size, 'one message').to_equal(1);
+
+    l_message := user_message(1);
+    ut.expect(l_message.get_string('role'), 'role').to_equal('user');
+    ut.expect(l_message.get_string('content'), 'prompt').to_be_like(
+      'Extract all text from this image as Markdown. Preserve tables as Markdown tables.%');
+    ut.expect(l_message.get_string('content'), 'unreadable line').to_be_like('%If the image is blank or unreadable, reply with exactly UNREADABLE');
+
+    l_images := l_message.get_array('images');
+    ut.expect(l_images.get_size, 'one image').to_equal(1);
+    l_decoded := apex_web_service.clobbase642blob(l_images.get_clob(0));
+    ut.expect(sys.dbms_lob.compare(l_decoded, uc_ai_test_utils.get_emp_table_jpeg), 'image decodes to the exact bytes').to_equal(0);
+    ut.expect(sys.dbms_lob.instr(l_images.get_clob(0), chr(10)), 'no line break in the base64').to_equal(0);
+    ut.expect(sys.dbms_lob.instr(l_images.get_clob(0), 'data:'), 'no data URL prefix').to_equal(0);
+
+    test_uc_ai_wire.expect_all_consumed(1);
+  end ollama_url_and_request_shape;
+
+
+  procedure ollama_default_url
+  as
+    l_result json_object_t;
+  begin
+    uc_ai_test_http_mock.enqueue(uc_ai_test_samples.get(c_ollama_sample_jpeg));
+
+    -- no ollama_reset: base_url is null; a trailing slash is tolerated
+    l_result := uc_ai.ocr(uc_ai_test_utils.get_emp_table_jpeg, 'image/jpeg', uc_ai.c_provider_ollama, c_ollama_model);
+    test_uc_ai_wire.expect_url(1, 'http://localhost:11434/api/chat');
+
+    uc_ai.g_base_url := 'https://ollama.wire.test/api/';
+    uc_ai_test_http_mock.enqueue(uc_ai_test_samples.get(c_ollama_sample_jpeg));
+    l_result := uc_ai.ocr(uc_ai_test_utils.get_emp_table_jpeg, 'image/jpeg', uc_ai.c_provider_ollama, c_ollama_model);
+    test_uc_ai_wire.expect_url(2, 'https://ollama.wire.test/api/chat');
+
+    test_uc_ai_wire.expect_all_consumed(2);
+  end ollama_default_url;
+
+
+  procedure ollama_custom_prompt
+  as
+    l_result   json_object_t;
+    l_messages json_array_t;
+  begin
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+
+    l_result := ollama_ocr(json_object_t('{"prompt":"Read the invoice number only."}'));
+    ut.expect(user_message(1).get_string('content'), 'custom prompt with hint').to_equal(
+      'Read the invoice number only.' || chr(10) || 'If the image is blank or unreadable, reply with exactly UNREADABLE');
+
+    l_result := ollama_ocr(json_object_t('{"prompt":"Read the invoice number only.","append_unreadable_hint":false}'));
+    ut.expect(user_message(2).get_string('content'), 'custom prompt without hint').to_equal('Read the invoice number only.');
+
+    l_result := ollama_ocr(json_object_t('{"system":"You are an OCR engine."}'));
+    l_messages := uc_ai_test_http_mock.request_json(3).get_array('messages');
+    ut.expect(l_messages.get_size, 'system and user message').to_equal(2);
+    ut.expect(treat(l_messages.get(0) as json_object_t).get_string('role'), 'first role').to_equal('system');
+    ut.expect(treat(l_messages.get(0) as json_object_t).get_string('content'), 'system text').to_equal('You are an OCR engine.');
+    ut.expect(treat(l_messages.get(1) as json_object_t).get_string('role'), 'second role').to_equal('user');
+    ut.expect(user_message(3).get_string('content'), 'default prompt').to_be_like('Extract all text%');
+
+    test_uc_ai_wire.expect_all_consumed(3);
+  end ollama_custom_prompt;
+
+
+  procedure ollama_options_pass_through
+  as
+    l_result json_object_t;
+    l_body   json_object_t;
+  begin
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+
+    l_result := ollama_ocr(json_object_t(
+      '{"options":{"temperature":0,"num_ctx":8192},"keep_alive":"10m","think":false,"tables":true,"some_key":"not sent"}'));
+
+    l_body := uc_ai_test_http_mock.request_json(1);
+    ut.expect(l_body.get_object('options').get_number('temperature'), 'temperature').to_equal(0);
+    ut.expect(l_body.get_object('options').get_number('num_ctx'), 'num_ctx').to_equal(8192);
+    ut.expect(l_body.get_string('keep_alive'), 'keep_alive').to_equal('10m');
+    ut.expect(l_body.get('think').is_false, 'think').to_be_true();
+    ut.expect(l_body.has('tables'), 'tables is not sent').to_be_false();
+    ut.expect(l_body.has('some_key'), 'unknown keys are not sent').to_be_false();
+
+    -- keep_alive as a number of seconds
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    l_result := ollama_ocr(json_object_t('{"keep_alive":0}'));
+    ut.expect(uc_ai_test_http_mock.request_json(2).get_number('keep_alive'), 'keep_alive number').to_equal(0);
+
+    -- without options the keys are absent
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    l_result := ollama_ocr;
+    ut.expect(uc_ai_test_http_mock.request_json(3).has('options'), 'no options key').to_be_false();
+    ut.expect(uc_ai_test_http_mock.request_json(3).has('keep_alive'), 'no keep_alive key').to_be_false();
+
+    test_uc_ai_wire.expect_all_consumed(3);
+  end ollama_options_pass_through;
+
+
+  procedure ollama_credential
+  as
+    l_result json_object_t;
+  begin
+    -- the general credential wins
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    l_result := ollama_ocr;
+    ut.expect(uc_ai_test_http_mock.request(1).credential, 'general credential').to_equal(c_credential);
+    ut.expect(uc_ai_test_http_mock.request_header(1, 'Authorization'), 'Authorization').to_be_null();
+
+    -- without it the Ollama one is used
+    uc_ai.g_apex_web_credential := null;
+    uc_ai_ollama.g_apex_web_credential := 'WIRE_OLLAMA_CREDENTIAL';
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    l_result := ollama_ocr;
+    ut.expect(uc_ai_test_http_mock.request(2).credential, 'ollama credential').to_equal('WIRE_OLLAMA_CREDENTIAL');
+    ut.expect(uc_ai_test_http_mock.request_header(2, 'Authorization'), 'Authorization 2').to_be_null();
+
+    -- extra headers are sent
+    uc_ai.g_extra_headers('X-Tenant-Id') := 'acme';
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    l_result := ollama_ocr;
+    ut.expect(uc_ai_test_http_mock.request_header(3, 'X-Tenant-Id'), 'extra header').to_equal('acme');
+    ut.expect(uc_ai_test_http_mock.request_header(3, 'Content-Type'), 'content type').to_equal('application/json');
+  end ollama_credential;
+
+
+  procedure ollama_media_types
+  as
+    l_result json_object_t;
+  begin
+    ollama_reset;
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+
+    l_result := uc_ai.ocr(uc_ai_test_utils.get_apple_png, 'image/png', uc_ai.c_provider_ollama, c_ollama_model);
+    l_result := uc_ai.ocr(uc_ai_test_utils.get_emp_table_jpeg, 'image/jpeg', uc_ai.c_provider_ollama, c_ollama_model);
+    l_result := uc_ai.ocr(uc_ai_test_utils.get_emp_table_jpeg, ' Image/JPG; q=1', uc_ai.c_provider_ollama, c_ollama_model);
+    l_result := uc_ai.ocr(uc_ai_test_utils.get_apple_webp, 'image/webp', uc_ai.c_provider_ollama, c_ollama_model);
+
+    test_uc_ai_wire.expect_all_consumed(4);
+  end ollama_media_types;
+
+
+  procedure ollama_unsupported_media_type
   as
     l_code    number;
     l_message varchar2(4000 char);
   begin
-    try_ocr(uc_ai_test_utils.get_apple_png, 'image/png', uc_ai.c_provider_ollama, null, l_code, l_message);
-    ut.expect(l_code, 'ollama').to_equal(-20306);
-    ut.expect(l_message, 'ollama message').to_be_like('%not supported yet%ollama%');
+    ollama_reset;
+    try_ocr(uc_ai_test_utils.get_emp_pdf, 'application/pdf', uc_ai.c_provider_ollama, null, l_code, l_message);
+    ut.expect(l_code, 'pdf code').to_equal(-20508);
+    ut.expect(l_message, 'pdf message').to_be_like('%PDF%not supported%');
+    ut.expect(l_message, 'pdf message names the fix').to_be_like('%image%');
+    test_uc_ai_wire.expect_all_consumed(0);
+
+    try_ocr(small_blob, 'image/gif', uc_ai.c_provider_ollama, null, l_code, l_message);
+    ut.expect(l_code, 'gif code').to_equal(-20508);
+    ut.expect(l_message, 'gif message').to_be_like('%image/gif%image/png%image/jpeg%image/webp%');
+
+    try_ocr(small_blob, 'image/tiff', uc_ai.c_provider_ollama, null, l_code, l_message);
+    ut.expect(l_code, 'tiff code').to_equal(-20508);
 
     test_uc_ai_wire.expect_all_consumed(0);
-  end providers_without_adapter;
+  end ollama_unsupported_media_type;
+
+
+  procedure ollama_null_model
+  as
+    l_result  json_object_t;
+    l_code    number;
+    l_message varchar2(4000 char);
+  begin
+    ollama_reset;
+    begin
+      l_result := uc_ai.ocr(uc_ai_test_utils.get_emp_table_jpeg, 'image/jpeg', uc_ai.c_provider_ollama);
+      l_code := 0;
+    exception
+      when others then
+        l_code    := sqlcode;
+        l_message := sqlerrm;
+    end;
+    ut.expect(l_code, 'code').to_equal(-20503);
+    ut.expect(l_message, 'message').to_be_like('%p_model%');
+    test_uc_ai_wire.expect_all_consumed(0);
+  end ollama_null_model;
+
+
+  procedure ollama_url_overload_raises
+  as
+    l_result  json_object_t;
+    l_code    number;
+    l_message varchar2(4000 char);
+  begin
+    ollama_reset;
+    begin
+      l_result := uc_ai.ocr(p_url => 'https://example.com/files/scan.png', p_provider => uc_ai.c_provider_ollama, p_model => c_ollama_model);
+      l_code := 0;
+    exception
+      when others then
+        l_code    := sqlcode;
+        l_message := sqlerrm;
+    end;
+    ut.expect(l_code, 'https url').to_equal(-20508);
+    ut.expect(l_message, 'message').to_be_like('%ollama%blob%');
+
+    begin
+      l_result := uc_ai.ocr(p_url => 'data:image/png;base64,AAAA', p_provider => uc_ai.c_provider_ollama, p_model => c_ollama_model);
+      l_code := 0;
+    exception
+      when others then
+        l_code := sqlcode;
+    end;
+    ut.expect(l_code, 'data url').to_equal(-20508);
+
+    test_uc_ai_wire.expect_all_consumed(0);
+  end ollama_url_overload_raises;
+
+
+  procedure ollama_pages_option
+  as
+    l_result  json_object_t;
+    l_code    number;
+    l_message varchar2(4000 char);
+  begin
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    l_result := ollama_ocr(json_object_t('{"pages":[0]}'));
+    ut.expect(uc_ai_test_http_mock.request_json(1).has('pages'), 'pages is not sent').to_be_false();
+
+    begin
+      l_result := ollama_ocr(json_object_t('{"pages":[0,1]}'));
+      l_code := 0;
+    exception
+      when others then
+        l_code    := sqlcode;
+        l_message := sqlerrm;
+    end;
+    ut.expect(l_code, 'page 1').to_equal(-20508);
+    ut.expect(l_message, 'message').to_be_like('%page%');
+
+    begin
+      l_result := ollama_ocr(json_object_t('{"pages":[2]}'));
+      l_code := 0;
+    exception
+      when others then
+        l_code := sqlcode;
+    end;
+    ut.expect(l_code, 'page 2').to_equal(-20508);
+
+    begin
+      l_result := ollama_ocr(json_object_t('{"pages":0}'));
+      l_code := 0;
+    exception
+      when others then
+        l_code := sqlcode;
+    end;
+    ut.expect(l_code, 'not an array').to_equal(-20503);
+
+    test_uc_ai_wire.expect_all_consumed(1);
+  end ollama_pages_option;
+
+
+  procedure ollama_invalid_options
+  as
+    l_code    number;
+    l_message varchar2(4000 char);
+  begin
+    try_ollama(json_object_t('{"prompt":5}'), c_ollama_model, l_code, l_message);
+    ut.expect(l_code, 'prompt number').to_equal(-20503);
+    try_ollama(json_object_t('{"prompt":{"a":1}}'), c_ollama_model, l_code, l_message);
+    ut.expect(l_code, 'prompt object').to_equal(-20503);
+    try_ollama(json_object_t('{"system":["a"]}'), c_ollama_model, l_code, l_message);
+    ut.expect(l_code, 'system array').to_equal(-20503);
+    try_ollama(json_object_t('{"options":"temperature=0"}'), c_ollama_model, l_code, l_message);
+    ut.expect(l_code, 'options string').to_equal(-20503);
+
+    test_uc_ai_wire.expect_all_consumed(0);
+  end ollama_invalid_options;
+
+
+  procedure ollama_recorded_result
+  as
+    l_result json_object_t;
+    l_page   json_object_t;
+    l_md     clob;
+  begin
+    uc_ai_test_http_mock.enqueue(uc_ai_test_samples.get(c_ollama_sample_jpeg));
+
+    l_result := ollama_ocr;
+
+    l_md := l_result.get_clob('markdown');
+    ut.expect(l_md, 'markdown has the name').to_be_like('%Dwight%Schrute%');
+    ut.expect(l_md, 'markdown table').to_be_like('%| First Name | Last Name | Email |%');
+    ut.expect(l_result.get_array('pages').get_size, 'one page').to_equal(1);
+
+    l_page := first_page_of(l_result);
+    ut.expect(l_page.get_number('index'), 'index').to_equal(0);
+    ut.expect(l_page.get_clob('markdown'), 'page markdown equals result markdown').to_equal(l_md);
+    ut.expect(l_page.has('blocks'), 'no blocks').to_be_false();
+    ut.expect(l_page.has('dimensions'), 'no dimensions').to_be_false();
+
+    ut.expect(l_result.get_object('usage').get_number('input_tokens'), 'input tokens').to_equal(168);
+    ut.expect(l_result.get_object('usage').get_number('output_tokens'), 'output tokens').to_equal(498);
+    ut.expect(l_result.get_object('usage').has('pages'), 'no pages usage').to_be_false();
+    ut.expect(l_result.get_string('model'), 'model').to_equal('gemma4:26b');
+    ut.expect(l_result.get_array('warnings').get_size, 'no warnings').to_equal(0);
+    ut.expect(l_result.get_object('raw').get_boolean('done'), 'raw is the response').to_be_true();
+    ut.expect(l_result.get_object('raw').get_object('message').has('thinking'), 'thinking stays in raw').to_be_true();
+  end ollama_recorded_result;
+
+
+  procedure ollama_thinking_is_ignored
+  as
+    l_result json_object_t;
+  begin
+    uc_ai_test_http_mock.enqueue(
+      '{"model":"m","message":{"role":"assistant","content":"The answer","thinking":"secret reasoning about UNREADABLE"},"done":true}');
+
+    l_result := ollama_ocr;
+
+    ut.expect(md_text(l_result), 'markdown').to_equal('The answer');
+    ut.expect(instr(md_text(l_result), 'secret'), 'no thinking in markdown').to_equal(0);
+    ut.expect(l_result.get_object('raw').get_object('message').get_string('thinking'), 'thinking in raw').to_be_like('secret%');
+    ut.expect(l_result.get_array('warnings').get_size, 'no warning').to_equal(0);
+  end ollama_thinking_is_ignored;
+
+
+  procedure ollama_fence_is_stripped
+  as
+    l_result json_object_t;
+  begin
+    uc_ai_test_http_mock.enqueue(ollama_response('```markdown' || chr(10) || '| A | B |' || chr(10) || '| - | - |' || chr(10) || '```'));
+    uc_ai_test_http_mock.enqueue(ollama_response('  ```' || chr(10) || 'plain text' || chr(10) || '```  ' || chr(10)));
+    uc_ai_test_http_mock.enqueue(ollama_response('Intro' || chr(10) || '```' || chr(10) || 'code' || chr(10) || '```' || chr(10) || 'Outro'));
+    uc_ai_test_http_mock.enqueue(ollama_response('```a' || chr(10) || 'one' || chr(10) || '```' || chr(10) || '```b' || chr(10) || 'two' || chr(10) || '```'));
+    uc_ai_test_http_mock.enqueue(ollama_response('```markdown' || chr(10) || 'no closing fence'));
+
+    l_result := ollama_ocr;
+    ut.expect(md_text(l_result), 'markdown fence').to_equal('| A | B |' || chr(10) || '| - | - |');
+
+    l_result := ollama_ocr;
+    ut.expect(md_text(l_result), 'bare fence with spaces').to_equal('plain text');
+
+    l_result := ollama_ocr;
+    ut.expect(md_text(l_result), 'fence inside text stays').to_equal(
+      'Intro' || chr(10) || '```' || chr(10) || 'code' || chr(10) || '```' || chr(10) || 'Outro');
+
+    l_result := ollama_ocr;
+    ut.expect(md_text(l_result), 'two blocks stay').to_be_like('```a%```b%');
+
+    l_result := ollama_ocr;
+    ut.expect(md_text(l_result), 'open fence stays').to_be_like('```markdown%no closing fence');
+  end ollama_fence_is_stripped;
+
+
+  procedure ollama_unreadable_is_warning
+  as
+    l_result json_object_t;
+    c_replies constant sys.odcivarchar2list := sys.odcivarchar2list(
+      'UNREADABLE', 'UNREADABLE.', 'unreadable', 'Unreadable.', '  UNREADABLE' || chr(10));
+  begin
+    <<reply_loop>>
+    for i in 1 .. c_replies.count loop
+      uc_ai_test_http_mock.enqueue(ollama_response(c_replies(i)));
+      l_result := ollama_ocr;
+      ut.expect(md_text(l_result), c_replies(i) || ': markdown is empty').to_be_null();
+      ut.expect(l_result.get_array('warnings').get_size, c_replies(i) || ': one warning').to_equal(1);
+      ut.expect(l_result.get_array('warnings').get_string(0), c_replies(i) || ': warning text').to_equal(
+        'The model reported that the image is blank or unreadable');
+    end loop reply_loop;
+
+    ut.expect(l_result.get_array('pages').get_size, 'the page stays').to_equal(1);
+    ut.expect(first_page_of(l_result).get_number('index'), 'index').to_equal(0);
+    ut.expect(l_result.get_object('usage').get_number('input_tokens'), 'usage is kept').to_equal(11);
+  end ollama_unreadable_is_warning;
+
+
+  procedure ollama_unreadable_inside_text
+  as
+    l_result json_object_t;
+  begin
+    uc_ai_test_http_mock.enqueue(ollama_response('The scan is UNREADABLE at the bottom.'));
+    uc_ai_test_http_mock.enqueue(ollama_response('UNREADABLE stamp' || chr(10) || 'Total 12'));
+
+    l_result := ollama_ocr;
+    ut.expect(md_text(l_result)).to_equal('The scan is UNREADABLE at the bottom.');
+    ut.expect(l_result.get_array('warnings').get_size, 'no warning').to_equal(0);
+
+    l_result := ollama_ocr;
+    ut.expect(md_text(l_result)).to_equal('UNREADABLE stamp' || chr(10) || 'Total 12');
+    ut.expect(l_result.get_array('warnings').get_size, 'no warning 2').to_equal(0);
+  end ollama_unreadable_inside_text;
+
+
+  procedure ollama_empty_content
+  as
+    l_result json_object_t;
+    c_no_text constant varchar2(100 char) := 'The model returned no text';
+  begin
+    uc_ai_test_http_mock.enqueue(ollama_response(null));
+    uc_ai_test_http_mock.enqueue('{"model":"m","message":{"role":"assistant"},"done":true}');
+    uc_ai_test_http_mock.enqueue(ollama_response('   ' || chr(10)));
+
+    l_result := ollama_ocr;
+    ut.expect(md_text(l_result), 'empty markdown').to_be_null();
+    ut.expect(l_result.get_array('warnings').get_string(0), 'warning').to_equal(c_no_text);
+    ut.expect(l_result.get_array('pages').get_size, 'page').to_equal(1);
+
+    l_result := ollama_ocr;
+    ut.expect(md_text(l_result), 'missing content').to_be_null();
+    ut.expect(l_result.get_array('warnings').get_string(0), 'warning 2').to_equal(c_no_text);
+
+    l_result := ollama_ocr;
+    ut.expect(md_text(l_result), 'blank content').to_be_null();
+    ut.expect(l_result.get_array('warnings').get_string(0), 'warning 3').to_equal(c_no_text);
+  end ollama_empty_content;
+
+
+  procedure ollama_usage_partial
+  as
+    l_result json_object_t;
+  begin
+    uc_ai_test_http_mock.enqueue(ollama_response('x', ',"eval_count":9'));
+    uc_ai_test_http_mock.enqueue(ollama_response('x', ' '));
+    uc_ai_test_http_mock.enqueue(ollama_response('x', ',"prompt_eval_count":null,"eval_count":"n/a"'));
+
+    l_result := ollama_ocr;
+    ut.expect(l_result.get_object('usage').has('input_tokens'), 'no input tokens').to_be_false();
+    ut.expect(l_result.get_object('usage').get_number('output_tokens'), 'output tokens').to_equal(9);
+
+    l_result := ollama_ocr;
+    ut.expect(l_result.get_object('usage').get_size, 'empty usage').to_equal(0);
+
+    l_result := ollama_ocr;
+    ut.expect(l_result.get_object('usage').get_size, 'unusable values are left out').to_equal(0);
+  end ollama_usage_partial;
+
+
+  procedure ollama_model_from_response
+  as
+    l_result json_object_t;
+  begin
+    uc_ai_test_http_mock.enqueue(ollama_response('x'));
+    uc_ai_test_http_mock.enqueue('{"message":{"role":"assistant","content":"x"},"done":true}');
+
+    l_result := ollama_ocr(null, 'requested:7b');
+    ut.expect(l_result.get_string('model'), 'from response').to_equal('wire-vision:1b');
+    ut.expect(uc_ai_test_http_mock.request_json(1).get_string('model'), 'requested model is sent').to_equal('requested:7b');
+
+    l_result := ollama_ocr(null, 'requested:7b');
+    ut.expect(l_result.get_string('model'), 'requested').to_equal('requested:7b');
+  end ollama_model_from_response;
+
+
+  procedure ollama_error_recorded
+  as
+    l_result  json_object_t;
+    l_code    number;
+    l_message varchar2(4000 char);
+  begin
+    uc_ai_test_http_mock.enqueue(uc_ai_test_samples.get(c_ollama_sample_404), 404);
+
+    begin
+      l_result := ollama_ocr(null, 'no-such-model:1b');
+      l_code := 0;
+    exception
+      when others then
+        l_code    := sqlcode;
+        l_message := sqlerrm;
+    end;
+    ut.expect(l_code, 'error code').to_equal(-20302);
+    ut.expect(l_message, 'message').to_be_like('%Ollama%HTTP 404%model ''no-such-model:1b'' not found%');
+    test_uc_ai_wire.expect_all_consumed(1);
+  end ollama_error_recorded;
+
+
+  procedure ollama_error_shapes
+  as
+    l_code    number;
+    l_message varchar2(4000 char);
+  begin
+    uc_ai_test_http_mock.enqueue('{"error":"model requires more system memory"}', 200);
+    try_ollama(null, c_ollama_model, l_code, l_message);
+    ut.expect(l_code, '200 with error').to_equal(-20302);
+    ut.expect(l_message, '200 message').to_be_like('%model requires more system memory%');
+
+    uc_ai_test_http_mock.enqueue('{"error":"llama runner process has terminated"}', 500);
+    try_ollama(null, c_ollama_model, l_code, l_message);
+    ut.expect(l_code, '500 code').to_equal(-20302);
+    ut.expect(l_message, '500 message').to_be_like('%HTTP 500%llama runner process has terminated%');
+
+    uc_ai_test_http_mock.enqueue('{"model":"m","done":true}', 200);
+    try_ollama(null, c_ollama_model, l_code, l_message);
+    ut.expect(l_code, 'no message').to_equal(-20302);
+    ut.expect(l_message, 'no message text').to_be_like('%no message%');
+
+    uc_ai_test_http_mock.enqueue('<html>Bad gateway</html>', 502);
+    try_ollama(null, c_ollama_model, l_code, l_message);
+    ut.expect(l_code, 'html').to_equal(-20302);
+
+    test_uc_ai_wire.expect_all_consumed(4);
+  end ollama_error_shapes;
+
+
+  procedure ollama_ocr_text
+  as
+    l_result json_object_t;
+    l_text   clob;
+  begin
+    uc_ai_test_http_mock.enqueue(uc_ai_test_samples.get(c_ollama_sample_jpeg));
+    uc_ai_test_http_mock.enqueue(uc_ai_test_samples.get(c_ollama_sample_jpeg));
+
+    l_result := ollama_ocr;
+    ollama_reset;
+    l_text := uc_ai.ocr_text(uc_ai_test_utils.get_emp_table_jpeg, 'image/jpeg', uc_ai.c_provider_ollama, c_ollama_model);
+
+    ut.expect(l_text).to_equal(l_result.get_clob('markdown'));
+    ut.expect(l_text).to_be_like('%Dwight%');
+  end ollama_ocr_text;
+
+
+  procedure ollama_body_is_not_logged
+  as
+    -- 45 bytes give 60 base64 characters without a line break
+    c_text    constant varchar2(45 char) := 'UC_AI_OCR_LOG_MARKER_0123456789_abcdefghijklm';
+    l_marker  varchar2(100 char);
+    l_last_id number;
+    l_result  json_object_t;
+    l_count   pls_integer;
+    l_calls   pls_integer;
+    l_rows    pls_integer;
+  begin
+    select nvl(max(id), 0) into l_last_id from logger_logs;
+
+    l_marker := sys.utl_raw.cast_to_varchar2(sys.utl_encode.base64_encode(sys.utl_raw.cast_to_raw(c_text)));
+    uc_ai_test_http_mock.enqueue(ollama_response('UC_AI_OCR_TEXT_MARKER'));
+    ollama_reset;
+
+    -- control: the query does find the marker when something logs it
+    uc_ai_logger.log('control row', 'test_uc_ai_ocr_wire.ollama_body_is_not_logged', l_marker);
+
+    l_result := uc_ai.ocr(to_blob(sys.utl_raw.cast_to_raw(c_text)), 'image/png', uc_ai.c_provider_ollama, c_ollama_model);
+    ut.expect(instr(user_message(1).get_array('images').get_string(0), l_marker), 'the request does hold the base64').to_be_greater_than(0);
+
+    select count(*)
+      into l_rows
+      from logger_logs
+     where id > l_last_id
+       and (instr(text, l_marker) > 0 or sys.dbms_lob.instr(extra, l_marker) > 0);
+    ut.expect(l_rows, 'only the control row holds the base64').to_equal(1);
+
+    select count(*)
+      into l_calls
+      from logger_logs
+     where id > l_last_id
+       and text like 'Calling Ollama OCR%';
+    ut.expect(l_calls, 'the call is logged').to_equal(1);
+
+    select count(*)
+      into l_count
+      from logger_logs
+     where id > l_last_id
+       and (sys.dbms_lob.instr(extra, '"images"') > 0 or sys.dbms_lob.instr(extra, '"stream"') > 0
+            or sys.dbms_lob.instr(extra, 'Extract all text') > 0
+            or sys.dbms_lob.instr(extra, 'UC_AI_OCR_TEXT_MARKER') > 0);
+    ut.expect(l_count, 'no log row holds the request body or the recognized text').to_equal(0);
+  end ollama_body_is_not_logged;
+
+
+  procedure unsupported_ocr_providers
+  as
+    l_code    number;
+    l_message varchar2(4000 char);
+  begin
+    <<provider_loop>>
+    for r in (
+      select column_value as provider
+        from table(sys.odcivarchar2list(
+               uc_ai.c_provider_openai, uc_ai.c_provider_anthropic, uc_ai.c_provider_google
+             , uc_ai.c_provider_xai, uc_ai.c_provider_openrouter))
+    ) loop
+      try_ocr(small_blob, 'application/pdf', r.provider, null, l_code, l_message);
+      ut.expect(l_code, r.provider || ' code').to_equal(-20306);
+      ut.expect(l_message, r.provider || ' names the provider').to_be_like('%' || r.provider || '%');
+      ut.expect(l_message, r.provider || ' lists the OCR providers').to_be_like('%mistral%oci%ollama%');
+    end loop provider_loop;
+
+    test_uc_ai_wire.expect_all_consumed(0);
+  end unsupported_ocr_providers;
 
 
   -- ---- logging ---------------------------------------------------------------
