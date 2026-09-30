@@ -36,6 +36,8 @@ as
   c_model_google_gemini_2_5_flash_lite constant uc_ai.model_type := 'google.gemini-2.5-flash-lite';
 
   -- xAI Grok models
+  c_model_grok_4_7                  constant uc_ai.model_type := 'xai.grok-4.7';
+  c_model_grok_4_6                  constant uc_ai.model_type := 'xai.grok-4.6';
   c_model_grok_4_3                  constant uc_ai.model_type := 'xai.grok-4.3';
   c_model_grok_4_20_multi_agent     constant uc_ai.model_type := 'xai.grok-4.20-multi-agent';
   c_model_grok_4_20                 constant uc_ai.model_type := 'xai.grok-4.20';

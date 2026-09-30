@@ -14,6 +14,7 @@ as
 
 
   -- get from https://docs.x.ai/docs/models
+  c_model_grok_4_7                constant uc_ai.model_type := 'grok-4.7';
   c_model_grok_4_6                constant uc_ai.model_type := 'grok-4.6';
   c_model_grok_4_5                constant uc_ai.model_type := 'grok-4.5';
   c_model_grok_4_3                constant uc_ai.model_type := 'grok-4.3';

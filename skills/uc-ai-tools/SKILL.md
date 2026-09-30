@@ -172,7 +172,7 @@ The caller binds such values with `p_run_context`, on `uc_ai.generate_text` and 
 l_result := uc_ai.generate_text(
   p_user_prompt => 'What are the payment terms?'
 , p_provider    => uc_ai.c_provider_openai
-, p_model       => uc_ai_openai.c_model_gpt_5_6_sol
+, p_model       => uc_ai_openai.c_model_gpt_6_1_sol
 , p_run_context => json_object_t('{"document_id": "7", "tenant_id": "ACME"}')
 );
 ```

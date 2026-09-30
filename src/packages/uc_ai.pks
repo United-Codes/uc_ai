@@ -12,8 +12,8 @@ as
   * https://www.united-codes.com
   */
 
-  c_version     constant varchar2(16 char) := '26.3';
-  c_version_num constant number := 20260300;
+  c_version     constant varchar2(16 char) := '26.4';
+  c_version_num constant number := 20260400;
 
   subtype provider_type is varchar2(64 char);
   c_provider_openai     constant provider_type := 'openai';

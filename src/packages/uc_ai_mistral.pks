@@ -26,6 +26,7 @@ as
   c_model_ministral_8b     constant uc_ai.model_type := 'ministral-8b-latest';
   c_model_ministral_3b     constant uc_ai.model_type := 'ministral-3b-latest';
   c_model_pixtral_large    constant uc_ai.model_type := 'pixtral-large-latest';
+  c_model_zai_glm_5_3      constant uc_ai.model_type := 'zai-glm-5-3';
   c_model_zai_glm_5_2      constant uc_ai.model_type := 'zai-glm-5-2';
 
   -- embedding models
