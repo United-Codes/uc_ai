@@ -44,7 +44,7 @@ user:                            -- nested object: indentation (2 spaces)
   - c: 3
 ```
 
-Nulls are `null`, booleans `true`/`false`, empty arrays `key[0]:`, empty objects `key:`, strings with special characters are quoted and escaped.
+Nulls are `null`, booleans `true`/`false`, empty arrays `key: []`, empty objects `key:`, strings with special characters (or a leading `#` or `-`) are quoted and escaped. The encoder follows TOON spec 4.1 with the comma delimiter. It does not decode.
 
 ### Before / after
 

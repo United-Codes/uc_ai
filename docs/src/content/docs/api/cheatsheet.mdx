@@ -37,6 +37,25 @@ uc_ai.generate_embeddings(
 ) return json_array_t;   -- array of vectors, one per input
 ```
 
+The next call reads a PDF or an image. See [OCR](/products/uc-ai/docs/api/ocr/).
+
+```sql
+-- OCR: text, pages and boxes of a PDF or an image
+uc_ai.ocr(
+  p_document   => l_blob,
+  p_media_type => 'application/pdf',
+  p_provider   => uc_ai.c_provider_mistral,   -- or c_provider_oci, c_provider_ollama
+  p_model      => null,                       -- optional. Ollama requires a vision model
+  p_options    => json_object_t('{"tables":true}')  -- optional
+) return json_object_t;   -- markdown, pages, usage, model, warnings, raw
+
+-- Mistral only: a document behind a URL
+uc_ai.ocr(p_url => 'https://...', p_provider => uc_ai.c_provider_mistral) return json_object_t;
+
+-- Only the text (result.markdown)
+uc_ai.ocr_text(l_blob, 'application/pdf', uc_ai.c_provider_mistral) return clob;
+```
+
 Both `generate_text` and `generate_embeddings` also have a **config-driven overload** with an extra `p_config json_object_t` parameter — see [Config vs globals](#config-driven-calls-vs-globals) below.
 
 ## Reading the result
@@ -52,6 +71,18 @@ Both `generate_text` and `generate_embeddings` also have a **config-driven overl
 ```sql
 dbms_output.put_line( l_result.get_clob('final_message') );
 ```
+
+## Reading an OCR result
+
+`uc_ai.ocr` returns a `json_object_t`. Keys:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `markdown` | CLOB | The text of all pages, joined with a blank line. |
+| `pages` | array | `index` (from 0), `markdown`, and optional `blocks`, `dimensions`, `confidence`. |
+| `usage` | object | `pages` and `bytes` (Mistral), `pages` (OCI), `input_tokens` and `output_tokens` (Ollama). |
+| `warnings` | array | Problems that did not stop the call. |
+| `raw` | object | The response of the provider. |
 
 ## Providers
 

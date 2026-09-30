@@ -14,6 +14,8 @@ create or replace package uc_ai_test_utils as
 
   function get_apple_png return blob;
 
+  function get_emp_table_jpeg return blob;
+
   function get_confidence_json_schema return json_object_t;
 
 end uc_ai_test_utils;

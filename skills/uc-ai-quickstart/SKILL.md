@@ -53,12 +53,12 @@ end;
 
 | Provider | Constant | Example model constants |
 |----------|----------|------------------------|
-| OpenAI | `uc_ai.c_provider_openai` | `uc_ai_openai.c_model_gpt_5_6_sol`, `c_model_gpt_5_6_terra`, `c_model_gpt_5_6_luna` |
-| Anthropic | `uc_ai.c_provider_anthropic` | `uc_ai_anthropic.c_model_claude_5_opus`, `c_model_claude_4_5_haiku` |
-| Google | `uc_ai.c_provider_google` | `uc_ai_google.c_model_gemini_3_1_pro`, `c_model_gemini_3_7_flash` |
+| OpenAI | `uc_ai.c_provider_openai` | `uc_ai_openai.c_model_gpt_6_astra`, `c_model_gpt_6_luna`, `c_model_gpt_5_6_terra` |
+| Anthropic | `uc_ai.c_provider_anthropic` | `uc_ai_anthropic.c_model_claude_5_5_opus`, `c_model_claude_5_5_sonnet`, `c_model_claude_4_5_haiku` |
+| Google | `uc_ai.c_provider_google` | `uc_ai_google.c_model_gemini_3_1_pro`, `c_model_gemini_3_8_flash` |
 | Ollama (local) | `uc_ai.c_provider_ollama` | see `uc_ai_ollama` spec; also set `uc_ai.g_base_url` |
 | OCI GenAI | `uc_ai.c_provider_oci` | `uc_ai_oci.c_model_llama_4_maverick`, `c_model_cohere_command_a_reasoning` |
-| xAI | `uc_ai.c_provider_xai` | `uc_ai_xai.c_model_grok_4_6`, `c_model_grok_4_3` |
+| xAI | `uc_ai.c_provider_xai` | `uc_ai_xai.c_model_grok_4_7`, `c_model_grok_4_20_multi_agent` |
 | OpenRouter | `uc_ai.c_provider_openrouter` | see `uc_ai_openrouter` spec |
 | Mistral | `uc_ai.c_provider_mistral` | `uc_ai_mistral.c_model_mistral_small`, `c_model_codestral` |
 
@@ -144,7 +144,7 @@ l_messages.append(
 l_result := uc_ai.generate_text(
   p_messages => l_messages
 , p_provider => uc_ai.c_provider_google
-, p_model    => uc_ai_google.c_model_gemini_3_7_flash
+, p_model    => uc_ai_google.c_model_gemini_3_8_flash
 );
 ```
 
@@ -167,6 +167,10 @@ end;
 ```
 
 A config-driven overload `generate_embeddings(p_input, p_provider, p_model, p_config)` exists as well.
+
+## OCR
+
+`uc_ai.ocr(p_document, p_media_type, p_provider, ...)` and `uc_ai.ocr_text(...)` extract text from a PDF or image with Mistral, OCI or Ollama, without a chat model. See the `uc-ai-file-analysis` skill.
 
 ## Pitfalls
 

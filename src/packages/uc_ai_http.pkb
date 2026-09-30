@@ -2,6 +2,9 @@ create or replace package body uc_ai_http as
 
   c_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
 
+  -- the apex_web_service.make_rest_request default
+  c_default_transfer_timeout constant pls_integer := 180;
+
   /*
    * The replaceable transport exists only in a build compiled with
    * UC_AI_DEBUG:TRUE. In the default build the code below is not compiled at all,
@@ -63,6 +66,7 @@ create or replace package body uc_ai_http as
     p_url                  in varchar2
   , p_body                 in clob
   , p_credential_static_id in varchar2 default null
+  , p_transfer_timeout     in number   default null
   ) return clob
   as
     $if $$uc_ai_debug $then
@@ -94,6 +98,7 @@ create or replace package body uc_ai_http as
     , p_http_method          => 'POST'
     , p_body                 => p_body
     , p_credential_static_id => p_credential_static_id
+    , p_transfer_timeout     => coalesce(p_transfer_timeout, c_default_transfer_timeout)
     );
   end post;
 

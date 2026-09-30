@@ -30,6 +30,9 @@ declare -a API_PACKAGES=(
     # every provider body calls uc_ai_http.post in place of apex_web_service.
     "uc_ai_http"
     "uc_ai_toon"
+    # ocr is called by the uc_ai body (bodies of API packages precede it) and its
+    # body uses the mistral constants (all specs exist before any body).
+    "uc_ai_ocr"
     "uc_ai_agents_api"
     "uc_ai_agent_exec_api"
     "uc_ai_agent_workflow_api"
@@ -130,6 +133,9 @@ get_package_description() {
             ;;
         "uc_ai_oci")
             echo "OCI AI Provider Package"
+            ;;
+        "uc_ai_ocr")
+            echo "OCR Package"
             ;;
         "uc_ai_ollama")
             echo "Ollama AI Provider Package"

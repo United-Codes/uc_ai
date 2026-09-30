@@ -5,6 +5,34 @@ sidebar:
   order: 3
 ---
 
+## v26.4
+
+To upgrade run the `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.4). This release has no migration script.
+
+For new installations follow [this guide](https://www.united-codes.com/products/uc-ai/docs/guides/installation/).
+
+**Behavior notes**:
+
+- **TOON output follows specification 4.1.** The `uc_ai_toon` encoder now writes an empty array as `key: []` and no longer as `key[0]:`. It puts a key outside letters, digits, `_` and `.` in quotes, and a string that starts with `#` or `-`. A column that holds objects with the same structure folds into the header, and an object whose values share the same structure uses a keyed table. The encoded text of some inputs is therefore different from earlier releases. A test that compares TOON text exactly needs new expected values. See [TOON](/products/uc-ai/docs/guides/toon/).
+
+**Features**:
+
+OCR:
+
+- **[OCR](/products/uc-ai/docs/api/ocr/)** (`uc_ai.ocr`, `uc_ai.ocr_text`): extract the text of a PDF or an image, without a chat model. The result has the same shape for every provider: the text as Markdown, the pages, the text blocks with normalized boxes and confidence where the provider reports them, the usage, the warnings, and the response of the provider. Three providers read documents: **Mistral** (the OCR models `uc_ai_mistral.c_model_mistral_ocr` and `c_model_mistral_ocr_4_1`, PDF, images, DOCX and PPTX, and a URL overload), **OCI Document Understanding** (PDF, PNG, JPEG and TIFF, with table extraction), and **Ollama** (images, read by a vision model that you name). The neutral options `pages` and `tables` and the key `extra_body` work across providers. See the provider pages for [Mistral](/products/uc-ai/docs/providers/mistral/#ocr), [OCI](/products/uc-ai/docs/providers/oci/#ocr-with-document-understanding) and [Ollama](/products/uc-ai/docs/providers/ollama/#ocr).
+
+New models:
+
+- **New model constants.** OpenAI: `c_model_gpt_6_1_sol`, `c_model_gpt_6_sol`, and `c_model_gpt_6_luna`. Anthropic: `c_model_claude_5_5_opus` and `c_model_claude_5_5_sonnet`. xAI: `c_model_grok_4_7`. Mistral: `c_model_zai_glm_5_3`. OCI: `c_model_grok_4_7` and `c_model_grok_4_6`.
+
+Tutorials:
+
+- **[Answer from Your Documents](/products/uc-ai/docs/tutorial/answer-from-documents/01-chunk-and-embed/)**: a new course that builds retrieval-augmented generation (RAG) on your own documents.
+
+Fixes:
+
+- **Mistral chat models read a PDF.** UC AI sends a PDF in a message to Mistral as a `document_url` content part. See [File analysis](/products/uc-ai/docs/guides/file_analysis/#provider-support-and-limits).
+
 ## v26.3
 
 To upgrade first run `v26.2_to_v26.3.sql` followed by `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.3).

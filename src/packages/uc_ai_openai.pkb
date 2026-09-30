@@ -79,7 +79,8 @@ create or replace package body uc_ai_openai as
    * Returns OpenAI-compatible messages array that can be sent directly to OpenAI API
    */
   function convert_lm_messages_to_openai(
-    p_lm_messages in json_array_t
+    p_lm_messages       in json_array_t
+  , p_provider_override in uc_ai.provider_type default null
   ) return json_array_t
   as
     l_scope uc_ai_logger.scope := c_scope_prefix || 'convert_lm_messages_to_openai';
@@ -151,7 +152,12 @@ create or replace package body uc_ai_openai as
                   l_new_content_item := json_object_t();
 
                   -- PDF doc: https://platform.openai.com/docs/guides/pdf-files?api-mode=responses#base64-encoded-files
-                  if l_mime_type = 'application/pdf' then
+                  if l_mime_type = 'application/pdf' and p_provider_override = uc_ai.c_provider_mistral then
+                    -- Mistral has no OpenAI-style file part; PDFs are document_url parts
+                    -- https://docs.mistral.ai/capabilities/document_ai/basic_ocr/
+                    l_new_content_item.put('type', 'document_url');
+                    l_new_content_item.put('document_url', 'data:application/pdf;base64,' || l_data);
+                  elsif l_mime_type = 'application/pdf' then
                     l_new_content_item.put('type', 'file');
 
                     l_temp_obj := json_object_t();
@@ -639,7 +645,7 @@ create or replace package body uc_ai_openai as
     l_result.put('finish_reason', 'unknown');
     
     -- Convert standardized messages to OpenAI format
-    l_openai_messages := convert_lm_messages_to_openai(p_messages);
+    l_openai_messages := convert_lm_messages_to_openai(p_messages, l_settings.provider_override);
     
     uc_ai_logger.log('Converted to ' || l_openai_messages.get_size || ' OpenAI messages', l_scope);
 

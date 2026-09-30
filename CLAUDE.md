@@ -52,6 +52,7 @@ scripts/
 | `uc_ai_tools_api` | Tool/function-calling registration and execution |
 | `uc_ai_prompt_profiles_api` | Versioned prompt templates with `{var}` substitution |
 | `uc_ai_memory` | Agent memory: virtual filesystem behind the `MEMORY` tool, store scoping, MEMORY PROTOCOL prompt block |
+| `uc_ai_ocr` | OCR dispatcher and adapters behind `uc_ai.ocr` / `uc_ai.ocr_text` (Mistral, OCI Document Understanding, Ollama) |
 | `uc_ai_message_api` | Message construction and conversation history |
 | `uc_ai_structured_output` | JSON schema-based output validation |
 | `uc_ai_logger` | Logging wrapper around OraOpenSource Logger |

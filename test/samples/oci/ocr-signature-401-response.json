@@ -1,0 +1,4 @@
+{
+  "code" : "NotAuthenticated",
+  "message" : "Failed to verify the HTTP(S) Signature"
+}

@@ -14,9 +14,8 @@ create or replace package test_uc_ai_mistral as
   --%test(Convert messages)
   procedure convert_messages;
 
-  -- disabled: Mistral chat completions has no OpenAI-style base64 file input for PDFs
-  --%test-no(PDF file input)
-  --procedure pdf_file_input;
+  --%test(PDF file input)
+  procedure pdf_file_input;
 
   --%test(image file input)
   procedure image_file_input;

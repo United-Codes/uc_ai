@@ -1,6 +1,6 @@
 ---
 name: uc-ai-file-analysis
-description: Use when sending files (PDFs, images, documents) to an AI model from Oracle PL/SQL with UC AI — multimodal analysis via uc_ai.generate_text with a manually built message array, using uc_ai_message_api.create_file_content (BLOB or base64 CLOB), create_text_content, create_user_message, and create_system_message. Also covers passing files to profile/orchestrator agents via execute_agent's p_files parameter. Covers PDF question-answering and image description with providers like Google Gemini or Anthropic Claude.
+description: Use when sending files (PDFs, images, documents) to an AI model from Oracle PL/SQL with UC AI — multimodal analysis via uc_ai.generate_text with a manually built message array, using uc_ai_message_api.create_file_content (BLOB or base64 CLOB), create_text_content, create_user_message, and create_system_message. Also covers passing files to profile/orchestrator agents via execute_agent's p_files parameter. Covers PDF question-answering and image description with providers like Google Gemini or Anthropic Claude. Also covers OCR — extracting the text, pages, boxes and confidence of a PDF or image without a chat model — with uc_ai.ocr / uc_ai.ocr_text (Mistral, OCI Document Understanding, Ollama vision models).
 ---
 
 # UC AI File Analysis — Sending PDFs and Images to AI Models
@@ -66,8 +66,12 @@ declare
   l_content       json_array_t := json_array_t();
   l_result        json_object_t;
   l_final_message clob;
+  l_blob          blob;
 begin
   -- API key: uc_ai_get_key function or uc_ai_google.g_apex_web_credential := 'GOOGLE';
+
+  -- A subquery is not allowed as a parameter of a PL/SQL call: select the BLOB first
+  select blob_content into l_blob from your_table where id = 1;
 
   -- system message sets the context
   l_messages.append(uc_ai_message_api.create_system_message(
@@ -77,7 +81,7 @@ begin
 
   l_content.append(uc_ai_message_api.create_file_content(
     p_media_type => 'application/pdf',
-    p_data_blob  => (select blob_content from your_table where id = 1),
+    p_data_blob  => l_blob,
     p_filename   => 'characters.pdf'
   ));
 
@@ -90,7 +94,7 @@ begin
   l_result := uc_ai.generate_text(
     p_messages => l_messages
   , p_provider => uc_ai.c_provider_google
-  , p_model    => uc_ai_google.c_model_gemini_3_7_flash
+  , p_model    => uc_ai_google.c_model_gemini_3_8_flash
   );
 
   l_final_message := l_result.get_clob('final_message');
@@ -109,15 +113,18 @@ declare
   l_messages json_array_t := json_array_t();
   l_content  json_array_t := json_array_t();
   l_result   json_object_t;
+  l_blob     blob;
 begin
   -- API key: uc_ai_get_key function or uc_ai_anthropic.g_apex_web_credential := 'ANTHROPIC';
+
+  select image_blob into l_blob from product_images where id = 42;
 
   l_messages.append(uc_ai_message_api.create_system_message(
     'You are an image analysis assistant.'));
 
   l_content.append(uc_ai_message_api.create_file_content(
     p_media_type => 'image/webp',
-    p_data_blob  => (select image_blob from product_images where id = 42),
+    p_data_blob  => l_blob,
     p_filename   => 'product.webp'
   ));
   l_content.append(uc_ai_message_api.create_text_content(
@@ -138,6 +145,51 @@ end;
 
 Always use the package model constants, never string literals — model constants change with releases, so check the installed provider spec for the current list. If you set any `g_*` globals for the call (credentials, tools, …), remember they are session-scoped; call `uc_ai.reset_globals;` first so earlier session state does not leak in. For the basics of `generate_text` and API key setup, see the `uc-ai-quickstart` skill or https://www.united-codes.com/products/uc-ai/docs/api/generate_text/.
 
+## Extract text with OCR (no chat model)
+
+When the goal is the text or structure of a document (ingestion, search, storage) and not an answer about it, use `uc_ai.ocr` or `uc_ai.ocr_text`. OCR does not go through `generate_text`, and the OCR models (for example `mistral-ocr-latest`) do not work there.
+
+```sql
+declare
+  l_result json_object_t;
+  l_text   clob;
+  l_blob   blob;
+begin
+  -- API key: uc_ai_get_key function or uc_ai_mistral.g_apex_web_credential := 'MISTRAL';
+
+  select blob_content into l_blob from your_table where id = 1;
+
+  l_result := uc_ai.ocr(
+    p_document   => l_blob,
+    p_media_type => 'application/pdf',
+    p_provider   => uc_ai.c_provider_mistral   -- or c_provider_oci, c_provider_ollama
+  );
+
+  l_text := l_result.get_clob('markdown');                        -- all pages, joined with a blank line
+  dbms_output.put_line(l_result.get_object('usage').stringify);   -- e.g. {"pages":1,"bytes":34116}
+
+  -- only the text:
+  l_text := uc_ai.ocr_text(
+    p_document   => l_blob,
+    p_media_type => 'application/pdf',
+    p_provider   => uc_ai.c_provider_mistral
+  );
+end;
+/
+```
+
+The result object holds `markdown`, `pages` (each with `index` starting at 0, `markdown` and, where the provider gives them, `blocks` with normalized `box` values, `dimensions` and `confidence`), `usage` (only keys the provider reports: `pages`, `bytes`, `input_tokens`, `output_tokens`), `model`, `warnings` and `raw` (the provider response). Test optional keys with `has`.
+
+| Provider | Accepts | Notes |
+|----------|---------|-------|
+| `c_provider_mistral` | PDF, PNG, JPEG, WebP, AVIF, and a URL overload (`p_url`) | Default model `uc_ai_mistral.c_model_mistral_ocr`. Options such as `pages`, `table_format`, `confidence_scores_granularity` pass through. |
+| `c_provider_oci` | PDF, PNG, JPEG, TIFF | Needs `uc_ai_oci.g_compartment_id`, `uc_ai_oci.g_region` and the web credential. UC AI builds the Markdown from lines and tables. Oracle documents a limit of 5 pages for synchronous calls. UC AI checks only the size of the document (8 MB of raw bytes) and not the page count. Option `tables => true` adds table extraction. |
+| `c_provider_ollama` | PNG, JPEG, WebP (no PDF) | `p_model` is required (`ORA-20502` when null) and must be a vision model. Use an image with an opaque background. No boxes and no confidence, so review the result. |
+
+Use the neutral options in `p_options` (a `json_object_t`): `pages` (0-based indexes) and `tables` (boolean). UC AI passes other keys on to the provider; use the key `extra_body` to add fields to the request body. `uc_ai.g_base_url` overrides the endpoint for Mistral and Ollama only. OCI builds its URL from `uc_ai_oci.g_region`.
+
+An unsupported media type raises `ORA-20508` before any request. A provider error raises `ORA-20302`. A provider without OCR support raises `ORA-20306`. `warnings` holds non-fatal problems, for example OCI reporting that a page has no text. OCI raises `ORA-20302` only when the provider reports an error and returns no page.
+
 ## Sending files to an agent
 
 Profile and orchestrator agents accept files directly via `p_files` on `uc_ai_agents_api.execute_agent` — no manual message array needed. Build a `uc_ai_message_api.t_files` collection and the files are attached to the agent's user message (works on the initial call and on `p_follow_up_message`):
@@ -149,7 +201,7 @@ declare
 begin
   l_files.extend;
   l_files(1).media_type := 'application/pdf';
-  l_files(1).data_blob  := (select blob_content from your_table where id = 1);
+  select blob_content into l_files(1).data_blob from your_table where id = 1;
   l_files(1).filename   := 'characters.pdf';
 
   l_result := uc_ai_agents_api.execute_agent(
@@ -169,6 +221,7 @@ Passing `p_files` to a workflow or handoff agent raises an error — only profil
 
 - **`p_media_type` must be the correct mime type** (`application/pdf`, `image/png`, `image/jpeg`, `image/webp`, …). A wrong mime type causes provider-side rejections or misinterpretation.
 - **The model must be multimodal.** Text-only models reject or ignore file content. Vision/file support varies per model — check the provider pages: https://www.united-codes.com/products/uc-ai/docs/guides/providers/
+- **Mistral takes PDFs in chat as `document_url` parts.** UC AI builds this for you: use the normal `application/pdf` file content with `p_provider => uc_ai.c_provider_mistral`.
 - **Provider file-type support differs.** Some providers accept PDFs and other documents, others only images — what works depends on the AI provider's capabilities. Test with your target provider.
 - **Large files consume many input tokens.** A multi-page PDF or high-resolution image can dominate your token usage (and cost). Check `l_result.get_object('usage')` and downscale/trim files where possible.
 - **Use the BLOB overload of `create_file_content` when you have binary data** — UC AI handles the base64 encoding. Only use the `p_data_base64` CLOB overload if the data is already base64-encoded.
@@ -176,5 +229,6 @@ Passing `p_files` to a workflow or handoff agent raises an error — only profil
 ## Full documentation
 
 - File analysis guide: https://www.united-codes.com/products/uc-ai/docs/guides/file_analysis/
+- OCR API: https://www.united-codes.com/products/uc-ai/docs/api/ocr/
 - generate_text API: https://www.united-codes.com/products/uc-ai/docs/api/generate_text/
 - Providers: https://www.united-codes.com/products/uc-ai/docs/guides/providers/

@@ -126,9 +126,14 @@ The docs must name and use only current models. An old id can already be retired
 and a copied example then fails for the reader.
 
 1. `docs/src/content/docs/providers/<provider>.mdx` — the `Models` section lists
-   the constants. List the current models. Then add a `Retired Models` section
+   the constants. List only the newest model of each family, for example the
+   latest Opus, the latest Sonnet and the latest Haiku. When a new model replaces
+   an older one of the same family, remove the older one from the list. Do not
+   remove its constant from the `.pks` file. End the list with one sentence that
+   says that the list shows the newest model of each family and that the package
+   keeps the constants of older models. Then add a `Retired Models` section
    that names the retired families and says that the constants stay for backward
-   compatibility.
+   compatibility. Models that the provider retired are not listed as current.
 2. Replace retired constants in every example, in the guides and in the API pages.
    `grep -rn "c_model_" docs/src/content/docs` shows all of them.
 3. `docs/src/content/docs/index.mdx` — the `Supported AI Providers` list names

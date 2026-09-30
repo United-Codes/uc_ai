@@ -42,12 +42,12 @@ exit;
 EOF
 ```
 
-Expected counts for UC_AI* objects (verified against a fresh v26.3 install):
+Expected counts for UC_AI* objects (verified against a fresh v26.4 install):
 
 | Object type | Count | Notes |
 |---|---|---|
-| PACKAGE | 24 | 26 specs exist; `uc_ai_ptc_api` and `uc_ai_ptc_runner` are installed by the code-mode sandbox script, not the core installer |
-| PACKAGE BODY | 21 | 23 bodies exist, minus the same two sandbox packages |
+| PACKAGE | 25 | 27 specs exist; `uc_ai_ptc_api` and `uc_ai_ptc_runner` are installed by the code-mode sandbox script, not the core installer |
+| PACKAGE BODY | 22 | 24 bodies exist, minus the same two sandbox packages |
 | TABLE | 11 | tools, tool_parameters, tool_tags, prompt_profiles, agents, agent_executions, agent_sessions, agent_messages, memory_stores, memory_files, memory_config |
 | SEQUENCE | 10 | one per table except `uc_ai_tool_tags` |
 | TRIGGER | 10 | `_BIU` / `_BI` per table, all ENABLED, except `uc_ai_memory_files` (deliberate, see `src/triggers/triggers.sql`) |

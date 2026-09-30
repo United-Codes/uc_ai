@@ -96,7 +96,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why?'
   , p_provider    => uc_ai.c_provider_google
-  , p_model       => uc_ai_google.c_model_gemini_3_7_flash
+  , p_model       => uc_ai_google.c_model_gemini_3_8_flash
   );
 
   l_messages := treat(l_result.get('messages') as json_array_t);

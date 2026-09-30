@@ -34,7 +34,8 @@ get_model_type() {
 
 # Extract all c_model_* constant names from a provider spec file
 get_model_constants() {
-  grep -oE 'c_model_[a-z0-9_]+' "$1" | grep -v '^c_model_type$' | head -100
+  # OCR models are not chat or embedding models: generate_text cannot call them
+  grep -oE 'c_model_[a-z0-9_]+' "$1" | grep -v '^c_model_type$' | grep -v '_ocr' | head -100
 }
 
 # Extract provider IDs from uc_ai.pks (e.g. "openai", "anthropic", ...)

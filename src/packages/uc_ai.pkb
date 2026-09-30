@@ -351,6 +351,65 @@ create or replace package body uc_ai as
     );
   end generate_embeddings;
 
+  function ocr (
+    p_document   in blob
+  , p_media_type in varchar2
+  , p_provider   in provider_type
+  , p_model      in model_type default null
+  , p_options    in json_object_t default null
+  ) return json_object_t
+  as
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals;
+  begin
+    return uc_ai_ocr.ocr(
+      p_document   => p_document
+    , p_url        => null
+    , p_media_type => p_media_type
+    , p_provider   => p_provider
+    , p_model      => p_model
+    , p_options    => p_options
+    , p_settings   => l_settings
+    );
+  end ocr;
+
+  function ocr (
+    p_url        in varchar2
+  , p_provider   in provider_type
+  , p_model      in model_type default null
+  , p_options    in json_object_t default null
+  ) return json_object_t
+  as
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals;
+  begin
+    return uc_ai_ocr.ocr(
+      p_document   => null
+    , p_url        => p_url
+    , p_media_type => null
+    , p_provider   => p_provider
+    , p_model      => p_model
+    , p_options    => p_options
+    , p_settings   => l_settings
+    );
+  end ocr;
+
+  function ocr_text (
+    p_document   in blob
+  , p_media_type in varchar2
+  , p_provider   in provider_type
+  , p_model      in model_type default null
+  , p_options    in json_object_t default null
+  ) return clob
+  as
+  begin
+    return ocr(
+      p_document   => p_document
+    , p_media_type => p_media_type
+    , p_provider   => p_provider
+    , p_model      => p_model
+    , p_options    => p_options
+    ).get_clob('markdown');
+  end ocr_text;
+
   procedure reset_globals
   as
   begin
