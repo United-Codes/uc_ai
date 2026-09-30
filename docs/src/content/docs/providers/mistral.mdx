@@ -179,7 +179,46 @@ end;
 
 #### PDF Analysis
 
-A chat model reads a PDF that you attach to a message. UC AI sends the PDF to Mistral as a `document_url` content part with a Base64 `data:application/pdf` URL. Use `create_file_content` with the media type `application/pdf`, as in the image example above. See the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for a PDF example. To get the text and the structure of a document instead of an answer, use [OCR](#ocr).
+A chat model reads a PDF that you attach to a message. UC AI sends the PDF to Mistral as a `document_url` content part with a Base64 `data:application/pdf` URL. Use `create_file_content` with the media type `application/pdf`, as in the image example above.
+
+```sql
+declare
+  l_messages json_array_t := json_array_t();
+  l_content json_array_t := json_array_t();
+  l_result json_object_t;
+  l_pdf blob;
+begin
+  select blob_content into l_pdf from your_table where id = 1;
+
+  l_messages.append(uc_ai_message_api.create_system_message(
+    'You are an assistant answering trivia questions about TV shows. Answer in one short sentence.'));
+
+  l_content.append(uc_ai_message_api.create_file_content(
+    p_media_type => 'application/pdf',
+    p_data_blob => l_pdf,
+    p_filename => 'characters.pdf'
+  ));
+
+  l_content.append(uc_ai_message_api.create_text_content(
+    'What is the TV show of the characters in the attached PDF?'
+  ));
+
+  l_messages.append(uc_ai_message_api.create_user_message(l_content));
+
+  l_result := uc_ai.generate_text(
+    p_messages => l_messages,
+    p_provider => uc_ai.c_provider_mistral,
+    p_model => uc_ai_mistral.c_model_mistral_small
+  );
+
+  dbms_output.put_line('Answer: ' || l_result.get_clob('final_message'));
+end;
+/
+```
+
+For a PDF with a table of TV show characters, a call on 2026-09-30 with `mistral-small-latest` printed `Answer: The characters are from the TV show "The Office."`. The wording of the answer can differ between calls.
+
+See the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for more file examples. To get the text and the structure of a document instead of an answer, use [OCR](#ocr).
 
 ### Reasoning / Thinking
 
