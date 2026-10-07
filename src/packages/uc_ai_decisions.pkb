@@ -11,6 +11,8 @@ create or replace package body uc_ai_decisions as
   c_type_boolean constant varchar2(10 char) := 'boolean';
   c_type_choice  constant varchar2(10 char) := 'choice';
   c_type_score   constant varchar2(10 char) := 'score';
+  -- neutral answer type of a question the provider refused
+  c_type_refused constant varchar2(10 char) := 'refused';
 
   c_id_pattern constant varchar2(100 char) := '^[A-Za-z][A-Za-z0-9_]{0,63}$';
 
@@ -852,47 +854,31 @@ create or replace package body uc_ai_decisions as
 
 
   /*
-   * REFUSAL POLICY. A provider can answer a question with a refusal and still
-   * answer the other questions of the same request. Today any refusal fails the
-   * whole call with -20309 and a message that lists the refused ids; the other
-   * answers stay in the log (p_raw). To return the other answers instead, replace
-   * the raise below with a collection of the refused ids that the result
-   * assembly (openai_to_neutral) turns into a "refused" answer type or a warning.
+   * REFUSAL POLICY. A provider can refuse a single question and still answer the
+   * others in the same response. A refused question gets the neutral answer
+   * {"type": "refused"}; the other answers are mapped as usual and the call does
+   * not raise, not even when every question was refused. A refusal still counts
+   * as the answer for its question (a missing, extra or duplicate answer is still
+   * an error) but skips the type, option, score and probability checks. A refusal
+   * without a name cannot be matched to a question and raises -20304 like any
+   * answer without a name. To make a refusal fail the call, raise here.
    */
-  procedure raise_if_refused (
-    p_answers in json_array_t
-  , p_raw     in clob
-  , p_scope   in varchar2
-  )
+  function is_refusal (
+    p_answer in json_object_t
+  ) return boolean
   as
-    l_answer json_object_t;
-    l_name   varchar2(4000 char);
-    l_ids    varchar2(3000 char);
   begin
-    <<answer_loop>>
-    for i in 0 .. p_answers.get_size - 1 loop
-      continue when not p_answers.get(i).is_object;
-      l_answer := treat(p_answers.get(i) as json_object_t);
+    return short_text_of(p_answer, 'type') = 'refusal';
+  end is_refusal;
 
-      if short_text_of(l_answer, 'type') = 'refusal' then
-        -- a refusal can come without a name
-        l_name := coalesce(short_text_of(l_answer, 'name'), '(no name)');
-        if nvl(length(l_ids), 0) < 2000 then
-          l_ids := l_ids || case when l_ids is not null then ', ' end || substr(l_name, 1, 100);
-        end if;
-      end if;
-    end loop answer_loop;
 
-    if l_ids is not null then
-      uc_ai_error.raise_error(
-        p_error_code => uc_ai_error.c_err_decision_refused
-      , p_scope      => p_scope
-      , p0           => 'OpenAI'
-      , p1           => l_ids
-      , p_extra      => p_raw
-      );
-    end if;
-  end raise_if_refused;
+  function refused_answer return json_object_t
+  as
+    l_out json_object_t := json_object_t();
+  begin
+    l_out.put('type', c_type_refused);
+    return l_out;
+  end refused_answer;
 
 
   /*
@@ -1069,8 +1055,8 @@ create or replace package body uc_ai_decisions as
 
 
   /*
-   * The neutral result from the OpenAI response. Raises -20309 for a refusal and
-   * -20304 when the answers do not match the questions.
+   * The neutral result from the OpenAI response. A refusal becomes the answer
+   * {"type": "refused"}. Raises -20304 when the answers do not match the questions.
    */
   -- @dblinter ignore(g-7440): pio_warnings is the warning list of the call, threaded through the adapter, so in out is intentional
   function openai_to_neutral (
@@ -1102,8 +1088,6 @@ create or replace package body uc_ai_decisions as
     end if;
     l_answers_in := p_resp_json.get_array('answers');
 
-    raise_if_refused(l_answers_in, p_resp, p_scope);
-
     -- every answer belongs to one question and every question has one answer
     <<index_loop>>
     for i in 0 .. l_answers_in.get_size - 1 loop
@@ -1131,6 +1115,13 @@ create or replace package body uc_ai_decisions as
       end if;
 
       l_answer   := treat(l_answers_in.get(l_position.get_number(l_ids(i))) as json_object_t);
+
+      -- see is_refusal: no further checks for a refused question
+      if is_refusal(l_answer) then
+        l_answers.put(l_ids(i), refused_answer);
+        continue;
+      end if;
+
       l_question := p_questions.get_object(l_ids(i));
       l_type     := short_text_of(l_question, 'type');
       l_expected := case l_type when c_type_boolean then 'predicate' else l_type end;

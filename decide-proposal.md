@@ -69,12 +69,12 @@ Open for the TypeSafe WP0: whether jev accepts images (if not, TypeSafe raises -
 
 ### Contradictions found (OpenAI calls against sections 2 and 3; decisions NOT edited)
 
-WP1 applied points 1, 2, 3 and 7 to section 3 (limits check, 2 options or levels minimum, criteria folded into the predicate instructions, images as message array). Points 4 and 5 are implemented as decided (refusal raises; null name handled). Point 6 is implemented (the label is dropped).
+WP1 applied points 1, 2, 3 and 7 to section 3 (limits check, 2 options or levels minimum, criteria folded into the predicate instructions, images as message array). Point 4 was decided later: a refusal does not raise, it becomes the answer `{"type": "refused"}` (decision 5). Point 5 is implemented (a refusal without a name raises -20304, as any answer without a name). Point 6 is implemented (the label is dropped).
 
 1. **Limits exist.** The old table said "none documented". The API enforces 2 to 255 choices and 2 to 10 levels. Section 3 lists the 255/10 pre-flight check for TypeSafe only. Without a check for OpenAI, the caller gets -20302 (400 with `array_above_max_length`) after a network call. Decide: add the same check to the OpenAI path.
 2. **A choice needs at least 2 options.** Section 3 says "non-empty object" for choice `criteria`; the API rejects 1 option (400). A one-level or one-option question should raise -20503 in the neutral check.
 3. **Predicate has no `criteria`.** Section 3 makes `criteria` optional on `boolean`. The OpenAI predicate takes only `instructions`; an extra field is a 400. The adapter has to fold `criteria` text into `instructions`. TypeSafe `noul` was not checked.
-4. **Refusal is per question and often means "ill-posed".** Decision 5 raises -20309 for any refusal and drops the valid answers in the same response (they stay in `p_extra`). Empty instructions, meaningless input, protected-trait inference and "name the private address" all produce refusals while sibling questions are answered. Decide whether one refused question among many should still fail the whole call.
+4. **Refusal is per question and often means "ill-posed".** Empty instructions, meaningless input, protected-trait inference and "name the private address" all produce refusals while sibling questions are answered. Decided: a refusal does not fail the call; the refused question gets the neutral answer `{"type": "refused"}` (decision 5).
 5. **Refusal `name` can be null** when the question had no name. Not reachable through `uc_ai.decide` (ids are validated first), but the adapter should read `name` with a null check.
 6. **Score probability entries have a `label`** in addition to `value` and `probability`. The adapter should read `value` for the index and may ignore `label`.
 7. **Images are supported as designed, with one change of shape.** `input` has to become a message array, `{"role":"user","content":[input_text, input_image...]}`; `input` as a plain string stays for text-only calls. Only `data:` URLs work, so the adapter builds `data:<media_type>;base64,...` from `create_file_content`. PDFs are not named in the docs; only image media types should pass the -20508 check.
@@ -86,7 +86,7 @@ WP1 applied points 1, 2, 3 and 7 to section 3 (limits check, 2 options or levels
 2. Return `json_object_t`, not a record.
 3. The neutral model follows Vercel: one shared `state`, `questions` keyed by id, answer types `boolean`, `choice`, `score`. The wire names `noul` and `predicate` never leave the adapters.
 4. Failed distribution checks (sum to 1, score equals weighted mean) become `warnings`, not errors. Structural problems raise.
-5. A refusal on any question raises `c_err_decision_refused` (-20309). The message lists the refused question ids. The raw response goes to `p_extra` so the logger keeps it. A `refused` answer type may be added later as an opt-in; going the other way would break callers.
+5. A refusal does not raise. A refused question gets the neutral answer `{"type": "refused"}` under `answers[<id>]`; the other questions in the same response are answered as usual, and the call succeeds even when every question is refused. `raw` keeps the full response. Callers check `type` before they read `choice`, `score` or `probability`. A refusal still counts as the answer for its question (missing, extra and duplicate answer checks apply) but skips the type, option, score and probability checks. A refusal without a name cannot be matched to a question and raises -20304, like any answer without a name.
 6. TypeSafe is a real provider constant, `uc_ai.c_provider_typesafe`. `scripts/generate_uc_ai_utils_body.sh` excludes it (like `c_provider_responses_api`) because it cannot chat.
 7. Images are in the first release, through `uc_ai_message_api.create_file_content` objects.
 8. No new package globals except the TypeSafe credential (section 4). Provider options go in one `p_options json_object_t`.
@@ -149,6 +149,7 @@ Constants: `uc_ai.c_provider_typesafe = 'typesafe'`, `uc_ai_typesafe.c_model_jev
 Rules:
 - `probabilities` is optional on `choice` and `score`, required `probability` on `boolean`. This leaves room for a structured-output fallback later.
 - Score probabilities are keyed by zero-based level index as a string.
+- A refused question has the answer `{ "type": "refused" }`. Callers check `type` before they read `choice`, `score` or `probability`.
 - `confidence` is the vendor statistic. It is not the probability of the selected option. It stays in `provider_metadata`.
 - `usage` keys appear only when the provider reports them.
 - `raw` keeps the full provider response.
@@ -162,7 +163,7 @@ Before any request (no HTTP call is made if one fails):
 
 After the response:
 - Errors (`c_err_format_processing`, -20304): a question has no answer or has an extra answer, the answer type differs from the question type, a choice is not one of the options, a score is outside [0, levels - 1], a probability is outside [0, 1].
-- Refusal: -20309 as in decision 5. The refusal handling is one procedure in the body (`raise_if_refused`) with a comment on how to change the policy. The message lists only the refused ids (`(no name)` for a refusal without a name); the raw response, with the sibling answers, goes to the logger.
+- Refusal: no error. See decision 5. The refusal handling is in one place in the body (`is_refusal` and `refused_answer`, with a comment on how to change the policy).
 - Warnings: a distribution does not sum to 1, or a score differs from the probability-weighted mean. Tolerance is 1e-6 plus half a unit in the last decimal (0.005, the 2-decimal rounding both APIs report) for each rounded value that goes into the sum or the mean. For the sum that is `1e-6 + 0.005 * n` for n entries. For the mean, a rounding error of probability i moves the mean by up to `0.005 * i`, so the tolerance is `1e-6 + 0.005 (the score itself) + 0.005 * (sum of the indexes)`. The sum tolerance grows with n, so the check cannot fire on a choice with about 200 options or more (255 options allow a deviation of 1.3); it is a check for the small questions, not for the 255-option case.
 - Unknown keys in `p_options` add a warning and are ignored. Known keys: `safety_identifier` (string, sent as is) and `extra_body` (object, merged into the request; the keys `model`, `input` and `questions` always win).
 - Provider HTTP or API error (status 400 or more, or an `error` object in a 200 body): `c_err_provider_response` (-20302) with the provider message and, when the error has one, its `param`. A non-JSON error body (a 502 page) is reported with a preview of the body.
@@ -175,7 +176,6 @@ No tables, no migration.
 - `src/packages/uc_ai_typesafe.pks` (spec only, like `uc_ai_mistral.pks`): `c_model_jev_latest`, `g_apex_web_credential`.
 - `uc_ai.pks`: `c_provider_typesafe`, the `decide` facade. `uc_ai.pkb`: the facade body, built with `uc_ai_settings.build_from_globals`.
 - `uc_ai_settings`: add `ts_apex_web_credential` in the four places named in `uc_ai_settings.pks`, and in `reset_globals`.
-- `uc_ai_error.pks`: `c_err_decision_refused constant number := -20309`.
 - `scripts/package_utils.sh`: `uc_ai_decisions` in the core list after `uc_ai_ocr`, `uc_ai_typesafe` in the provider list. Then regenerate install, upgrade and uninstall scripts.
 - `scripts/generate_uc_ai_utils_body.sh`: exclude `typesafe` from the provider list.
 - `uc_ai_get_key` belongs to the user (`src/dependencies/key_function.sql`) and raises -20001 for an unknown provider. Every user needs a `typesafe` branch. The docs must say so, and the post-install script should not overwrite the user function.
@@ -197,7 +197,7 @@ No tables, no migration.
 ### Tests (utPLSQL; `test_uc_ai_decisions` and `test_uc_ai_decisions_wire`, following the OCR test packages)
 
 Wire tests (no network, recorded samples, `uc_ai_http.set_transport`):
-- OpenAI: URL ends in `/decisions`; question array shape for all three types; `predicate` name never appears in the neutral result; image becomes a data URL; probability array to object; refusal raises -20309 with ids; 429 maps to -20302; usage mapped; request body absent from the log table.
+- OpenAI: URL ends in `/decisions`; question array shape for all three types; `predicate` name never appears in the neutral result; image becomes a data URL; probability array to object; a refusal gives `{type: refused}` and keeps the other answers; 429 maps to -20302; usage mapped; request body absent from the log table.
 - TypeSafe: URL `/systemone`; `noul` mapping both ways; questions keyed by id; 256 options and 11 levels raise before any request; `confidence` lands in `provider_metadata`.
 - Neutral: bad id, empty criteria, one-level score, unknown type raise -20503; unsupported type or file raises -20508 and the mock saw no request; answer missing, answer of the wrong type, unknown choice, score out of range raise -20304; sum-to-1 and weighted-mean failures give warnings and no error.
 
@@ -205,4 +205,4 @@ Live tests (disabled when a credential is missing): OpenAI and TypeSafe each wit
 
 ## 7. Later (not in the first release)
 
-Structured-output fallback for Anthropic, Google and the other chat providers (no real probabilities). A `p_config` overload and scalar helpers (`decide_choice`, `decide_probability`). A `refused` answer type as an opt-in. A strict mode that turns distribution warnings into errors. A `decision` workflow step type with usage accounting. Prompt-profile integration. Batch of unrelated states.
+Structured-output fallback for Anthropic, Google and the other chat providers (no real probabilities). A `p_config` overload and scalar helpers (`decide_choice`, `decide_probability`). A strict mode that turns distribution warnings and refusals into errors. A `decision` workflow step type with usage accounting. Prompt-profile integration. Batch of unrelated states.

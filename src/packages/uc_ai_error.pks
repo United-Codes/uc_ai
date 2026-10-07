@@ -54,7 +54,6 @@ as
   c_err_unknown_provider       constant number := -20306;
   c_err_structured_unsupported constant number := -20307;
   c_err_reasoning_budget       constant number := -20308;
-  c_err_decision_refused       constant number := -20309;
 
   -- Agent errors
   c_err_unknown_agent_type     constant number := -20400;
@@ -99,7 +98,6 @@ as
   c_msg_unknown_provider       constant varchar2(200 char) := 'Unknown AI provider: %0';
   c_msg_structured_unsupported constant varchar2(200 char) := 'Provider %0 does not support structured output';
   c_msg_reasoning_budget       constant varchar2(200 char) := 'Reasoning budget tokens (%0) exceed max tokens (%1). Set a higher value.';
-  c_msg_decision_refused       constant varchar2(200 char) := 'Provider %0 refused to answer question(s): %1';
 
   -- Agent messages
   c_msg_unknown_agent_type     constant varchar2(200 char) := 'Unknown agent type: %0';

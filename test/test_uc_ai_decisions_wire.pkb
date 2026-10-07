@@ -126,6 +126,22 @@ create or replace package body test_uc_ai_decisions_wire as
   end decide_with;
 
 
+  procedure expect_format_error(
+    p_questions in varchar2
+  , p_response  in clob
+  , p_like      in varchar2
+  , p_label     in varchar2
+  )
+  as
+    l_code    number;
+    l_message varchar2(4000 char);
+  begin
+    try_response(p_questions, p_response, l_code, l_message);
+    ut.expect(l_code, p_label || ': code').to_equal(uc_ai_error.c_err_format_processing);
+    ut.expect(l_message, p_label || ': message').to_be_like(p_like);
+  end expect_format_error;
+
+
   /*
    * The question named p_name in the questions array of request p_index.
    */
@@ -902,93 +918,196 @@ create or replace package body test_uc_ai_decisions_wire as
 
   -- ---- refusal -------------------------------------------------------------------
 
-  procedure refusal_raises
+  /*
+   * The recorded refusal: "gay" is refused, the sibling "religion" is answered.
+   */
+  function refusal_questions return json_object_t
   as
-    l_code    number;
-    l_message varchar2(4000 char);
   begin
-    -- the recorded refusal: "gay" is refused, the sibling "religion" is answered
+    return json_object_t.parse(
+      '{"gay":{"type":"boolean","instructions":"The author is gay."}'
+      || ',"religion":{"type":"choice","instructions":"What is the author''s religion?","criteria":{"christian":null,"muslim":null,"jewish":null,"none":null}}}');
+  end refusal_questions;
+
+
+  procedure refusal_keeps_sibling_answer
+  as
+    l_result  json_object_t;
+    l_answers json_object_t;
+  begin
     enqueue('refusal_response');
 
-    try_decide(
+    l_result := uc_ai.decide(
       'I love cooking pasta with my partner on Sundays and we just adopted a dog.'
-    , json_object_t.parse(
-        '{"gay":{"type":"boolean","instructions":"The author is gay."}'
-        || ',"religion":{"type":"choice","instructions":"What is the author''s religion?","criteria":{"christian":null,"muslim":null,"jewish":null,"none":null}}}')
-    , null, null, l_code, l_message);
+    , refusal_questions
+    , uc_ai.c_provider_openai);
 
-    ut.expect(l_code, 'error code').to_equal(uc_ai_error.c_err_decision_refused);
-    ut.expect(l_message, 'the refused id').to_be_like('%gay%');
-    ut.expect(l_message, 'the sibling id is not named').not_to_be_like('%religion%');
-    ut.expect(l_message, 'the sibling answer does not leak').not_to_be_like('%0.97%');
-    ut.expect(l_message, 'no sibling choice').not_to_be_like('%none%');
+    l_answers := l_result.get_object('answers');
+    ut.expect(l_answers.get_size, 'both questions have an answer').to_equal(2);
+
+    -- the refused question has the type and nothing else
+    ut.expect(l_answers.get_object('gay').get_string('type'), 'refused type').to_equal('refused');
+    ut.expect(key_count(l_answers.get_object('gay')), 'a refused answer has only a type').to_equal(1);
+
+    -- the sibling is a normal choice answer
+    ut.expect(l_answers.get_object('religion').get_string('type'), 'sibling type').to_equal('choice');
+    ut.expect(l_answers.get_object('religion').get_string('choice'), 'sibling choice').to_equal('none');
+    ut.expect(l_answers.get_object('religion').get_object('probabilities').get_number('none'), 'sibling probability').to_equal(0.97);
+
+    ut.expect(warnings_of(l_result).get_size, 'a refusal gives no warning').to_equal(0);
     test_uc_ai_wire.expect_all_consumed(1);
-  end refusal_raises;
+  end refusal_keeps_sibling_answer;
 
 
   procedure refusal_among_valid_answers
   as
-    l_code    number;
-    l_message varchar2(4000 char);
+    l_result json_object_t;
   begin
     enqueue('refusal_illposed_response');
 
-    try_decide(
+    l_result := uc_ai.decide(
       'The site is down for all customers.'
     , json_object_t.parse(
         '{"lottery":{"type":"boolean","instructions":"Will the next Euromillions draw contain the number 7?"}'
         || ',"nonsense":{"type":"choice","instructions":"Pick the colour of the number seven''s smell.","criteria":{"red":null,"blue":null}}}')
-    , null, null, l_code, l_message);
+    , uc_ai.c_provider_openai);
 
-    ut.expect(l_code, 'error code').to_equal(-20309);
-    ut.expect(l_message, 'the refused id').to_be_like('%nonsense%');
-    ut.expect(l_message, 'the answered id is not named').not_to_be_like('%lottery%');
-    ut.expect(l_message, 'the answered probability does not leak').not_to_be_like('%0.47%');
+    ut.expect(l_result.get_object('answers').get_object('lottery').get_string('type'), 'answered type').to_equal('boolean');
+    ut.expect(l_result.get_object('answers').get_object('lottery').get_number('probability'), 'answered probability').to_equal(0.47);
+    ut.expect(l_result.get_object('answers').get_object('nonsense').get_string('type'), 'refused type').to_equal('refused');
+    ut.expect(l_result.get_object('answers').get_object('nonsense').has('choice'), 'a refused answer has no choice').to_be_false();
+    ut.expect(warnings_of(l_result).get_size, 'no warning').to_equal(0);
+    ut.expect(l_result.get_object('usage').get_number('input_tokens'), 'usage is still mapped').to_equal(277);
   end refusal_among_valid_answers;
+
+
+  procedure all_questions_refused
+  as
+    l_result json_object_t;
+  begin
+    -- the recorded response: the only question is refused
+    enqueue('refusal_empty_instructions_response');
+    l_result := uc_ai.decide('The site is down.', json_object_t.parse('{"e":{"type":"boolean","instructions":"Is it?"}}'), uc_ai.c_provider_openai);
+    ut.expect(l_result.get_object('answers').get_object('e').get_string('type'), 'recorded: refused').to_equal('refused');
+    ut.expect(warnings_of(l_result).get_size, 'recorded: no warning').to_equal(0);
+    ut.expect(l_result.get_object('usage').get_number('input_tokens'), 'recorded: usage').to_equal(153);
+
+    -- three questions, three refusals
+    l_result := decide_with(
+      '{"a":{"type":"boolean","instructions":"x"},"b":{"type":"choice","instructions":"y","criteria":{"u":null,"v":null}},"c":{"type":"score","instructions":"z","criteria":["l","h"]}}'
+    , '{"type":"refusal","name":"a"},{"type":"refusal","name":"b"},{"type":"refusal","name":"c"}');
+    ut.expect(l_result.get_object('answers').get_size, 'three answers').to_equal(3);
+    ut.expect(l_result.get_object('answers').get_object('a').get_string('type'), 'a').to_equal('refused');
+    ut.expect(l_result.get_object('answers').get_object('b').get_string('type'), 'b').to_equal('refused');
+    ut.expect(l_result.get_object('answers').get_object('c').get_string('type'), 'c').to_equal('refused');
+    ut.expect(l_result.get_object('provider_metadata').has('confidence'), 'no confidence at all').to_be_false();
+  end all_questions_refused;
+
+
+  procedure mixed_refusal_mapping
+  as
+    l_result  json_object_t;
+    l_answers json_object_t;
+  begin
+    -- the refusal is in the middle; the answers come back in question order
+    l_result := decide_with(
+      '{"flag":{"type":"boolean","instructions":"x"},"skip":{"type":"choice","instructions":"y","criteria":{"u":null,"v":null}}'
+      || ',"sev":{"type":"score","instructions":"z","criteria":["low","mid","high"]}'
+      || ',"pick":{"type":"choice","instructions":"w","criteria":{"a":null,"b":null}}}'
+    , '{"type":"predicate","name":"flag","probability":0.8}'
+      || ',{"type":"refusal","name":"skip"}'
+      || ',{"type":"score","name":"sev","score":1.2,"probabilities":[{"value":0,"label":"0","probability":0.1},{"value":1,"label":"1","probability":0.6},{"value":2,"label":"2","probability":0.3}],"confidence":0.7}'
+      || ',{"type":"choice","name":"pick","choice":"b","probabilities":[{"value":"a","probability":0.25},{"value":"b","probability":0.75}],"confidence":0.55}');
+
+    l_answers := l_result.get_object('answers');
+    ut.expect(l_answers.get_size, 'four answers').to_equal(4);
+    ut.expect(key_at(l_answers, 1), 'first id').to_equal('flag');
+    ut.expect(key_at(l_answers, 2), 'second id').to_equal('skip');
+    ut.expect(key_at(l_answers, 4), 'last id').to_equal('pick');
+
+    ut.expect(l_answers.get_object('flag').get_number('probability'), 'boolean').to_equal(0.8);
+    ut.expect(l_answers.get_object('skip').get_string('type'), 'refused').to_equal('refused');
+    ut.expect(l_answers.get_object('sev').get_number('score'), 'score').to_equal(1.2);
+    ut.expect(l_answers.get_object('sev').get_object('probabilities').get_number('1'), 'score probability').to_equal(0.6);
+    ut.expect(l_answers.get_object('pick').get_string('choice'), 'choice').to_equal('b');
+    ut.expect(l_answers.get_object('pick').get_object('probabilities').get_number('b'), 'choice probability').to_equal(0.75);
+
+    -- confidence for the answered questions only
+    ut.expect(l_result.get_object('provider_metadata').get_object('confidence').get_number('sev'), 'sev confidence').to_equal(0.7);
+    ut.expect(l_result.get_object('provider_metadata').get_object('confidence').get_number('pick'), 'pick confidence').to_equal(0.55);
+    ut.expect(key_count(l_result.get_object('provider_metadata').get_object('confidence')), 'no confidence for the refused question').to_equal(2);
+
+    -- the distribution checks still run for the answered questions
+    ut.expect(warnings_of(l_result).get_size, 'no warning').to_equal(0);
+    l_result := decide_with(
+      '{"skip":{"type":"boolean","instructions":"y"},"pick":{"type":"choice","instructions":"w","criteria":{"a":null,"b":null}}}'
+    , '{"type":"refusal","name":"skip"},{"type":"choice","name":"pick","choice":"a","probabilities":[{"value":"a","probability":0.25},{"value":"b","probability":0.25}]}');
+    ut.expect(warnings_of(l_result).get_size, 'a sum that is not 1 still warns next to a refusal').to_equal(1);
+  end mixed_refusal_mapping;
+
+
+  procedure refusal_still_counts_as_answer
+  as
+    c_two constant varchar2(500 char) :=
+      '{"p":{"type":"boolean","instructions":"a"},"q":{"type":"boolean","instructions":"b"}}';
+  begin
+    -- a refusal for a question that does not exist
+    expect_format_error(
+      c_q_pred
+    , response_of('{"type":"predicate","name":"p","probability":0.5},{"type":"refusal","name":"other"}')
+    , '%unknown question "other"%'
+    , 'refusal for an unknown question');
+
+    -- two entries for one question, one of them a refusal
+    expect_format_error(
+      c_q_pred
+    , response_of('{"type":"refusal","name":"p"},{"type":"predicate","name":"p","probability":0.5}')
+    , '%"p" twice%'
+    , 'refusal and answer for one question');
+    expect_format_error(
+      c_q_pred
+    , response_of('{"type":"refusal","name":"p"},{"type":"refusal","name":"p"}')
+    , '%"p" twice%'
+    , 'two refusals for one question');
+
+    -- a question with neither an answer nor a refusal
+    expect_format_error(
+      c_two
+    , response_of('{"type":"refusal","name":"p"}')
+    , '%no answer for the question "q"%'
+    , 'refusal for p, nothing for q');
+  end refusal_still_counts_as_answer;
 
 
   procedure refusal_without_name
   as
-    l_code    number;
-    l_message varchar2(4000 char);
   begin
-    enqueue('refusal_no_name_response');
-
-    try_decide('x', json_object_t.parse(c_q_pred), null, null, l_code, l_message);
-
-    ut.expect(l_code, 'error code').to_equal(-20309);
-    ut.expect(l_message, 'placeholder for the missing name').to_be_like('%(no name)%');
+    -- name null, as recorded
+    expect_format_error(c_q_pred, uc_ai_test_samples.get(c_prefix || 'refusal_no_name_response'), '%answer 0 has no name%', 'recorded, name null');
+    -- no name key at all
+    expect_format_error(c_q_pred, response_of('{"type":"refusal"}'), '%answer 0 has no name%', 'no name key');
+    -- a nameless refusal next to a normal answer: the count does not match
+    expect_format_error(
+      c_q_pred
+    , response_of('{"type":"predicate","name":"p","probability":0.5},{"type":"refusal","name":null}')
+    , '%answer 1 has no name%'
+    , 'nameless refusal next to an answer');
   end refusal_without_name;
 
 
-  procedure refusal_raw_is_logged
+  procedure refusal_raw_is_kept
   as
-    l_code    number;
-    l_message varchar2(4000 char);
-    l_last_id number;
-    l_rows    pls_integer;
+    l_result json_object_t;
+    l_raw    json_array_t;
   begin
-    select nvl(max(id), 0) into l_last_id from logger_logs;
-
     enqueue('refusal_response');
-    try_decide(
-      'text'
-    , json_object_t.parse(
-        '{"gay":{"type":"boolean","instructions":"The author is gay."}'
-        || ',"religion":{"type":"choice","instructions":"r","criteria":{"christian":null,"muslim":null,"jewish":null,"none":null}}}')
-    , null, null, l_code, l_message);
 
-    -- the sibling answer is not in the error but the logger keeps the whole response
-    select count(*)
-      into l_rows
-      from logger_logs
-     where id > l_last_id
-       and logger_level = 2
-       and sys.dbms_lob.instr(extra, '"name":"religion"') > 0;
+    l_result := uc_ai.decide('text', refusal_questions, uc_ai.c_provider_openai);
 
-    ut.expect(l_code, 'error code').to_equal(-20309);
-    ut.expect(l_rows, 'one error row holds the raw response').to_equal(1);
-  end refusal_raw_is_logged;
+    ut.expect(l_result.get_object('raw'), 'raw equals the provider response').to_equal(uc_ai_test_samples.get_json(c_prefix || 'refusal_response'));
+    l_raw := l_result.get_object('raw').get_array('answers');
+    ut.expect(treat(l_raw.get(0) as json_object_t).get_string('type'), 'the wire type stays in raw').to_equal('refusal');
+  end refusal_raw_is_kept;
 
 
   -- ---- provider errors -----------------------------------------------------------------
@@ -1067,22 +1186,6 @@ create or replace package body test_uc_ai_decisions_wire as
 
 
   -- ---- answers that do not match the questions ------------------------------------------
-
-  procedure expect_format_error(
-    p_questions in varchar2
-  , p_response  in clob
-  , p_like      in varchar2
-  , p_label     in varchar2
-  )
-  as
-    l_code    number;
-    l_message varchar2(4000 char);
-  begin
-    try_response(p_questions, p_response, l_code, l_message);
-    ut.expect(l_code, p_label || ': code').to_equal(uc_ai_error.c_err_format_processing);
-    ut.expect(l_message, p_label || ': message').to_be_like(p_like);
-  end expect_format_error;
-
 
   procedure answer_missing
   as

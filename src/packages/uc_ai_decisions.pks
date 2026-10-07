@@ -36,6 +36,11 @@ as
    *     boolean          {type, probability}
    *     choice           {type, choice, probabilities? {option: p}}
    *     score            {type, score, probabilities? {"0": p, "1": p, ...}}
+   *     refused          {type: "refused"}  the provider refused this question
+   *   A refused question has no choice, score or probability. The other questions
+   *   in the same response are answered as usual, and the call does not raise,
+   *   not even when every question is refused. Callers must check type before
+   *   they read choice, score or probability.
    *   usage              {input_tokens?, output_tokens?, total_tokens?}
    *   model              the model the provider reports, else the requested model
    *   provider_metadata  {confidence? {id: n}, usage? (the provider usage object)}
@@ -55,12 +60,12 @@ as
    *
    * After the response:
    *   -20302  the provider reported an error (HTTP status 400 or more, or an error body)
-   *   -20309  the provider refused to answer at least one question. The message
-   *           lists the question ids, the raw response goes to the logger. Other
-   *           answers in the same response are dropped.
    *   -20304  the answers do not match the questions: a missing, extra or
-   *           duplicate answer, a wrong answer type, a choice that is not an
-   *           option, a score outside the levels, a probability outside 0..1
+   *           duplicate answer, an answer without a name (also a refusal without
+   *           a name), a wrong answer type, a choice that is not an option, a
+   *           score outside the levels, a probability outside 0..1. A refused
+   *           answer skips the type, option, score and probability checks, but
+   *           still counts as the answer for its question.
    *   Distribution checks (probabilities do not sum to 1, a score that differs from
    *   the probability-weighted mean) add a text to warnings and do not raise. The
    *   tolerance is 1e-6 plus half a unit of the 2-decimal rounding (0.005) for

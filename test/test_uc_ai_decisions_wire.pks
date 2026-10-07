@@ -100,17 +100,26 @@ create or replace package test_uc_ai_decisions_wire as
   procedure missing_probabilities_are_fine;
 
   -- refusal ---------------------------------------------------------------------
-  --%test(A refusal raises -20309 with the id and leaks nothing else)
-  procedure refusal_raises;
+  --%test(A refused question gets {type: refused} and the sibling answer is kept)
+  procedure refusal_keeps_sibling_answer;
 
-  --%test(A refusal next to a valid answer raises and names only the refused id)
+  --%test(A refusal next to a valid answer does not raise and gives no warning)
   procedure refusal_among_valid_answers;
 
-  --%test(A refusal without a name raises with a placeholder)
+  --%test(When every question is refused the call still succeeds)
+  procedure all_questions_refused;
+
+  --%test(A refusal between answers keeps the order, the probabilities and the confidence of the others)
+  procedure mixed_refusal_mapping;
+
+  --%test(A refusal counts as the answer of its question: missing, extra and duplicate checks still apply)
+  procedure refusal_still_counts_as_answer;
+
+  --%test(A refusal without a name raises -20304)
   procedure refusal_without_name;
 
-  --%test(The raw response of a refusal goes to the log)
-  procedure refusal_raw_is_logged;
+  --%test(raw keeps the refusal entry as the provider sent it)
+  procedure refusal_raw_is_kept;
 
   -- provider errors ---------------------------------------------------------------
   --%test(404 model_not_found raises -20302 with the provider message)

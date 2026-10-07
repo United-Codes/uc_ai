@@ -299,7 +299,9 @@ as
    *
    * Returns a provider-neutral JSON object: answers (keyed by question id, with
    * probabilities), usage, model, provider_metadata (confidence), warnings and raw
-   * (the provider response). See uc_ai_decisions for the full shape.
+   * (the provider response). See uc_ai_decisions for the full shape. A question the
+   * provider refuses gets the answer {"type": "refused"} and the call does not
+   * raise; check the answer type before you read choice, score or probability.
    *
    * p_provider is required; the supported provider is c_provider_openai. p_model
    * null uses the provider default (OpenAI: uc_ai_openai.c_model_gpt_6_luna).
@@ -309,8 +311,7 @@ as
    *
    * Malformed questions or input raise -20503, input the provider cannot take
    * raises -20508 (both before any request is sent). A provider error raises
-   * -20302, a refusal on any question -20309 (uc_ai_error.c_err_decision_refused),
-   * answers that do not match the questions -20304. Probabilities that do not
+   * -20302, answers that do not match the questions -20304. Probabilities that do not
    * add up are not errors: they add a text to warnings.
    *
    * Settings such as g_apex_web_credential and g_base_url come from the package
