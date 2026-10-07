@@ -121,6 +121,10 @@ If a new model is not yet available as a constant, you can pass the model name d
 
 Without `uc_ai.g_base_url`, UC AI sends the request to `https://api.typesafe.ai/v1/systemone`. If you set `uc_ai.g_base_url`, for example to a proxy, UC AI sends the request to `<g_base_url>/systemone`.
 
+## Decision agents
+
+A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) with the provider `typesafe` runs `uc_ai.decide` as an agent. It keeps the credential in its `model_config`.
+
 ## Usage Example
 
 The example asks a choice question and a boolean question about a customer message. See [Decide](/products/uc-ai/docs/api/decide/#route-a-support-message) for the full result and for a routing example.

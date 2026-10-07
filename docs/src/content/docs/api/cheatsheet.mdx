@@ -119,6 +119,8 @@ dbms_output.put_line( l_result.get_clob('final_message') );
 
 Read `type` before you read `choice`, `score` or `probability`. A `refused` answer has none of them.
 
+A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) runs `uc_ai.decide` as an agent. Create it with `p_agent_type => uc_ai_agents_api.c_type_decision` and `p_decision_config` (`provider`, `model`, `state_template`, `questions`, `options`, `model_config`). The `final_message` of `execute_agent` is the same object without `raw`.
+
 ## Providers
 
 ```sql

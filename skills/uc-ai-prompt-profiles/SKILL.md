@@ -82,6 +82,7 @@ Use provider/model package constants, never string literals; model constants cha
 - Names may contain only **alphanumerics and underscores** (`{valid_name_123}`).
 - Matching against `p_parameters` keys is **case-insensitive** (`{Country}` matches a parameter `country`).
 - Every placeholder must have a parameter — a missing one raises an error (ORA-20506, `Missing parameter for placeholder: {text}`) before any AI call is made. Extra parameters are ignored.
+- UC AI fills the placeholders in **one pass** and inserts each value as it is: a value that contains `{other}` stays unchanged, a backslash stays, and a value over 32k characters works.
 
 ## Executing a profile
 

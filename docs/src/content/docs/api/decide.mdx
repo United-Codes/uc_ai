@@ -260,6 +260,8 @@ If no web credential is set, UC AI reads the key with your function `uc_ai_get_k
 
 UC AI sets a transfer timeout of 300 seconds for a decision call.
 
+A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) does not read these globals. It reads the credential and the base URL from the `model_config` of the agent.
+
 ## Logging
 
 UC AI never writes the request body to the log. The body holds your text and the Base64 data of the images. The log holds the provider, the model, the number of questions, the number of files and the size in bytes.
@@ -500,11 +502,231 @@ answers: {"fruit":{"type":"choice","choice":"apple","probabilities":{"apple":1,"
 usage: {"input_tokens":180,"output_tokens":0,"total_tokens":180}
 ```
 
-## Use a decision as a workflow step
+## Decision agents
 
-A workflow has no step type for a decision. A [PL/SQL step](/products/uc-ai/docs/guides/multi-agent-systems/workflows/#plsql-steps) can call `uc_ai.decide` and return the result as a CLOB. UC AI stores the result as the state of the step. A later step can then use a condition on the answers.
+A decision agent runs `uc_ai.decide` as an agent. It keeps the questions, the provider, the model, and the credential in its configuration. The run writes an execution row with the token counts, and a workflow can use the answers in a condition. Use a decision agent when the decision is one step of a multi-agent process. See [Decision agents](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/).
 
-The example uses a function that holds the call. Create it first. The function removes `raw` from the result, to keep the workflow state small.
+## Route a ticket with a workflow
+
+The example is a workflow that routes a customer ticket. A decision agent asks which team handles the ticket. A conditional workflow then runs the profile agent of that team. If OpenAI refuses the question, the workflow runs a profile agent that writes a note for a person.
+
+The workflow has four steps:
+
+1. The decision agent `ticket_router` answers the question `department`.
+2. The profile agent `billing_reply` runs if the answer is `billing`.
+3. The profile agent `support_reply` runs if the answer is `support`.
+4. The profile agent `human_review_note` runs if OpenAI refused the question.
+
+Run the blocks as a user that has the web credential `OPENAI`. The profiles and the decision agent name this credential in their model configuration. The blocks do not set a session global.
+
+### Create the profile agents
+
+Each profile agent has a prompt profile. The three profiles have the same structure. They write a reply or a note from the customer message.
+
+```sql
+DECLARE
+  l_id NUMBER;
+BEGIN
+  l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                   => 'BILLING_REPLY_PROFILE',
+    p_description            => 'First reply to a billing ticket',
+    p_system_prompt_template => 'You write the first reply of the billing team to a customer. Write at most three sentences. Do not promise a refund.',
+    p_user_prompt_template   => 'Customer message: {message}',
+    p_provider               => uc_ai.c_provider_openai,
+    p_model                  => uc_ai_openai.c_model_gpt_5_6_luna,
+    p_model_config_json      => '{"g_apex_web_credential": "OPENAI"}',
+    p_status                 => uc_ai_prompt_profiles_api.c_status_active
+  );
+  l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                   => 'SUPPORT_REPLY_PROFILE',
+    p_description            => 'First reply to a support ticket',
+    p_system_prompt_template => 'You write the first reply of the support team to a customer. Write at most three sentences. Ask for the app version if it is missing.',
+    p_user_prompt_template   => 'Customer message: {message}',
+    p_provider               => uc_ai.c_provider_openai,
+    p_model                  => uc_ai_openai.c_model_gpt_5_6_luna,
+    p_model_config_json      => '{"g_apex_web_credential": "OPENAI"}',
+    p_status                 => uc_ai_prompt_profiles_api.c_status_active
+  );
+  l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+    p_code                   => 'HUMAN_REVIEW_NOTE_PROFILE',
+    p_description            => 'Note for a person who reviews a ticket',
+    p_system_prompt_template => 'You write an internal note for a person who reviews a ticket by hand. State in one sentence that the automatic routing gave no answer. Then summarize the customer message in one sentence. Do not answer the customer.',
+    p_user_prompt_template   => 'Customer message: {message}',
+    p_provider               => uc_ai.c_provider_openai,
+    p_model                  => uc_ai_openai.c_model_gpt_5_6_luna,
+    p_model_config_json      => '{"g_apex_web_credential": "OPENAI"}',
+    p_status                 => uc_ai_prompt_profiles_api.c_status_active
+  );
+
+  l_id := uc_ai_agents_api.create_agent(
+    p_code                => 'billing_reply',
+    p_description         => 'Writes the first reply to a billing ticket',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'BILLING_REPLY_PROFILE',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+  l_id := uc_ai_agents_api.create_agent(
+    p_code                => 'support_reply',
+    p_description         => 'Writes the first reply to a support ticket',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'SUPPORT_REPLY_PROFILE',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+  l_id := uc_ai_agents_api.create_agent(
+    p_code                => 'human_review_note',
+    p_description         => 'Writes a note for a person who reviews a ticket',
+    p_agent_type          => uc_ai_agents_api.c_type_profile,
+    p_prompt_profile_code => 'HUMAN_REVIEW_NOTE_PROFILE',
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+
+  COMMIT; -- agents must be committed before they can be executed
+END;
+/
+```
+
+### Create the decision agent
+
+The decision agent asks one question. Its `state_template` is the placeholder `{message}`. The workflow passes the customer message in this input parameter.
+
+```sql
+DECLARE
+  l_id     NUMBER;
+  l_config CLOB;
+BEGIN
+  l_config := q'[{
+    "provider": "openai",
+    "model": "gpt-6-luna",
+    "state_template": "{message}",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this message?",
+        "criteria": {
+          "billing": "Payments, invoices, and refunds.",
+          "support": "Product usage and technical problems."
+        }
+      }
+    },
+    "model_config": {
+      "g_apex_web_credential": "OPENAI"
+    }
+  }]';
+
+  l_id := uc_ai_agents_api.create_agent(
+    p_code            => 'ticket_router',
+    p_description     => 'Decides which team handles a ticket',
+    p_agent_type      => uc_ai_agents_api.c_type_decision,
+    p_decision_config => l_config,
+    p_status          => uc_ai_agents_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+### Create and run the workflow
+
+The workflow type `conditional` runs the steps in order. A step with a `condition` runs only if the condition is true. See [Conditional workflow](/products/uc-ai/docs/guides/multi-agent-systems/workflows/#conditional-workflow).
+
+```sql
+DECLARE
+  l_def    CLOB;
+  l_id     NUMBER;
+  l_result json_object_t;
+  l_keys   json_key_list;
+BEGIN
+  l_def := q'[{
+    "workflow_type": "conditional",
+    "steps": [
+      {
+        "agent_code": "ticket_router",
+        "input_mapping": { "message": "{$.input.message}" },
+        "output_key": "route"
+      },
+      {
+        "agent_code": "billing_reply",
+        "condition": "'{$.steps.route.answers.department.choice}' = 'billing'",
+        "input_mapping": { "message": "{$.input.message}" },
+        "output_key": "billing_draft"
+      },
+      {
+        "agent_code": "support_reply",
+        "condition": "'{$.steps.route.answers.department.choice}' = 'support'",
+        "input_mapping": { "message": "{$.input.message}" },
+        "output_key": "support_draft"
+      },
+      {
+        "agent_code": "human_review_note",
+        "condition": "'{$.steps.route.answers.department.type}' = 'refused'",
+        "input_mapping": { "message": "{$.input.message}" },
+        "output_key": "review_note"
+      }
+    ]
+  }]';
+
+  l_id := uc_ai_agents_api.create_agent(
+    p_code                => 'ticket_workflow',
+    p_description         => 'Routes a ticket and drafts the first reply',
+    p_agent_type          => uc_ai_agents_api.c_type_workflow,
+    p_workflow_definition => l_def,
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+  COMMIT;
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'ticket_workflow',
+    p_input_parameters => json_object_t('{"message": "I was charged twice for my order. Please refund the extra charge."}'),
+    p_session_id       => 'doc_decision_wf_billing'
+  );
+
+  DBMS_OUTPUT.PUT_LINE('status: ' || l_result.get_string('status'));
+  DBMS_OUTPUT.PUT_LINE('final_message: ' || l_result.get('final_message').to_string);
+  l_keys := l_result.get_object('steps').get_keys;
+  FOR i IN 1 .. l_keys.count LOOP
+    DBMS_OUTPUT.PUT_LINE('step ' || l_keys(i) || ': ' || l_result.get_object('steps').get(l_keys(i)).to_string);
+  END LOOP;
+END;
+/
+```
+
+Output of a call on 2026-10-07. The output is complete. The text of the reply is different in each call:
+
+```text
+status: completed
+final_message: "We’re sorry for the billing issue. Please provide your order number and the dates and amounts of both charges so we can investigate the duplicate payment and determine the appropriate resolution."
+step route: {"answers":{"department":{"type":"choice","choice":"billing","probabilities":{"billing":1,"support":0}}},"warnings":[],"model":"gpt-6-luna","provider_metadata":{"usage":{"input_tokens":135,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":135},"confidence":{"department":1}}}
+step billing_draft: "We’re sorry for the billing issue. Please provide your order number and the dates and amounts of both charges so we can investigate the duplicate payment and determine the appropriate resolution."
+```
+
+A step that does not run has no entry in `steps`. Here `support_draft` and `review_note` are missing. The `final_message` of the workflow is the output of the last step that ran.
+
+A second run with the message `The export button in your app does nothing since the last update.` gave this output. The decision agent chose `support`, and the profile agent `support_reply` wrote the reply:
+
+```text
+status: completed
+final_message: "Sorry you’re having trouble with the export button after the update. Could you tell us which app version you’re using and what device and operating system it’s running on? If possible, please also let us know whether anything happens at all when you tap Export (such as an error message or loading indicator)."
+step route: {"answers":{"department":{"type":"choice","choice":"support","probabilities":{"billing":0,"support":1}}},"warnings":[],"model":"gpt-6-luna","provider_metadata":{"usage":{"input_tokens":134,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":134},"confidence":{"department":1}}}
+step support_draft: "Sorry you’re having trouble with the export button after the update. Could you tell us which app version you’re using and what device and operating system it’s running on? If possible, please also let us know whether anything happens at all when you tap Export (such as an error message or loading indicator)."
+```
+
+Notes on this example:
+
+- The fourth step reads `type`, not `choice`. A refused question has no `choice`, and a condition with a path that does not resolve is false, also with `!=`. See [Branch on a refused answer](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/#branch-on-a-refused-answer). In the two runs above, OpenAI refused no question, so the fourth step did not run.
+- To send an unsure routing to a person too, add a fifth step with a numeric condition, for example `{$.steps.route.provider_metadata.confidence.department} < 0.8`. Use a separate step. A condition with `or` is false if one of its paths does not resolve, and a refused question has no `confidence`.
+- The tokens of the decision step count in the run. In the first run, `ticket_router` used 135 input tokens and `billing_reply` used 52 input tokens and 102 output tokens. The session totals show 187 and 102. See [Read the tokens](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/#read-the-tokens).
+
+To delete the example, call `uc_ai_agents_api.purge_agent` for each of the five agent codes. Commit, and delete the three prompt profiles with `uc_ai_prompt_profiles_api.delete_prompt_profile`. The profiles stay after a purge.
+
+## Call decide from your own code
+
+A `plsql` step of a workflow can call `uc_ai.decide` from your own function. Use this route only if you need the call inside your own PL/SQL logic. A decision agent is the better choice for a decision step. The `plsql` route has two limits:
+
+- **UC AI does not count the tokens.** The execution rows of the workflow have 0 tokens for the step. In a run on 2026-10-07, `total_input_tokens` and `total_output_tokens` in `uc_ai_agent_executions` were both 0, and the step used 145 input tokens. The execution hook does not see the call. The tokens are in the step state, at `$.steps.route.usage`.
+- **The call reads the session globals.** The values come from the packages `uc_ai`, `uc_ai_openai`, and `uc_ai_typesafe`, as for a direct call. They include the credential and the base URL. Set them in the same session, before you call `execute_agent`.
+
+The function holds the call. It removes `raw` from the result, to keep the workflow state small.
 
 ```sql
 create or replace function triage_decide (p_message in clob) return clob
@@ -533,78 +755,16 @@ end triage_decide;
 /
 ```
 
-The workflow has three steps. The first step calls the function. The two other steps have a `condition` on the `choice` of the `department` answer. Only the step with the matching condition runs.
+The step of the workflow calls the function and stores the result under its `output_key`:
 
-```sql
-declare
-  l_def    clob;
-  l_id     number;
-  l_result json_object_t;
-begin
-  uc_ai_openai.g_apex_web_credential := 'OPENAI';
-
-  l_def := q'[{
-    "workflow_type": "sequential",
-    "steps": [
-      {
-        "step_type": "plsql",
-        "plsql_function_call": "return triage_decide(json_object_t(:parameters).get_object('input').get_clob('message'));",
-        "output_key": "route"
-      },
-      {
-        "step_type": "plsql",
-        "condition": "'{$.steps.route.answers.department.choice}' = 'billing'",
-        "plsql_function_call": "return '{\"queue\":\"billing_team\"}';",
-        "output_key": "ticket_billing"
-      },
-      {
-        "step_type": "plsql",
-        "condition": "'{$.steps.route.answers.department.choice}' = 'support'",
-        "plsql_function_call": "return '{\"queue\":\"support_team\"}';",
-        "output_key": "ticket_support"
-      }
-    ]
-  }]';
-
-  l_id := uc_ai_agents_api.create_agent(
-    p_code                => 'ticket_router'
-  , p_description         => 'Routes a message with uc_ai.decide'
-  , p_agent_type          => uc_ai_agents_api.c_type_workflow
-  , p_workflow_definition => l_def
-  , p_status              => uc_ai_agents_api.c_status_active
-  );
-  commit; -- agents must be committed before they can be executed
-
-  l_result := uc_ai_agents_api.execute_agent(
-    p_agent_code       => 'ticket_router'
-  , p_input_parameters => json_object_t('{"message": "I was charged twice for my order. Please refund the extra charge."}')
-  , p_session_id       => uc_ai_agents_api.generate_session_id
-  );
-
-  sys.dbms_output.put_line('status: ' || l_result.get_string('status'));
-  sys.dbms_output.put_line('final_message: ' || l_result.get_clob('final_message'));
-  sys.dbms_output.put_line('route: ' || l_result.get_object('steps').get_object('route').get_object('answers').to_string);
-  sys.dbms_output.put_line('route usage: ' || l_result.get_object('steps').get_object('route').get_object('usage').to_string);
-end;
-/
+```json
+{
+  "step_type": "plsql",
+  "plsql_function_call": "return triage_decide(json_object_t(:parameters).get_object('input').get_clob('message'));",
+  "output_key": "route"
+}
 ```
 
-Output of a call on 2026-10-07. The output is complete:
+Later steps use the answers in conditions, as in the example above. If `uc_ai.decide` raises an error, the `plsql` step raises it. A refused answer has no `choice`: use a condition on `type`.
 
-```text
-status: completed
-final_message: {"queue":"billing_team"}
-route: {"department":{"type":"choice","choice":"billing","probabilities":{"billing":1,"support":0,"sales":0}}}
-route usage: {"input_tokens":145,"output_tokens":0,"total_tokens":145}
-```
-
-Notes on this example:
-
-- The PL/SQL step runs in your database session. Set the web credential in the same session, before you call `execute_agent`.
-- Put single quotes around a string reference in a condition, as in `'{$.steps.route.answers.department.choice}'`. See [Conditional workflow](/products/uc-ai/docs/guides/multi-agent-systems/workflows/).
-- If `uc_ai.decide` raises an error, the PL/SQL step raises it.
-- A refused `department` answer has no `choice`. Make sure that your workflow handles this case. The example does not test it.
-
-**Known gap.** UC AI does not add the tokens of a PL/SQL step to the totals of the run. In the run above, `total_input_tokens` and `total_output_tokens` in `uc_ai_agent_executions` were both 0, and the step used 145 input tokens. The execution hook does not see the call either. The tokens of the step are in the step state, at `$.steps.route.usage`.
-
-Delete the example objects when you are done. Call `uc_ai_agents_api.purge_agent('ticket_router')`, commit, and drop the function `triage_decide`.
+Delete the function when you are done: `drop function triage_decide`.

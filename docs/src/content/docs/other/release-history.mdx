@@ -7,11 +7,18 @@ sidebar:
 
 ## Next release
 
+To upgrade first run `v26.4_to_v26.5.sql` followed by the `upgrade_packages.sql` script. The migration adds the column `uc_ai_agents.decision_config` and the agent type `decision`. It adds the column `uc_ai_agent_messages.tool_call_id` too.
+
+**Behavior notes**:
+
+- **Placeholders in a prompt profile are filled in one pass.** UC AI now inserts each value as it is. A value that contains `{other}` no longer expands to the value of another parameter. A backslash in a value stays as it is, and UC AI no longer reads it as an escape. A value of more than 32,767 characters now works. Before, it raised `ORA-06502`. A profile that relied on the old expansion of a nested placeholder needs the final text in the value. See [Prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/).
+
 **Features**:
 
 Decisions:
 
 - **[Decide](/products/uc-ai/docs/api/decide/)** (`uc_ai.decide`, experimental): get typed answers with probabilities to several named questions about one text or image. A question is a choice, a score or a boolean. One call evaluates all questions, and the result has the same shape for every provider. Two providers support it: **OpenAI** (the Decisions API with `uc_ai_openai.c_model_gpt_6_luna`, with images) and the new provider **TypeSafe** (`uc_ai.c_provider_typesafe` with `uc_ai_typesafe.c_model_jev_latest`, text only). TypeSafe supports decisions only. It has no chat and no embeddings. The provider APIs are in beta, so the result can still change. See the pages for [OpenAI](/products/uc-ai/docs/providers/openai/#decisions) and [TypeSafe](/products/uc-ai/docs/providers/typesafe/).
+- **[Decision agents](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/)** (new agent type `decision`): run `uc_ai.decide` as an agent. Create one with `uc_ai_agents_api.c_type_decision` and a `p_decision_config`. This JSON holds the provider, the model, the `state_template`, and the questions. An optional `model_config` holds the credential and the base URL. A decision agent has an execution row with the token counts, so the session totals include it. A workflow uses it as a normal `agent` step, and a condition can read `{$.steps.<key>.answers.<id>.choice}`. A refused question has no `choice`: branch on `answers.<id>.type = 'refused'`. A decision agent cannot chat. It cannot be a handoff target or a conversation participant. The cost budgets of UC AI Pro do not price a decision agent yet. See [Route a ticket with a workflow](/products/uc-ai/docs/api/decide/#route-a-ticket-with-a-workflow).
 
 ## v26.4
 

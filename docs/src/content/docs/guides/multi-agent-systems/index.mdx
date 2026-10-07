@@ -20,6 +20,11 @@ One large prompt is not necessary. You break the problem into smaller steps, and
     href="/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/"
   />
   <LinkCard
+    title="Decision Agents"
+    description="Run uc_ai.decide as an agent: typed answers with probabilities for a workflow condition"
+    href="/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/"
+  />
+  <LinkCard
     title="Workflows"
     description="Sequential and loop patterns for deterministic multi-step pipelines"
     href="/products/uc-ai/docs/guides/multi-agent-systems/workflows/"
@@ -51,6 +56,7 @@ One large prompt is not necessary. You break the problem into smaller steps, and
 | Pattern                      | Use when...                                                       | Example                                                             |
 | ---------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
 | **Profile agent**            | A single AI call with execution tracking and composability        | Classify a support ticket, answer a question                        |
+| **Decision agent**           | A workflow or your code must branch on a typed answer, with its probability | Route a ticket to billing or support                                |
 | **Sequential workflow**      | Steps must run in a fixed order, each building on the previous    | Classify text, then summarize based on category                     |
 | **Loop workflow**            | You need iterative refinement until a quality threshold is met    | Generate a haiku, rate it, improve it, repeat                       |
 | **Orchestrator**             | A central AI must decide which agents to call, and in what order  | Travel planner delegating to calendar, flight, and hotel agents     |
@@ -91,6 +97,9 @@ A profile agent runs its prompt profile on each call. You can then compose these
 | Orchestrator | `c_type_orchestrator` | AI-driven delegation to specialized agents |
 | Handoff      | `c_type_handoff`      | Agents transfer control to each other      |
 | Conversation | `c_type_conversation` | Multiple agents collaborate in dialogue    |
+| Decision     | `c_type_decision`     | Typed answers with probabilities through `uc_ai.decide` |
+
+A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) has no prompt profile. It holds a `decision_config` with the questions, and it returns typed answers.
 
 ### Executing agents
 
@@ -642,6 +651,6 @@ glance"** section with its exact output.
 - **Start simple**: begin with a profile agent. Compose workflows or conversations later, when the task grows
 - **Write a clear agent description**: an orchestrator uses the agent descriptions to decide which agent to call. A clear description improves the delegation
 - **Set the limits**: always set `max_turns`, `max_iterations`, and `max_delegations`. These limits stop a runaway run
-- **Use structured output for a decision point**: if an exit condition or the routing logic depends on the output of an agent, use a response schema. The values are then reliable and easy to parse
+- **Use structured output for a decision point**: if an exit condition or the routing logic depends on the output of an agent, use a response schema. The values are then reliable and easy to parse. A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) also gives the probability of each answer
 - **Match the model to the task**: use a capable model for an orchestrator or a moderator, because it must make decisions. Use a faster model for a leaf agent with one narrow task
 - **Test with small limits first**: start with `max_turns: 2` or `max_iterations: 2`. Validate the flow, then increase the limits

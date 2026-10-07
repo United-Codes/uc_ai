@@ -46,14 +46,14 @@ scripts/
 |---------|---------|
 | `uc_ai` | Main entry point: `generate_text()`, `generate_embeddings()`, provider/model constants |
 | `uc_ai_anthropic`, `uc_ai_google`, `uc_ai_openai`, `uc_ai_oci`, `uc_ai_ollama`, `uc_ai_xai`, `uc_ai_openrouter`, `uc_ai_typesafe` | Provider implementations (`uc_ai_typesafe` holds constants and the credential only: TypeSafe jev supports `uc_ai.decide`, not chat) |
-| `uc_ai_agents_api` | Agent CRUD, validation, versioning |
+| `uc_ai_agents_api` | Agent CRUD, validation, versioning (agent type `decision` runs `uc_ai.decide` as an agent) |
 | `uc_ai_agent_exec_api` | Agent execution engine (sequential, conditional, parallel, loop workflows) |
 | `uc_ai_agent_workflow_api` | Workflow helpers: input mapping, condition evaluation, step execution |
 | `uc_ai_tools_api` | Tool/function-calling registration and execution |
 | `uc_ai_prompt_profiles_api` | Versioned prompt templates with `{var}` substitution |
 | `uc_ai_memory` | Agent memory: virtual filesystem behind the `MEMORY` tool, store scoping, MEMORY PROTOCOL prompt block |
 | `uc_ai_ocr` | OCR dispatcher and adapters behind `uc_ai.ocr` / `uc_ai.ocr_text` (Mistral, OCI Document Understanding, Ollama) |
-| `uc_ai_decisions` | Typed decisions dispatcher and adapters behind `uc_ai.decide` (OpenAI Decisions, TypeSafe jev); experimental |
+| `uc_ai_decisions` | Typed decisions dispatcher and adapters behind `uc_ai.decide` and the `decision` agent type (OpenAI Decisions, TypeSafe jev); experimental |
 | `uc_ai_message_api` | Message construction and conversation history |
 | `uc_ai_structured_output` | JSON schema-based output validation |
 | `uc_ai_logger` | Logging wrapper around OraOpenSource Logger |
@@ -191,5 +191,6 @@ Check these files for context on specific topics:
 | Tools / function calling guide | `docs/src/content/docs/guides/tools.mdx` |
 | Prompt profiles guide | `docs/src/content/docs/guides/prompt-profiles.mdx` |
 | Agentic AI guide | `docs/src/content/docs/guides/agentic-ai.mdx` |
+| Decision agents guide | `docs/src/content/docs/guides/multi-agent-systems/decision-agents.mdx` |
 | Structured output guide | `docs/src/content/docs/guides/structured_output.mdx` |
 | Release history | `docs/src/content/docs/other/release-history.mdx` |

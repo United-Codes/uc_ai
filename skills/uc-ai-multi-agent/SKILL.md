@@ -17,11 +17,14 @@ UC AI lets you compose specialized AI agents into workflows, orchestrators, and 
 | **Sequential workflow** | Steps must run in a fixed order, each building on the previous | Classify text, then summarize based on category |
 | **Loop workflow** | Iterative refinement until a quality threshold is met | Generate a haiku, rate it, improve it, repeat |
 | **Orchestrator** | A central AI should decide which agents to call and in what order | Travel planner delegating to calendar, flight, and hotel agents |
+| **Decision agent** | A workflow or your code must branch on a typed answer and its probability | Route a ticket to billing or support |
 | **Handoff** | Agents pass control to each other based on their own output | Support triage agent handing off to a technical or sales specialist |
 | **Round-robin conversation** | Multiple perspectives should take turns in a fixed order | Brainstormer, critic, and synthesizer collaborate on a plan |
 | **AI-driven conversation** | A moderator should dynamically decide who speaks next | Panel discussion where the moderator picks the most relevant expert |
 
 Deep dives sit next to this file: **workflows.md** (sequential/conditional/loop JSON), **orchestrator.md** (delegation config), **conversations.md** (round-robin and AI-driven dialogue).
+
+A **decision agent** (`c_type_decision`) has no prompt profile. It runs `uc_ai.decide` (experimental; OpenAI and TypeSafe) with a `p_decision_config` JSON: `provider`, optional `model`, `state_template` (`{name}` placeholders from the input parameters), `questions`, optional `options`, and optional `model_config` for the credential (`{"g_apex_web_credential": "OPENAI"}`) and base URL. A decision agent does not read the session globals. `final_message` is a JSON object (`answers`, `warnings`, `model`, `provider_metadata`), so a workflow condition can read `{$.steps.route.answers.department.choice}`. A refused question has no `choice`: a path that does not resolve makes every condition false, also `!=`, so branch on `answers.<id>.type = 'refused'`. A decision agent cannot chat (no handoff target, no conversation participant, no `p_follow_up_message`). The cost budgets of UC AI Pro do not price it yet. Docs: https://www.united-codes.com/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/
 
 An agent that must remember across conversations gets a memory store — see the `uc-ai-agent-memory` skill.
 
@@ -46,11 +49,12 @@ function create_agent(
   p_max_iterations         in uc_ai_agents.max_iterations%type default null,
   p_max_history_messages   in uc_ai_agents.max_history_messages%type default null,
   p_version                in uc_ai_agents.version%type default 1,
-  p_status                 in uc_ai_agents.status%type default c_status_draft
+  p_status                 in uc_ai_agents.status%type default c_status_draft,
+  p_decision_config        in uc_ai_agents.decision_config%type default null
 ) return uc_ai_agents.id%type;
 ```
 
-Agent type constants: `uc_ai_agents_api.c_type_profile`, `c_type_workflow`, `c_type_orchestrator`, `c_type_handoff`, `c_type_conversation`. Status constants: `c_status_draft`, `c_status_active`, `c_status_archived`. **Always use these constants, never string literals.**
+Agent type constants: `uc_ai_agents_api.c_type_profile`, `c_type_workflow`, `c_type_orchestrator`, `c_type_handoff`, `c_type_conversation`, `c_type_decision`. Status constants: `c_status_draft`, `c_status_active`, `c_status_archived`. **Always use these constants, never string literals.**
 
 Complete example — profile + agent, activated:
 
