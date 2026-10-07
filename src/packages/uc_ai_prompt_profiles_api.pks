@@ -233,6 +233,9 @@ as
    * @param p_model_override      Override the profile's model setting
    * @param p_config_override     Override the profile's model_config_json setting
    * @param p_files               Optional files (documents/images) to attach to the user message
+   * @param p_prompt_addendum     Optional text appended to the rendered system prompt, after a blank
+   *                              line and after the MEMORY PROTOCOL block. Null or empty text leaves
+   *                              the prompt unchanged.
    *
    * @return                      JSON object response from AI provider
    */
@@ -243,7 +246,8 @@ as
     p_provider_override in uc_ai_prompt_profiles.provider%type default null,
     p_model_override    in uc_ai_prompt_profiles.model%type default null,
     p_config_override   in json_object_t default null,
-    p_files             in uc_ai_message_api.t_files default null
+    p_files             in uc_ai_message_api.t_files default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t;
 
 

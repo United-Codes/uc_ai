@@ -981,7 +981,8 @@ create or replace package body uc_ai_prompt_profiles_api as
     p_provider_override in uc_ai_prompt_profiles.provider%type default null,
     p_model_override    in uc_ai_prompt_profiles.model%type default null,
     p_config_override   in json_object_t default null,
-    p_files             in uc_ai_message_api.t_files default null
+    p_files             in uc_ai_message_api.t_files default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t
   as
     l_scope          uc_ai_logger.scope := gc_scope_prefix || 'execute_profile';
@@ -1024,6 +1025,18 @@ create or replace package body uc_ai_prompt_profiles_api as
         , p_extra => sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
         );
     end;
+
+    -- Caller-supplied addendum (execute_agent p_prompt_addendum), after the
+    -- memory protocol so the protocol keeps its place in the prompt. Only the
+    -- first turn renders the prompt; a follow-up turn replays the stored system
+    -- message, so the addendum is never added twice.
+    if p_prompt_addendum is not null and sys.dbms_lob.getlength(p_prompt_addendum) > 0 then
+      if l_system_prompt is null or sys.dbms_lob.getlength(l_system_prompt) = 0 then
+        l_system_prompt := p_prompt_addendum;
+      else
+        l_system_prompt := l_system_prompt || chr(10) || chr(10) || p_prompt_addendum;
+      end if;
+    end if;
 
     -- Optional execution-hook augmentation of the rendered system prompt
     -- (e.g. an extension injecting standing instructions). Runs after the

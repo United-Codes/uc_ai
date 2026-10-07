@@ -585,6 +585,12 @@ as
    *                            and the Pro memory layer can scope a store by one of the keys.
    *                            Inherited by every nested run. Bound to the session on the first
    *                            turn: a later turn can add a key but cannot change one.
+   * @param p_prompt_addendum   Text appended to the rendered system prompt of this run, after a blank
+   *                            line and after the MEMORY PROTOCOL block. Profile and orchestrator
+   *                            agents only; any other agent type raises an error. Applied on the
+   *                            first turn of a conversation only: a follow-up turn reuses the
+   *                            system message of the stored history, so it ignores this parameter.
+   *                            Null or empty text leaves the prompt unchanged.
    *
    * @return                    JSON result object
    */
@@ -598,7 +604,8 @@ as
     p_response_schema   in json_object_t default null,
     p_files             in uc_ai_message_api.t_files default null,
     p_extra_tool_tag    in varchar2 default null,
-    p_run_context       in json_object_t default null
+    p_run_context       in json_object_t default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t;
 
 
@@ -622,6 +629,12 @@ as
    *                            and the Pro memory layer can scope a store by one of the keys.
    *                            Inherited by every nested run. Bound to the session on the first
    *                            turn: a later turn can add a key but cannot change one.
+   * @param p_prompt_addendum   Text appended to the rendered system prompt of this run, after a blank
+   *                            line and after the MEMORY PROTOCOL block. Profile and orchestrator
+   *                            agents only; any other agent type raises an error. Applied on the
+   *                            first turn of a conversation only: a follow-up turn reuses the
+   *                            system message of the stored history, so it ignores this parameter.
+   *                            Null or empty text leaves the prompt unchanged.
    *
    * @return                    JSON result object
    */
@@ -634,7 +647,8 @@ as
     p_response_schema   in json_object_t default null,
     p_files             in uc_ai_message_api.t_files default null,
     p_extra_tool_tag    in varchar2 default null,
-    p_run_context       in json_object_t default null
+    p_run_context       in json_object_t default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t;
 
 
@@ -770,7 +784,10 @@ as
    *
    * @param p_session_id  The session to read
    *
-   * @return              Cursor with the ordered message rows
+   * @return              Cursor with the ordered message rows. The last column,
+   *                      tool_call_id, holds the provider tool call id on
+   *                      tool_call and tool_result rows. It is unique only
+   *                      within one execution_id.
    */
   function get_session_messages(
     p_session_id in varchar2

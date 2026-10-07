@@ -163,6 +163,8 @@ begin ut.run('test_uc_ai_memory'); end;                  -- 84
 /
 begin ut.run('test_uc_ai_run_context'); end;             -- 46
 /
+begin ut.run('test_uc_ai_agent_prompt_addendum'); end;   -- 10
+/
 begin ut.run('test_uc_ai_hook'); end;                    -- 12
 /
 begin ut.run('test_uc_ai_wire'); end;                    -- 24
@@ -195,11 +197,12 @@ The last two of the wire suites do call `execute_agent`, but only on an agent th
 must fail first — uncommitted, or pointing at a missing prompt profile — so no
 provider is reached.
 
-The four agent suites in this set reach no provider either, each for its own
+The five agent suites in this set reach no provider either, each for its own
 reason: `agent_as_tool` and `agent_purge` run workflows built from `plsql` steps
 only, `run_context` pins an offline OCI model so `generate_text` raises before it
 opens a connection, and `memory` drives `uc_ai_memory.execute_command` directly —
 its one `execute_agent` call is the test that expects the run to fail at start.
+`agent_prompt_addendum` answers every request from `uc_ai_test_http_mock`.
 Keep that property when you add a test to them.
 
 **Do not** put these in the LLM-free set: `test_uc_ai_prompt_profiles_api` calls

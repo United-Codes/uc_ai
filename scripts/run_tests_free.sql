@@ -43,6 +43,7 @@ begin
   , 'test_uc_ai_agent_purge'
   , 'test_uc_ai_memory'
   , 'test_uc_ai_run_context'
+  , 'test_uc_ai_agent_prompt_addendum'
   , 'test_uc_ai_hook'
   , 'test_uc_ai_wire'
   , 'test_uc_ai_wire_2'
@@ -54,9 +55,9 @@ begin
   , 'test_uc_ai_oci_wire'
   , 'test_uc_ai_ollama_wire'
   , 'test_uc_ai_ocr_wire'
-  , 'test_uc_ai_tools_wire'
   , 'test_uc_ai_decisions'
   , 'test_uc_ai_decisions_wire'
+  , 'test_uc_ai_tools_wire'
   , 'test_uc_ai_spec_wire'
   ));
 end;

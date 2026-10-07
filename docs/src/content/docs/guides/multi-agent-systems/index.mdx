@@ -187,6 +187,39 @@ and a later `null` never changes a key that has one.
 UC AI records the effective context in `uc_ai_agent_executions.run_context` and in
 `uc_ai_agent_sessions.run_context`.
 
+### Adding text to the system prompt
+
+`p_prompt_addendum` adds text to the end of the system prompt of one run. Use it
+for an instruction that depends on the caller and not on the prompt profile, for
+example the rules of one APEX region:
+
+```sql
+l_result := uc_ai_agents_api.execute_agent(
+  p_agent_code      => 'DOC_AGENT',
+  p_session_id      => l_session_id,
+  p_prompt_addendum => 'Answer in at most three sentences.'
+);
+```
+
+UC AI renders the system prompt of the prompt profile first. Then it adds a blank
+line and the addendum. If the agent uses [agent
+memory](/products/uc-ai/docs/guides/agent-memory/), the addendum follows the
+memory protocol block. An [execution hook](/products/uc-ai/docs/guides/execution-hooks/)
+that implements `augment_system_prompt` sees the prompt with the addendum.
+
+- Only a profile agent and an orchestrator agent accept an addendum. For any other
+  agent type, `execute_agent` raises `ORA-20503` before it creates a run.
+- Only the first turn of a conversation renders the system prompt. A follow-up
+  turn reuses the system message in the stored history, and this message already
+  holds the addendum. A follow-up call can pass the same text again: UC AI does
+  not add it twice. A different text on a follow-up call has no effect.
+- A null or empty addendum leaves the prompt unchanged.
+- A nested run does not receive the addendum. It applies to the agent that you
+  call.
+
+The APEX Chat plug-in uses this parameter to add the protocol of its [chat
+widgets](/products/uc-ai/docs/guides/chat-widgets/) to the first turn.
+
 ### Input mapping
 
 An input mapping defines how the data flows between agents. It uses a path in curly braces to reference a value in the workflow state:
@@ -549,6 +582,30 @@ hop, and a conversation participant.
 | `agent_code`                                      | The agent that **produced** this message (see below). It is `null` for the `user` and `system` input of the caller |
 | `content`                                         | Message text (for `text`/`reasoning`, and for plain-string messages)                                         |
 | `tool_name`, `tool_input`, `tool_output`, `tool_status` | Populated for `tool_call` / `tool_result` rows                                                          |
+| `tool_call_id`                                    | The tool call ID of the provider. A `tool_call` row and its `tool_result` row carry the same value. Other rows have `null` |
+
+**Pairing a tool call with its result (`tool_call_id`).** To find the result of a
+call, join the two rows on `execution_id` and `tool_call_id`. Use both columns.
+Google and Ollama do not send a tool call ID, so UC AI generates one, such as
+`tool_call_1`, with a counter for each run. An ID is therefore unique only inside
+one `execution_id`. A row that UC AI wrote before the `tool_call_id` column existed
+has `null` in this column.
+
+```sql
+SELECT c.tool_name,
+       c.tool_input,
+       r.tool_output
+  FROM uc_ai_agent_messages c
+  JOIN uc_ai_agent_messages r
+    ON r.execution_id = c.execution_id
+   AND r.tool_call_id = c.tool_call_id
+   AND r.role = 'tool_result'
+ WHERE c.session_id = :session_id
+   AND c.role = 'tool_call'
+ ORDER BY c.seq;
+```
+
+`get_session_messages` returns `tool_call_id` as its last column.
 
 **Attribution (`agent_code`).** In a multi-agent pattern, UC AI stores the whole
 turn against the `execution_id` of the top-level wrapper. `agent_code` therefore

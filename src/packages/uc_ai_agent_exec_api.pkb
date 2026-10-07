@@ -670,7 +670,8 @@ create or replace package body uc_ai_agent_exec_api as
     p_session_id        in varchar2 default null,
     p_files             in uc_ai_message_api.t_files default null,
     p_extra_tool_tag    in varchar2 default null,
-    p_run_context       in clob default null
+    p_run_context       in clob default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t
   as
     l_scope           uc_ai_logger.scope := gc_scope_prefix || 'execute_profile_agent';
@@ -788,7 +789,8 @@ create or replace package body uc_ai_agent_exec_api as
       p_version         => p_agent.prompt_profile_version,
       p_parameters      => effective_prompt_params(p_input_params, p_run_context),
       p_config_override => l_config,
-      p_files           => p_files
+      p_files           => p_files,
+      p_prompt_addendum => p_prompt_addendum
     );
 
     if p_response_schema is not null then
@@ -1050,7 +1052,8 @@ end;!';
     p_exec_id           in uc_ai_agent_executions.id%type,
     p_follow_up_message in clob default null,
     p_files             in uc_ai_message_api.t_files default null,
-    p_run_context       in clob default null
+    p_run_context       in clob default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t
   as
     l_scope            uc_ai_logger.scope := gc_scope_prefix || 'execute_orchestrator_agent';
@@ -1160,7 +1163,8 @@ end;!';
           p_code              => l_profile_code,
           p_parameters        => effective_prompt_params(p_input_params, p_run_context),
           p_config_override   => l_profile_config,
-          p_files             => p_files
+          p_files             => p_files,
+          p_prompt_addendum   => p_prompt_addendum
         );
       end if;
 

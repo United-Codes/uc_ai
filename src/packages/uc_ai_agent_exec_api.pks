@@ -81,6 +81,8 @@ as
    *                            own model config (used by handoff agents to expose transfer tools)
    * @param p_run_context       Run context of this run (JSON object as a CLOB). Fills prompt
    *                            placeholders the input parameters do not supply.
+   * @param p_prompt_addendum   Optional text appended to the rendered system prompt of the first
+   *                            turn (ignored on a follow-up turn, which reuses the stored system message)
    * @return JSON result from prompt profile execution
    */
   function execute_profile_agent(
@@ -92,7 +94,8 @@ as
     p_session_id        in varchar2 default null,
     p_files             in uc_ai_message_api.t_files default null,
     p_extra_tool_tag    in varchar2 default null,
-    p_run_context       in clob default null
+    p_run_context       in clob default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t;
 
 
@@ -124,6 +127,8 @@ as
    * @param p_files             Optional files (documents/images) to attach to the user message
    * @param p_run_context       Run context of this run (JSON object as a CLOB). Fills prompt
    *                            placeholders the input parameters do not supply.
+   * @param p_prompt_addendum   Optional text appended to the rendered system prompt of the first
+   *                            turn (ignored on a follow-up turn, which reuses the stored system message)
    * @return JSON result from orchestration
    */
   function execute_orchestrator_agent(
@@ -133,7 +138,8 @@ as
     p_exec_id           in uc_ai_agent_executions.id%type,
     p_follow_up_message in clob default null,
     p_files             in uc_ai_message_api.t_files default null,
-    p_run_context       in clob default null
+    p_run_context       in clob default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t;
 
 

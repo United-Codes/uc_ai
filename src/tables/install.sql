@@ -417,6 +417,9 @@ create table uc_ai_agent_messages (
   tool_output            clob,
   tool_status            varchar2(50 char),
 
+  -- Provider tool call id; pairs a tool_call row with its tool_result row
+  tool_call_id           varchar2(255 char),
+
   created_at             timestamp not null,
 
   constraint uc_ai_agent_messages_pk primary key (id),
@@ -434,6 +437,7 @@ create index uc_ai_agent_msg_exec_idx on uc_ai_agent_messages(execution_id);
 comment on table uc_ai_agent_messages is 'Normalized, untrimmed per-message conversation log (one row per content item)';
 comment on column uc_ai_agent_messages.seq is 'Ordering within the session; assigned as running max(seq)+1 per persisted message';
 comment on column uc_ai_agent_messages.agent_code is 'Agent that produced this message (sub-agent for wrapper turns; the turn''s own agent otherwise); null for caller user/system input';
+comment on column uc_ai_agent_messages.tool_call_id is 'Provider tool call id, set on tool_call and tool_result rows (null on all other roles and on rows written before v26.5). Pairs a tool_call row with its tool_result row. Google and Ollama synthesize ids such as tool_call_1 from a per-run counter, so an id is unique only within one execution_id. Pair rows on (execution_id, tool_call_id), never on tool_call_id alone';
 
 
 -- ============================================================================

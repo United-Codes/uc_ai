@@ -852,17 +852,18 @@ create or replace package body uc_ai_agents_api as
       p_tool_name   in varchar2 default null,
       p_tool_input  in clob     default null,
       p_tool_output in clob     default null,
-      p_tool_status in varchar2 default null
+      p_tool_status in varchar2 default null,
+      p_tool_call_id in varchar2 default null
     )
     as
     begin
       l_seq := l_seq + 1;
       insert into uc_ai_agent_messages (
         session_id, execution_id, seq, role, content, agent_code,
-        tool_name, tool_input, tool_output, tool_status
+        tool_name, tool_input, tool_output, tool_status, tool_call_id
       ) values (
         p_session_id, p_exec_id, l_seq, p_role, p_content, p_agent_code,
-        p_tool_name, p_tool_input, p_tool_output, p_tool_status
+        p_tool_name, p_tool_input, p_tool_output, p_tool_status, p_tool_call_id
       );
     end ins;
   begin
@@ -956,7 +957,8 @@ create or replace package body uc_ai_agents_api as
               p_role       => 'tool_call',
               p_agent_code => l_msg_agent,
               p_tool_name  => l_item.get_string('toolName'),
-              p_tool_input => l_item.get_clob('args')
+              p_tool_input => l_item.get_clob('args'),
+              p_tool_call_id => l_item.get_string('toolCallId')
             );
           when 'tool_result' then
             ins(
@@ -964,7 +966,8 @@ create or replace package body uc_ai_agents_api as
               p_agent_code  => l_msg_agent,
               p_tool_name   => l_item.get_string('toolName'),
               p_tool_output => l_item.get_clob('result'),
-              p_tool_status => 'success'
+              p_tool_status => 'success',
+              p_tool_call_id => l_item.get_string('toolCallId')
             );
           else
             null; -- ignore unknown content types
@@ -2387,7 +2390,8 @@ create or replace package body uc_ai_agents_api as
     p_response_schema   in json_object_t default null,
     p_files             in uc_ai_message_api.t_files default null,
     p_extra_tool_tag    in varchar2 default null,
-    p_run_context       in json_object_t default null
+    p_run_context       in json_object_t default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t
   as
     l_scope          uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -2450,6 +2454,19 @@ create or replace package body uc_ai_agents_api as
       , p_scope      => l_scope
       , p0           => 'extra_tool_tag'
       , p1           => 'can only be used with profile agents, not ' || l_agent.agent_type
+      );
+    end if;
+
+    -- Validate prompt_addendum usage: only agents that render their system
+    -- prompt through a prompt profile can honour it
+    if p_prompt_addendum is not null
+       and sys.dbms_lob.getlength(p_prompt_addendum) > 0
+       and l_agent.agent_type not in (c_type_profile, c_type_orchestrator) then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'prompt_addendum'
+      , p1           => 'can only be used with profile or orchestrator agents, not ' || l_agent.agent_type
       );
     end if;
 
@@ -2577,13 +2594,13 @@ create or replace package body uc_ai_agents_api as
       -- Execute based on agent type (delegating to sub-package)
       case l_agent.agent_type
         when c_type_profile then
-          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema, p_follow_up_message, l_session_id, p_files, p_extra_tool_tag, l_run_context);
+          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema, p_follow_up_message, l_session_id, p_files, p_extra_tool_tag, l_run_context, p_prompt_addendum);
 
         when c_type_workflow then
           l_result := uc_ai_agent_exec_api.execute_workflow_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
 
         when c_type_orchestrator then
-          l_result := uc_ai_agent_exec_api.execute_orchestrator_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message, p_files, l_run_context);
+          l_result := uc_ai_agent_exec_api.execute_orchestrator_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message, p_files, l_run_context, p_prompt_addendum);
 
         when c_type_handoff then
           l_result := uc_ai_agent_exec_api.execute_handoff_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message);
@@ -2721,7 +2738,8 @@ create or replace package body uc_ai_agents_api as
     p_response_schema   in json_object_t default null,
     p_files             in uc_ai_message_api.t_files default null,
     p_extra_tool_tag    in varchar2 default null,
-    p_run_context       in json_object_t default null
+    p_run_context       in json_object_t default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -2739,7 +2757,8 @@ create or replace package body uc_ai_agents_api as
       p_response_schema   => p_response_schema,
       p_files             => p_files,
       p_extra_tool_tag    => p_extra_tool_tag,
-      p_run_context       => p_run_context
+      p_run_context       => p_run_context,
+      p_prompt_addendum   => p_prompt_addendum
     );
   exception
     when others then
@@ -3035,7 +3054,8 @@ create or replace package body uc_ai_agents_api as
              m.tool_input,
              m.tool_output,
              m.tool_status,
-             m.created_at
+             m.created_at,
+             m.tool_call_id
       from uc_ai_agent_messages m
       where m.session_id = p_session_id
       order by m.seq;
