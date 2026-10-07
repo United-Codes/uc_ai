@@ -1,0 +1,164 @@
+---
+title: TypeSafe
+description: UC AI provider documentation for TypeSafe jev. A model for typed decisions with uc_ai.decide. It does not support chat or embeddings.
+---
+
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+
+<Aside type="caution" title="Experimental">
+  TypeSafe support is experimental. The jev API is in beta, and the result of `uc_ai.decide` can still change.
+</Aside>
+
+The UC AI TypeSafe package connects the TypeSafe jev model to [`uc_ai.decide`](/products/uc-ai/docs/api/decide/). jev answers typed questions about a text. It returns a choice, a score or a probability for each question, with the probabilities of all options.
+
+TypeSafe supports decisions only. jev has no chat interface and no embeddings. `uc_ai.generate_text` and `uc_ai.generate_embeddings` do not accept `uc_ai.c_provider_typesafe`. For the same reason, `uc_ai_utils.get_providers` and `uc_ai_utils.get_models` do not list TypeSafe.
+
+## Features
+
+- Typed answers to several named questions in one call
+- Question types: choice, score and boolean
+- Probabilities for every option and level
+- No refusals: jev answers every question
+- Text only: jev reads no images
+
+## Prerequisites
+
+1. TypeSafe API key
+2. Oracle database with internet access to `api.typesafe.ai` (see [Network Setup (ACL & Wallet)](/products/uc-ai/docs/guides/network-setup/))
+3. UC AI package installed
+4. Set up the API key, as described in the next two sections
+
+For the API key, see the [TypeSafe documentation](https://docs.typesafe.ai/).
+
+## Creating a Web Credential
+
+To use your TypeSafe key with APEX Web Credentials, create a web credential in your APEX workspace. You can use the APEX user interface or PL/SQL. The static ID in this guide is `TYPESAFE_AI`.
+
+<Tabs>
+<TabItem label="APEX user interface">
+
+Go to Workspace Utilities → Web Credentials and create a web credential with the following configuration:
+
+- Authentication Type: HTTP Header
+- Credential Name: `Authorization`
+- Credential Secret: `Bearer <your_api_key>`
+
+Also set `Valid for URLs` to the TypeSafe API (https://api.typesafe.ai/) to limit the scope of the credential.
+
+</TabItem>
+<TabItem label="PL/SQL">
+
+Run this block as the schema that holds UC AI. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the TypeSafe API. The `apex_util.set_workspace` call is only necessary outside an APEX session, for example in SQLcl.
+
+```sql
+begin
+  -- apex_util.set_workspace(p_workspace => 'MY_WORKSPACE');
+
+  apex_credential.create_credential(
+    p_credential_name      => 'TYPESAFE_AI',
+    p_credential_static_id => 'TYPESAFE_AI',
+    p_authentication_type  => apex_credential.C_TYPE_HTTP_HEADER,
+    p_allowed_urls         => apex_t_varchar2('https://api.typesafe.ai/'),
+    p_prompt_on_install    => false,
+    p_credential_comment   => 'Credential for TypeSafe'
+  );
+
+  apex_credential.set_persistent_credentials(
+    p_credential_static_id => 'TYPESAFE_AI',
+    p_key                  => 'Authorization',
+    p_value                => 'Bearer <your_api_key>'
+  );
+
+  commit;
+end;
+/
+```
+
+</TabItem>
+</Tabs>
+
+To use the web credential in your PL/SQL code, set the package variable `uc_ai_typesafe.g_apex_web_credential` to its static ID. Do this before you call `uc_ai.decide`:
+
+```sql
+uc_ai_typesafe.g_apex_web_credential := 'TYPESAFE_AI';
+```
+
+The common variable `uc_ai.g_apex_web_credential` also works. UC AI uses it before the variable of the provider.
+
+## Using a key function
+
+Without a web credential, UC AI reads the key with the function `uc_ai_get_key`. It sends the key as a Bearer header. Your schema owns `uc_ai_get_key`. UC AI does not change it when you upgrade. If you installed UC AI before TypeSafe support, the function has no branch for TypeSafe. Add one:
+
+```sql
+case p_provider
+  when uc_ai.c_provider_typesafe then
+    return '<your_api_key>';
+  -- the other providers
+```
+
+Without the branch, the function raises `ORA-20001` with the message `No key defined for provider: typesafe`. See [Set up API Keys](/products/uc-ai/docs/guides/installation/#set-up-api-keys) for the complete function.
+
+## Models
+
+The package has one model constant:
+
+- `uc_ai_typesafe.c_model_jev_latest` - the alias `jev-latest`. This is the default model of `uc_ai.decide` for TypeSafe.
+
+`jev-latest` points to a pinned version of jev. The response reports the version that answered, for example `jev-1.13.0`. `uc_ai.decide` returns this version in `model`. See the [TypeSafe models page](https://docs.typesafe.ai/models) for the current models.
+
+:::tip
+If a new model is not yet available as a constant, you can pass the model name directly as a string. See the [FAQ](/products/uc-ai/docs/other/faq/#custom-model-strings) for details.
+:::
+
+## Limits
+
+- Text only. A file in `p_files` raises `ORA-20508` before UC AI sends a request.
+- A choice question has at most 255 options. A score question has at most 10 levels. UC AI requires at least 2 options or 2 levels.
+- The TypeSafe documentation names a context of 64k tokens for each request.
+- jev does not refuse a question. A question that has no sense gets a low `confidence`.
+
+## Base URL
+
+Without `uc_ai.g_base_url`, UC AI sends the request to `https://api.typesafe.ai/v1/systemone`. If you set `uc_ai.g_base_url`, for example to a proxy, UC AI sends the request to `<g_base_url>/systemone`.
+
+## Usage Example
+
+The example asks a choice question and a boolean question about a customer message. See [Decide](/products/uc-ai/docs/api/decide/#route-a-support-message) for the full result and for a routing example.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai_typesafe.g_apex_web_credential := 'TYPESAFE_AI';
+
+  l_result := uc_ai.decide(
+    p_state     => 'I was charged twice for my order. Please refund the extra charge.'
+  , p_questions => json_object_t(q'[{
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this message?",
+        "criteria": {
+          "billing": "Payments, invoices, and refunds.",
+          "support": "Product usage and technical problems."
+        }
+      },
+      "wants_refund": {
+        "type": "boolean",
+        "instructions": "Does the customer ask for money back?"
+      }
+    }]')
+  , p_provider  => uc_ai.c_provider_typesafe
+  );
+
+  sys.dbms_output.put_line(l_result.get_object('answers').to_string);
+end;
+/
+```
+
+Output of a call on 2026-10-07. The output is complete. The probabilities can differ between calls:
+
+```text
+{"department":{"type":"choice","choice":"billing","probabilities":{"support":0,"billing":1}},"wants_refund":{"type":"boolean","probability":0.99}}
+```
+
+See the [decide reference](/products/uc-ai/docs/api/decide/) for the question types, the result, the warnings and the error codes.

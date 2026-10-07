@@ -13,6 +13,7 @@ The UC AI OpenAI package integrates OpenAI's GPT models into your Oracle databas
 - Full function calling (tools) support
 - Reasoning capabilities with reasoning effort control
 - Multi-modal support (text, images, PDFs)
+- Typed decisions with `uc_ai.decide` (see [Decisions](#decisions))
 
 ## Responses API
 
@@ -247,6 +248,35 @@ end;
 ```
 
 For more information about the `generate_embeddings` function, visit its [documentation page](/products/uc-ai/docs/api/generate_embeddings/).
+
+## Decisions
+
+`uc_ai.decide` uses the OpenAI Decisions API (`/v1/decisions`). It answers several named questions about one text or image with typed answers and probabilities. The default model is `uc_ai_openai.c_model_gpt_6_luna`. The call uses the same web credential as the chat calls. OpenAI reads images in PNG, JPEG and WebP format for decisions.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai_openai.g_apex_web_credential := 'OPENAI';
+
+  l_result := uc_ai.decide(
+    p_state     => 'I was charged twice for my order. Please refund the extra charge.'
+  , p_questions => json_object_t('{"wants_refund": {"type": "boolean", "instructions": "Does the customer ask for money back?"}}')
+  , p_provider  => uc_ai.c_provider_openai
+  );
+
+  sys.dbms_output.put_line(l_result.get_object('answers').to_string);
+end;
+/
+```
+
+Output of a call on 2026-10-07. The output is complete. The probability can differ between calls:
+
+```text
+{"wants_refund":{"type":"boolean","probability":1}}
+```
+
+The feature is experimental. OpenAI can refuse a question, and the answer then has the type `refused`. See the [decide reference](/products/uc-ai/docs/api/decide/) for the result and the checks.
 
 ## Using OpenAI API compliant providers
 

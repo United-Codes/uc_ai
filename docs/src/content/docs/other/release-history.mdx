@@ -5,6 +5,14 @@ sidebar:
   order: 3
 ---
 
+## Next release
+
+**Features**:
+
+Decisions:
+
+- **[Decide](/products/uc-ai/docs/api/decide/)** (`uc_ai.decide`, experimental): get typed answers with probabilities to several named questions about one text or image. A question is a choice, a score or a boolean. One call evaluates all questions, and the result has the same shape for every provider. Two providers support it: **OpenAI** (the Decisions API with `uc_ai_openai.c_model_gpt_6_luna`, with images) and the new provider **TypeSafe** (`uc_ai.c_provider_typesafe` with `uc_ai_typesafe.c_model_jev_latest`, text only). TypeSafe supports decisions only. It has no chat and no embeddings. The provider APIs are in beta, so the result can still change. See the pages for [OpenAI](/products/uc-ai/docs/providers/openai/#decisions) and [TypeSafe](/products/uc-ai/docs/providers/typesafe/).
+
 ## v26.4
 
 To upgrade run the `upgrade_packages.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases/tag/v26.4). This release has no migration script.

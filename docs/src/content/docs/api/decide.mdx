@@ -1,0 +1,610 @@
+---
+title: Decide
+description: Reference for uc_ai.decide. Get typed answers with probabilities to several named questions about one text or image. Experimental. Works with OpenAI and TypeSafe.
+sidebar:
+  order: 16
+---
+
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+
+<Aside type="caution" title="Experimental">
+  `uc_ai.decide` is experimental. The provider APIs behind it are in beta, so the shape of the result can still change. Test your code again after you upgrade UC AI.
+</Aside>
+
+A decision is one shared state and several named questions. The state is a text, optionally with images. Each question has a type and gets a typed answer with probabilities. One call to `uc_ai.decide` evaluates all questions.
+
+Use a decision when your code must branch on the answer. The answers are not free text. A choice question returns one of the options that you define, and a score question returns a number from the levels that you define. Every answer comes with probabilities, so the code can test how sure the model is before it acts.
+
+Two providers support decisions:
+
+| Provider | Constant | Endpoint | Default model |
+| --- | --- | --- | --- |
+| OpenAI | `uc_ai.c_provider_openai` | OpenAI Decisions (`/decisions`) | `uc_ai_openai.c_model_gpt_6_luna` |
+| TypeSafe | `uc_ai.c_provider_typesafe` | TypeSafe jev (`/systemone`) | `uc_ai_typesafe.c_model_jev_latest` |
+
+Decisions do not go through `generate_text`. The result has no messages and no tool calls. A provider that is not in this table raises `ORA-20306`. TypeSafe supports decisions only. See the [TypeSafe provider page](/products/uc-ai/docs/providers/typesafe/).
+
+## Signature
+
+```sql
+function decide (
+  p_state     in clob
+, p_questions in json_object_t
+, p_provider  in provider_type
+, p_model     in model_type default null
+, p_files     in json_array_t default null
+, p_options   in json_object_t default null
+) return json_object_t;
+```
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `p_state` | `clob` | Yes, if there is no file | The text that the questions refer to. It can be JSON that you serialize with `to_clob`. The provider reads JSON as text. |
+| `p_questions` | `json_object_t` | Yes | The questions, keyed by question id. See [Questions](#questions). |
+| `p_provider` | `provider_type` | Yes | `uc_ai.c_provider_openai` or `uc_ai.c_provider_typesafe`. |
+| `p_model` | `model_type` | No | `null` selects the default model of the provider. |
+| `p_files` | `json_array_t` | No | Images, made with `uc_ai_message_api.create_file_content`. See [Images](#images). |
+| `p_options` | `json_object_t` | No | Provider options. See [The p_options parameter](#the-p_options-parameter). |
+
+An empty or null `p_state` without a file raises `ORA-20503`.
+
+## Questions
+
+`p_questions` is a JSON object. Each key is a question id, and each value is the definition of one question. The answers use the same ids.
+
+```json
+{
+  "department": {
+    "type": "choice",
+    "instructions": "Which team should handle this message?",
+    "criteria": {
+      "billing": "Payments, invoices, and refunds.",
+      "support": "Product usage and technical problems."
+    }
+  },
+  "severity": {
+    "type": "score",
+    "instructions": "How severe is the problem described?",
+    "criteria": ["Cosmetic", "Workaround exists", "Blocking"]
+  },
+  "wants_refund": {
+    "type": "boolean",
+    "instructions": "Does the customer ask for money back?"
+  }
+}
+```
+
+A question has these keys:
+
+| Key | Required | Description |
+| --- | --- | --- |
+| `type` | Yes | `boolean`, `choice` or `score`. |
+| `instructions` | Yes | The question as a text. A blank text raises `ORA-20503`. |
+| `criteria` | Depends on the type | See the question types below. |
+
+A question with any other key adds a warning, and UC AI ignores the key.
+
+### Question ids
+
+A question id starts with a letter. It has up to 64 letters, digits or underscores. The pattern is `^[A-Za-z][A-Za-z0-9_]{0,63}$`. UC AI checks every id before it sends a request.
+
+### Choice
+
+The answer is one of the options that you define. `criteria` is an object. Each key is an option, and each value is a description of the option. The question needs at least 2 options and at most 255 options. A description can be null or empty.
+
+### Score
+
+The answer is a number between the first and the last level. `criteria` is an array of level descriptions. Level 0 is the first element. The question needs at least 2 levels and at most 10 levels. A description can be null or empty.
+
+### Boolean
+
+The answer is the probability that the statement is true. `criteria` is optional. It is an object with the keys `true` and `false`. Each value describes when the answer is true or false. Both keys are optional.
+
+## Result
+
+`decide` returns a `json_object_t` with these keys:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `answers` | object | One answer for each question, keyed by question id. See [Answers](#answers). |
+| `usage` | object | Only the values that the provider reports: `input_tokens`, `output_tokens` and `total_tokens`. |
+| `model` | string | The model that the provider reports. If the provider reports none, the requested model. |
+| `provider_metadata` | object | `confidence` and `usage`. See [Confidence](#confidence). |
+| `warnings` | array of strings | Problems that did not stop the call. The array is empty when there are none. |
+| `raw` | object | The response of the provider as it came back. |
+
+`raw` is the only place for data that the neutral shape does not carry. An example is the `legend` of a TypeSafe score.
+
+### Answers
+
+Each answer has a `type`. The type of an answer is the type of its question, or `refused`.
+
+| Type | Keys | Description |
+| --- | --- | --- |
+| `boolean` | `probability` | The probability that the statement is true, from 0 to 1. |
+| `choice` | `choice`, `probabilities` | The chosen option. `probabilities` has the probability of every option. |
+| `score` | `score`, `probabilities` | The probability-weighted mean of the level indexes, rounded to 2 decimals. `probabilities` is keyed by the level index as a string (`"0"`, `"1"`, ...). |
+| `refused` | None | The provider refused the question. See [Refused answers](#refused-answers). |
+
+The providers return probabilities with 2 decimals. A `probabilities` object lists every option or level, also with the probability 0. The order of its keys is not the order of the options. Both providers return `probabilities`. Test with `has` before you read it, because a later provider can leave it out.
+
+The index of a level starts at 0. A score of 1.01 on three levels is close to the second level.
+
+### Refused answers
+
+OpenAI can refuse a question. It refuses each question on its own and answers the other questions of the same call. The refused question gets the answer `{"type": "refused"}`. The call does not raise an error. This is also true when OpenAI refuses every question.
+
+Read the `type` of an answer before you read `choice`, `score` or `probability`. A refused answer has none of these keys.
+
+OpenAI refused questions that have no clear answer. Examples are a question with meaningless instructions, and a question that infers a protected trait of a person. TypeSafe never refuses. It answers every question. A question that has no sense gets a low `confidence`.
+
+A refused question still costs the input tokens of the call.
+
+### Confidence
+
+`provider_metadata.confidence` holds one number for each choice and score question, keyed by question id. The provider calculates it. It is not the probability of the chosen option. In the example [below](#route-a-support-message), OpenAI chose `support` with the probability 0.80 and the confidence 0.70.
+
+Boolean questions and refused questions have no confidence. `provider_metadata.usage` holds the usage object of the provider as it came back.
+
+### Warnings
+
+A warning describes a problem that did not stop the call. The call still returns a result. A warning is one text. These cases add a warning:
+
+- The probabilities of a question do not add up to 1.
+- A score differs from the probability-weighted mean of its levels.
+- A question has a key other than `type`, `instructions` and `criteria`.
+- `p_options` has a key that the provider does not use.
+
+The providers round probabilities and scores to 2 decimals. A rounded value can be wrong by 0.005. UC AI allows for this. The tolerance of the sum is 0.000001, plus 0.005 for each probability in the sum. The tolerance of the score is 0.000001, plus 0.005 for the rounding of the score, plus 0.005 multiplied by the level index for each level.
+
+The tolerance of the sum grows with the number of options. A choice with about 200 options or more can therefore never give this warning. The check is for questions with few options.
+
+## Images
+
+OpenAI reads images. Pass them in `p_files`, as objects from `uc_ai_message_api.create_file_content`. OpenAI accepts `image/png`, `image/jpeg` and `image/webp`. UC AI sends each image to OpenAI as a Base64 `data:` URL. Any other media type raises `ORA-20508` before a request is sent.
+
+TypeSafe reads text only. A file in `p_files` raises `ORA-20508` before a request is sent.
+
+You can pass an image without text. If `p_files` holds an image, `p_state` can be empty. The call needs at least a text or a file.
+
+## Checks and errors
+
+UC AI checks the call before it sends a request. A failed check costs no request. The check of the provider is the first check.
+
+| Code | When | Cause |
+| --- | --- | --- |
+| `ORA-20306` | Before the request | `p_provider` is null, unknown, or has no decision support. The message lists the providers that have decision support. |
+| `ORA-20503` | Before the request | A question or an id is malformed. A choice with fewer than 2 options. A score with fewer than 2 levels. An unknown question type. Blank instructions. An empty state without a file. A file object or a value in `p_options` of the wrong type. |
+| `ORA-20508` | Before the request | The provider cannot take the call. More than 255 options in a choice. More than 10 levels in a score. An image type that the provider does not accept. A file for TypeSafe. |
+| `ORA-20302` | After the request | The provider returned an error. The message holds the HTTP status and the message of the provider. |
+| `ORA-20304` | After the response | The answers do not match the questions. |
+
+`ORA-20304` has these causes:
+
+- A question has no answer, or the response has an answer for no question.
+- An answer has no name, or two answers have the same name.
+- The type of an answer is not the type of its question.
+- A chosen option is not one of the options of the question.
+- A score is outside the levels.
+- A probability is outside the range from 0 to 1.
+
+A refused answer is the answer of its question. It skips the checks for the type, the option, the score and the probability.
+
+If the probabilities do not add up, the call does not raise an error. It adds a warning.
+
+The errors that UC AI raised for malformed calls on 2026-10-07:
+
+```text
+ORA-20503: Invalid question id "1st": an id starts with a letter and has up to 64 letters, digits or underscores
+ORA-20503: Invalid question "dept": a choice question needs at least 2 options in criteria, found 1
+ORA-20503: Invalid question "dept": type "predicate" is not supported. Use boolean, choice or score
+ORA-20503: Invalid question "dept": instructions are missing. Pass a non-empty string
+ORA-20503: Invalid state: it is null or empty and there is no file. Pass text, an image or both
+ORA-20306: Provider anthropic has no decision support. Decision providers: openai, typesafe
+ORA-20508: Unsupported content type: 256 options in question "big". The provider allows at most 255
+ORA-20508: Unsupported content type: files. The provider takes text only, pass the state as text
+ORA-20508: Unsupported content type: media type application/pdf for file 1. Supported: image/png, image/jpeg, image/webp
+```
+
+A model name that the provider does not know raises `ORA-20302`:
+
+```text
+ORA-20302: Error response from provider OpenAI: HTTP 404: The model `gpt-6-nope` does not exist or you do not have access to it.
+ORA-20302: Error response from provider TypeSafe: HTTP 400: Unknown model: jev-nope
+```
+
+For a validation error, TypeSafe adds the path of the field to the message. UC AI never copies the input of the request into an error message.
+
+## Limits
+
+| Limit | OpenAI | TypeSafe |
+| --- | --- | --- |
+| Options in a choice | 2 to 255 | 2 to 255 |
+| Levels in a score | 2 to 10 | 2 to 10 |
+| Questions in one call | At least 1 | At least 1 |
+| Images | `image/png`, `image/jpeg`, `image/webp` | None |
+
+TypeSafe accepts a question with one option or one level. UC AI still requires 2, because a decision between one option is not a decision. The upper limit for the number of questions is not known. A call with 50 questions worked on OpenAI.
+
+The vendor documentation lists the size of the context. For TypeSafe, see [docs.typesafe.ai](https://docs.typesafe.ai/). For OpenAI, see the [OpenAI API reference](https://platform.openai.com/docs/api-reference).
+
+## The p_options parameter
+
+`p_options` is one JSON object. UC AI knows two keys. Every other key adds a warning and UC AI ignores it.
+
+| Key | Provider | Description |
+| --- | --- | --- |
+| `safety_identifier` | OpenAI | A string. UC AI sends it as it is. For TypeSafe, the key adds a warning and UC AI ignores it. |
+| `extra_body` | OpenAI, TypeSafe | An object. UC AI merges its keys into the request body. The keys `model`, `questions` and `input` (OpenAI) or `state` (TypeSafe) always keep the value from UC AI. |
+
+A `safety_identifier` that is not a string, or an `extra_body` that is not an object, raises `ORA-20503`.
+
+A call with `{"safety_identifier":"user-123","temperature":0}` to TypeSafe returned these warnings:
+
+```text
+["Option \"safety_identifier\" is not supported for provider typesafe and was ignored","Option \"temperature\" is not supported for provider typesafe and was ignored"]
+```
+
+## Credentials and base URL
+
+Decision calls use the configuration that `generate_text` reads from the package globals. The credential comes from `uc_ai.g_apex_web_credential`, or from the web credential of the provider:
+
+| Provider | Web credential variable |
+| --- | --- |
+| OpenAI | `uc_ai_openai.g_apex_web_credential` |
+| TypeSafe | `uc_ai_typesafe.g_apex_web_credential` |
+
+If no web credential is set, UC AI reads the key with your function `uc_ai_get_key` and sends it as a Bearer header. See [Set up API Keys](/products/uc-ai/docs/guides/installation/#set-up-api-keys).
+
+`uc_ai.g_base_url` also applies to decision calls. If you set it, for example to a proxy, UC AI sends the decision calls to that URL as well. OpenAI receives `<g_base_url>/decisions`, and TypeSafe receives `<g_base_url>/systemone`. Without `uc_ai.g_base_url`, the URLs are `https://api.openai.com/v1/decisions` and `https://api.typesafe.ai/v1/systemone`.
+
+UC AI sets a transfer timeout of 300 seconds for a decision call.
+
+## Logging
+
+UC AI never writes the request body to the log. The body holds your text and the Base64 data of the images. The log holds the provider, the model, the number of questions, the number of files and the size in bytes.
+
+## Differences between the providers
+
+| | OpenAI | TypeSafe |
+| --- | --- | --- |
+| Endpoint | `POST <base>/decisions` | `POST <base>/systemone` |
+| Default model | `uc_ai_openai.c_model_gpt_6_luna` | `uc_ai_typesafe.c_model_jev_latest` |
+| `model` in the result | The name that you sent | The version that answered. `jev-latest` gave `jev-1.13.0`. |
+| Images | `image/png`, `image/jpeg`, `image/webp` | None. A file raises `ORA-20508`. |
+| Refusal | Per question. The answer has the type `refused`. | Never |
+| Boolean criteria | UC AI adds the texts to the instructions, because OpenAI takes no criteria for a boolean question | UC AI sends the criteria as they are |
+| `confidence` | Choice and score questions | Choice and score questions |
+| `usage` keys | `input_tokens`, `output_tokens` (always 0), `total_tokens` | `input_tokens`, `output_tokens` |
+| Error body | An `error` object | A `detail` text, object or list |
+
+For a boolean question on OpenAI, UC AI builds the instructions as follows. First the instructions of the question. Then a blank line, `Criteria for true:`, a line feed and the text for `true`. Then the same for `false`. UC AI leaves out the part of a key that has no text.
+
+## Examples
+
+### Route a support message
+
+The example asks three questions about one customer message. It reads the answers and routes the message. A message goes to a team only if the probability of the best option is at least 0.9. Otherwise a person reviews it.
+
+Run the block as a user that has the web credential `OPENAI`. Replace the message and the credential with your own values. The block prints the answers, the usage, the metadata and the warnings. Then it prints the routing result.
+
+```sql
+declare
+  c_threshold constant number := 0.9;
+
+  l_message   clob := q'[Hello, the export button in your app does nothing since the last update. By the way, is there a discount for 10 licenses?]';
+  l_questions json_object_t := json_object_t(q'[{
+    "department": {
+      "type": "choice",
+      "instructions": "Which team should handle this message?",
+      "criteria": {
+        "billing": "Payments, invoices, and refunds.",
+        "support": "Product usage and technical problems.",
+        "sales":   "New purchases and pricing questions."
+      }
+    },
+    "severity": {
+      "type": "score",
+      "instructions": "How severe is the problem described?",
+      "criteria": [
+        "Appearance only; no lost functionality.",
+        "Something is broken but the customer can continue.",
+        "The customer cannot continue or lost money."
+      ]
+    },
+    "wants_refund": {
+      "type": "boolean",
+      "instructions": "Does the customer ask for money back?",
+      "criteria": {
+        "true":  "The customer asks for a refund or a reimbursement.",
+        "false": "The customer does not ask for money back."
+      }
+    }
+  }]');
+  l_result    json_object_t;
+  l_answers   json_object_t;
+  l_dept      json_object_t;
+  l_choice    varchar2(100 char);
+  l_p         number;
+  l_keys      json_key_list;
+begin
+  uc_ai_openai.g_apex_web_credential := 'OPENAI';
+
+  l_result := uc_ai.decide(
+    p_state     => l_message
+  , p_questions => l_questions
+  , p_provider  => uc_ai.c_provider_openai
+  );
+
+  l_answers := l_result.get_object('answers');
+  l_keys := l_answers.get_keys;
+  <<answer_loop>>
+  for i in 1 .. l_keys.count loop
+    sys.dbms_output.put_line(l_keys(i) || ': ' || l_answers.get_object(l_keys(i)).to_string);
+  end loop answer_loop;
+  sys.dbms_output.put_line('model: ' || l_result.get_string('model'));
+  sys.dbms_output.put_line('usage: ' || l_result.get_object('usage').to_string);
+  sys.dbms_output.put_line('provider_metadata: ' || l_result.get_object('provider_metadata').to_string);
+  sys.dbms_output.put_line('warnings: ' || l_result.get_array('warnings').to_string);
+
+  l_dept := l_answers.get_object('department');
+  if l_dept.get_string('type') = 'refused' then
+    sys.dbms_output.put_line('route: manual review (the provider refused the question)');
+  else
+    l_choice := l_dept.get_string('choice');
+    l_p      := l_dept.get_object('probabilities').get_number(l_choice);
+    if l_p >= c_threshold then
+      sys.dbms_output.put_line('route: ' || l_choice || ' (probability ' || to_char(l_p, 'FM0.00', 'NLS_NUMERIC_CHARACTERS=''.,''') || ')');
+    else
+      sys.dbms_output.put_line('route: manual review (best option ' || l_choice || ', probability ' || to_char(l_p, 'FM0.00', 'NLS_NUMERIC_CHARACTERS=''.,''') || ')');
+    end if;
+  end if;
+end;
+/
+```
+
+The code checks `type` first. A refused `department` question has no `choice`. The code then routes by the probability of the chosen option. It does not use `confidence` for this.
+
+Select a provider to see its output. The output of the two providers differs, because each provider uses its own model.
+
+<Tabs syncKey="decide-provider">
+<TabItem label="OpenAI">
+
+Output of a call on 2026-10-07. The output is complete. The message has two topics, and OpenAI gave `support` the probability 0.80. The block sent the message to manual review. The probabilities can differ between calls and between model versions.
+
+```text
+department: {"type":"choice","choice":"support","probabilities":{"billing":0.01,"support":0.8,"sales":0.19}}
+severity: {"type":"score","score":1.01,"probabilities":{"0":0.02,"1":0.95,"2":0.03}}
+wants_refund: {"type":"boolean","probability":0}
+model: gpt-6-luna
+usage: {"input_tokens":473,"output_tokens":0,"total_tokens":473}
+provider_metadata: {"usage":{"input_tokens":473,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":473},"confidence":{"department":0.7,"severity":0.93}}
+warnings: []
+route: manual review (best option support, probability 0.80)
+```
+
+The call with the message `I was charged twice for my order. Please refund the extra charge.` gave a clear result. These are the `department` line and the last line of the output:
+
+```text
+department: {"type":"choice","choice":"billing","probabilities":{"billing":1,"support":0,"sales":0}}
+route: billing (probability 1.00)
+```
+
+</TabItem>
+<TabItem label="TypeSafe">
+
+Replace two lines of the block. Set the web credential `uc_ai_typesafe.g_apex_web_credential := 'TYPESAFE_AI';` and pass `p_provider => uc_ai.c_provider_typesafe`.
+
+Output of a call on 2026-10-07 with the same message. The output is complete. TypeSafe reports the version of the model that answered. The order of the keys in `probabilities` is the order that TypeSafe returned.
+
+```text
+department: {"type":"choice","choice":"support","probabilities":{"support":0.98,"sales":0.02,"billing":0}}
+severity: {"type":"score","score":1.16,"probabilities":{"0":0,"1":0.84,"2":0.16}}
+wants_refund: {"type":"boolean","probability":0.03}
+model: jev-1.13.0
+usage: {"input_tokens":473,"output_tokens":71}
+provider_metadata: {"usage":{"input_tokens":473,"output_tokens":71},"confidence":{"department":0.97,"severity":0.76}}
+warnings: []
+route: support (probability 0.98)
+```
+
+</TabItem>
+</Tabs>
+
+The two providers read the same message differently. OpenAI gave `support` 0.80, and TypeSafe gave it 0.98. Set the threshold for the provider and the model that you use.
+
+### Read a refused answer
+
+The example sends one question that has an answer and one question that has none. OpenAI answers the first question and refuses the second. The call does not raise an error.
+
+```sql
+declare
+  l_questions json_object_t := json_object_t(q'[{
+    "department": {
+      "type": "choice",
+      "instructions": "Which team should handle this message?",
+      "criteria": { "billing": "Payments and refunds.", "support": "Technical problems." }
+    },
+    "smell": {
+      "type": "choice",
+      "instructions": "Pick the colour of the number seven's smell.",
+      "criteria": { "red": "Red.", "blue": "Blue." }
+    }
+  }]');
+  l_result json_object_t;
+begin
+  uc_ai_openai.g_apex_web_credential := 'OPENAI';
+  l_result := uc_ai.decide(
+    p_state     => 'I was charged twice for my order.'
+  , p_questions => l_questions
+  , p_provider  => uc_ai.c_provider_openai
+  );
+  sys.dbms_output.put_line('answers: ' || l_result.get_object('answers').to_string);
+  sys.dbms_output.put_line('usage: ' || l_result.get_object('usage').to_string);
+  sys.dbms_output.put_line('warnings: ' || l_result.get_array('warnings').to_string);
+end;
+/
+```
+
+Output of a call on 2026-10-07. The output is complete:
+
+```text
+answers: {"department":{"type":"choice","choice":"billing","probabilities":{"billing":1,"support":0}},"smell":{"type":"refused"}}
+usage: {"input_tokens":234,"output_tokens":0,"total_tokens":234}
+warnings: []
+```
+
+The `smell` answer has no `choice`. A call to `get_string('choice')` on it returns null. Test `get_string('type') = 'refused'` before you read an answer. The model decides which questions OpenAI refuses. The question in this example has no meaning, and OpenAI refused it in the call on 2026-10-07.
+
+### Read an image
+
+The example asks which fruit an image shows. `uc_ai_test_utils.get_apple_png` returns a PNG from the UC AI tests. Replace it with your own blob. Only OpenAI reads images.
+
+```sql
+declare
+  l_files     json_array_t := json_array_t();
+  l_questions json_object_t := json_object_t(q'[{
+    "fruit": {
+      "type": "choice",
+      "instructions": "Which fruit is in the picture?",
+      "criteria": { "apple": "A red or green apple.", "banana": "A banana.", "pear": "A pear." }
+    }
+  }]');
+  l_result json_object_t;
+begin
+  uc_ai_openai.g_apex_web_credential := 'OPENAI';
+
+  l_files.append(uc_ai_message_api.create_file_content(
+    p_media_type => 'image/png'
+  , p_data_blob  => uc_ai_test_utils.get_apple_png
+  , p_filename   => 'fruit.png'
+  ));
+
+  l_result := uc_ai.decide(
+    p_state     => 'Look at the attached picture.'
+  , p_questions => l_questions
+  , p_provider  => uc_ai.c_provider_openai
+  , p_files     => l_files
+  );
+
+  sys.dbms_output.put_line('answers: ' || l_result.get_object('answers').to_string);
+  sys.dbms_output.put_line('usage: ' || l_result.get_object('usage').to_string);
+end;
+/
+```
+
+Output of a call on 2026-10-07. The output is complete:
+
+```text
+answers: {"fruit":{"type":"choice","choice":"apple","probabilities":{"apple":1,"banana":0,"pear":0}}}
+usage: {"input_tokens":180,"output_tokens":0,"total_tokens":180}
+```
+
+## Use a decision as a workflow step
+
+A workflow has no step type for a decision. A [PL/SQL step](/products/uc-ai/docs/guides/multi-agent-systems/workflows/#plsql-steps) can call `uc_ai.decide` and return the result as a CLOB. UC AI stores the result as the state of the step. A later step can then use a condition on the answers.
+
+The example uses a function that holds the call. Create it first. The function removes `raw` from the result, to keep the workflow state small.
+
+```sql
+create or replace function triage_decide (p_message in clob) return clob
+as
+  l_questions json_object_t := json_object_t(q'[{
+    "department": {
+      "type": "choice",
+      "instructions": "Which team should handle this message?",
+      "criteria": {
+        "billing": "Payments, invoices, and refunds.",
+        "support": "Product usage and technical problems.",
+        "sales":   "New purchases and pricing questions."
+      }
+    }
+  }]');
+  l_result json_object_t;
+begin
+  l_result := uc_ai.decide(
+    p_state     => p_message
+  , p_questions => l_questions
+  , p_provider  => uc_ai.c_provider_openai
+  );
+  l_result.remove('raw'); -- keep the workflow state small
+  return l_result.to_clob;
+end triage_decide;
+/
+```
+
+The workflow has three steps. The first step calls the function. The two other steps have a `condition` on the `choice` of the `department` answer. Only the step with the matching condition runs.
+
+```sql
+declare
+  l_def    clob;
+  l_id     number;
+  l_result json_object_t;
+begin
+  uc_ai_openai.g_apex_web_credential := 'OPENAI';
+
+  l_def := q'[{
+    "workflow_type": "sequential",
+    "steps": [
+      {
+        "step_type": "plsql",
+        "plsql_function_call": "return triage_decide(json_object_t(:parameters).get_object('input').get_clob('message'));",
+        "output_key": "route"
+      },
+      {
+        "step_type": "plsql",
+        "condition": "'{$.steps.route.answers.department.choice}' = 'billing'",
+        "plsql_function_call": "return '{\"queue\":\"billing_team\"}';",
+        "output_key": "ticket_billing"
+      },
+      {
+        "step_type": "plsql",
+        "condition": "'{$.steps.route.answers.department.choice}' = 'support'",
+        "plsql_function_call": "return '{\"queue\":\"support_team\"}';",
+        "output_key": "ticket_support"
+      }
+    ]
+  }]';
+
+  l_id := uc_ai_agents_api.create_agent(
+    p_code                => 'ticket_router'
+  , p_description         => 'Routes a message with uc_ai.decide'
+  , p_agent_type          => uc_ai_agents_api.c_type_workflow
+  , p_workflow_definition => l_def
+  , p_status              => uc_ai_agents_api.c_status_active
+  );
+  commit; -- agents must be committed before they can be executed
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'ticket_router'
+  , p_input_parameters => json_object_t('{"message": "I was charged twice for my order. Please refund the extra charge."}')
+  , p_session_id       => uc_ai_agents_api.generate_session_id
+  );
+
+  sys.dbms_output.put_line('status: ' || l_result.get_string('status'));
+  sys.dbms_output.put_line('final_message: ' || l_result.get_clob('final_message'));
+  sys.dbms_output.put_line('route: ' || l_result.get_object('steps').get_object('route').get_object('answers').to_string);
+  sys.dbms_output.put_line('route usage: ' || l_result.get_object('steps').get_object('route').get_object('usage').to_string);
+end;
+/
+```
+
+Output of a call on 2026-10-07. The output is complete:
+
+```text
+status: completed
+final_message: {"queue":"billing_team"}
+route: {"department":{"type":"choice","choice":"billing","probabilities":{"billing":1,"support":0,"sales":0}}}
+route usage: {"input_tokens":145,"output_tokens":0,"total_tokens":145}
+```
+
+Notes on this example:
+
+- The PL/SQL step runs in your database session. Set the web credential in the same session, before you call `execute_agent`.
+- Put single quotes around a string reference in a condition, as in `'{$.steps.route.answers.department.choice}'`. See [Conditional workflow](/products/uc-ai/docs/guides/multi-agent-systems/workflows/).
+- If `uc_ai.decide` raises an error, the PL/SQL step raises it.
+- A refused `department` answer has no `choice`. Make sure that your workflow handles this case. The example does not test it.
+
+**Known gap.** UC AI does not add the tokens of a PL/SQL step to the totals of the run. In the run above, `total_input_tokens` and `total_output_tokens` in `uc_ai_agent_executions` were both 0, and the step used 145 input tokens. The execution hook does not see the call either. The tokens of the step are in the step state, at `$.steps.route.usage`.
+
+Delete the example objects when you are done. Call `uc_ai_agents_api.purge_agent('ticket_router')`, commit, and drop the function `triage_decide`.

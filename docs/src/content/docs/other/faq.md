@@ -30,6 +30,8 @@ Currently, UC AI supports eight AI providers:
 
 The framework provides a common API for calls to different providers.
 
+UC AI also supports **TypeSafe** (jev) for [typed decisions](/products/uc-ai/docs/api/decide/). TypeSafe supports decisions only. It has no chat and no embeddings, so `generate_text` does not accept it.
+
 ## Do I need to install additional dependencies?
 
 The only dependency is the Logger package, which is included in the project. You can either install the full Logger for debugging capabilities or use the "no-op" version if you don't need logging functionality.

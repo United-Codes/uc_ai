@@ -84,6 +84,8 @@ begin
       return '...';
     when uc_ai.c_provider_google then
       return '...';
+    when uc_ai.c_provider_typesafe then
+      return '...';
     else
       raise e_unhandled_provider;
   end case;
@@ -106,6 +108,7 @@ You can also store your secret API keys as APEX Web Credentials. This needs an A
 - [OCI](/products/uc-ai/docs/providers/oci/#prerequisites)
 - [OpenAI](/products/uc-ai/docs/providers/openai/#creating-a-web-credential)
 - [OpenRouter](/products/uc-ai/docs/providers/openrouter/#creating-a-web-credential)
+- [TypeSafe](/products/uc-ai/docs/providers/typesafe/#creating-a-web-credential)
 - [xAI](/products/uc-ai/docs/providers/xai/#creating-a-web-credential)
 
 Before you call a UC AI function, set the package variable of your provider to the static ID of the web credential. For example, an OpenAI web credential with the static ID `OPENAI` needs this code:

@@ -45,7 +45,7 @@ scripts/
 | Package | Purpose |
 |---------|---------|
 | `uc_ai` | Main entry point: `generate_text()`, `generate_embeddings()`, provider/model constants |
-| `uc_ai_anthropic`, `uc_ai_google`, `uc_ai_openai`, `uc_ai_oci`, `uc_ai_ollama`, `uc_ai_xai`, `uc_ai_openrouter` | Provider implementations |
+| `uc_ai_anthropic`, `uc_ai_google`, `uc_ai_openai`, `uc_ai_oci`, `uc_ai_ollama`, `uc_ai_xai`, `uc_ai_openrouter`, `uc_ai_typesafe` | Provider implementations (`uc_ai_typesafe` holds constants and the credential only: TypeSafe jev supports `uc_ai.decide`, not chat) |
 | `uc_ai_agents_api` | Agent CRUD, validation, versioning |
 | `uc_ai_agent_exec_api` | Agent execution engine (sequential, conditional, parallel, loop workflows) |
 | `uc_ai_agent_workflow_api` | Workflow helpers: input mapping, condition evaluation, step execution |
@@ -53,6 +53,7 @@ scripts/
 | `uc_ai_prompt_profiles_api` | Versioned prompt templates with `{var}` substitution |
 | `uc_ai_memory` | Agent memory: virtual filesystem behind the `MEMORY` tool, store scoping, MEMORY PROTOCOL prompt block |
 | `uc_ai_ocr` | OCR dispatcher and adapters behind `uc_ai.ocr` / `uc_ai.ocr_text` (Mistral, OCI Document Understanding, Ollama) |
+| `uc_ai_decisions` | Typed decisions dispatcher and adapters behind `uc_ai.decide` (OpenAI Decisions, TypeSafe jev); experimental |
 | `uc_ai_message_api` | Message construction and conversation history |
 | `uc_ai_structured_output` | JSON schema-based output validation |
 | `uc_ai_logger` | Logging wrapper around OraOpenSource Logger |
@@ -185,6 +186,7 @@ Check these files for context on specific topics:
 | Input mapping syntax for workflows | `docs/input-mapping-guide.md` |
 | Provider setup guides | `docs/src/content/docs/providers/*.mdx` |
 | API reference (generate_text) | `docs/src/content/docs/api/generate_text.mdx` |
+| API reference (decide) | `docs/src/content/docs/api/decide.mdx` |
 | Agent memory guide | `docs/src/content/docs/guides/agent-memory.mdx` |
 | Tools / function calling guide | `docs/src/content/docs/guides/tools.mdx` |
 | Prompt profiles guide | `docs/src/content/docs/guides/prompt-profiles.mdx` |
