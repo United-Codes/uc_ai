@@ -218,7 +218,7 @@ No tables, no migration.
 
 ## 5. Interaction with existing features
 
-- **Workflows:** no new step type. A `plsql` step whose `plsql_function_call` returns `uc_ai.decide(...).to_clob` becomes step state. A condition such as `'{$.steps.route.answers.department.choice}' = 'billing'` routes on it. Document this with a recorded example. Known gap: tokens from such a step do not reach the `uc_ai_agent_executions` totals and the execution hook does not see the call.
+- **Workflows:** no new step type. A `plsql` step whose `plsql_function_call` returns `uc_ai.decide(...).to_clob` becomes step state. A condition such as `'{$.steps.route.answers.department.choice}' = 'billing'` routes on it. Document this with a recorded example. Known gap: the result has the tokens, but a `plsql` step is not an agent run, so they do not reach the `uc_ai_agent_executions` totals and the execution hook does not see the call.
 - **Prompt profiles, agents, tools, events, structured output:** untouched.
 
 ## 6. Build plan (one sub-agent per work package, in order)

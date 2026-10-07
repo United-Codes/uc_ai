@@ -519,7 +519,51 @@ The workflow has four steps:
 
 Run the blocks as a user that has the web credential `OPENAI`. The profiles and the decision agent name this credential in their model configuration. The blocks do not set a session global.
 
-### Create the profile agents
+### Create the decision agent
+
+The decision agent asks one question. Its `state_template` is the placeholder `{message}`. The workflow passes the customer message in this input parameter.
+
+```sql
+DECLARE
+  l_id     NUMBER;
+  l_config CLOB;
+BEGIN
+  l_config := q'[{
+    "provider": "openai",
+    "model": "gpt-6-luna",
+    "state_template": "{message}",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this message?",
+        "criteria": {
+          "billing": "Payments, invoices, and refunds.",
+          "support": "Product usage and technical problems."
+        }
+      }
+    },
+    "model_config": {
+      "g_apex_web_credential": "OPENAI"
+    }
+  }]';
+
+  l_id := uc_ai_agents_api.create_agent(
+    p_code            => 'ticket_router',
+    p_description     => 'Decides which team handles a ticket',
+    p_agent_type      => uc_ai_agents_api.c_type_decision,
+    p_decision_config => l_config,
+    p_status          => uc_ai_agents_api.c_status_active
+  );
+
+  COMMIT;
+END;
+/
+```
+
+The workflow also needs the three profile agents `billing_reply`, `support_reply`, and `human_review_note`. Open the block below to see the code that creates them.
+
+<details>
+<summary>Create the profile agents</summary>
 
 Each profile agent has a prompt profile. The three profiles have the same structure. They write a reply or a note from the customer message.
 
@@ -585,46 +629,7 @@ END;
 /
 ```
 
-### Create the decision agent
-
-The decision agent asks one question. Its `state_template` is the placeholder `{message}`. The workflow passes the customer message in this input parameter.
-
-```sql
-DECLARE
-  l_id     NUMBER;
-  l_config CLOB;
-BEGIN
-  l_config := q'[{
-    "provider": "openai",
-    "model": "gpt-6-luna",
-    "state_template": "{message}",
-    "questions": {
-      "department": {
-        "type": "choice",
-        "instructions": "Which team should handle this message?",
-        "criteria": {
-          "billing": "Payments, invoices, and refunds.",
-          "support": "Product usage and technical problems."
-        }
-      }
-    },
-    "model_config": {
-      "g_apex_web_credential": "OPENAI"
-    }
-  }]';
-
-  l_id := uc_ai_agents_api.create_agent(
-    p_code            => 'ticket_router',
-    p_description     => 'Decides which team handles a ticket',
-    p_agent_type      => uc_ai_agents_api.c_type_decision,
-    p_decision_config => l_config,
-    p_status          => uc_ai_agents_api.c_status_active
-  );
-
-  COMMIT;
-END;
-/
-```
+</details>
 
 ### Create and run the workflow
 
@@ -718,53 +723,3 @@ Notes on this example:
 - The tokens of the decision step count in the run. In the first run, `ticket_router` used 135 input tokens and `billing_reply` used 52 input tokens and 102 output tokens. The session totals show 187 and 102. See [Read the tokens](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/#read-the-tokens).
 
 To delete the example, call `uc_ai_agents_api.purge_agent` for each of the five agent codes. Commit, and delete the three prompt profiles with `uc_ai_prompt_profiles_api.delete_prompt_profile`. The profiles stay after a purge.
-
-## Call decide from your own code
-
-A `plsql` step of a workflow can call `uc_ai.decide` from your own function. Use this route only if you need the call inside your own PL/SQL logic. A decision agent is the better choice for a decision step. The `plsql` route has two limits:
-
-- **UC AI does not count the tokens.** The execution rows of the workflow have 0 tokens for the step. In a run on 2026-10-07, `total_input_tokens` and `total_output_tokens` in `uc_ai_agent_executions` were both 0, and the step used 145 input tokens. The execution hook does not see the call. The tokens are in the step state, at `$.steps.route.usage`.
-- **The call reads the session globals.** The values come from the packages `uc_ai`, `uc_ai_openai`, and `uc_ai_typesafe`, as for a direct call. They include the credential and the base URL. Set them in the same session, before you call `execute_agent`.
-
-The function holds the call. It removes `raw` from the result, to keep the workflow state small.
-
-```sql
-create or replace function triage_decide (p_message in clob) return clob
-as
-  l_questions json_object_t := json_object_t(q'[{
-    "department": {
-      "type": "choice",
-      "instructions": "Which team should handle this message?",
-      "criteria": {
-        "billing": "Payments, invoices, and refunds.",
-        "support": "Product usage and technical problems.",
-        "sales":   "New purchases and pricing questions."
-      }
-    }
-  }]');
-  l_result json_object_t;
-begin
-  l_result := uc_ai.decide(
-    p_state     => p_message
-  , p_questions => l_questions
-  , p_provider  => uc_ai.c_provider_openai
-  );
-  l_result.remove('raw'); -- keep the workflow state small
-  return l_result.to_clob;
-end triage_decide;
-/
-```
-
-The step of the workflow calls the function and stores the result under its `output_key`:
-
-```json
-{
-  "step_type": "plsql",
-  "plsql_function_call": "return triage_decide(json_object_t(:parameters).get_object('input').get_clob('message'));",
-  "output_key": "route"
-}
-```
-
-Later steps use the answers in conditions, as in the example above. If `uc_ai.decide` raises an error, the `plsql` step raises it. A refused answer has no `choice`: use a condition on `type`.
-
-Delete the function when you are done: `drop function triage_decide`.

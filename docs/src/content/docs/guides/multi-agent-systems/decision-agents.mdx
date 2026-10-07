@@ -25,8 +25,6 @@ A decision agent has the same tracking as other agents. UC AI writes an executio
 | A free-text answer, tools, or a conversation | A [profile agent](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/) |
 | One call from your own PL/SQL code, outside an agent run | [`uc_ai.decide`](/products/uc-ai/docs/api/decide/) |
 
-A workflow can also call `uc_ai.decide` in a `plsql` step. A decision agent is the better choice inside a workflow, for two reasons. The tokens of the agent count in the totals of the run, and the credential is part of the agent. See [Limits of the plsql route](/products/uc-ai/docs/api/decide/#call-decide-from-your-own-code).
-
 ## Decision configuration
 
 A decision agent has no prompt profile. Its `decision_config` column holds one JSON object:
