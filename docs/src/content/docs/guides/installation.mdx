@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import { Card, CardGrid, LinkCard, Tabs, TabItem } from "@astrojs/starlight/components";
 
 ## Prerequisites
 
@@ -17,7 +17,10 @@ import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
 UC AI writes debug information to a log. If you do not have [Logger](https://github.com/OraOpenSource/Logger) installed, UC AI logs through the `apex_debug` package.
 
-### Option 1: GitHub release scripts
+Install UC AI with the scripts of a GitHub release, or with the source code of the repository.
+
+<Tabs>
+<TabItem label="Release scripts">
 
 The GitHub release page of each UC AI version contains scripts. These scripts install the UC AI packages and their dependencies.
 
@@ -27,7 +30,8 @@ The GitHub release page of each UC AI version contains scripts. These scripts in
 
 Run the script that you need in your SQL client. It installs the UC AI packages and their dependencies.
 
-### Option 2: Install GitHub repository
+</TabItem>
+<TabItem label="Repository">
 
 Download the source code of the latest release from the [GitHub releases page](https://github.com/United-Codes/uc_ai/releases/), or clone the [GitHub repository](https://github.com/United-Codes/uc_ai).
 
@@ -52,6 +56,9 @@ If you do not want Logger, install its "no op" (no operation) version instead. T
 cd ./src/dependencies/logger_3.1.1
 sql ./logger_install_no_op.sql
 ```
+
+</TabItem>
+</Tabs>
 
 ## Set up API Keys
 

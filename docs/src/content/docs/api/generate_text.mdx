@@ -5,7 +5,7 @@ sidebar:
   order: 10
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
 
 ## Parameters
 
@@ -72,7 +72,10 @@ FUNCTION generate_text (
 
 ### Parameter Reference
 
-#### For Signature 1 (Individual Prompts)
+The parameters depend on the signature. Select the signature to see its parameters.
+
+<Tabs>
+<TabItem label="Signature 1: Individual Prompts">
 
 | Parameter                | Type            | Required | Description                                                                      |
 | ------------------------ | --------------- | -------- | -------------------------------------------------------------------------------- |
@@ -84,7 +87,8 @@ FUNCTION generate_text (
 | `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. The response then conforms to this schema. |
 | `p_run_context`          | `JSON_OBJECT_T` | No       | Name/value pairs bound to this call. Every tool receives them under `_ctx`. See [the run context](/products/uc-ai/docs/guides/tools/#the-run-context). |
 
-#### For Signature 2 (Message Array)
+</TabItem>
+<TabItem label="Signature 2: Message Array">
 
 | Parameter                | Type            | Required | Description                                                                          |
 | ------------------------ | --------------- | -------- | ------------------------------------------------------------------------------------ |
@@ -94,6 +98,9 @@ FUNCTION generate_text (
 | `p_max_tool_calls`       | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).              |
 | `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. The response then conforms to this schema.     |
 | `p_run_context`          | `JSON_OBJECT_T` | No       | Name/value pairs bound to this call. Every tool receives them under `_ctx`. See [the run context](/products/uc-ai/docs/guides/tools/#the-run-context). |
+
+</TabItem>
+</Tabs>
 
 ### Parameter Details
 

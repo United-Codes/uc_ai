@@ -5,7 +5,7 @@ sidebar:
   order: 40
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
 
 AI reasoning means that an AI system can **work through a problem step by step**. The model analyzes the information logically and reaches a conclusion by deliberate thought, and not only by a pattern match. The AI therefore solves a complex problem better, explains its decisions better, and handles a new situation that its training data does not hold.
 
@@ -32,7 +32,12 @@ To enable reasoning, set the global flag `uc_ai.g_enable_reasoning := true;`. Th
 
 A provider-specific parameter controls how much the AI reasons. More effort gives a more detailed thought process, but it also increases the response time and the token usage. The complexity of the task and the model also control this effect.
 
-### Example1: Reasoning with Google Gemini
+### Provider-specific examples
+
+Each example enables reasoning and sets the provider-specific parameter.
+
+<Tabs syncKey="reasoning-provider">
+<TabItem label="Google Gemini">
 
 ```sql
 DECLARE
@@ -58,7 +63,8 @@ END;
 /
 ```
 
-### Example2: Reasoning with OpenAI
+</TabItem>
+<TabItem label="OpenAI">
 
 ```sql
 DECLARE
@@ -82,6 +88,9 @@ BEGIN
 END;
 /
 ```
+
+</TabItem>
+</Tabs>
 
 ## Generic Reasoning Settings
 
