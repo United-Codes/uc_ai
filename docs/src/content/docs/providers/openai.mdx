@@ -3,6 +3,8 @@ title: OpenAI
 description: UC AI provider documentation for OpenAI GPT models
 ---
 
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
 The UC AI OpenAI package integrates OpenAI's GPT models into your Oracle database applications.
 
 ## Features
@@ -31,13 +33,50 @@ You can get an API key by signing up at [OpenAI Platform](https://platform.opena
 
 ## Creating a Web Credential
 
-To use your OpenAI key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following configuration:
+To use your OpenAI key with APEX Web Credentials, create a web credential in your APEX workspace. You can use the APEX user interface or PL/SQL.
+
+<Tabs>
+<TabItem label="APEX user interface">
+
+Go to Workspace Utilities → Web Credentials and create a web credential with the following configuration:
 
 - Authentication Type: HTTP Header
 - Credential Name: `Authorization`
 - Credential Secret: `Bearer <your_api_key>`
 
 Also set `Valid for URLs` to the OpenAI API (https://api.openai.com/) to limit the scope of the credential.
+
+</TabItem>
+<TabItem label="PL/SQL">
+
+Run this block as the schema that holds UC AI. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the OpenAI API. The `apex_util.set_workspace` call is only necessary outside an APEX session, for example in SQLcl.
+
+```sql
+begin
+  -- apex_util.set_workspace(p_workspace => 'MY_WORKSPACE');
+
+  apex_credential.create_credential(
+    p_credential_name      => 'OPENAI',
+    p_credential_static_id => 'OPENAI',
+    p_authentication_type  => apex_credential.C_TYPE_HTTP_HEADER,
+    p_allowed_urls         => apex_t_varchar2('https://api.openai.com/'),
+    p_prompt_on_install    => false,
+    p_credential_comment   => 'Credential for OpenAI'
+  );
+
+  apex_credential.set_persistent_credentials(
+    p_credential_static_id => 'OPENAI',
+    p_key                  => 'Authorization',
+    p_value                => 'Bearer <your_api_key>'
+  );
+
+  commit;
+end;
+/
+```
+
+</TabItem>
+</Tabs>
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_openai.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 

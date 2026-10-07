@@ -3,6 +3,8 @@ title: Setup OCI Key
 description: How to create an API Credential key for Oracle Cloud Infrastructure and configure the APEX Web Credential
 ---
 
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
 ## Create OCI API Key
 
 After you log in to the [Oracle Cloud Console](https://cloud.oracle.com/), you can create an API key for the OCI provider in UC AI.
@@ -35,6 +37,9 @@ Now you see some additional information that you need to keep open or copy to a 
 
 Log-in to the APEX Workspace that is associated with the schema where UC AI is installed.
 
+<Tabs>
+<TabItem label="APEX user interface">
+
 **1. Open Web Credentials**
 
 From the top navigation menu select `App Builder` > `Workspace Utilities` > `All Workspace Utilities`.
@@ -62,3 +67,44 @@ Open your downloaded private key file in a text editor (`*.pem` file). Only copy
 Click `Create` to save the Web Credential.
 
 You can now reference it via the Static ID you entered.
+
+</TabItem>
+<TabItem label="PL/SQL">
+
+Run this block as the schema that holds UC AI. Replace the placeholders with the values from the previous step. For `p_client_secret`, use the content of the `*.pem` file **without** the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines.
+
+The `p_allowed_urls` parameter limits the credential to the OCI Generative AI and Document Understanding endpoints of your region. Replace `us-ashburn-1` with your region. The `apex_util.set_workspace` call is only necessary outside an APEX session, for example in SQLcl.
+
+```sql
+begin
+  -- apex_util.set_workspace(p_workspace => 'MY_WORKSPACE');
+
+  apex_credential.create_credential(
+    p_credential_name      => 'OCI_KEY',
+    p_credential_static_id => 'OCI_KEY',
+    p_authentication_type  => apex_credential.C_TYPE_OCI,
+    p_allowed_urls         => apex_t_varchar2(
+      'https://inference.generativeai.us-ashburn-1.oci.oraclecloud.com/',
+      'https://document.aiservice.us-ashburn-1.oci.oraclecloud.com/'
+    ),
+    p_prompt_on_install    => false,
+    p_credential_comment   => 'Credential for OCI'
+  );
+
+  apex_credential.set_persistent_credentials(
+    p_credential_static_id => 'OCI_KEY',
+    p_client_id            => 'ocid1.user.oc1..aaaaaaaa...',  -- User ID
+    p_client_secret        => 'MIIEvgIBADANBgkqhkiG9w0B...',  -- private key without BEGIN/END lines
+    p_namespace            => 'ocid1.tenancy.oc1..aaaaaaaa...',  -- Tenancy
+    p_fingerprint          => 'a8:...:a0'  -- Fingerprint
+  );
+
+  commit;
+end;
+/
+```
+
+You can now reference the web credential via the static ID `OCI_KEY`.
+
+</TabItem>
+</Tabs>

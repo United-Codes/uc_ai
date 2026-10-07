@@ -63,3 +63,36 @@ sup {
 		text-underline-offset: 2.1px;
 	}
 }
+/* Tabs as pills: gray track, raised active tab. */
+starlight-tabs [role='tablist'] {
+	width: fit-content;
+	gap: 0.25rem;
+	padding: 0.25rem;
+	border-bottom: 0;
+	border-radius: 0.75rem;
+	background-color: var(--sl-color-gray-6);
+}
+
+starlight-tabs .tab > [role='tab'] {
+	padding: 0.35rem 1rem;
+	border-radius: 0.5rem;
+	box-shadow: none;
+	font-size: var(--sl-text-sm);
+	transition:
+		background-color 0.15s,
+		color 0.15s;
+}
+
+starlight-tabs .tab > [role='tab']:hover {
+	color: var(--sl-color-white);
+}
+
+starlight-tabs .tab [role='tab'][aria-selected='true'] {
+	color: var(--sl-color-white);
+	background-color: var(--sl-color-gray-5);
+}
+
+:root[data-theme='light'] starlight-tabs .tab [role='tab'][aria-selected='true'] {
+	background-color: #ffffff;
+	box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
