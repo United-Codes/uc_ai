@@ -155,20 +155,30 @@ create or replace package body test_uc_ai_decisions_live as
   -- ---- TypeSafe jev -----------------------------------------------------------
 
   /*
-   * True when the web credential TYPESAFE_AI does not exist in this schema. A missing
+   * True when the web credential p_static_id does not exist in this schema. A missing
    * credential raises ORA-01403 from apex_web_service, with no name in the message,
    * so the test asks the APEX view first (dynamic SQL: no compile-time dependency).
    */
-  function ts_credential_missing return boolean
+  function credential_missing(p_static_id in varchar2) return boolean
   as
     c_sql constant varchar2(200 char) := 'select count(*) from apex_workspace_credentials where static_id = :1';
     l_count number;
   begin
-    execute immediate c_sql into l_count using c_ts_credential;
+    execute immediate c_sql into l_count using p_static_id;
     return l_count = 0;
   exception
     when others then
       return true;
+  end credential_missing;
+
+
+  /*
+   * True when the web credential TYPESAFE_AI does not exist in this schema.
+   */
+  function ts_credential_missing return boolean
+  as
+  begin
+    return credential_missing(c_ts_credential);
   end ts_credential_missing;
 
 
@@ -238,6 +248,122 @@ create or replace package body test_uc_ai_decisions_live as
     ut.expect(l_code, 'error code').to_equal(uc_ai_error.c_err_provider_response);
     ut.expect(l_message, 'vendor message').to_be_like('%provider TypeSafe: HTTP 400: Unknown model: jev-nope%');
   end ts_bad_model;
+
+  -- ---- decision agent ---------------------------------------------------------
+
+  /*
+   * A decision agent on p_provider answers the triage message; the execution row
+   * holds the tokens of the call and the session total equals it. The agent names
+   * its credential in model_config: it does not read the session globals.
+   */
+  procedure run_triage_agent(
+    p_provider   in varchar2
+  , p_credential in varchar2
+  )
+  as
+    c_code constant varchar2(50 char) := 'TEST_DECAL_TRIAGE';
+    l_config   json_object_t := json_object_t();
+    l_input    json_object_t := json_object_t();
+    l_model_cfg json_object_t := json_object_t();
+    l_provider_cfg json_object_t := json_object_t();
+    l_id       number;
+    l_result   json_object_t;
+    l_exec_id  number;
+    l_session  varchar2(255 char);
+    l_in       number;
+    l_out      number;
+    l_sess_in  number;
+    l_status   varchar2(50 char);
+    l_answers  json_object_t;
+  begin
+    -- a run that stopped half way can have left the agent behind
+    <<leftover_loop>>
+    for r in (select code from uc_ai_agents where code = c_code group by code) loop
+      uc_ai_agents_api.purge_agent(r.code);
+    end loop leftover_loop;
+
+    l_provider_cfg.put('g_apex_web_credential', p_credential);
+    l_model_cfg.put(p_provider, l_provider_cfg);
+    l_config.put('provider', p_provider);
+    if p_provider = uc_ai.c_provider_openai then
+      l_config.put('model', 'gpt-6-luna');
+    end if;
+    l_config.put('state_template', '{message}');
+    l_config.put('questions', json_object_t.parse(
+        '{"department":{"type":"choice","instructions":"Which team should handle this message?","criteria":{'
+        || '"billing":"Payments, invoices, and refunds.","support":"Product usage and technical problems.","sales":"New purchases and pricing questions."}}'
+        || ',"severity":{"type":"score","instructions":"How severe is the problem described?","criteria":['
+        || '"Appearance only; no lost functionality.","Something is broken but the customer can continue.","The customer cannot continue or lost money."]}'
+        || ',"wants_refund":{"type":"boolean","instructions":"Does the customer ask for money back?"'
+        || ',"criteria":{"true":"The customer asks for a refund or a reimbursement.","false":"The customer does not ask for money back."}}}'));
+    l_config.put('model_config', l_model_cfg);
+
+    l_id := uc_ai_agents_api.create_agent(
+      p_code            => c_code,
+      p_description     => 'Live decision agent test',
+      p_agent_type      => uc_ai_agents_api.c_type_decision,
+      p_decision_config => l_config.to_clob,
+      p_status          => uc_ai_agents_api.c_status_active
+    );
+    commit;
+    ut.expect(l_id, 'agent created').to_be_not_null();
+
+    l_input.put('message', 'I was charged twice for my order. Please refund the extra charge.');
+    begin
+      l_result := uc_ai_agents_api.execute_agent(p_agent_code => c_code, p_input_parameters => l_input);
+    exception
+      when others then
+        uc_ai_agents_api.purge_agent(c_code);
+        raise;
+    end;
+
+    l_exec_id := l_result.get_number('execution_id');
+    l_session := l_result.get_string('session_id');
+    l_answers := l_result.get_object('final_message').get_object('answers');
+    sys.dbms_output.put_line('Decision agent ' || p_provider || ': ' || l_answers.to_string
+      || ' tokens ' || l_result.get_object('usage').to_string);
+
+    select status, total_input_tokens, total_output_tokens
+      into l_status, l_in, l_out
+      from uc_ai_agent_executions
+     where id = l_exec_id;
+    select total_input_tokens into l_sess_in from uc_ai_agent_sessions where session_id = l_session;
+
+    uc_ai_agents_api.purge_agent(c_code);
+
+    ut.expect(l_status, 'status').to_equal(uc_ai_agents_api.c_exec_completed);
+    ut.expect(l_answers.get_object('department').get_string('choice'), 'department').to_equal('billing');
+    ut.expect(l_answers.get_object('wants_refund').get_number('probability'), 'wants_refund').to_be_greater_than(0.5);
+    ut.expect(l_in, 'input tokens on the execution').to_be_greater_than(0);
+    ut.expect(l_in, 'execution equals the result').to_equal(l_result.get_object('usage').get_number('prompt_tokens'));
+    ut.expect(l_out, 'output tokens on the execution').to_equal(l_result.get_object('usage').get_number('completion_tokens'));
+    ut.expect(l_sess_in, 'session total equals the execution').to_equal(l_in);
+  end run_triage_agent;
+
+
+  procedure agent_triage_example
+  as
+  begin
+    if credential_missing('OPENAI') then
+      sys.dbms_output.put_line('SKIPPED: the web credential OPENAI is not available here');
+      return;
+    end if;
+
+    run_triage_agent(uc_ai.c_provider_openai, 'OPENAI');
+  end agent_triage_example;
+
+
+  procedure ts_agent_triage_example
+  as
+  begin
+    if ts_credential_missing then
+      sys.dbms_output.put_line('SKIPPED: the web credential ' || c_ts_credential || ' is not available here');
+      return;
+    end if;
+
+    run_triage_agent(uc_ai.c_provider_typesafe, c_ts_credential);
+  end ts_agent_triage_example;
+
 
 end test_uc_ai_decisions_live;
 /

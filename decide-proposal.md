@@ -239,4 +239,4 @@ Live tests (disabled when a credential is missing): OpenAI and TypeSafe each wit
 
 ## 7. Later (not in the first release)
 
-Structured-output fallback for Anthropic, Google and the other chat providers (no real probabilities). A `p_config` overload and scalar helpers (`decide_choice`, `decide_probability`). A strict mode that turns distribution warnings and refusals into errors. A `decision` workflow step type with usage accounting. Prompt-profile integration. Batch of unrelated states.
+Structured-output fallback for Anthropic, Google and the other chat providers (no real probabilities). A `p_config` overload and scalar helpers (`decide_choice`, `decide_probability`). A strict mode that turns distribution warnings and refusals into errors. Prompt-profile integration. Batch of unrelated states. Done: the `decision` workflow step with usage accounting is the agent type `decision` (`uc_ai_agent_exec_api.execute_decision_agent`). A workflow uses it as a normal `agent` step, and the execution row holds the tokens, so the known gap in section 5 (Workflows) is closed for that route.

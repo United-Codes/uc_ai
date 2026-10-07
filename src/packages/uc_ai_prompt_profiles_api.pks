@@ -221,6 +221,23 @@ as
 
 
   /*
+   * Renders a template the way a prompt profile renders its prompts: every
+   * {name} placeholder is replaced with the value of the same key in
+   * p_parameters (case-insensitive; numbers and booleans become text, an object
+   * or array becomes its JSON text). A placeholder without a key raises
+   * c_err_missing_placeholder, exactly as execute_profile does.
+   *
+   * @param p_template   Template text with {name} placeholders
+   * @param p_parameters JSON object with the values; null counts as no values
+   * @return             The rendered text
+   */
+  function render_template(
+    p_template   in clob,
+    p_parameters in json_object_t default null
+  ) return clob;
+
+
+  /*
    * Executes a prompt profile with parameter substitution
    * 
    * Replaces placeholders (#placeholder#) in system and user prompt templates

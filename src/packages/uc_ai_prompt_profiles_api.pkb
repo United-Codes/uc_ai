@@ -490,48 +490,112 @@ create or replace package body uc_ai_prompt_profiles_api as
   /*
    * Replaces placeholders ({placeholder}) in a template with values from parameters JSON
    * Case-insensitive replacement
+   *
+   * One pass over the original template: each {name} is resolved once, left to
+   * right, and the value is appended as it is. Inserted text is never scanned
+   * again, so a value that contains {other} stays as it is. The key is compared
+   * as text, not as a pattern, and the value is not read as a replacement
+   * string (a backslash stays a backslash). A {name} without a key stays in the
+   * text. If two keys differ only in case, the first one in key order wins.
+   * Values and result are CLOBs, so there is no size limit of 32k.
    */
   function replace_placeholders(
     p_template   in clob,
     p_parameters in json_object_t
   ) return clob
   as
-    l_scope  uc_ai_logger.scope := gc_scope_prefix || 'replace_placeholders';
-    l_result clob := p_template;
-    l_key_arr   json_key_list;
-    l_key    varchar2(4000 char);
-    l_value  varchar2(32767 char);
+    l_scope   uc_ai_logger.scope := gc_scope_prefix || 'replace_placeholders';
+    l_result  clob;
+    l_key_arr json_key_list;
+    l_keys_up apex_t_varchar2 := apex_t_varchar2();
+    l_name    varchar2(32767 char);
+    l_value   clob;
+    l_pos     pls_integer := 1;
+    l_start   pls_integer;
+    l_end     pls_integer;
+    l_found   pls_integer;
+    l_element json_element_t;
+
+    -- appends p_amount characters of the template, from p_from, to the result
+    procedure append_template(
+      pio_result in out nocopy clob,
+      p_template in clob,
+      p_from     in pls_integer,
+      p_amount   in pls_integer
+    )
+    as
+    begin
+      if p_amount > 0 then
+        sys.dbms_lob.copy(
+          dest_lob    => pio_result,
+          src_lob     => p_template,
+          amount      => p_amount,
+          dest_offset => sys.dbms_lob.getlength(pio_result) + 1,
+          src_offset  => p_from
+        );
+      end if;
+    end append_template;
   begin
-    if p_parameters is null then
-      return l_result;
+    if p_parameters is null or p_template is null then
+      return p_template;
     end if;
 
     l_key_arr := p_parameters.get_keys;
-    
-    <<parameter_keys>>
+    <<upper_keys>>
     for i in 1 .. l_key_arr.count loop
-      l_key := l_key_arr(i);
-      
-      -- Get value as string
-      if p_parameters.get(l_key).is_string then
-        l_value := p_parameters.get_string(l_key);
-      elsif p_parameters.get(l_key).is_number then
-        l_value := to_char(p_parameters.get_number(l_key));
-      elsif p_parameters.get(l_key).is_boolean then
-        l_value := case when p_parameters.get_boolean(l_key) then 'true' else 'false' end;
+      l_keys_up.extend;
+      l_keys_up(i) := upper(l_key_arr(i));
+    end loop upper_keys;
+
+    sys.dbms_lob.createtemporary(l_result, true);
+
+    <<placeholder_loop>>
+    loop
+      l_start := regexp_instr(p_template, '\{[^{}]+\}', l_pos);
+      exit placeholder_loop when l_start = 0;
+
+      -- the pattern has no } inside, so the first } after the start closes it
+      l_end  := instr(p_template, '}', l_start);
+      l_name := substr(p_template, l_start + 1, l_end - l_start - 1);
+
+      -- text before the placeholder
+      append_template(l_result, p_template, l_pos, l_start - l_pos);
+
+      l_found := null;
+      <<find_key>>
+      for i in 1 .. l_keys_up.count loop
+        if l_keys_up(i) = upper(l_name) then
+          l_found := i;
+          exit find_key;
+        end if;
+      end loop find_key;
+
+      if l_found is null then
+        -- no value: the placeholder stays as it is
+        append_template(l_result, p_template, l_start, l_end - l_start + 1);
       else
-        l_value := p_parameters.get(l_key).to_string;
+        l_element := p_parameters.get(l_key_arr(l_found));
+        if l_element.is_string then
+          l_value := p_parameters.get_clob(l_key_arr(l_found));
+        elsif l_element.is_number then
+          l_value := to_char(p_parameters.get_number(l_key_arr(l_found)));
+        elsif l_element.is_boolean then
+          l_value := case when p_parameters.get_boolean(l_key_arr(l_found)) then 'true' else 'false' end;
+        else
+          l_value := l_element.to_clob;
+        end if;
+
+        if l_value is not null and sys.dbms_lob.getlength(l_value) > 0 then
+          sys.dbms_lob.append(l_result, l_value);
+        end if;
       end if;
-      
-      -- Replace placeholder (case-insensitive)
-      l_result := regexp_replace(
-        l_result,
-        '\{' || l_key || '\}',
-        l_value,
-        1, 0, 'i'
-      );
-    end loop parameter_keys;
-    
+
+      l_pos := l_end + 1;
+    end loop placeholder_loop;
+
+    -- text after the last placeholder
+    append_template(l_result, p_template, l_pos, sys.dbms_lob.getlength(p_template) - l_pos + 1);
+
     return l_result;
   exception
     when others then
@@ -595,6 +659,28 @@ create or replace package body uc_ai_prompt_profiles_api as
       l_position := regexp_instr(l_combined_template, '\{[A-Za-z0-9_]+\}', l_position) + length(l_placeholder);
     end loop placeholder_loop;
   end validate_parameters;
+
+
+  /*
+   * Renders one template: validates the placeholders, then replaces them
+   */
+  function render_template(
+    p_template   in clob,
+    p_parameters in json_object_t default null
+  ) return clob
+  as
+    l_parameters json_object_t;
+  begin
+    -- validate_parameters reads the parameters to report a missing one, so it
+    -- gets an empty object instead of null
+    l_parameters := coalesce(p_parameters, json_object_t());
+    validate_parameters(
+      p_system_template => p_template,
+      p_user_template   => null,
+      p_parameters      => l_parameters
+    );
+    return replace_placeholders(p_template, l_parameters);
+  end render_template;
 
 
   /*

@@ -3,6 +3,7 @@ create or replace package test_uc_ai_decisions_live as
 
   --%suite(Decisions: live OpenAI Decisions and TypeSafe jev API calls)
   --%suitepath(uc_ai)
+  --%rollback(manual)
 
   -- Each test calls the OpenAI Decisions API (model gpt-6-luna) with the APEX web
   -- credential OPENAI, or the TypeSafe jev API (model jev-latest) with the APEX web
@@ -30,6 +31,12 @@ create or replace package test_uc_ai_decisions_live as
 
   --%test(TypeSafe: a bad model name raises -20302 with the vendor message)
   procedure ts_bad_model;
+
+  --%test(Decision agent: a triage run on OpenAI records the tokens on the execution)
+  procedure agent_triage_example;
+
+  --%test(Decision agent: a triage run on TypeSafe records the tokens on the execution)
+  procedure ts_agent_triage_example;
 
 end test_uc_ai_decisions_live;
 /

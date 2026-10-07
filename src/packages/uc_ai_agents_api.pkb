@@ -947,7 +947,13 @@ create or replace package body uc_ai_agents_api as
     -- final_message as a single assistant row so the turn is not lost.
     if not p_result.has('messages') then
       if p_result.has('final_message') then
-        ins(p_role => 'assistant', p_content => p_result.get_clob('final_message'),
+        -- get_clob returns null for the JSON object of a decision agent
+        ins(p_role => 'assistant',
+            p_content => case
+                           when p_result.get('final_message').is_object
+                             then p_result.get('final_message').to_clob
+                           else p_result.get_clob('final_message')
+                         end,
             p_agent_code => l_exec_agent);
         commit;
       end if;
@@ -2894,13 +2900,7 @@ create or replace package body uc_ai_agents_api as
           l_result := uc_ai_agent_exec_api.execute_conversation_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
 
         when c_type_decision then
-          -- WP2 replaces this branch with the executor
-          uc_ai_error.raise_error(
-            p_error_code => uc_ai_error.c_err_invalid_config
-          , p_scope      => l_scope
-          , p0           => 'decision agent ' || p_agent_code
-          , p1           => 'execution of decision agents is not implemented yet'
-          );
+          l_result := uc_ai_agent_exec_api.execute_decision_agent(l_agent, p_input_parameters, l_exec_id, p_files, l_run_context);
 
         else
           uc_ai_error.raise_error(
