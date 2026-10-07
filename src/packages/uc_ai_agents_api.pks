@@ -22,6 +22,7 @@ as
   c_type_orchestrator constant uc_ai_agents.agent_type%type := 'orchestrator';
   c_type_handoff      constant uc_ai_agents.agent_type%type := 'handoff';
   c_type_conversation constant uc_ai_agents.agent_type%type := 'conversation';
+  c_type_decision     constant uc_ai_agents.agent_type%type := 'decision';
 
   -- Workflow type constants
   c_workflow_sequential  constant varchar2(50 char) := 'sequential';
@@ -153,7 +154,7 @@ as
    * 
    * @param p_code                   Unique code for the agent
    * @param p_description            Description of the agent
-   * @param p_agent_type             Type: 'profile', 'workflow', 'orchestrator', 'handoff', 'conversation'
+   * @param p_agent_type             Type: 'profile', 'workflow', 'orchestrator', 'handoff', 'conversation', 'decision'
    * @param p_prompt_profile_code    For profile agents: code of the referenced prompt profile
    * @param p_prompt_profile_version For profile agents: version (null = latest active)
    * @param p_workflow_definition    JSON workflow definition for workflow agents
@@ -165,6 +166,7 @@ as
    * @param p_max_history_messages   Optional max conversation history messages
    * @param p_version                Version number (default 1)
    * @param p_status                 Status: 'draft', 'active', or 'archived' (default 'draft')
+   * @param p_decision_config        JSON config for decision agents (see validate_decision_config)
    * 
    * @return id                      The ID of the created agent
    */
@@ -182,7 +184,8 @@ as
     p_max_iterations         in uc_ai_agents.max_iterations%type default null,
     p_max_history_messages   in uc_ai_agents.max_history_messages%type default null,
     p_version                in uc_ai_agents.version%type default 1,
-    p_status                 in uc_ai_agents.status%type default c_status_draft
+    p_status                 in uc_ai_agents.status%type default c_status_draft,
+    p_decision_config        in uc_ai_agents.decision_config%type default null
   ) return uc_ai_agents.id%type;
 
 
@@ -200,6 +203,7 @@ as
    * @param p_timeout_seconds        Optional execution timeout
    * @param p_max_iterations         Optional max iterations for loops
    * @param p_max_history_messages   Optional max conversation history messages
+   * @param p_decision_config        JSON config for decision agents (see validate_decision_config)
    */
   procedure update_agent(
     p_id                     in uc_ai_agents.id%type,
@@ -212,7 +216,8 @@ as
     p_output_schema          in uc_ai_agents.output_schema%type default null,
     p_timeout_seconds        in uc_ai_agents.timeout_seconds%type default null,
     p_max_iterations         in uc_ai_agents.max_iterations%type default null,
-    p_max_history_messages   in uc_ai_agents.max_history_messages%type default null
+    p_max_history_messages   in uc_ai_agents.max_history_messages%type default null,
+    p_decision_config        in uc_ai_agents.decision_config%type default null
   );
 
 
@@ -401,6 +406,29 @@ as
   ) return t_validation_result;
 
 
+  /*
+   * Validates the decision_config of a decision agent
+   *
+   * decision_config is a JSON object:
+   *   provider        string, required. A provider that supports uc_ai.decide: openai or typesafe
+   *   model           string, optional. Null uses the default model of the provider
+   *   state_template  string, required, not empty. The shared text state sent to the provider
+   *   questions       object, required, at least one key. One entry per named question.
+   *                   The rules for a question are checked by uc_ai.decide when the agent runs
+   *   options         object, optional. The p_options of uc_ai.decide
+   *   model_config    object, optional. Same keys as the model_config of a prompt profile
+   *                   (credentials, base_url, ...), checked by uc_ai_settings.build_from_config
+   * Any other key is not valid.
+   *
+   * @param p_decision_config  The JSON decision config to validate
+   *
+   * @return  Validation result with is_valid flag and error_reason (if invalid)
+   */
+  function validate_decision_config(
+    p_decision_config in clob
+  ) return t_validation_result;
+
+
   -- ============================================================================
   -- Workflow-Specific Functions
   -- ============================================================================
@@ -576,7 +604,7 @@ as
    * @param p_parent_exec_id    Optional parent execution ID for nested calls
    * @param p_response_schema   Optional JSON schema for response validation (profile agents only)
    * @param p_files             Optional files (documents/images) to attach to the user message
-   *                            (profile/orchestrator agents only). Build with uc_ai_message_api.t_files.
+   *                            (profile/orchestrator/decision agents only). Build with uc_ai_message_api.t_files.
    * @param p_extra_tool_tag    Engine-internal: extra tool tag merged into the profile's model
    *                            config (profile agents only; used for handoff transfer tools)
    * @param p_run_context       Name/value pairs bound to this run, e.g. {"document_id":"7"}.
@@ -620,7 +648,7 @@ as
    * @param p_parent_exec_id    Optional parent execution ID for nested calls
    * @param p_response_schema   Optional JSON schema for response validation (profile agents only)
    * @param p_files             Optional files (documents/images) to attach to the user message
-   *                            (profile/orchestrator agents only). Build with uc_ai_message_api.t_files.
+   *                            (profile/orchestrator/decision agents only). Build with uc_ai_message_api.t_files.
    * @param p_extra_tool_tag    Engine-internal: extra tool tag merged into the profile's model
    *                            config (profile agents only; used for handoff transfer tools)
    * @param p_run_context       Name/value pairs bound to this run, e.g. {"document_id":"7"}.

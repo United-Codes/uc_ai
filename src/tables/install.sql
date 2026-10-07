@@ -188,6 +188,9 @@ create table uc_ai_agents (
   -- For agent_type = 'orchestrator'/'handoff'/'conversation'
   orchestration_config   clob,
   
+  -- For agent_type = 'decision'
+  decision_config        clob,
+  
   -- Shared configuration
   input_schema           clob,
   output_schema          clob,
@@ -204,7 +207,7 @@ create table uc_ai_agents (
   constraint uc_ai_agents_uk unique (code, version),
   constraint uc_ai_agents_status_ck check (status in ('draft', 'active', 'archived')),
   constraint uc_ai_agents_type_ck check (agent_type in
-    ('profile', 'workflow', 'orchestrator', 'handoff', 'conversation')),
+    ('profile', 'workflow', 'orchestrator', 'handoff', 'conversation', 'decision')),
   -- Each agent type requires its own configuration column to be populated
   constraint uc_ai_agents_profile_ck check (
     agent_type <> 'profile' or prompt_profile_code is not null),
@@ -212,8 +215,12 @@ create table uc_ai_agents (
     agent_type <> 'workflow' or workflow_definition is not null),
   constraint uc_ai_agents_orch_ck check (
     agent_type not in ('orchestrator', 'handoff', 'conversation')
-    or orchestration_config is not null)
+    or orchestration_config is not null),
+  constraint uc_ai_agents_decision_ck check (
+    agent_type <> 'decision' or decision_config is not null)
 );
+
+comment on column uc_ai_agents.decision_config is 'For agent_type = ''decision'': JSON object with provider, model, state_template, questions and optional options and model_config. Run through uc_ai.decide';
 
 -- Ensure only one active version per code
 create unique index uc_ai_agents_active_uk on uc_ai_agents(

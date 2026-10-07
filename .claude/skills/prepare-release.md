@@ -155,6 +155,8 @@ begin ut.run('test_uc_ai_agent_session_meta'); end;      -- 28
 /
 begin ut.run('test_uc_ai_agent_validation'); end;        -- 41
 /
+begin ut.run('test_uc_ai_decision_agent'); end;         -- 47
+/
 begin ut.run('test_uc_ai_agent_as_tool'); end;           -- 20
 /
 begin ut.run('test_uc_ai_agent_purge'); end;             --  9

@@ -39,6 +39,7 @@ begin
   , 'test_uc_ai_workflow_mapping'
   , 'test_uc_ai_agent_session_meta'
   , 'test_uc_ai_agent_validation'
+  , 'test_uc_ai_decision_agent'
   , 'test_uc_ai_agent_as_tool'
   , 'test_uc_ai_agent_purge'
   , 'test_uc_ai_memory'
