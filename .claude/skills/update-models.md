@@ -21,6 +21,7 @@ Models are defined in exactly **one place**: as `c_model_*` constants in each pr
 | `src/packages/uc_ai_oci.pks` | OCI GenAI model constants |
 | `src/packages/uc_ai_xai.pks` | xAI Grok model constants |
 | `src/packages/uc_ai_mistral.pks` | Mistral model constants (`-latest` aliases) |
+| `src/packages/uc_ai_typesafe.pks` | TypeSafe jev (`uc_ai.decide` only): not a chat provider, the generator skips it |
 | `src/packages/uc_ai_ollama.pks` | Ollama (no hardcoded models — dynamic) |
 | `src/packages/uc_ai_openrouter.pks` | OpenRouter (no hardcoded models — dynamic) |
 | `src/packages/uc_ai_utils.pks` | Package spec with pipelined function signatures and record types |

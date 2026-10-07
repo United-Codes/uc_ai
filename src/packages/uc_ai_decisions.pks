@@ -16,7 +16,8 @@ as
    * decide() here. The provider API behind it is in beta, so the shape of the
    * result can still change. Each provider has a private adapter in the body that
    * turns the neutral call into the provider request and the provider response
-   * into the neutral result. Providers: openai (Decisions API, POST /decisions).
+   * into the neutral result. Providers: openai (Decisions API, POST /decisions) and
+   * typesafe (TypeSafe jev, POST /systemone; text only, no refusals).
    *
    * One shared state (text and optional images) and several named questions. Each
    * question has a type and gets a typed answer with probabilities.
@@ -56,7 +57,8 @@ as
    *           with fewer than 2 levels, an empty state without files
    *   -20508  the provider cannot take it: more choices or levels than the
    *           provider allows (limits table in the body), an image media type the
-   *           provider does not accept
+   *           provider does not accept, any file for a provider that takes text
+   *           only (typesafe)
    *
    * After the response:
    *   -20302  the provider reported an error (HTTP status 400 or more, or an error body)
@@ -71,9 +73,16 @@ as
    *   tolerance is 1e-6 plus half a unit of the 2-decimal rounding (0.005) for
    *   each rounded value that goes into the sum or the mean.
    *
-   * p_options: safety_identifier (string, sent as it is) and extra_body (object,
-   * merged into the request; the keys model, input and questions always win).
-   * Every other key is ignored and adds a text to warnings.
+   * p_options: safety_identifier (OpenAI only; string, sent as it is) and extra_body
+   * (object, merged into the request; the keys model, input (OpenAI) or state
+   * (TypeSafe) and questions always win). Every other key is ignored and adds a
+   * text to warnings.
+   *
+   * TypeSafe: the boolean question is a noul question and its criteria are sent
+   * as they are (true and false texts); jev answers every question, so the answer
+   * type refused does not occur. confidence is in provider_metadata for choice
+   * and score answers. An error body (detail) raises -20302 with the vendor
+   * message and the field path, never the echoed input.
    *
    * The request body can hold base64 images and user text. It is never logged.
    */

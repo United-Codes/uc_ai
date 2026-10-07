@@ -26,6 +26,13 @@ create or replace package test_uc_ai_settings as
   --%test(build_from_config maps the oci block, including the dedicated endpoint id)
   procedure config_maps_oci_keys;
 
+  --%test(build_from_config maps the typesafe block)
+  procedure config_maps_typesafe_keys;
+
+  --%test(build_from_config raises on an unknown typesafe key)
+  --%throws(-20503)
+  procedure config_rejects_unknown_typesafe_key;
+
   --%test(build_from_config raises on an unknown oci key)
   --%throws(-20503)
   procedure config_rejects_unknown_oci_key;

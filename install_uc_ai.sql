@@ -52,6 +52,7 @@ PROMPT - Installing AI provider package specifications...
 @@src/packages/uc_ai_oci.pks
 @@src/packages/uc_ai_ollama.pks
 @@src/packages/uc_ai_openai.pks
+@@src/packages/uc_ai_typesafe.pks
 @@src/packages/uc_ai_xai.pks
 @@src/packages/uc_ai_openrouter.pks
 @@src/packages/uc_ai_responses_api.pks

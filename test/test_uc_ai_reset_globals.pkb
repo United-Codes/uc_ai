@@ -67,6 +67,9 @@ create or replace package body test_uc_ai_reset_globals as
 
     -- Mistral
     uc_ai_mistral.g_apex_web_credential := 'DIRTY';
+
+    -- TypeSafe
+    uc_ai_typesafe.g_apex_web_credential := 'DIRTY';
   end dirty_all_globals;
 
   procedure resets_uc_ai_core
@@ -148,6 +151,9 @@ create or replace package body test_uc_ai_reset_globals as
 
     -- Mistral
     ut.expect(uc_ai_mistral.g_apex_web_credential).to_be_null();
+
+    -- TypeSafe
+    ut.expect(uc_ai_typesafe.g_apex_web_credential).to_be_null();
   end resets_providers;
 
 end test_uc_ai_reset_globals;

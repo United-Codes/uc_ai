@@ -39,10 +39,13 @@ get_model_constants() {
 }
 
 # Extract provider IDs from uc_ai.pks (e.g. "openai", "anthropic", ...)
-# Skips c_provider_responses_api as it's not a real provider
+# Skips c_provider_responses_api as it's not a real provider, and
+# c_provider_typesafe: TypeSafe jev only answers uc_ai.decide (no chat, no
+# embeddings), so it must not show up in the provider or model lists.
 get_provider_ids() {
   grep -oE "c_provider_[a-z_]+" "$CORE_SPEC" \
     | grep -v 'c_provider_responses_api' \
+    | grep -v 'c_provider_typesafe' \
     | sed 's/c_provider_//' \
     | awk '!seen[$0]++'
 }

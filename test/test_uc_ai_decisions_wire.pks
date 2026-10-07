@@ -182,5 +182,124 @@ create or replace package test_uc_ai_decisions_wire as
   --%test(The request body, the state and the images are not logged)
   procedure body_is_not_logged;
 
+  -- TypeSafe jev ----------------------------------------------------------------------------
+  -- The jev responses in test/samples/typesafe/decisions are real ones, recorded from
+  -- POST /v1/systemone. The answers that need a state nobody can ask the API for are
+  -- written out here. Credential tests read uc_ai_get_key in one test and never print it.
+
+  -- request shape
+  --%test(TypeSafe: URL is base/systemone, the default model is jev-latest and the credential is named)
+  procedure ts_url_headers_and_default_model;
+
+  --%test(TypeSafe: base_url replaces the host and a trailing slash does not double)
+  procedure ts_base_url_replaces_host;
+
+  --%test(TypeSafe: the triage and the empty-level request equal the recorded requests)
+  procedure ts_request_matches_recorded;
+
+  --%test(TypeSafe: boolean becomes noul with only the criteria that have a text)
+  procedure ts_noul_criteria;
+
+  --%test(TypeSafe: a choice option without description is null, a score level without description is an empty string)
+  procedure ts_blank_descriptions;
+
+  --%test(TypeSafe: questions are an object keyed by id in the order of the question ids)
+  procedure ts_question_order_follows_keys;
+
+  --%test(TypeSafe: the state is a plain string and texts longer than 32k reach the request unchanged)
+  procedure ts_state_and_long_texts;
+
+  --%test(TypeSafe: extra_body is merged but cannot replace model, state or questions; safety_identifier warns)
+  procedure ts_extra_body_and_options;
+
+  --%test(TypeSafe: 255 options and 10 levels are sent as they are)
+  procedure ts_limits_are_sent;
+
+  -- response mapping
+  --%test(TypeSafe: the recorded triage response becomes the neutral result)
+  procedure ts_triage_result_is_neutral;
+
+  --%test(TypeSafe: noul becomes boolean with the probability and the wire name never appears)
+  procedure ts_noul_maps_to_boolean;
+
+  --%test(TypeSafe: confidence lands in provider_metadata for choice and score only)
+  procedure ts_confidence_in_provider_metadata;
+
+  --%test(TypeSafe: usage is mapped and the provider usage object is kept)
+  procedure ts_usage_is_mapped;
+
+  --%test(TypeSafe: model is the resolved version from the response, else the requested one; raw is kept)
+  procedure ts_model_and_raw;
+
+  --%test(TypeSafe: recorded responses map without warnings and without refusals)
+  procedure ts_recorded_samples_map;
+
+  --%test(TypeSafe: an answer without probabilities or confidence maps without them)
+  procedure ts_missing_optional_parts;
+
+  -- provider errors
+  --%test(TypeSafe: 400 with a detail object raises -20302 with the vendor message)
+  procedure ts_error_unknown_model;
+
+  --%test(TypeSafe: 400 with a detail string raises -20302 with the message)
+  procedure ts_error_detail_string;
+
+  --%test(TypeSafe: 422 with a validation list raises -20302 with message and field path, never the echoed input)
+  procedure ts_error_422_validation_list;
+
+  --%test(TypeSafe: a long validation list is cut after 3 items)
+  procedure ts_error_422_many_items;
+
+  --%test(TypeSafe: 429, 529, 401 and an HTML 502 raise -20302)
+  procedure ts_error_status_codes;
+
+  --%test(TypeSafe: a 200 with an error body raises -20302)
+  procedure ts_error_body_on_200;
+
+  -- answers that do not match the questions
+  --%test(TypeSafe: a question without an answer or an answer for an unknown question raises -20304)
+  procedure ts_answer_missing_or_extra;
+
+  --%test(TypeSafe: an answer of the wrong type raises -20304, also the neutral type boolean)
+  procedure ts_answer_wrong_type;
+
+  --%test(TypeSafe: a choice that is not an option raises -20304)
+  procedure ts_choice_not_an_option;
+
+  --%test(TypeSafe: a score outside the levels raises -20304)
+  procedure ts_score_out_of_range;
+
+  --%test(TypeSafe: a probability outside 0 to 1 raises -20304)
+  procedure ts_probability_out_of_range;
+
+  --%test(TypeSafe: a probability key for an unknown option or level raises -20304)
+  procedure ts_probability_unknown_key;
+
+  --%test(TypeSafe: a response without an answers object or with a bad answer raises -20304)
+  procedure ts_answers_bad_shape;
+
+  -- distribution checks
+  --%test(TypeSafe: probabilities that do not sum to 1 give a warning and no error)
+  procedure ts_sum_not_one_warns;
+
+  --%test(TypeSafe: a score computed from unrounded probabilities (1.96 for 0.03 and 0.97) gives no warning)
+  procedure ts_mean_rounding_tolerated;
+
+  --%test(TypeSafe: a score that differs from the weighted mean gives a warning and no error)
+  procedure ts_mean_mismatch_warns;
+
+  -- credential and logging
+  --%test(TypeSafe: credential resolution is uc_ai.g_apex_web_credential, then uc_ai_typesafe.g_apex_web_credential)
+  procedure ts_credential_resolution;
+
+  --%test(TypeSafe: without a web credential the key comes from uc_ai_get_key('typesafe'))
+  procedure ts_key_from_get_key;
+
+  --%test(TypeSafe: the request body and the state are not logged)
+  procedure ts_body_is_not_logged;
+
+  --%test(TypeSafe: the validation echo of a 422 is not logged)
+  procedure ts_422_echo_is_not_logged;
+
 end test_uc_ai_decisions_wire;
 /

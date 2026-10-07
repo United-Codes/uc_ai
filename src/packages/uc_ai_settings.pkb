@@ -74,6 +74,9 @@ as
     -- mistral
     l_s.ms_apex_web_credential         := null;
 
+    -- typesafe
+    l_s.ts_apex_web_credential         := null;
+
     -- responses api
     l_s.ra_base_url                    := null;
     l_s.ra_apex_web_credential         := null;
@@ -162,6 +165,9 @@ as
 
     -- mistral
     l_s.ms_apex_web_credential         := uc_ai_mistral.g_apex_web_credential;
+
+    -- typesafe
+    l_s.ts_apex_web_credential         := uc_ai_typesafe.g_apex_web_credential;
 
     -- responses api
     l_s.ra_base_url                    := uc_ai_responses_api.g_base_url;
@@ -303,6 +309,7 @@ as
           , uc_ai.c_provider_xai
           , uc_ai.c_provider_openrouter
           , uc_ai.c_provider_mistral
+          , uc_ai.c_provider_typesafe
           ) and l_value.is_object then
             null;
           else
@@ -491,6 +498,28 @@ as
                 );
             end case;
           end loop mistral_keys_loop;
+        end if;
+
+      when uc_ai.c_provider_typesafe then
+        if p_config.has(uc_ai.c_provider_typesafe) and p_config.get(uc_ai.c_provider_typesafe).is_object then
+          l_provider_obj := treat(p_config.get(uc_ai.c_provider_typesafe) as json_object_t);
+          l_provider_key_arr := l_provider_obj.get_keys;
+          <<typesafe_keys_loop>>
+          for i in 1 .. l_provider_key_arr.count loop
+            l_key := l_provider_key_arr(i);
+            case l_key
+              when 'g_apex_web_credential' then
+                l_s.ts_apex_web_credential := l_provider_obj.get_string(l_key);
+              else
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'TypeSafe provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
+            end case;
+          end loop typesafe_keys_loop;
         end if;
 
       when uc_ai.c_provider_oci then

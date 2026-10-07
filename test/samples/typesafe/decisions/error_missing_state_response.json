@@ -1,0 +1,1 @@
+{"detail":[{"type":"missing","loc":["body","state"],"msg":"Field required","input":{"questions":{"n":{"type":"noul","instructions":"Is it an outage?","criteria":null}},"model":"jev-latest"}}]}

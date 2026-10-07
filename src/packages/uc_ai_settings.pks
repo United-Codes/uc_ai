@@ -95,6 +95,8 @@ as
   , or_apex_web_credential         varchar2(255 char)
     -- mistral
   , ms_apex_web_credential         varchar2(255 char)
+    -- typesafe
+  , ts_apex_web_credential         varchar2(255 char)
     -- responses api (populated by openai/ollama/oci before delegating)
   , ra_base_url                    varchar2(4000 char)
   , ra_apex_web_credential         varchar2(255 char)

@@ -20,8 +20,11 @@ create or replace package test_uc_ai_decisions as
   procedure reset_state;
 
   -- provider ---------------------------------------------------------------------
-  --%test(A null, unknown or chat-only provider raises -20306 and names the decision providers)
+  --%test(A null, unknown or chat-only provider raises -20306 and names the decision providers openai and typesafe)
   procedure unknown_provider;
+
+  --%test(TypeSafe cannot chat: generate_text raises -20306 and the provider and model are not in the utils lists)
+  procedure typesafe_is_not_a_chat_provider;
 
   --%test(The provider is checked before the questions)
   procedure provider_before_questions;
@@ -54,6 +57,12 @@ create or replace package test_uc_ai_decisions as
   --%test(More than 255 options or 10 levels raise -20508; 255 and 10 work, see the wire tests)
   procedure provider_limits;
 
+  --%test(TypeSafe: more than 255 options or 10 levels raise -20508 and no request is sent)
+  procedure typesafe_limits;
+
+  --%test(TypeSafe: 1 option, 1 level and a malformed question still raise -20503 before any request)
+  procedure typesafe_neutral_checks;
+
   -- state and files -------------------------------------------------------------
   --%test(An empty state without files raises -20503)
   procedure empty_state;
@@ -63,6 +72,9 @@ create or replace package test_uc_ai_decisions as
 
   --%test(A file object of another shape raises -20503)
   procedure bad_file_shape;
+
+  --%test(TypeSafe takes text only: any file raises -20508 before any request, with or without state)
+  procedure typesafe_files_unsupported;
 
   -- options -------------------------------------------------------------------------
   --%test(An option of the wrong type raises -20503)

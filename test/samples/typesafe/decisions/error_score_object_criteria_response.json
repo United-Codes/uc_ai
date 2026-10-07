@@ -1,0 +1,1 @@
+{"detail":[{"type":"list_type","loc":["body","questions","s","score","criteria"],"msg":"Input should be a valid list","input":{"a":"x","b":"y"}}]}

@@ -2904,6 +2904,190 @@ create or replace package body uc_ai_test_samples as
 }
 ~';
 
+      when 'typesafe/decisions/choices_255_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"c":{"type":"choice","choice":"cat_0","confidence":0.99,"probabilities":{"cat_47":0.0,"cat_92":0.0,"cat_58":0.0,"cat_110":0.0,"cat_104":0.0,"cat_31":0.0,"cat_27":0.0,"cat_111":0.0,"cat_35":0.0,"cat_168":0.0,"cat_161":0.0,"cat_175":0.0,"cat_242":0.0,"cat_195":0.0,"cat_239":0.0,"cat_1":0.0,"cat_179":0.0,"cat_56":0.0,"cat_222":0.0,"cat_13":0.0,"cat_55":0.0,"cat_108":0.0,"cat_78":0.0,"cat_254":0.0,"cat_227":0.0,"cat_30":0.0,"cat_208":0.0,"cat_156":0.0,"cat_137":0.0,"cat_141":0.0,"cat_43":0.0,"cat_83":0.0,"cat_123":0.0,"cat_131":0.0,"cat_251":0.0,"cat_80":0.0,"cat_235":0.0,"cat_95":0.0,"cat_129":0.0,"cat_219":0.0,"cat_76":0.0,"cat_112":0.0,"cat_214":0.0,"cat_174":0.0,"cat_204":0.0,"cat_228":0.0,"cat_184":0.0,"cat_11":0.0,"cat_200":0.0,"cat_191":0.0,"cat_89":0.0,"cat_88":0.0,"cat_166":0.0,"cat_158":0.0,"cat_106":0.0,"cat_192":0.0,"cat_250":0.0,"cat_121":0.0,"cat_39":0.0,"cat_126":0.0,"cat_51":0.0,"cat_186":0.0,"cat_86":0.0,"cat_38":0.0,"cat_217":0.0,"cat_15":0.0,"cat_6":0.0,"cat_216":0.0,"cat_41":0.0,"cat_73":0.0,"cat_26":0.0,"cat_233":0.0,"cat_143":0.0,"cat_241":0.0,"cat_115":0.0,"cat_128":0.0,"cat_220":0.0,"cat_46":0.0,"cat_154":0.0,"cat_67":0.0,"cat_209":0.0,"cat_74":0.0,"cat_130":0.0,"cat_3":0.0,"cat_18":0.0,"cat_0":0.99,"cat_238":0.0,"cat_245":0.0,"cat_187":0.0,"cat_72":0.0,"cat_215":0.0,"cat_2":0.0,"cat_152":0.0,"cat_33":0.0,"cat_182":0.0,"cat_54":0.0,"cat_193":0.0,"cat_102":0.0,"cat_150":0.0,"cat_134":0.0,"cat_136":0.0,"cat_181":0.0,"cat_189":0.0,"cat_142":0.0,"cat_52":0.0,"cat_249":0.0,"cat_14":0.0,"cat_48":0.0,"cat_229":0.0,"cat_201":0.0,"cat_45":0.0,"cat_71":0.0,"cat_234":0.0,"cat_202":0.0,"cat_21":0.0,"cat_198":0.0,"cat_84":0.0,"cat_176":0.0,"cat_246":0.0,"cat_162":0.0,"cat_53":0.0,"cat_178":0.0,"cat_120":0.0,"cat_119":0.0,"cat_19":0.0,"cat_194":0.0,"cat_81":0.0,"cat_139":0.0,"cat_77":0.0,"cat_82":0.0,"cat_116":0.0,"cat_103":0.0,"cat_221":0.0,"cat_155":0.0,"cat_5":0.0,"cat_147":0.0,"cat_101":0.0,"cat_75":0.0,"cat_20":0.0,"cat_169":0.0,"cat_244":0.0,"cat_223":0.0,"cat_153":0.0,"cat_69":0.0,"cat_225":0.0,"cat_60":0.0,"cat_149":0.0,"cat_172":0.0,"cat_109":0.0,"cat_12":0.0,"cat_146":0.0,"cat_165":0.0,"cat_8":0.0,"cat_125":0.0,"cat_23":0.0,"cat_135":0.0,"cat_248":0.0,"cat_224":0.0,"cat_132":0.0,"cat_66":0.0,"cat_114":0.0,"cat_37":0.0,"cat_207":0.0,"cat_49":0.0,"cat_61":0.0,"cat_91":0.0,"cat_63":0.0,"cat_25":0.0,"cat_144":0.0,"cat_138":0.0,"cat_232":0.0,"cat_170":0.0,"cat_213":0.0,"cat_206":0.0,"cat_96":0.0,"cat_183":0.0,"cat_70":0.0,"cat_44":0.0,"cat_212":0.0,"cat_68":0.0,"cat_253":0.0,"cat_42":0.01,"cat_243":0.0,"cat_173":0.0,"cat_118":0.0,"cat_160":0.0,"cat_117":0.0,"cat_90":0.0,"cat_197":0.0,"cat_105":0.0,"cat_145":0.0,"cat_236":0.0,"cat_177":0.0,"cat_171":0.0,"cat_107":0.0,"cat_22":0.0,"cat_64":0.0,"cat_34":0.0,"cat_59":0.0,"cat_94":0.0,"cat_40":0.0,"cat_10":0.0,"cat_122":0.0,"cat_24":0.0,"cat_99":0.0,"cat_211":0.0,"cat_50":0.0,"cat_205":0.0,"cat_199":0.0,"cat_36":0.0,"cat_151":0.0,"cat_62":0.0,"cat_231":0.0,"cat_98":0.0,"cat_180":0.0,"cat_124":0.0,"cat_240":0.0,"cat_79":0.0,"cat_148":0.0,"cat_164":0.0,"cat_113":0.0,"cat_100":0.0,"cat_133":0.0,"cat_127":0.0,"cat_85":0.0,"cat_247":0.0,"cat_9":0.0,"cat_188":0.0,"cat_57":0.0,"cat_190":0.0,"cat_87":0.0,"cat_167":0.0,"cat_4":0.0,"cat_218":0.0,"cat_17":0.0,"cat_226":0.0,"cat_28":0.0,"cat_157":0.0,"cat_93":0.0,"cat_29":0.0,"cat_252":0.0,"cat_97":0.0,"cat_7":0.0,"cat_185":0.0,"cat_65":0.0,"cat_32":0.0,"cat_163":0.0,"cat_210":0.0,"cat_159":0.0,"cat_140":0.0,"cat_237":0.0,"cat_230":0.0,"cat_196":0.0,"cat_16":0.0,"cat_203":0.0}}},"usage":{"input_tokens":4011,"output_tokens":2714}}
+~';
+
+      when 'typesafe/decisions/empty_state_request' then
+        return q'~{"model":"jev-latest","state":"","questions":{"n":{"type":"noul","instructions":"Is it an outage?"}}}
+~';
+
+      when 'typesafe/decisions/empty_state_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"n":{"type":"noul","noul":0.35}},"usage":{"input_tokens":271,"output_tokens":20}}
+~';
+
+      when 'typesafe/decisions/error_choice_array_criteria_response' then
+        return q'~{"detail":[{"type":"dict_type","loc":["body","questions","c","choice","criteria"],"msg":"Input should be a valid dictionary","input":["a","b"]}]}
+~';
+
+      when 'typesafe/decisions/error_choice_without_criteria_response' then
+        return q'~{"detail":[{"type":"missing","loc":["body","questions","c","choice","criteria"],"msg":"Field required","input":{"type":"choice","instructions":"Pick."}}]}
+~';
+
+      when 'typesafe/decisions/error_choices_256_response' then
+        return q'~{"detail":"Too many choices. Must have at most 255 choices."}
+~';
+
+      when 'typesafe/decisions/error_empty_instructions_response' then
+        return q'~{"detail":"Noul question must have criteria or instructions: e"}
+~';
+
+      when 'typesafe/decisions/error_empty_questions_request' then
+        return q'~{"model":"jev-latest","state":"x","questions":{}}
+~';
+
+      when 'typesafe/decisions/error_empty_questions_response' then
+        return q'~{"detail":[{"type":"too_short","loc":["body","questions"],"msg":"Dictionary should have at least 1 item after validation, not 0","input":{},"ctx":{"field_type":"Dictionary","min_length":1,"actual_length":0}}]}
+~';
+
+      when 'typesafe/decisions/error_image_top_level_response' then
+        return q'~{"detail":{"error_type":"api_usage_error","message":"Invalid request."}}
+~';
+
+      when 'typesafe/decisions/error_levels_11_response' then
+        return q'~{"detail":"Too many score levels. Must have at most 10 levels."}
+~';
+
+      when 'typesafe/decisions/error_missing_instructions_response' then
+        return q'~{"detail":"Noul question must have criteria or instructions: e"}
+~';
+
+      when 'typesafe/decisions/error_missing_model_response' then
+        return q'~{"detail":[{"type":"missing","loc":["body","model"],"msg":"Field required","input":{"state":"x","questions":{"n":{"type":"noul","instructions":"Is it an outage?"}}}}]}
+~';
+
+      when 'typesafe/decisions/error_missing_questions_response' then
+        return q'~{"detail":[{"type":"missing","loc":["body","questions"],"msg":"Field required","input":{"model":"jev-latest","state":"x"}}]}
+~';
+
+      when 'typesafe/decisions/error_missing_state_response' then
+        return q'~{"detail":[{"type":"missing","loc":["body","state"],"msg":"Field required","input":{"questions":{"n":{"type":"noul","instructions":"Is it an outage?","criteria":null}},"model":"jev-latest"}}]}
+~';
+
+      when 'typesafe/decisions/error_null_level_response' then
+        return q'~{"detail":[{"type":"string_type","loc":["body","questions","urgent_null_levels","score","criteria",0,"str"],"msg":"Input should be a valid string","input":null},{"type":"dict_type","loc":["body","questions","urgent_null_levels","score","criteria",0,"dict[any,any]"],"msg":"Input should be a valid dictionary","input":null},{"type":"list_type","loc":["body","questions","urgent_null_levels","score","criteria",0,"list[any]"],"msg":"Input should be a valid list","input":null},{"type":"string_type","loc":["body","questions","urgent_null_levels","score","criteria",1,"str"],"msg":"Input should be a valid string","input":null},{"type":"dict_type","loc":["body","questions","urgent_null_levels","score","criteria",1,"dict[any,any]"],"msg":"Input should be a valid dictionary","input":null},{"type":"list_type","loc":["body","questions","urgent_null_levels","score","criteria",1,"list[any]"],"msg":"Input should be a valid list","input":null},{"type":"string_type","loc":["body","questions","urgent_null_levels","score","criteria",2,"str"],"msg":"Input should be a valid string","input":null},{"type":"dict_type","loc":["body","questions","urgent_null_levels","score","criteria",2,"dict[any,any]"],"msg":"Input should be a valid dictionary","input":null},{"type":"list_type","loc":["body","questions","urgent_null_levels","score","criteria",2,"list[any]"],"msg":"Input should be a valid list","input":null}]}
+~';
+
+      when 'typesafe/decisions/error_score_object_criteria_response' then
+        return q'~{"detail":[{"type":"list_type","loc":["body","questions","s","score","criteria"],"msg":"Input should be a valid list","input":{"a":"x","b":"y"}}]}
+~';
+
+      when 'typesafe/decisions/error_unknown_field_response' then
+        return q'~{"detail":{"error_type":"api_usage_error","message":"Invalid request."}}
+~';
+
+      when 'typesafe/decisions/error_unknown_model_request' then
+        return q'~{"model":"jev-nope","state":"x","questions":{"n":{"type":"noul","instructions":"Is it an outage?"}}}
+~';
+
+      when 'typesafe/decisions/error_unknown_model_response' then
+        return q'~{"detail":{"error_type":"api_usage_error","message":"Unknown model: jev-nope"}}
+~';
+
+      when 'typesafe/decisions/error_unknown_type_response' then
+        return q'~{"detail":{"error_type":"api_usage_error","message":"Invalid request."}}
+~';
+
+      when 'typesafe/decisions/illposed_request' then
+        return q'~{"model":"jev-latest","state":"The site is down for all customers.","questions":{"smell":{"type":"choice","instructions":"Pick the colour of the number seven's smell","criteria":{"red":"red","blue":"blue"}},"lottery":{"type":"noul","instructions":"Will the next Euromillions draw contain the number 7?"},"good":{"type":"noul","instructions":"Is this an outage?"}}}
+~';
+
+      when 'typesafe/decisions/illposed_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"smell":{"type":"choice","choice":"red","confidence":0.2,"probabilities":{"red":0.6,"blue":0.4}},"lottery":{"type":"noul","noul":0.37},"good":{"type":"noul","noul":0.96}},"usage":{"input_tokens":350,"output_tokens":66}}
+~';
+
+      when 'typesafe/decisions/image_in_state_request' then
+        return q'~{"model":"jev-latest","state":[{"type":"text","text":"The attached scan is the customer's request."},{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABGCAMAAAC+PCsEAAAADFBMVEX///+Xl5cWFhbQ0NCcbXH8AAAB4UlEQVRo3u2XyXbDIAxFEe///zmNBxBIEGFycrp4d9XKBnSZ5KRECCGEEEIIIYQQQh4hWSHiRf+AjckRkaan47/7/TYqbdMB6hnOFoIUw0t5XyRPRYYq6okEtI2IXNQUdPQNnNhURPpobT3OTuoDnBtE2uX9IFI7Ra7DyvRNJ9KI5D4qrZxnAmVY/hK9vGERd9hnIjLr0c9OtUN9IbokJpn8BRHU0f2pyX7/UOsgw2F/uCJqyv0enSV5eyQlguGwvxRp9rjTI6zI8bxsrVIIUvTeMod9OA1LImVzDabGiJwBOywWDntz/bp1xKkEH0TMabMi6NKAJ4LogvQpw40+ELm3REwEpa3Y7EIek8re1cMu9lHk2lwxkTvd9iVZKOymUH3pjKR7c4XOSLmk+gMbLevJOeww0Yci5+aK3Fq4lhrnoqtjGl0OM8COyN225Iiroky2oZ57c/5WNPbqSDuvRuRoMazsaPvpRGRlV22LNMVK6oHN6rn7GTr8EtQfjWseeyJq3uqFr5KELzKebudba1vE+z1iOj/yRALUhd/9rFr4PVJFnNt/WaQctb4ieiLN7oYVSYNyOppuJRJ4eyKCmnRIRL2pv/Jsh4u/2R+I7IPw6hNCCCGEEEIIIYQQQsh/4gUC0AoldCOB0gAAAABJRU5ErkJggg=="}}],"questions":{"topic":{"type":"choice","instructions":"What does the document say?","criteria":{"refund":"The word REFUND appears","invoice":"The word INVOICE appears","other":"Anything else"}}}}
+~';
+
+      when 'typesafe/decisions/image_in_state_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"topic":{"type":"choice","choice":"other","confidence":1.0,"probabilities":{"invoice":0.0,"other":1.0,"refund":0.0}}},"usage":{"input_tokens":890,"output_tokens":38}}
+~';
+
+      when 'typesafe/decisions/levels_10_request' then
+        return q'~{"model":"jev-latest","state":"The site is down for all customers.","questions":{"s":{"type":"score","instructions":"Rate the severity.","criteria":["L0","L1","L2","L3","L4","L5","L6","L7","L8","L9"]}}}
+~';
+
+      when 'typesafe/decisions/levels_10_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"s":{"type":"score","score":7.71,"confidence":0.48,"legend":{"0":"L0","1":"L1","2":"L2","3":"L3","4":"L4","5":"L5","6":"L6","7":"L7","8":"L8","9":"L9"},"probabilities":{"0":0.01,"1":0.01,"2":0.0,"3":0.03,"4":0.03,"5":0.09,"6":0.05,"7":0.07,"8":0.15,"9":0.56}}},"usage":{"input_tokens":354,"output_tokens":17}}
+~';
+
+      when 'typesafe/decisions/noul_criteria_only_request' then
+        return q'~{"model":"jev-latest","state":"The site is down for all customers.","questions":{"n":{"type":"noul","criteria":{"true":"The site is unavailable.","false":"The site works."}}}}
+~';
+
+      when 'typesafe/decisions/noul_criteria_only_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"n":{"type":"noul","noul":0.69}},"usage":{"input_tokens":294,"output_tokens":20}}
+~';
+
+      when 'typesafe/decisions/one_level_request' then
+        return q'~{"model":"jev-latest","state":"The site is down.","questions":{"s":{"type":"score","instructions":"Rate.","criteria":["Only"]}}}
+~';
+
+      when 'typesafe/decisions/one_level_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"s":{"type":"score","score":0.0,"confidence":1.0,"legend":{"0":"Only"},"probabilities":{"0":1.0}}},"usage":{"input_tokens":285,"output_tokens":17}}
+~';
+
+      when 'typesafe/decisions/one_option_request' then
+        return q'~{"model":"jev-latest","state":"The site is down.","questions":{"c":{"type":"choice","instructions":"Pick.","criteria":{"only":"x"}}}}
+~';
+
+      when 'typesafe/decisions/one_option_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"c":{"type":"choice","choice":"only","confidence":1.0,"probabilities":{"only":1.0}}},"usage":{"input_tokens":295,"output_tokens":24}}
+~';
+
+      when 'typesafe/decisions/order_request' then
+        return q'~{"model":"jev-latest","state":"The site is down for all customers.","questions":{"z_last":{"type":"noul","instructions":"Is this an outage?"},"a_first":{"type":"noul","instructions":"Is this a feature request?"},"m_mid":{"type":"noul","instructions":"Is this about billing?"}}}
+~';
+
+      when 'typesafe/decisions/order_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"z_last":{"type":"noul","noul":0.96},"a_first":{"type":"noul","noul":0.02},"m_mid":{"type":"noul","noul":0.06}},"usage":{"input_tokens":304,"output_tokens":55}}
+~';
+
+      when 'typesafe/decisions/score_empty_levels_request' then
+        return q'~{"model":"jev-latest","state":"The site is down for all customers.","questions":{"s":{"type":"score","instructions":"Rate the severity.","criteria":["","",""]}}}
+~';
+
+      when 'typesafe/decisions/score_empty_levels_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"s":{"type":"score","score":1.47,"confidence":0.19,"legend":{"0":"","1":"","2":""},"probabilities":{"0":0.25,"1":0.04,"2":0.71}}},"usage":{"input_tokens":299,"output_tokens":17}}
+~';
+
+      when 'typesafe/decisions/state_array_request' then
+        return q'~{"model":"jev-latest","state":["Hi","My card was charged twice."],"questions":{"refund":{"type":"noul","instructions":"Does the customer mention a charge problem?"}}}
+~';
+
+      when 'typesafe/decisions/state_array_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"refund":{"type":"noul","noul":0.99}},"usage":{"input_tokens":286,"output_tokens":20}}
+~';
+
+      when 'typesafe/decisions/state_object_request' then
+        return q'~{"model":"jev-latest","state":{"ticket":{"subject":"Duplicate charge","text":"I was charged twice."},"order":{"id":"A-104"}},"questions":{"refund":{"type":"noul","instructions":"Is the customer eligible for a refund of the duplicate charge?"}}}
+~';
+
+      when 'typesafe/decisions/state_object_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"refund":{"type":"noul","noul":0.76}},"usage":{"input_tokens":322,"output_tokens":20}}
+~';
+
+      when 'typesafe/decisions/triage_request' then
+        return q'~{"model":"jev-latest","state":"I was charged twice for my order. Please refund the extra charge.","questions":{"department":{"type":"choice","instructions":"Which team should handle this message?","criteria":{"billing":"Payments, invoices, and refunds.","support":"Product usage and technical problems.","sales":"New purchases and pricing questions."}},"severity":{"type":"score","instructions":"How severe is the problem described?","criteria":["Appearance only; no lost functionality.","Something is broken but the customer can continue.","The customer cannot continue or lost money."]},"wants_refund":{"type":"noul","instructions":"Does the customer ask for money back?","criteria":{"true":"The customer asks for a refund or a reimbursement.","false":"The customer does not ask for money back."}}}}
+~';
+
+      when 'typesafe/decisions/triage_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"department":{"type":"choice","choice":"billing","confidence":1.0,"probabilities":{"support":0.0,"billing":1.0,"sales":0.0}},"severity":{"type":"score","score":1.96,"confidence":0.95,"legend":{"0":"Appearance only; no lost functionality.","1":"Something is broken but the customer can continue.","2":"The customer cannot continue or lost money."},"probabilities":{"0":0.0,"1":0.03,"2":0.97}},"wants_refund":{"type":"noul","noul":0.99}},"usage":{"input_tokens":458,"output_tokens":71}}
+~';
+
+      when 'typesafe/decisions/triage_response_headers' then
+        return q'~{"status":200,"headers":{"Content-Type":"application/json","x-typesafe-request-id":"req_REDACTED"}}
+~';
+
+      when 'typesafe/decisions/variants_request' then
+        return q'~{"model":"jev-latest","state":"The login page shows a typo in the footer. Otherwise everything works fine. Not urgent.","questions":{"area_null_desc":{"type":"choice","instructions":"Which area does the report concern?","criteria":{"ui":null,"backend":null,"docs":null}},"area_empty_desc":{"type":"choice","instructions":"Which area does the report concern?","criteria":{"ui":"","backend":"","docs":""}},"urgent_two":{"type":"score","instructions":"Is the report urgent?","criteria":["No","Yes"]},"noul_plain":{"type":"noul","instructions":"The text describes a defect in the product."},"noul_criteria":{"type":"noul","instructions":"Is the report a bug?","criteria":{"true":"The text describes a defect.","false":"A feature request or a question."}},"noul_criteria_true_only":{"type":"noul","instructions":"Is the report a bug?","criteria":{"true":"The text describes a defect."}},"noul_instr_object":{"type":"noul","instructions":{"report":"typo in footer","question":"Is `report` about a visual problem?"}}}}
+~';
+
+      when 'typesafe/decisions/variants_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"area_null_desc":{"type":"choice","choice":"ui","confidence":1.0,"probabilities":{"docs":0.0,"ui":1.0,"backend":0.0}},"area_empty_desc":{"type":"choice","choice":"ui","confidence":1.0,"probabilities":{"docs":0.0,"ui":1.0,"backend":0.0}},"urgent_two":{"type":"score","score":0.0,"confidence":1.0,"legend":{"0":"No","1":"Yes"},"probabilities":{"0":1.0,"1":0.0}},"noul_plain":{"type":"noul","noul":0.94},"noul_criteria":{"type":"noul","noul":0.92},"noul_criteria_true_only":{"type":"noul","noul":0.88},"noul_instr_object":{"type":"noul","noul":0.91}},"usage":{"input_tokens":500,"output_tokens":171}}
+~';
+
       when 'xai/1-simple-request' then
         return q'~{
   "model": "grok-4-fast-non-reasoning",

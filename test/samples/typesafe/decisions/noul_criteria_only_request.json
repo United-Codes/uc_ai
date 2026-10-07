@@ -1,0 +1,1 @@
+{"model":"jev-latest","state":"The site is down for all customers.","questions":{"n":{"type":"noul","criteria":{"true":"The site is unavailable.","false":"The site works."}}}}

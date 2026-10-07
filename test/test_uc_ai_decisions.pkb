@@ -108,12 +108,39 @@ create or replace package body test_uc_ai_decisions as
   procedure unknown_provider
   as
   begin
-    expect_error(json_object_t.parse(c_valid_questions), uc_ai_error.c_err_unknown_provider, '%null%openai%', 'null', p_provider => null);
-    expect_error(json_object_t.parse(c_valid_questions), -20306, '%nope%openai%', 'unknown', p_provider => 'nope');
+    expect_error(json_object_t.parse(c_valid_questions), uc_ai_error.c_err_unknown_provider, '%null%openai, typesafe%', 'null', p_provider => null);
+    expect_error(json_object_t.parse(c_valid_questions), -20306, '%nope%openai, typesafe%', 'unknown', p_provider => 'nope');
     -- providers that chat but have no decision API
-    expect_error(json_object_t.parse(c_valid_questions), -20306, '%anthropic%openai%', 'anthropic', p_provider => uc_ai.c_provider_anthropic);
-    expect_error(json_object_t.parse(c_valid_questions), -20306, '%google%openai%', 'google', p_provider => uc_ai.c_provider_google);
+    expect_error(json_object_t.parse(c_valid_questions), -20306, '%anthropic%openai, typesafe%', 'anthropic', p_provider => uc_ai.c_provider_anthropic);
+    expect_error(json_object_t.parse(c_valid_questions), -20306, '%google%openai, typesafe%', 'google', p_provider => uc_ai.c_provider_google);
   end unknown_provider;
+
+
+  procedure typesafe_is_not_a_chat_provider
+  as
+    l_code   number := 0;
+    l_result json_object_t;
+    l_count  pls_integer;
+  begin
+    begin
+      l_result := uc_ai.generate_text(
+        p_user_prompt => 'hi'
+      , p_provider    => uc_ai.c_provider_typesafe
+      , p_model       => uc_ai_typesafe.c_model_jev_latest
+      );
+    exception
+      when others then
+        l_code := sqlcode;
+    end;
+    ut.expect(l_code, 'generate_text').to_equal(uc_ai_error.c_err_unknown_provider);
+    ut.expect(uc_ai_test_http_mock.request_count, 'no request sent').to_equal(0);
+
+    select count(*) into l_count from table(uc_ai_utils.get_providers) where provider_id = uc_ai.c_provider_typesafe;
+    ut.expect(l_count, 'get_providers lists no typesafe').to_equal(0);
+
+    select count(*) into l_count from table(uc_ai_utils.get_models) where provider = uc_ai.c_provider_typesafe or model_id = uc_ai_typesafe.c_model_jev_latest;
+    ut.expect(l_count, 'get_models lists no jev').to_equal(0);
+  end typesafe_is_not_a_chat_provider;
 
 
   procedure provider_before_questions
@@ -270,6 +297,52 @@ create or replace package body test_uc_ai_decisions as
   end provider_limits;
 
 
+  procedure typesafe_limits
+  as
+    l_options   json_object_t := json_object_t();
+    l_levels    json_array_t := json_array_t();
+    l_question  json_object_t;
+    l_questions json_object_t;
+  begin
+    <<option_loop>>
+    for i in 1 .. 256 loop
+      l_options.put_null('o' || i);
+    end loop option_loop;
+    l_question := json_object_t();
+    l_question.put('type', 'choice');
+    l_question.put('instructions', 'x');
+    l_question.put('criteria', l_options);
+    l_questions := json_object_t();
+    l_questions.put('c', l_question);
+    expect_error(l_questions, uc_ai_error.c_err_unsupported_content, '%256 options in question "c"%at most 255%', '256 options', p_provider => uc_ai.c_provider_typesafe);
+
+    <<level_loop>>
+    for i in 1 .. 11 loop
+      l_levels.append('level ' || i);
+    end loop level_loop;
+    l_question := json_object_t();
+    l_question.put('type', 'score');
+    l_question.put('instructions', 'x');
+    l_question.put('criteria', l_levels);
+    l_questions := json_object_t();
+    l_questions.put('s', l_question);
+    expect_error(l_questions, -20508, '%11 levels in question "s"%at most 10%', '11 levels', p_provider => uc_ai.c_provider_typesafe);
+  end typesafe_limits;
+
+
+  procedure typesafe_neutral_checks
+  as
+  begin
+    -- jev accepts one option or one level, the neutral model does not
+    expect_error(one_question('c', '{"type":"choice","instructions":"x","criteria":{"only":"a"}}'), -20503, '%at least 2 options%', 'one option', p_provider => uc_ai.c_provider_typesafe);
+    expect_error(one_question('s', '{"type":"score","instructions":"x","criteria":["only"]}'), -20503, '%at least 2 levels%', 'one level', p_provider => uc_ai.c_provider_typesafe);
+    expect_error(one_question('q', '{"type":"noul","instructions":"x"}'), -20503, '%type "noul" is not supported%', 'wire name noul', p_provider => uc_ai.c_provider_typesafe);
+    expect_error(one_question('1q', '{"type":"boolean","instructions":"x"}'), -20503, '%question id%', 'bad id', p_provider => uc_ai.c_provider_typesafe);
+    expect_error(one_question('q', '{"type":"boolean","instructions":" "}'), -20503, '%instructions%', 'blank instructions', p_provider => uc_ai.c_provider_typesafe);
+    expect_error(json_object_t.parse(c_valid_questions), -20503, '%state%', 'no state', p_state => null, p_provider => uc_ai.c_provider_typesafe);
+  end typesafe_neutral_checks;
+
+
   -- ---- state and files ---------------------------------------------------------
 
   procedure empty_state
@@ -331,6 +404,26 @@ create or replace package body test_uc_ai_decisions as
     l_files := json_array_t('[{"type":"text","text":"hi"}]');
     expect_error(l_questions, -20503, '%file 1%type must be file%', 'a text content', p_files => l_files);
   end bad_file_shape;
+
+
+  procedure typesafe_files_unsupported
+  as
+    l_questions json_object_t := json_object_t.parse(c_valid_questions);
+    l_files     json_array_t;
+  begin
+    l_files := json_array_t();
+    l_files.append(uc_ai_message_api.create_file_content('image/png', 'AAAA', 'a.png'));
+    expect_error(l_questions, uc_ai_error.c_err_unsupported_content, '%text only%', 'png with state', p_files => l_files, p_provider => uc_ai.c_provider_typesafe);
+    expect_error(l_questions, -20508, '%text only%', 'png without state', p_state => null, p_files => l_files, p_provider => uc_ai.c_provider_typesafe);
+
+    -- an invalid file object is also a file: the provider cannot take it
+    l_files := json_array_t('["a string"]');
+    expect_error(l_questions, -20508, '%text only%', 'not an object', p_files => l_files, p_provider => uc_ai.c_provider_typesafe);
+
+    -- an empty files array is no file
+    l_files := json_array_t();
+    expect_error(l_questions, -20503, '%state%', 'empty files array without state', p_state => null, p_files => l_files, p_provider => uc_ai.c_provider_typesafe);
+  end typesafe_files_unsupported;
 
 
   -- ---- options -------------------------------------------------------------------

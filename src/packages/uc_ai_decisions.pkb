@@ -5,7 +5,8 @@ create or replace package body uc_ai_decisions as
   -- A decision call with images can take longer than a chat call
   c_transfer_timeout constant pls_integer := 300;
 
-  c_openai_base_url constant varchar2(100 char) := 'https://api.openai.com/v1';
+  c_openai_base_url   constant varchar2(100 char) := 'https://api.openai.com/v1';
+  c_typesafe_base_url constant varchar2(100 char) := 'https://api.typesafe.ai/v1';
 
   -- neutral question types
   c_type_boolean constant varchar2(10 char) := 'boolean';
@@ -16,7 +17,7 @@ create or replace package body uc_ai_decisions as
 
   c_id_pattern constant varchar2(100 char) := '^[A-Za-z][A-Za-z0-9_]{0,63}$';
 
-  -- Both providers report probabilities, scores and confidence with 2 decimals.
+  -- Every provider reports probabilities, scores and confidence with 2 decimals.
   -- A reported value can be off by half a unit of the last decimal. The distribution
   -- checks allow that for each rounded value that goes into a sum or a mean.
   c_epsilon   constant number := 0.000001;
@@ -27,7 +28,8 @@ create or replace package body uc_ai_decisions as
   type t_limits is record (
     max_choices pls_integer
   , max_levels  pls_integer
-    -- comma separated, without spaces (membership test is instr on ',type,')
+    -- comma separated, without spaces (membership test is instr on ',type,').
+    -- Null: the provider takes no files (text only).
   , media_types varchar2(1000 char)
   );
 
@@ -39,7 +41,7 @@ create or replace package body uc_ai_decisions as
   ) return boolean
   as
   begin
-    return p_provider = uc_ai.c_provider_openai;
+    return p_provider in (uc_ai.c_provider_openai, uc_ai.c_provider_typesafe);
   end is_supported;
 
 
@@ -49,10 +51,17 @@ create or replace package body uc_ai_decisions as
   as
     l_limits t_limits;
   begin
-    -- OpenAI Decisions: 2 to 255 choices, 2 to 10 levels, images as data URLs
     l_limits.max_choices := 255;
     l_limits.max_levels  := 10;
-    l_limits.media_types := 'image/png,image/jpeg,image/webp';
+
+    if p_provider = uc_ai.c_provider_typesafe then
+      -- TypeSafe jev: up to 255 choices, up to 10 levels, text only (no image input)
+      l_limits.media_types := null;
+    else
+      -- OpenAI Decisions: 2 to 255 choices, 2 to 10 levels, images as data URLs
+      l_limits.media_types := 'image/png,image/jpeg,image/webp';
+    end if;
+
     return l_limits;
   end limits_of;
 
@@ -65,7 +74,10 @@ create or replace package body uc_ai_decisions as
   ) return varchar2
   as
   begin
-    return 'safety_identifier,extra_body';
+    return case p_provider
+             when uc_ai.c_provider_typesafe then 'extra_body'
+             else 'safety_identifier,extra_body'
+           end;
   end known_options;
 
 
@@ -74,7 +86,10 @@ create or replace package body uc_ai_decisions as
   ) return varchar2
   as
   begin
-    return uc_ai_openai.c_model_gpt_6_luna;
+    return case p_provider
+             when uc_ai.c_provider_typesafe then uc_ai_typesafe.c_model_jev_latest
+             else uc_ai_openai.c_model_gpt_6_luna
+           end;
   end default_model;
 
 
@@ -458,6 +473,11 @@ create or replace package body uc_ai_decisions as
       return;
     end if;
 
+    -- a provider without media types takes text only
+    if p_limits.media_types is null and p_files.get_size > 0 then
+      unsupported_input('files. The provider takes text only, pass the state as text', p_scope);
+    end if;
+
     <<file_loop>>
     for i in 0 .. p_files.get_size - 1 loop
       l_what := 'file ' || (i + 1);
@@ -587,9 +607,76 @@ create or replace package body uc_ai_decisions as
   -- ---- HTTP -------------------------------------------------------------------
 
   /*
+   * The message of a "detail" error body (TypeSafe, FastAPI shaped). detail is a
+   * string, an object {"error_type", "message"} or a list of validation items
+   * {"loc": [...], "msg": "..."}. Null for any other shape.
+   *
+   * A validation item also has "input", an echo of the offending part of the
+   * request, which can hold the state. It is never read here.
+   */
+  function detail_message (
+    p_json in json_object_t
+  ) return varchar2
+  as
+    -- SQLERRM shows 512 bytes, so a long list has to stay short
+    c_max_items constant pls_integer := 3;
+    l_detail  json_element_t;
+    l_items   json_array_t;
+    l_item    json_object_t;
+    l_loc     json_array_t;
+    l_param   varchar2(500 char);
+    l_message varchar2(3000 char);
+    l_part    varchar2(1000 char);
+  begin
+    l_detail := p_json.get('detail');
+
+    if l_detail is null then
+      return null;
+    elsif l_detail.is_string then
+      return substr(p_json.get_string('detail'), 1, 3000);
+    elsif l_detail.is_object then
+      return substr(short_text_of(treat(l_detail as json_object_t), 'message'), 1, 3000);
+    elsif not l_detail.is_array then
+      return null;
+    end if;
+
+    l_items := treat(l_detail as json_array_t);
+    <<item_loop>>
+    for i in 0 .. least(l_items.get_size, c_max_items) - 1 loop
+      if not l_items.get(i).is_object then
+        continue;
+      end if;
+      l_item := treat(l_items.get(i) as json_object_t);
+
+      -- loc is the path of the field, starting with "body"
+      l_param := null;
+      if l_item.has('loc') and l_item.get('loc').is_array then
+        l_loc := l_item.get_array('loc');
+        <<loc_loop>>
+        for j in 0 .. l_loc.get_size - 1 loop
+          if l_loc.get(j).is_scalar and not (j = 0 and l_loc.get_string(j) = 'body') then
+            l_param := substr(l_param || case when l_param is not null then '.' end || l_loc.get_string(j), 1, 500);
+          end if;
+        end loop loc_loop;
+      end if;
+
+      l_part := substr(coalesce(short_text_of(l_item, 'msg'), 'invalid') || case when l_param is not null then ' (param ' || l_param || ')' end, 1, 200);
+      l_message := substr(l_message || case when l_message is not null then '; ' end || l_part, 1, 3000);
+    end loop item_loop;
+
+    if l_items.get_size > c_max_items then
+      l_message := substr(l_message || '; and ' || (l_items.get_size - c_max_items) || ' more', 1, 3000);
+    end if;
+
+    return l_message;
+  end detail_message;
+
+
+  /*
    * Parse a provider response. An error status with an error body becomes -20302
-   * with the provider's own message; anything else that is not JSON or not a
-   * success is left to uc_ai_error.parse_json_response.
+   * with the provider's own message (OpenAI: an "error" object, TypeSafe: a
+   * "detail"); anything else that is not JSON or not a success is left to
+   * uc_ai_error.parse_json_response.
    */
   function parse_response (
     p_response in clob
@@ -602,6 +689,7 @@ create or replace package body uc_ai_decisions as
     l_error   json_object_t;
     l_message varchar2(4000 char);
     l_param   varchar2(500 char);
+    l_detail  varchar2(3000 char);
   begin
     if nvl(l_status, 0) >= 400 then
       begin
@@ -624,6 +712,19 @@ create or replace package body uc_ai_decisions as
           , p1           => 'HTTP ' || l_status || ': ' || l_message
                             || case when l_param is not null then ' (param ' || l_param || ')' end
           , p_extra      => p_response
+          );
+        end if;
+      elsif l_json is not null and l_json.has('detail') then
+        l_detail := detail_message(l_json);
+
+        if l_detail is not null then
+          -- a validation list echoes the request input: keep the response out of the log
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_provider_response
+          , p_scope      => p_scope
+          , p0           => p_provider
+          , p1           => 'HTTP ' || l_status || ': ' || l_detail
+          , p_extra      => case when l_json.get('detail').is_array then null else p_response end
           );
         end if;
       end if;
@@ -1055,6 +1156,46 @@ create or replace package body uc_ai_decisions as
 
 
   /*
+   * The neutral result from the mapped answers and the provider response: usage
+   * (the neutral keys, and the whole provider object in provider_metadata),
+   * confidence, model, warnings and raw.
+   */
+  function assemble_result (
+    p_resp_json    in json_object_t
+  , p_answers      in json_object_t
+  , p_confidence   in json_object_t
+  , p_model        in varchar2
+  , p_warnings     in json_array_t
+  ) return json_object_t
+  as
+    l_usage_in json_object_t;
+    l_usage    json_object_t := json_object_t();
+    l_metadata json_object_t := json_object_t();
+    l_result   json_object_t := json_object_t();
+  begin
+    if p_resp_json.has('usage') and p_resp_json.get('usage').is_object then
+      l_usage_in := p_resp_json.get_object('usage');
+      copy_number(l_usage_in, 'input_tokens', l_usage);
+      copy_number(l_usage_in, 'output_tokens', l_usage);
+      copy_number(l_usage_in, 'total_tokens', l_usage);
+      l_metadata.put('usage', l_usage_in);
+    end if;
+
+    if p_confidence.get_size > 0 then
+      l_metadata.put('confidence', p_confidence);
+    end if;
+
+    l_result.put('answers', p_answers);
+    l_result.put('usage', l_usage);
+    l_result.put('model', coalesce(short_text_of(p_resp_json, 'model'), p_model));
+    l_result.put('provider_metadata', l_metadata);
+    l_result.put('warnings', p_warnings);
+    l_result.put('raw', p_resp_json);
+    return l_result;
+  end assemble_result;
+
+
+  /*
    * The neutral result from the OpenAI response. A refusal becomes the answer
    * {"type": "refused"}. Raises -20304 when the answers do not match the questions.
    */
@@ -1078,10 +1219,6 @@ create or replace package body uc_ai_decisions as
     l_expected   varchar2(10 char);
     l_answers    json_object_t := json_object_t();
     l_confidence json_object_t := json_object_t();
-    l_usage_in   json_object_t;
-    l_usage      json_object_t := json_object_t();
-    l_metadata   json_object_t := json_object_t();
-    l_result     json_object_t := json_object_t();
   begin
     if not p_resp_json.has('answers') or not p_resp_json.get('answers').is_array then
       format_error('the response has no answers array', p_resp, p_scope);
@@ -1148,26 +1285,7 @@ create or replace package body uc_ai_decisions as
       end if;
     end loop question_loop;
 
-    -- usage: the neutral keys, and the whole provider object in provider_metadata
-    if p_resp_json.has('usage') and p_resp_json.get('usage').is_object then
-      l_usage_in := p_resp_json.get_object('usage');
-      copy_number(l_usage_in, 'input_tokens', l_usage);
-      copy_number(l_usage_in, 'output_tokens', l_usage);
-      copy_number(l_usage_in, 'total_tokens', l_usage);
-      l_metadata.put('usage', l_usage_in);
-    end if;
-
-    if l_confidence.get_size > 0 then
-      l_metadata.put('confidence', l_confidence);
-    end if;
-
-    l_result.put('answers', l_answers);
-    l_result.put('usage', l_usage);
-    l_result.put('model', coalesce(short_text_of(p_resp_json, 'model'), p_model));
-    l_result.put('provider_metadata', l_metadata);
-    l_result.put('warnings', pio_warnings);
-    l_result.put('raw', p_resp_json);
-    return l_result;
+    return assemble_result(p_resp_json, l_answers, l_confidence, p_model, pio_warnings);
   end openai_to_neutral;
 
 
@@ -1251,6 +1369,444 @@ create or replace package body uc_ai_decisions as
   end decide_openai;
 
 
+  -- ---- TypeSafe jev adapter ---------------------------------------------------
+
+  /*
+   * One boolean criterion text for noul.criteria, or null when there is none.
+   */
+  procedure put_noul_criterion (
+    p_criteria in            json_object_t
+  , p_key      in            varchar2
+  , pio_target in out nocopy json_object_t
+  )
+  as
+    l_text clob;
+  begin
+    l_text := text_of(p_criteria, p_key);
+    if not is_blank(l_text) then
+      pio_target.put(p_key, l_text);
+    end if;
+  end put_noul_criterion;
+
+
+  /*
+   * The criteria object of a choice question: option -> description. jev takes
+   * null for an option without a description.
+   */
+  function typesafe_choice_criteria (
+    p_criteria in json_object_t
+  ) return json_object_t
+  as
+    l_keys   json_key_list := p_criteria.get_keys;
+    l_result json_object_t := json_object_t();
+    l_text   clob;
+  begin
+    <<choice_loop>>
+    for j in 1 .. l_keys.count loop
+      l_text := text_of(p_criteria, l_keys(j));
+      if is_blank(l_text) then
+        l_result.put_null(l_keys(j));
+      else
+        l_result.put(l_keys(j), l_text);
+      end if;
+    end loop choice_loop;
+
+    return l_result;
+  end typesafe_choice_criteria;
+
+
+  /*
+   * The criteria array of a score question: one description per level, level 0
+   * first. jev rejects null for a level (HTTP 422), so a level without a
+   * description gets an empty string. append('') would add a JSON null (an empty
+   * varchar2 is null in Oracle), so the empty string comes from parsed JSON.
+   */
+  function typesafe_score_criteria (
+    p_criteria in json_array_t
+  ) return json_array_t
+  as
+    l_result json_array_t := json_array_t();
+    l_empty  json_element_t;
+    l_text   clob;
+  begin
+    l_empty := json_array_t.parse('[""]').get(0);
+
+    <<level_loop>>
+    for j in 0 .. p_criteria.get_size - 1 loop
+      l_text := null;
+      if p_criteria.get(j).is_string then
+        l_text := p_criteria.get_clob(j);
+      end if;
+
+      if is_blank(l_text) then
+        l_result.append(l_empty);
+      else
+        l_result.append(l_text);
+      end if;
+    end loop level_loop;
+
+    return l_result;
+  end typesafe_score_criteria;
+
+
+  /*
+   * The questions object of the TypeSafe request, keyed by question id in the
+   * order of the neutral questions. boolean is a noul; its criteria are sent as
+   * {true, false} with the keys that have a text, and left out when there is none.
+   */
+  function typesafe_questions (
+    p_questions in json_object_t
+  ) return json_object_t
+  as
+    l_ids      json_key_list := p_questions.get_keys;
+    l_result   json_object_t := json_object_t();
+    l_question json_object_t;
+    l_out      json_object_t;
+    l_noul     json_object_t;
+  begin
+    <<question_loop>>
+    for i in 1 .. l_ids.count loop
+      l_question := p_questions.get_object(l_ids(i));
+      l_out      := json_object_t();
+
+      case short_text_of(l_question, 'type')
+        when c_type_boolean then
+          l_out.put('type', 'noul');
+          l_out.put('instructions', l_question.get_clob('instructions'));
+          if l_question.has('criteria') and l_question.get('criteria').is_object then
+            l_noul := json_object_t();
+            put_noul_criterion(l_question.get_object('criteria'), 'true', l_noul);
+            put_noul_criterion(l_question.get_object('criteria'), 'false', l_noul);
+            if l_noul.get_size > 0 then
+              l_out.put('criteria', l_noul);
+            end if;
+          end if;
+        when c_type_choice then
+          l_out.put('type', 'choice');
+          l_out.put('instructions', l_question.get_clob('instructions'));
+          l_out.put('criteria', typesafe_choice_criteria(l_question.get_object('criteria')));
+        else
+          l_out.put('type', 'score');
+          l_out.put('instructions', l_question.get_clob('instructions'));
+          l_out.put('criteria', typesafe_score_criteria(l_question.get_array('criteria')));
+      end case;
+
+      l_result.put(l_ids(i), l_out);
+    end loop question_loop;
+
+    return l_result;
+  end typesafe_questions;
+
+
+  /*
+   * The request body. Order: extra_body, then the reserved keys model, state and
+   * questions, so extra_body cannot replace them. The state is always a string.
+   */
+  function typesafe_body (
+    p_state     in clob
+  , p_questions in json_object_t
+  , p_model     in varchar2
+  , p_options   in json_object_t
+  ) return json_object_t
+  as
+    l_body       json_object_t := json_object_t();
+    l_extra      json_object_t;
+    l_extra_keys json_key_list;
+  begin
+    if p_options is not null
+       and p_options.has('extra_body') and p_options.get('extra_body').is_object
+    then
+      l_extra      := p_options.get_object('extra_body');
+      l_extra_keys := l_extra.get_keys;
+      <<extra_loop>>
+      for i in 1 .. l_extra_keys.count loop
+        l_body.put(l_extra_keys(i), l_extra.get(l_extra_keys(i)));
+      end loop extra_loop;
+    end if;
+
+    l_body.put('model', p_model);
+    l_body.put('state', p_state);
+    l_body.put('questions', typesafe_questions(p_questions));
+    return l_body;
+  end typesafe_body;
+
+
+  /*
+   * The probabilities object of a choice or score answer, copied key by key. The
+   * key is an option for a choice (p_levels is null) and a level index as text
+   * for a score. An unknown key or a probability outside 0..1 raises -20304. The
+   * neutral keys are the same as jev's, in the order jev sent them.
+   */
+  function typesafe_probabilities (
+    p_id        in varchar2
+  , p_answer    in json_object_t
+  , p_criteria  in json_object_t
+  , p_levels    in pls_integer
+  , p_raw       in clob
+  , p_scope     in varchar2
+  ) return json_object_t
+  as
+    l_what  varchar2(200 char) := 'Answer "' || p_id || '"';
+    l_in    json_object_t;
+    l_keys  json_key_list;
+    l_out   json_object_t := json_object_t();
+  begin
+    if not p_answer.get('probabilities').is_object then
+      format_error(l_what || ': probabilities is not an object', p_raw, p_scope);
+    end if;
+
+    l_in   := p_answer.get_object('probabilities');
+    l_keys := l_in.get_keys;
+    <<entry_loop>>
+    for i in 1 .. l_keys.count loop
+      if p_levels is null then
+        if not p_criteria.has(l_keys(i)) then
+          format_error(l_what || ': probabilities has "' || substr(l_keys(i), 1, 100) || '", which is not one of the options', p_raw, p_scope);
+        end if;
+      elsif not regexp_like(l_keys(i), '^(0|[1-9][0-9]{0,2})$') or to_number(l_keys(i)) >= p_levels then
+        format_error(l_what || ': probabilities has the level "' || substr(l_keys(i), 1, 100) || '", outside 0 to ' || (p_levels - 1), p_raw, p_scope);
+      end if;
+
+      l_out.put(l_keys(i), number_of(l_in, l_keys(i), l_what || ' probabilities "' || substr(l_keys(i), 1, 100) || '"', true, p_raw, p_scope));
+    end loop entry_loop;
+
+    return l_out;
+  end typesafe_probabilities;
+
+
+  -- @dblinter ignore(g-7440): pio_warnings is the warning list of the call, threaded through the adapter, so in out is intentional
+  function typesafe_choice (
+    p_id           in            varchar2
+  , p_answer       in            json_object_t
+  , p_question     in            json_object_t
+  , pio_warnings   in out nocopy json_array_t
+  , p_raw          in            clob
+  , p_scope        in            varchar2
+  ) return json_object_t
+  as
+    l_out      json_object_t := json_object_t();
+    l_criteria json_object_t;
+    l_choice   varchar2(4000 char);
+    l_probs    json_object_t;
+  begin
+    l_criteria := p_question.get_object('criteria');
+    l_choice   := short_text_of(p_answer, 'choice');
+
+    if l_choice is null or not l_criteria.has(l_choice) then
+      format_error('Answer "' || p_id || '": the choice is not one of the options', p_raw, p_scope);
+    end if;
+
+    l_out.put('type', c_type_choice);
+    l_out.put('choice', l_choice);
+
+    if p_answer.has('probabilities') and not p_answer.get('probabilities').is_null then
+      l_probs := typesafe_probabilities(p_id, p_answer, l_criteria, null, p_raw, p_scope);
+      check_sum(p_id, l_probs, pio_warnings);
+      l_out.put('probabilities', l_probs);
+    end if;
+
+    return l_out;
+  end typesafe_choice;
+
+
+  -- @dblinter ignore(g-7440): pio_warnings is the warning list of the call, threaded through the adapter, so in out is intentional
+  function typesafe_score (
+    p_id           in            varchar2
+  , p_answer       in            json_object_t
+  , p_question     in            json_object_t
+  , pio_warnings   in out nocopy json_array_t
+  , p_raw          in            clob
+  , p_scope        in            varchar2
+  ) return json_object_t
+  as
+    l_out    json_object_t := json_object_t();
+    l_levels pls_integer;
+    l_score  number;
+    l_probs  json_object_t;
+  begin
+    l_levels := p_question.get_array('criteria').get_size;
+    l_score  := number_of(p_answer, 'score', 'Answer "' || p_id || '"', false, p_raw, p_scope);
+
+    if l_score < 0 or l_score > l_levels - 1 then
+      format_error('Answer "' || p_id || '": the score ' || num_text(l_score) || ' is outside 0 to ' || (l_levels - 1), p_raw, p_scope);
+    end if;
+
+    l_out.put('type', c_type_score);
+    l_out.put('score', l_score);
+
+    if p_answer.has('probabilities') and not p_answer.get('probabilities').is_null then
+      l_probs := typesafe_probabilities(p_id, p_answer, null, l_levels, p_raw, p_scope);
+      check_sum(p_id, l_probs, pio_warnings);
+      check_mean(p_id, l_score, l_probs, pio_warnings);
+      l_out.put('probabilities', l_probs);
+    end if;
+
+    return l_out;
+  end typesafe_score;
+
+
+  /*
+   * The neutral result from the TypeSafe response. noul becomes boolean with the
+   * probability in noul. confidence (choice and score only) goes to
+   * provider_metadata. jev has no refusal: every question has a typed answer.
+   * Raises -20304 when the answers do not match the questions.
+   */
+  -- @dblinter ignore(g-7440): pio_warnings is the warning list of the call, threaded through the adapter, so in out is intentional
+  function typesafe_to_neutral (
+    p_resp_json    in            json_object_t
+  , p_resp         in            clob
+  , p_questions    in            json_object_t
+  , p_model        in            varchar2
+  , pio_warnings   in out nocopy json_array_t
+  , p_scope        in            varchar2
+  ) return json_object_t
+  as
+    l_ids        json_key_list := p_questions.get_keys;
+    l_answers_in json_object_t;
+    l_names      json_key_list;
+    l_answer     json_object_t;
+    l_question   json_object_t;
+    l_type       varchar2(10 char);
+    l_expected   varchar2(10 char);
+    l_answers    json_object_t := json_object_t();
+    l_confidence json_object_t := json_object_t();
+    l_out        json_object_t;
+  begin
+    if not p_resp_json.has('answers') or not p_resp_json.get('answers').is_object then
+      format_error('the response has no answers object', p_resp, p_scope);
+    end if;
+    l_answers_in := p_resp_json.get_object('answers');
+
+    -- every answer belongs to one question and every question has one answer
+    l_names := l_answers_in.get_keys;
+    <<name_loop>>
+    for i in 1 .. l_names.count loop
+      if not p_questions.has(l_names(i)) then
+        format_error('the response answers the unknown question "' || substr(l_names(i), 1, 100) || '"', p_resp, p_scope);
+      end if;
+    end loop name_loop;
+
+    <<question_loop>>
+    for i in 1 .. l_ids.count loop
+      if not l_answers_in.has(l_ids(i)) then
+        format_error('the response has no answer for the question "' || l_ids(i) || '"', p_resp, p_scope);
+      end if;
+      if not l_answers_in.get(l_ids(i)).is_object then
+        format_error('the answer for the question "' || l_ids(i) || '" is not an object', p_resp, p_scope);
+      end if;
+
+      l_answer   := l_answers_in.get_object(l_ids(i));
+      l_question := p_questions.get_object(l_ids(i));
+      l_type     := short_text_of(l_question, 'type');
+      l_expected := case l_type when c_type_boolean then 'noul' else l_type end;
+
+      if short_text_of(l_answer, 'type') is null or short_text_of(l_answer, 'type') != l_expected then
+        format_error(
+          'Answer "' || l_ids(i) || '" has the type ' || coalesce(short_text_of(l_answer, 'type'), 'null')
+          || ' but the question is a ' || l_type
+        , p_resp, p_scope);
+      end if;
+
+      if l_type = c_type_boolean then
+        l_out := json_object_t();
+        l_out.put('type', c_type_boolean);
+        l_out.put('probability', number_of(l_answer, 'noul', 'Answer "' || l_ids(i) || '"', true, p_resp, p_scope));
+        l_answers.put(l_ids(i), l_out);
+      else
+        if l_type = c_type_choice then
+          l_answers.put(l_ids(i), typesafe_choice(l_ids(i), l_answer, l_question, pio_warnings, p_resp, p_scope));
+        else
+          l_answers.put(l_ids(i), typesafe_score(l_ids(i), l_answer, l_question, pio_warnings, p_resp, p_scope));
+        end if;
+
+        if l_answer.has('confidence') and l_answer.get('confidence').is_number then
+          l_confidence.put(l_ids(i), l_answer.get_number('confidence'));
+        end if;
+      end if;
+    end loop question_loop;
+
+    return assemble_result(p_resp_json, l_answers, l_confidence, p_model, pio_warnings);
+  end typesafe_to_neutral;
+
+
+  -- @dblinter ignore(g-7440): pio_warnings is the warning list of the call, threaded through the adapter, so in out is intentional
+  function decide_typesafe (
+    p_state        in            clob
+  , p_questions    in            json_object_t
+  , p_model        in            varchar2
+  , p_options      in            json_object_t
+  , p_settings     in            uc_ai_settings.t_settings
+  , pio_warnings   in out nocopy json_array_t
+  ) return json_object_t
+  as
+    l_scope          uc_ai_logger.scope := c_scope_prefix || 'decide_typesafe';
+    l_model          varchar2(255 char);
+    l_url            varchar2(4000 char);
+    l_body           clob;
+    l_web_credential varchar2(255 char);
+    l_resp           clob;
+    l_resp_json      json_object_t;
+    l_question_keys  json_key_list := p_questions.get_keys;
+  begin
+    l_url   := rtrim(coalesce(p_settings.base_url, c_typesafe_base_url), '/') || '/systemone';
+    l_model := coalesce(p_model, default_model(uc_ai.c_provider_typesafe));
+    l_body  := typesafe_body(p_state, p_questions, l_model, p_options).to_clob;
+
+    apex_web_service.clear_request_headers;
+    apex_web_service.g_request_headers(1).name  := 'Content-Type';
+    apex_web_service.g_request_headers(1).value := 'application/json';
+
+    l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.ts_apex_web_credential);
+
+    if l_web_credential is null then
+      apex_web_service.g_request_headers(2).name  := 'Authorization';
+      apex_web_service.g_request_headers(2).value := 'Bearer ' || uc_ai_get_key(uc_ai.c_provider_typesafe);
+    end if;
+
+    uc_ai_settings.apply_extra_headers(p_settings);
+
+    -- Never log l_body: it holds the state
+    uc_ai_logger.log(
+      'Calling TypeSafe at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null')
+    , l_scope
+    , 'model=' || l_model
+      || ', questions=' || l_question_keys.count
+      || ', request size=' || sys.dbms_lob.getlength(l_body) || ' characters'
+      || ', option keys=' || nvl(option_keys(p_options), 'none')
+    );
+
+    l_resp := uc_ai_http.post(
+      p_url                  => l_url
+    , p_body                 => l_body
+    , p_credential_static_id => l_web_credential
+    , p_transfer_timeout     => c_transfer_timeout
+    );
+
+    l_resp_json := parse_response(l_resp, 'TypeSafe', l_scope);
+
+    -- a 200 can still carry an error body
+    if l_resp_json.has('error') and not l_resp_json.get('error').is_null then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_provider_response
+      , p_scope      => l_scope
+      , p0           => 'TypeSafe'
+      , p1           => case when l_resp_json.get('error').is_object
+                             then coalesce(short_text_of(l_resp_json.get_object('error'), 'message'), 'error response')
+                             else 'error response' end
+      , p_extra      => l_resp
+      );
+    end if;
+
+    uc_ai_logger.log(
+      'TypeSafe response'
+    , l_scope
+    , 'response length=' || sys.dbms_lob.getlength(l_resp)
+    );
+
+    return typesafe_to_neutral(l_resp_json, l_resp, p_questions, l_model, pio_warnings, l_scope);
+  end decide_typesafe;
+
+
   -- ---- dispatcher -------------------------------------------------------------
 
   function decide (
@@ -1272,7 +1828,8 @@ create or replace package body uc_ai_decisions as
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_unknown_provider
       , p_scope      => l_scope
-      , p_message    => 'Provider %0 has no decision support. Decision providers: ' || uc_ai.c_provider_openai
+      , p_message    => 'Provider %0 has no decision support. Decision providers: '
+                        || uc_ai.c_provider_openai || ', ' || uc_ai.c_provider_typesafe
       , p0           => nvl(p_provider, 'null')
       );
     end if;
@@ -1286,6 +1843,17 @@ create or replace package body uc_ai_decisions as
     check_options(p_options, p_provider, l_warnings, l_scope);
 
     -- 3. adapter
+    if p_provider = uc_ai.c_provider_typesafe then
+      return decide_typesafe(
+        p_state      => p_state
+      , p_questions  => p_questions
+      , p_model      => p_model
+      , p_options    => p_options
+      , p_settings   => p_settings
+      , pio_warnings => l_warnings
+      );
+    end if;
+
     return decide_openai(
       p_state      => p_state
     , p_questions  => p_questions

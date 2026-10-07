@@ -1,0 +1,1 @@
+{"detail":[{"type":"dict_type","loc":["body","questions","c","choice","criteria"],"msg":"Input should be a valid dictionary","input":["a","b"]}]}

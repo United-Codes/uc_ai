@@ -502,6 +502,9 @@ create or replace package body uc_ai as
 
     -- Reset Mistral global variables
     uc_ai_mistral.g_apex_web_credential := null;
+
+    -- Reset TypeSafe global variables
+    uc_ai_typesafe.g_apex_web_credential := null;
   end reset_globals;
 
   procedure set_event_callback(p_proc_name in varchar2)

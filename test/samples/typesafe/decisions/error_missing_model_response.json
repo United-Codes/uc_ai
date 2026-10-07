@@ -1,0 +1,1 @@
+{"detail":[{"type":"missing","loc":["body","model"],"msg":"Field required","input":{"state":"x","questions":{"n":{"type":"noul","instructions":"Is it an outage?"}}}}]}

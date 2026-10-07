@@ -24,6 +24,8 @@ as
   c_provider_xai        constant provider_type := 'xai';
   c_provider_openrouter constant provider_type := 'openrouter';
   c_provider_mistral    constant provider_type := 'mistral';
+  -- not a chat provider: TypeSafe jev only answers uc_ai.decide (no generate_text)
+  c_provider_typesafe   constant provider_type := 'typesafe';
 
   -- not a real provider, but usable for any provider that supports Responses API
   c_provider_responses_api constant provider_type := 'responses_api';
@@ -295,7 +297,7 @@ as
    * keyed by question id; each question has a type (boolean, choice or score),
    * instructions and criteria (see uc_ai_decisions for the full shape). p_files
    * holds uc_ai_message_api.create_file_content objects; only images (png, jpeg,
-   * webp) are supported.
+   * webp) are supported, and only by OpenAI (TypeSafe jev takes text only).
    *
    * Returns a provider-neutral JSON object: answers (keyed by question id, with
    * probabilities), usage, model, provider_metadata (confidence), warnings and raw
@@ -303,11 +305,12 @@ as
    * provider refuses gets the answer {"type": "refused"} and the call does not
    * raise; check the answer type before you read choice, score or probability.
    *
-   * p_provider is required; the supported provider is c_provider_openai. p_model
-   * null uses the provider default (OpenAI: uc_ai_openai.c_model_gpt_6_luna).
-   * p_options: safety_identifier and extra_body (an object merged into the
-   * request; the keys model, input and questions always win). Other keys are
-   * ignored with a warning.
+   * p_provider is required; the supported providers are c_provider_openai and
+   * c_provider_typesafe. p_model null uses the provider default (OpenAI:
+   * uc_ai_openai.c_model_gpt_6_luna, TypeSafe: uc_ai_typesafe.c_model_jev_latest).
+   * p_options: safety_identifier (OpenAI only) and extra_body (an object merged
+   * into the request; the keys model, input/state and questions always win). Other
+   * keys are ignored with a warning.
    *
    * Malformed questions or input raise -20503, input the provider cannot take
    * raises -20508 (both before any request is sent). A provider error raises

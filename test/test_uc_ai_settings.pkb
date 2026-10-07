@@ -49,6 +49,8 @@ create or replace package body test_uc_ai_settings as
 
     uc_ai_mistral.g_apex_web_credential := 'MS_CRED';
 
+    uc_ai_typesafe.g_apex_web_credential := 'TS_CRED';
+
     uc_ai_responses_api.g_base_url := 'https://resp.example/v1';
     uc_ai_responses_api.g_reasoning_effort := 'high';
     uc_ai_responses_api.g_reasoning_summary := 'detailed';
@@ -102,6 +104,8 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.or_apex_web_credential).to_equal('OR_CRED');
     -- mistral
     ut.expect(l_s.ms_apex_web_credential).to_equal('MS_CRED');
+    -- typesafe
+    ut.expect(l_s.ts_apex_web_credential).to_equal('TS_CRED');
     -- responses api
     ut.expect(l_s.ra_base_url).to_equal('https://resp.example/v1');
     ut.expect(l_s.ra_reasoning_effort).to_equal('high');
@@ -288,6 +292,35 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.oc_endpoint_id).to_equal('ocid1.generativeaiendpoint.cfg');
     ut.expect(l_s.oc_region).to_equal('eu-frankfurt-1');
   end config_maps_oci_keys;
+
+  procedure config_maps_typesafe_keys
+  as
+    l_s uc_ai_settings.t_settings;
+  begin
+    -- the typesafe block is only read when the call names the typesafe provider
+    l_s := uc_ai_settings.build_from_config(
+      json_object_t('{"typesafe": {"g_apex_web_credential": "TS_CFG"}}')
+    , uc_ai.c_provider_typesafe
+    );
+    ut.expect(l_s.ts_apex_web_credential).to_equal('TS_CFG');
+
+    -- and it is a known provider key for another provider's config
+    l_s := uc_ai_settings.build_from_config(
+      json_object_t('{"typesafe": {"g_apex_web_credential": "TS_CFG"}}')
+    , uc_ai.c_provider_openai
+    );
+    ut.expect(l_s.ts_apex_web_credential).to_be_null();
+  end config_maps_typesafe_keys;
+
+  procedure config_rejects_unknown_typesafe_key
+  as
+    l_s uc_ai_settings.t_settings;
+  begin
+    l_s := uc_ai_settings.build_from_config(
+      json_object_t('{"typesafe": {"g_not_a_real_key": 1}}')
+    , uc_ai.c_provider_typesafe
+    );
+  end config_rejects_unknown_typesafe_key;
 
   procedure config_rejects_unknown_oci_key
   as

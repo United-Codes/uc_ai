@@ -50,6 +50,7 @@ declare -a PROVIDER_PACKAGES=(
     "uc_ai_oci"
     "uc_ai_ollama"
     "uc_ai_openai"
+    "uc_ai_typesafe"
     "uc_ai_xai"
     "uc_ai_openrouter"
     "uc_ai_responses_api"
@@ -133,6 +134,9 @@ get_package_description() {
             ;;
         "uc_ai_mistral")
             echo "Mistral AI Provider Package"
+            ;;
+        "uc_ai_typesafe")
+            echo "TypeSafe Decisions Provider Package"
             ;;
         "uc_ai_oci")
             echo "OCI AI Provider Package"

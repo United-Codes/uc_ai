@@ -13,6 +13,8 @@ begin
       return '...';
     when uc_ai.c_provider_google then
       return '...';
+    when uc_ai.c_provider_typesafe then
+      return '...';
     else 
       raise e_unhandled_provider;
   end case;

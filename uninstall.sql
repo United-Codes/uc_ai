@@ -39,6 +39,7 @@ PROMPT Dropping AI provider packages...
 DROP PACKAGE uc_ai_responses_api;
 DROP PACKAGE uc_ai_openrouter;
 DROP PACKAGE uc_ai_xai;
+DROP PACKAGE uc_ai_typesafe;
 DROP PACKAGE uc_ai_openai;
 DROP PACKAGE uc_ai_ollama;
 DROP PACKAGE uc_ai_oci;

@@ -1,6 +1,6 @@
 # Proposal: typed decisions in UC AI (`uc_ai.decide`)
 
-Status: draft. Design decisions are made (section 2). The OpenAI wire format is verified against real calls (section 1, 2026-10-07). The TypeSafe wire format is NOT yet verified.
+Status: draft. Design decisions are made (section 2). The OpenAI and the TypeSafe wire formats are verified against real calls (section 1, 2026-10-07).
 Backends in the first release: **OpenAI Decisions** (`POST /v1/decisions`, model `gpt-6-luna`) and **TypeSafe jev** (`POST /v1/systemone`, model `jev-latest`).
 Both APIs are beta. The public entry point is marked experimental in the spec and the docs.
 
@@ -48,24 +48,56 @@ About 70 calls through `uc_ai_http.post` with the web credential `OPENAI` (no ke
 
 **Still unverified**: 429 shape and `retry-after`; 401 shape; the upper limit of questions and of input size; the effect of `detail` on images; large images (only 0.5 to 2.4 KB images were sent); PDF or other media types (the docs only name images); behaviour for `file_id`; whether `safety_identifier` changes anything (accepted only); latency for long inputs.
 
-### TypeSafe jev (NOT verified in this run; from the Vercel AI SDK adapter and vendor docs only)
+### TypeSafe jev `POST {base_url}/systemone` (real calls from the dev database, 2026-10-07)
 
-| | TypeSafe jev |
-|---|---|
-| Endpoint | `POST https://api.typesafe.ai/v1/systemone` |
-| Auth | Bearer |
-| Model | `jev-latest` |
-| Input | `state` (string) |
-| Questions | object keyed by question id |
-| Boolean | type `noul`, answer `{noul: p}` |
-| Choice | `criteria: {option: description}`, answer `{choice, probabilities:{option: p}, confidence}` |
-| Score | `criteria: [description, ...]`, answer `{score, probabilities:{index: p}, confidence}` |
-| Refusal | none |
-| Limits | 255 choice options, 10 score levels |
-| Usage | `usage.input_tokens`, `output_tokens` |
-| Rounding | probabilities and scores to 2 decimals |
+About 36 calls through `uc_ai_http.post` with the web credential `TYPESAFE_AI` (no key read or echoed). Cost: about 15,000 input tokens in total (price in the vendor docs: $0.042 per million input tokens, output free). Recorded in `test/samples/typesafe/decisions/` (response bodies as returned, request bodies as sent; HTTP status codes are in this section; `triage_response_headers.json` holds the header sample). Vendor docs: `docs.typesafe.ai/api`, `/models`, `/concepts/state`.
 
-Open for the TypeSafe WP0: whether jev accepts images (if not, TypeSafe raises -20508 for files), its error body shapes, and whether `confidence` is always present.
+**Request**
+- URL `https://api.typesafe.ai/v1/systemone`. Headers: `Content-Type: application/json` and Bearer auth (the web credential adds it).
+- Body `{"model":"jev-latest","state":<string | object | array>,"questions":{<id>:{...}}}`. `model`, `state`, `questions` are required (422 `missing`). `state` as a JSON object or array works (the model reads it as structured text); we only send strings. `state` as an empty string and as `"x"` return 200 (empty state: `noul` 0.35, no refusal).
+- Question objects: `type` is `noul`, `choice` or `score`. `instructions`: an empty, null or missing `instructions` on a noul gives 400 `Noul question must have criteria or instructions: <id>` (so criteria alone are enough, checked: `noul_criteria_only` returns 200). The docs say `instructions` is required, the JS SDK types make it optional; the neutral model requires it anyway.
+  - `noul`: optional `criteria: {"true"?:..., "false"?:...}`. Works with both keys, with `true` only, with null or `""` values, and with an empty object `{}`. So a boolean question maps directly: no folding into the instructions, unlike the OpenAI predicate.
+  - `choice`: `criteria` is an object `{option: description}`. A description of `null` or `""` works (answered normally). `criteria` as an array gives 422 (`dict_type`), missing `criteria` 422.
+  - `score`: `criteria` is an array of descriptions, level 0 first. A description of `""` works; `null` gives **422** (`string_type`, `dict_type`, `list_type` for each null level: the SDK types say null is allowed, the API does not take it). `criteria` as an object gives 422 (`list_type`).
+  - Unknown keys inside a question (`description`) are ignored (200). An unknown top-level key (`temperature`) gives 400 `Invalid request.`. An unknown question `type` (`boolean`) gives 400 `Invalid request.`.
+- Limits: choice 255 options works (4,011 input tokens), 256 gives 400 `Too many choices. Must have at most 255 choices.`; score 10 levels works, 11 gives 400 `Too many score levels. Must have at most 10 levels.` **One option or one level is accepted (200)**, unlike OpenAI (answer: that option with probability 1.0). The neutral check keeps its 2 minimum. At least 1 question (empty `questions` gives 422 `too_short`). The docs name 64k tokens of context per request (32k for `state` plus the longest question). The upper question count was not searched.
+- Images: the docs say text only ("No image, audio, or video input", `models`, `concepts/state`). A data URL image inside `state` (as an array of text and `image_url` parts) returns 200 but is read as text (890 input tokens for a 562-byte PNG, answer `other` instead of `refund`). A top-level `images` field gives 400 `Invalid request.`. **No usable image input: TypeSafe files raise -20508.**
+
+**Response** (200)
+- `{"model":"jev-1.13.0","answers":{<id>:{...}},"usage":{"input_tokens","output_tokens"}}`. `model` is the **resolved version** (`jev-latest` gives `jev-1.13.0`), not the alias. `output_tokens` is non-zero (17 to 2,714; billed price is input only per the docs). `usage` has only these two keys.
+- `answers` is keyed by question id, in request order (checked with keys `z_last`, `a_first`, `m_mid`: the order of the request, not alphabetic). Every question had an answer in every call.
+  - `noul`: `{"type":"noul","noul":p}`. No `confidence`, no probabilities.
+  - `choice`: `{"type":"choice","choice":"...","confidence":c,"probabilities":{option:p}}`. The key order of `probabilities` is **not** the option order (unordered, e.g. `cat_47, cat_92, ...`).
+  - `score`: `{"type":"score","score":s,"confidence":c,"legend":{"0":"description",...},"probabilities":{"0":p,...}}`. `legend` repeats the level descriptions (empty string for an empty description). Keys of `probabilities` and `legend` are the level index as a string.
+- `confidence` was present on every choice and score answer (11 answers), also with the value 0.2 for a nonsense question. It is not the probability of the chosen option (choice with probability 0.6 had confidence 0.2).
+- `probabilities` are complete (every option and level, zeros included; 255 entries for 255 options) and summed to 1.0 in every answer (deviation 0 at 6 decimals), 2 decimals each. The chosen `choice` was the argmax.
+- `score` is the probability-weighted mean of the level indexes **computed from the unrounded probabilities, then rounded to 2 decimals**: the mean of the rounded probabilities differed by +0.01 (7.71 against 7.70) and -0.01 (1.96 against 1.97). The warning tolerance (1e-6 plus half a unit per rounded value) covers it: 3 levels allow 0.02, 2 levels allow 0.01.
+- `noul` has 2 decimals (0.99, 0.37, 0.05).
+
+**Refusal**: none. An ill-posed question (a choice "Pick the colour of the number seven's smell") is answered with low confidence (0.2) and a 0.6/0.4 spread; "Will the next Euromillions draw contain the number 7?" gives noul 0.37; sibling answers are normal. An empty state gives 200. An empty or missing `instructions` on a noul is a 400 for the whole request, not a per-question result. jev has no refusal type, so the neutral answer `{"type":"refused"}` never comes from TypeSafe.
+
+**Errors** (FastAPI shapes, **no `error` object**, unlike OpenAI): the body is `{"detail": ...}` and `detail` has three shapes.
+- 400 with `detail` a string: `Too many choices. Must have at most 255 choices.`, `Too many score levels. ...`, `Noul question must have criteria or instructions: e`.
+- 400 with `detail` an object `{"error_type":"api_usage_error","message":"..."}`: unknown model (`Unknown model: jev-nope`), and the generic `Invalid request.` for an unknown question type, an unknown top-level key and an unknown top-level image field.
+- 422 with `detail` a list of `{"type","loc":[...],"msg","input"}` (pydantic): missing `state`, `model` or `questions`, empty `questions` (`too_short`), a wrong `criteria` type, a null score level. `loc` is the field path (`["body","questions","c","choice","criteria"]`). `input` echoes the offending input, so it can hold the caller's text: the adapter must not copy `input` into the error message.
+- Documented, not tested on purpose: 401 (bad or missing key), 429 (rate limit, 80 requests and 100K tokens per second at the time of writing), 529 (overloaded). The body shape of these is not known; the vendor SDKs retry 408, 429 and 5xx and honor `retry-after`.
+
+**Headers** (200 response): `x-typesafe-request-id` (`req_...`, worth logging), `Content-Type: application/json`, Cloudflare headers (`CF-RAY`, `cf-cache-status`). No rate limit or processing time headers.
+
+**Still unverified**: 401, 429 and 529 shapes and `retry-after`; the upper limit of questions and of `state` size; behaviour for state over the context limit; whether a pinned version id (`jev-1.13.0`) is accepted (the docs say yes); `jev-preview`; reproducibility of the probabilities (calls are not seeded).
+
+### jev contradictions (TypeSafe calls against sections 2 and 3; none needs a decision)
+
+All handled in the adapter (section 3 and 4 updated); the design stands.
+1. **No images.** Section 3 left TypeSafe files open. jev is text only (docs, and a call): files raise -20508 before any request, the message says that jev takes text only.
+2. **Score levels reject `null`.** The neutral model allows a null or empty level description. The adapter sends `""` for a score level and `null` for a choice option without a description (both accepted). A boolean `criteria` is sent as `{true?, false?}` with only the keys that have a text.
+3. **Boolean criteria go through natively.** `noul` takes `criteria` `{true, false}`; no folding into the instructions (that stays OpenAI only).
+4. **No refusal, no per-question failure.** Every question was answered (low confidence for nonsense). A bad question fails the whole request (400/422). The neutral answer `{"type":"refused"}` is never produced for TypeSafe.
+5. **Error bodies have no `error` object.** `detail` is a string, an object `{error_type, message}` or a list of pydantic items. `parse_response` must read `detail` too; the 422 `input` echo must not go into the message.
+6. **The returned `model` is the resolved version** (`jev-1.13.0`), not `jev-latest`.
+7. **One option or one level is accepted by jev.** The neutral check still needs 2 (a one-option decision is not a decision).
+8. **`score` is rounded from unrounded probabilities,** so it can differ by 0.01 from the mean of the rounded probabilities. The existing tolerance covers it, no change.
+9. **`usage.output_tokens` is non-zero** (billed price counts input only). Passed through as reported.
 
 ### Contradictions found (OpenAI calls against sections 2 and 3; decisions NOT edited)
 
@@ -124,10 +156,11 @@ Constants: `uc_ai.c_provider_typesafe = 'typesafe'`, `uc_ai_typesafe.c_model_jev
 }
 ```
 
-- `instructions` is a required, non-blank string. `criteria` is required for `choice` (an object with **at least 2** options) and `score` (an array of **at least 2** levels; level 0 is the first element). A choice option or level without a description (null or empty) is sent without one. It is optional for `boolean`: an object `{"true": "...", "false": "..."}`; the OpenAI adapter folds it into the predicate `instructions` (a predicate takes only `instructions`; an extra field is a 400): the instructions, then a blank line and `Criteria for true:` plus a line feed plus the text, then the same for `false`, each only when given.
+- `instructions` is a required, non-blank string. `criteria` is required for `choice` (an object with **at least 2** options) and `score` (an array of **at least 2** levels; level 0 is the first element). A choice option or level without a description (null or empty) is sent without one. It is optional for `boolean`: an object `{"true": "...", "false": "..."}`; the OpenAI adapter folds it into the predicate `instructions` (a predicate takes only `instructions`; an extra field is a 400): the instructions, then a blank line and `Criteria for true:` plus a line feed plus the text, then the same for `false`, each only when given. The TypeSafe adapter sends it as it is: `noul.criteria` `{"true"?, "false"?}` with the keys that have a text, and no `criteria` when both are blank.
 - Question ids must match `^[A-Za-z][A-Za-z0-9_]{0,63}$` (a trailing line feed is rejected too). Check before any request. A key in a question other than `type`, `instructions` and `criteria` adds a warning and is ignored.
 - Read every string with `get_clob`, never `get_string` (32k limit).
 - The score levels go to OpenAI as `{"label": "0", "description": <criteria text>}`: the label is the zero-based index, so the answer index and the label always agree.
+- TypeSafe: `criteria` of a choice is sent as the object `{option: description}` with `null` for a blank description; the criteria of a score is the array of descriptions with `""` for a blank one (jev rejects a `null` level with HTTP 422). The request is `{"model", "state", "questions": {<id>: {...}}}` with `state` always a string (jev also takes a JSON object or array, not used).
 
 ### Neutral result
 
@@ -158,27 +191,28 @@ Rules:
 
 Before any request (no HTTP call is made if one fails):
 - Malformed question or id, a choice with fewer than 2 options, a score with fewer than 2 levels, an unknown type (`predicate` and `noul` are not neutral types), blank instructions, an empty state without files, a malformed file object, an option of the wrong type: `c_err_invalid_config` (-20503).
-- Question type or file the provider cannot take: `c_err_unsupported_content` (-20508). The message names the supported types. More than 255 options in a choice or more than 10 levels in a score (OpenAI, verified; TypeSafe has the same numbers). The limits are in one per-provider table in the body of `uc_ai_decisions` (`limits_of`). Files: only `image/png`, `image/jpeg` and `image/webp` pass for OpenAI (verified); other media types raise before any request. TypeSafe files: only if WP0 shows jev takes images.
+- Question type or file the provider cannot take: `c_err_unsupported_content` (-20508). The message names the supported types. More than 255 options in a choice or more than 10 levels in a score (OpenAI, verified; TypeSafe has the same numbers). The limits are in one per-provider table in the body of `uc_ai_decisions` (`limits_of`). Files: only `image/png`, `image/jpeg` and `image/webp` pass for OpenAI (verified); other media types raise before any request. TypeSafe takes text only (docs and a call): any file raises -20508 before any request, with or without state ("The provider takes text only"; the limits table has no media types for it).
 - Null or unknown provider: existing unknown-provider error (-20306), checked first. The message lists the providers that have decision support.
 
 After the response:
 - Errors (`c_err_format_processing`, -20304): a question has no answer or has an extra answer, the answer type differs from the question type, a choice is not one of the options, a score is outside [0, levels - 1], a probability is outside [0, 1].
 - Refusal: no error. See decision 5. The refusal handling is in one place in the body (`is_refusal` and `refused_answer`, with a comment on how to change the policy).
 - Warnings: a distribution does not sum to 1, or a score differs from the probability-weighted mean. Tolerance is 1e-6 plus half a unit in the last decimal (0.005, the 2-decimal rounding both APIs report) for each rounded value that goes into the sum or the mean. For the sum that is `1e-6 + 0.005 * n` for n entries. For the mean, a rounding error of probability i moves the mean by up to `0.005 * i`, so the tolerance is `1e-6 + 0.005 (the score itself) + 0.005 * (sum of the indexes)`. The sum tolerance grows with n, so the check cannot fire on a choice with about 200 options or more (255 options allow a deviation of 1.3); it is a check for the small questions, not for the 255-option case.
-- Unknown keys in `p_options` add a warning and are ignored. Known keys: `safety_identifier` (string, sent as is) and `extra_body` (object, merged into the request; the keys `model`, `input` and `questions` always win).
-- Provider HTTP or API error (status 400 or more, or an `error` object in a 200 body): `c_err_provider_response` (-20302) with the provider message and, when the error has one, its `param`. A non-JSON error body (a 502 page) is reported with a preview of the body.
+- Unknown keys in `p_options` add a warning and are ignored. Known keys: `safety_identifier` (OpenAI only; string, sent as is; a warning for TypeSafe) and `extra_body` (object, merged into the request; the keys `model`, `input` (OpenAI) or `state` (TypeSafe) and `questions` always win).
+- Provider HTTP or API error (status 400 or more, or an `error` object in a 200 body): `c_err_provider_response` (-20302) with the provider message and, when the error has one, its `param`. TypeSafe errors have no `error` object but a `detail`: a string, an object `{error_type, message}` or a list of validation items; the message is the text, and for a list each item gives `msg (param <loc path without body>)`, at most 3 items then `; and N more` (SQLERRM shows 512 bytes). The `input` echo of a validation item (it can hold the state) is never read, and a validation list is not passed to the log. A non-JSON error body (a 502 page) is reported with a preview of the body.
+- TypeSafe has no refusal: every question gets a typed answer (a nonsense question gets a low `confidence`). The tolerance of the distribution checks is the same: jev rounds probabilities and score to 2 decimals, and computes the score from the unrounded probabilities, so it can differ by 0.01 from the mean of the rounded ones (inside the tolerance).
 
 ## 4. Footprint
 
 No tables, no migration.
 
 - `src/packages/uc_ai_decisions.pks/.pkb`: dispatcher, pre-flight checks, validation, result assembly, both adapters as private functions.
-- `src/packages/uc_ai_typesafe.pks` (spec only, like `uc_ai_mistral.pks`): `c_model_jev_latest`, `g_apex_web_credential`.
+- `src/packages/uc_ai_typesafe.pks` (spec only, like `uc_ai_mistral.pks`): `c_model_jev_latest`, `g_apex_web_credential`. Credential: `coalesce(uc_ai.g_apex_web_credential, uc_ai_typesafe.g_apex_web_credential)` as for Mistral; with neither, `uc_ai_get_key('typesafe')` as a Bearer header. Base URL: `uc_ai.g_base_url` as for Mistral, so a proxy URL also receives TypeSafe calls (`<base>/systemone`); the default is `https://api.typesafe.ai/v1`.
 - `uc_ai.pks`: `c_provider_typesafe`, the `decide` facade. `uc_ai.pkb`: the facade body, built with `uc_ai_settings.build_from_globals`.
 - `uc_ai_settings`: add `ts_apex_web_credential` in the four places named in `uc_ai_settings.pks`, and in `reset_globals`.
 - `scripts/package_utils.sh`: `uc_ai_decisions` in the core list after `uc_ai_ocr`, `uc_ai_typesafe` in the provider list. Then regenerate install, upgrade and uninstall scripts.
-- `scripts/generate_uc_ai_utils_body.sh`: exclude `typesafe` from the provider list.
-- `uc_ai_get_key` belongs to the user (`src/dependencies/key_function.sql`) and raises -20001 for an unknown provider. Every user needs a `typesafe` branch. The docs must say so, and the post-install script should not overwrite the user function.
+- `scripts/generate_uc_ai_utils_body.sh`: exclude `typesafe` from the provider list (done: the generator reads the `c_model_*` constants only of providers it lists, so `jev-latest` is not in `uc_ai_utils.get_models` either).
+- `uc_ai_get_key` belongs to the user (`src/dependencies/key_function.sql`) and raises -20001 for an unknown provider. Every user who does not name a web credential needs a `typesafe` branch (the sample in the repo has one now). The docs must say so, and the post-install script should not overwrite the user function.
 - OpenAI base URL: the adapter follows `uc_ai.g_base_url` like chat. The docs must say that a proxy URL then also receives decision calls.
 - Set `p_transfer_timeout` on decision calls (images can make them slow).
 
@@ -191,7 +225,7 @@ No tables, no migration.
 
 0. **WP0 Verify.** Make real calls from the dev database to both APIs (questions of all three types, one refusal-prone question, an image for OpenAI, an error case each). Needs a TypeSafe key and OpenAI access to `gpt-6-luna` Decisions. Never echo keys. Record the responses in `test/samples/`. Correct section 1.
 1. **WP1 Core and OpenAI.** `uc_ai_decisions` (dispatcher, checks, validation, assembly), the `uc_ai.decide` facade, OpenAI adapter, error constant, script wiring.
-2. **WP2 TypeSafe.** `uc_ai_typesafe.pks`, `c_provider_typesafe`, settings field, TypeSafe adapter, generator exclusion, `uc_ai_get_key` docs note.
+2. **WP2 TypeSafe.** (done) `uc_ai_typesafe.pks`, `c_provider_typesafe`, settings field, TypeSafe adapter, generator exclusion, `uc_ai_get_key` docs note.
 3. **WP3 Docs.** `api/decide.mdx`, `providers/typesafe.mdx`, updates to `providers/openai.mdx`, `api/cheatsheet.mdx`, `api/types.mdx`, `other/release-history.mdx`, the `CLAUDE.md` package table, and a workflow-routing example. Use `simple-english` and `docs-voice`. Grep every heading anchor before changing it. Docs output must come from recorded calls.
 
 ### Tests (utPLSQL; `test_uc_ai_decisions` and `test_uc_ai_decisions_wire`, following the OCR test packages)
