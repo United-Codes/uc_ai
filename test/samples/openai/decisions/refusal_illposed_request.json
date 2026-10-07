@@ -1,0 +1,1 @@
+{"model":"gpt-6-luna","input":"The site is down for all customers.","questions":[{"type":"predicate","name":"lottery","instructions":"Will the next Euromillions draw contain the number 7?"},{"type":"choice","name":"nonsense","instructions":"Pick the colour of the number seven's smell.","choices":[{"value":"red"},{"value":"blue"}]}]}

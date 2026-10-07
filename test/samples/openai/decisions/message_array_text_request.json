@@ -1,0 +1,1 @@
+{"model":"gpt-6-luna","input":[{"role":"user","content":[{"type":"input_text","text":"I was charged twice. Please refund me."}]}],"questions":[{"type":"predicate","name":"refund","instructions":"The customer wants money back."}]}
