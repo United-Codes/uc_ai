@@ -33,6 +33,9 @@ declare -a API_PACKAGES=(
     # ocr is called by the uc_ai body (bodies of API packages precede it) and its
     # body uses the mistral constants (all specs exist before any body).
     "uc_ai_ocr"
+    # decisions is called by the uc_ai body like ocr and uses the openai constants
+    # (all specs exist before any body).
+    "uc_ai_decisions"
     "uc_ai_agents_api"
     "uc_ai_agent_exec_api"
     "uc_ai_agent_workflow_api"
@@ -136,6 +139,9 @@ get_package_description() {
             ;;
         "uc_ai_ocr")
             echo "OCR Package"
+            ;;
+        "uc_ai_decisions")
+            echo "Decisions Package"
             ;;
         "uc_ai_ollama")
             echo "Ollama AI Provider Package"

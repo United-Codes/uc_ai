@@ -287,6 +287,45 @@ as
   ) return clob;
 
   /*
+   * EXPERIMENTAL. Decide typed answers to named questions against one shared
+   * state. The provider APIs behind it are in beta, so the shape of the result can
+   * still change.
+   *
+   * p_state is text (or JSON serialised with to_clob). p_questions is an object
+   * keyed by question id; each question has a type (boolean, choice or score),
+   * instructions and criteria (see uc_ai_decisions for the full shape). p_files
+   * holds uc_ai_message_api.create_file_content objects; only images (png, jpeg,
+   * webp) are supported.
+   *
+   * Returns a provider-neutral JSON object: answers (keyed by question id, with
+   * probabilities), usage, model, provider_metadata (confidence), warnings and raw
+   * (the provider response). See uc_ai_decisions for the full shape.
+   *
+   * p_provider is required; the supported provider is c_provider_openai. p_model
+   * null uses the provider default (OpenAI: uc_ai_openai.c_model_gpt_6_luna).
+   * p_options: safety_identifier and extra_body (an object merged into the
+   * request; the keys model, input and questions always win). Other keys are
+   * ignored with a warning.
+   *
+   * Malformed questions or input raise -20503, input the provider cannot take
+   * raises -20508 (both before any request is sent). A provider error raises
+   * -20302, a refusal on any question -20309 (uc_ai_error.c_err_decision_refused),
+   * answers that do not match the questions -20304. Probabilities that do not
+   * add up are not errors: they add a text to warnings.
+   *
+   * Settings such as g_apex_web_credential and g_base_url come from the package
+   * globals, like in generate_text.
+   */
+  function decide (
+    p_state     in clob
+  , p_questions in json_object_t
+  , p_provider  in provider_type
+  , p_model     in model_type default null
+  , p_files     in json_array_t default null
+  , p_options   in json_object_t default null
+  ) return json_object_t;
+
+  /*
    * Resets all global variables in uc_ai and provider packages to their default values.
    * Note: g_event_callback is intentionally preserved across resets (long-lived registration).
    */

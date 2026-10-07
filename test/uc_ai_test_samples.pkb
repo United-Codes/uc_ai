@@ -1979,6 +1979,190 @@ create or replace package body uc_ai_test_samples as
 }
 ~';
 
+      when 'openai/decisions/choices_255_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"c","choice":"invoice","probabilities":[{"value":"cat_1","probability":0.01},{"value":"cat_2","probability":0.01},{"value":"cat_3","probability":0.01},{"value":"cat_4","probability":0.0},{"value":"cat_5","probability":0.0},{"value":"cat_6","probability":0.0},{"value":"cat_7","probability":0.0},{"value":"cat_8","probability":0.0},{"value":"cat_9","probability":0.0},{"value":"cat_10","probability":0.0},{"value":"cat_11","probability":0.0},{"value":"cat_12","probability":0.0},{"value":"cat_13","probability":0.0},{"value":"cat_14","probability":0.0},{"value":"cat_15","probability":0.0},{"value":"cat_16","probability":0.0},{"value":"cat_17","probability":0.0},{"value":"cat_18","probability":0.0},{"value":"cat_19","probability":0.0},{"value":"cat_20","probability":0.0},{"value":"cat_21","probability":0.0},{"value":"cat_22","probability":0.0},{"value":"cat_23","probability":0.0},{"value":"cat_24","probability":0.0},{"value":"cat_25","probability":0.0},{"value":"cat_26","probability":0.0},{"value":"cat_27","probability":0.0},{"value":"cat_28","probability":0.0},{"value":"cat_29","probability":0.0},{"value":"cat_30","probability":0.0},{"value":"cat_31","probability":0.0},{"value":"cat_32","probability":0.0},{"value":"cat_33","probability":0.0},{"value":"cat_34","probability":0.0},{"value":"cat_35","probability":0.0},{"value":"cat_36","probability":0.0},{"value":"cat_37","probability":0.0},{"value":"cat_38","probability":0.0},{"value":"cat_39","probability":0.0},{"value":"cat_40","probability":0.0},{"value":"cat_41","probability":0.0},{"value":"cat_42","probability":0.0},{"value":"cat_43","probability":0.0},{"value":"cat_44","probability":0.0},{"value":"cat_45","probability":0.0},{"value":"cat_46","probability":0.0},{"value":"cat_47","probability":0.0},{"value":"cat_48","probability":0.0},{"value":"cat_49","probability":0.0},{"value":"cat_50","probability":0.0},{"value":"cat_51","probability":0.0},{"value":"cat_52","probability":0.0},{"value":"cat_53","probability":0.0},{"value":"cat_54","probability":0.0},{"value":"cat_55","probability":0.0},{"value":"cat_56","probability":0.0},{"value":"cat_57","probability":0.0},{"value":"cat_58","probability":0.0},{"value":"cat_59","probability":0.0},{"value":"cat_60","probability":0.0},{"value":"cat_61","probability":0.0},{"value":"cat_62","probability":0.0},{"value":"cat_63","probability":0.0},{"value":"cat_64","probability":0.0},{"value":"cat_65","probability":0.0},{"value":"cat_66","probability":0.0},{"value":"cat_67","probability":0.0},{"value":"cat_68","probability":0.0},{"value":"cat_69","probability":0.0},{"value":"cat_70","probability":0.0},{"value":"cat_71","probability":0.0},{"value":"cat_72","probability":0.0},{"value":"cat_73","probability":0.0},{"value":"cat_74","probability":0.0},{"value":"cat_75","probability":0.0},{"value":"cat_76","probability":0.0},{"value":"cat_77","probability":0.0},{"value":"cat_78","probability":0.0},{"value":"cat_79","probability":0.0},{"value":"cat_80","probability":0.0},{"value":"cat_81","probability":0.0},{"value":"cat_82","probability":0.0},{"value":"cat_83","probability":0.0},{"value":"cat_84","probability":0.0},{"value":"cat_85","probability":0.0},{"value":"cat_86","probability":0.0},{"value":"cat_87","probability":0.0},{"value":"cat_88","probability":0.0},{"value":"cat_89","probability":0.0},{"value":"cat_90","probability":0.0},{"value":"cat_91","probability":0.0},{"value":"cat_92","probability":0.0},{"value":"cat_93","probability":0.0},{"value":"cat_94","probability":0.0},{"value":"cat_95","probability":0.0},{"value":"cat_96","probability":0.0},{"value":"cat_97","probability":0.0},{"value":"cat_98","probability":0.0},{"value":"cat_99","probability":0.0},{"value":"cat_100","probability":0.0},{"value":"cat_101","probability":0.0},{"value":"cat_102","probability":0.0},{"value":"cat_103","probability":0.0},{"value":"cat_104","probability":0.0},{"value":"cat_105","probability":0.0},{"value":"cat_106","probability":0.0},{"value":"cat_107","probability":0.0},{"value":"cat_108","probability":0.0},{"value":"cat_109","probability":0.0},{"value":"cat_110","probability":0.0},{"value":"cat_111","probability":0.0},{"value":"cat_112","probability":0.0},{"value":"cat_113","probability":0.0},{"value":"cat_114","probability":0.0},{"value":"cat_115","probability":0.0},{"value":"cat_116","probability":0.0},{"value":"cat_117","probability":0.0},{"value":"cat_118","probability":0.0},{"value":"cat_119","probability":0.0},{"value":"cat_120","probability":0.0},{"value":"cat_121","probability":0.0},{"value":"cat_122","probability":0.0},{"value":"cat_123","probability":0.0},{"value":"cat_124","probability":0.0},{"value":"cat_125","probability":0.0},{"value":"cat_126","probability":0.0},{"value":"cat_127","probability":0.0},{"value":"cat_128","probability":0.0},{"value":"cat_129","probability":0.0},{"value":"cat_130","probability":0.0},{"value":"cat_131","probability":0.0},{"value":"cat_132","probability":0.0},{"value":"cat_133","probability":0.0},{"value":"cat_134","probability":0.0},{"value":"cat_135","probability":0.0},{"value":"cat_136","probability":0.0},{"value":"cat_137","probability":0.0},{"value":"cat_138","probability":0.0},{"value":"cat_139","probability":0.0},{"value":"cat_140","probability":0.0},{"value":"cat_141","probability":0.0},{"value":"cat_142","probability":0.0},{"value":"cat_143","probability":0.0},{"value":"cat_144","probability":0.0},{"value":"cat_145","probability":0.0},{"value":"cat_146","probability":0.0},{"value":"cat_147","probability":0.0},{"value":"cat_148","probability":0.0},{"value":"cat_149","probability":0.0},{"value":"cat_150","probability":0.0},{"value":"cat_151","probability":0.0},{"value":"cat_152","probability":0.0},{"value":"cat_153","probability":0.0},{"value":"cat_154","probability":0.0},{"value":"cat_155","probability":0.0},{"value":"cat_156","probability":0.0},{"value":"cat_157","probability":0.0},{"value":"cat_158","probability":0.0},{"value":"cat_159","probability":0.0},{"value":"cat_160","probability":0.0},{"value":"cat_161","probability":0.0},{"value":"cat_162","probability":0.0},{"value":"cat_163","probability":0.0},{"value":"cat_164","probability":0.0},{"value":"cat_165","probability":0.0},{"value":"cat_166","probability":0.0},{"value":"cat_167","probability":0.0},{"value":"cat_168","probability":0.0},{"value":"cat_169","probability":0.0},{"value":"cat_170","probability":0.0},{"value":"cat_171","probability":0.0},{"value":"cat_172","probability":0.0},{"value":"cat_173","probability":0.0},{"value":"cat_174","probability":0.0},{"value":"cat_175","probability":0.0},{"value":"cat_176","probability":0.0},{"value":"cat_177","probability":0.0},{"value":"cat_178","probability":0.0},{"value":"cat_179","probability":0.0},{"value":"cat_180","probability":0.0},{"value":"cat_181","probability":0.0},{"value":"cat_182","probability":0.0},{"value":"cat_183","probability":0.0},{"value":"cat_184","probability":0.0},{"value":"cat_185","probability":0.0},{"value":"cat_186","probability":0.0},{"value":"cat_187","probability":0.0},{"value":"cat_188","probability":0.0},{"value":"cat_189","probability":0.0},{"value":"cat_190","probability":0.0},{"value":"cat_191","probability":0.0},{"value":"cat_192","probability":0.0},{"value":"cat_193","probability":0.0},{"value":"cat_194","probability":0.0},{"value":"cat_195","probability":0.0},{"value":"cat_196","probability":0.0},{"value":"cat_197","probability":0.0},{"value":"cat_198","probability":0.0},{"value":"cat_199","probability":0.0},{"value":"cat_200","probability":0.0},{"value":"cat_201","probability":0.0},{"value":"cat_202","probability":0.0},{"value":"cat_203","probability":0.0},{"value":"cat_204","probability":0.0},{"value":"cat_205","probability":0.0},{"value":"cat_206","probability":0.0},{"value":"cat_207","probability":0.0},{"value":"cat_208","probability":0.0},{"value":"cat_209","probability":0.0},{"value":"cat_210","probability":0.0},{"value":"cat_211","probability":0.0},{"value":"cat_212","probability":0.0},{"value":"cat_213","probability":0.0},{"value":"cat_214","probability":0.0},{"value":"cat_215","probability":0.0},{"value":"cat_216","probability":0.0},{"value":"cat_217","probability":0.0},{"value":"cat_218","probability":0.0},{"value":"cat_219","probability":0.0},{"value":"cat_220","probability":0.0},{"value":"cat_221","probability":0.0},{"value":"cat_222","probability":0.0},{"value":"cat_223","probability":0.0},{"value":"cat_224","probability":0.0},{"value":"cat_225","probability":0.0},{"value":"cat_226","probability":0.0},{"value":"cat_227","probability":0.0},{"value":"cat_228","probability":0.0},{"value":"cat_229","probability":0.0},{"value":"cat_230","probability":0.0},{"value":"cat_231","probability":0.0},{"value":"cat_232","probability":0.0},{"value":"cat_233","probability":0.0},{"value":"cat_234","probability":0.0},{"value":"cat_235","probability":0.0},{"value":"cat_236","probability":0.0},{"value":"cat_237","probability":0.0},{"value":"cat_238","probability":0.0},{"value":"cat_239","probability":0.0},{"value":"cat_240","probability":0.0},{"value":"cat_241","probability":0.0},{"value":"cat_242","probability":0.0},{"value":"cat_243","probability":0.0},{"value":"cat_244","probability":0.0},{"value":"cat_245","probability":0.0},{"value":"cat_246","probability":0.0},{"value":"cat_247","probability":0.0},{"value":"cat_248","probability":0.0},{"value":"cat_249","probability":0.0},{"value":"cat_250","probability":0.0},{"value":"cat_251","probability":0.01},{"value":"cat_252","probability":0.0},{"value":"cat_253","probability":0.01},{"value":"cat_254","probability":0.01},{"value":"invoice","probability":0.94}],"confidence":0.94}],"usage":{"input_tokens":1637,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":1637}}
+~';
+
+      when 'openai/decisions/choices_30_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"c","choice":"invoice","probabilities":[{"value":"cat_1","probability":0.0},{"value":"cat_2","probability":0.0},{"value":"cat_3","probability":0.0},{"value":"cat_4","probability":0.0},{"value":"cat_5","probability":0.0},{"value":"cat_6","probability":0.0},{"value":"cat_7","probability":0.0},{"value":"cat_8","probability":0.0},{"value":"cat_9","probability":0.0},{"value":"cat_10","probability":0.0},{"value":"cat_11","probability":0.0},{"value":"cat_12","probability":0.0},{"value":"cat_13","probability":0.0},{"value":"cat_14","probability":0.0},{"value":"cat_15","probability":0.0},{"value":"cat_16","probability":0.0},{"value":"cat_17","probability":0.0},{"value":"cat_18","probability":0.0},{"value":"cat_19","probability":0.0},{"value":"cat_20","probability":0.0},{"value":"cat_21","probability":0.0},{"value":"cat_22","probability":0.0},{"value":"cat_23","probability":0.0},{"value":"cat_24","probability":0.0},{"value":"cat_25","probability":0.0},{"value":"cat_26","probability":0.0},{"value":"cat_27","probability":0.0},{"value":"cat_28","probability":0.0},{"value":"cat_29","probability":0.0},{"value":"invoice","probability":1.0}],"confidence":1.0}],"usage":{"input_tokens":435,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":435}}
+~';
+
+      when 'openai/decisions/error_bad_image_data_response' then
+        return q'~{"error":{"message":"Invalid image data. Supply a supported base64 image data URL.","type":"invalid_request_error","param":"input[0].content[0].image_url","code":null}}
+~';
+
+      when 'openai/decisions/error_choice_without_choices_response' then
+        return q'~{"error":{"message":"Missing required parameter: 'questions[0].choices'.","type":"invalid_request_error","param":"questions[0].choices","code":"missing_required_parameter"}}
+~';
+
+      when 'openai/decisions/error_choices_256_response' then
+        return q'~{"error":{"message":"Invalid 'questions[0].choices': array too long. Expected an array with maximum length 255, but got an array with length 256 instead.","type":"invalid_request_error","param":"questions[0].choices","code":"array_above_max_length"}}
+~';
+
+      when 'openai/decisions/error_duplicate_choice_values_response' then
+        return q'~{"error":{"message":"Choice values must be unique within the question.","type":"invalid_request_error","param":"questions[0].choices[1].value","code":null}}
+~';
+
+      when 'openai/decisions/error_duplicate_names_response' then
+        return q'~{"error":{"message":"Question names must be unique within the request.","type":"invalid_request_error","param":"questions[1].name","code":null}}
+~';
+
+      when 'openai/decisions/error_empty_questions_response' then
+        return q'~{"error":{"message":"Invalid 'questions': empty array. Expected an array with minimum length 1, but got an empty array instead.","type":"invalid_request_error","param":"questions","code":"empty_array"}}
+~';
+
+      when 'openai/decisions/error_image_chat_shape_response' then
+        return q'~{"error":{"message":"Invalid value: 'image_url'. Supported values are: 'input_text' and 'input_image'.","type":"invalid_request_error","param":"input[0].content[0].type","code":"invalid_value"}}
+~';
+
+      when 'openai/decisions/error_image_http_url_response' then
+        return q'~{"error":{"message":"Invalid 'input[0].content[0].image_url': string does not match pattern. Expected a string that matches the pattern '^data:'.","type":"invalid_request_error","param":"input[0].content[0].image_url","code":"invalid_value"}}
+~';
+
+      when 'openai/decisions/error_levels_11_response' then
+        return q'~{"error":{"message":"Invalid 'questions[0].levels': array too long. Expected an array with maximum length 10, but got an array with length 11 instead.","type":"invalid_request_error","param":"questions[0].levels","code":"array_above_max_length"}}
+~';
+
+      when 'openai/decisions/error_missing_input_response' then
+        return q'~{"error":{"message":"Missing required parameter: 'input'.","type":"invalid_request_error","param":"input","code":"missing_required_parameter"}}
+~';
+
+      when 'openai/decisions/error_missing_instructions_response' then
+        return q'~{"error":{"message":"Missing required parameter: 'questions[0].instructions'.","type":"invalid_request_error","param":"questions[0].instructions","code":"missing_required_parameter"}}
+~';
+
+      when 'openai/decisions/error_missing_model_response' then
+        return q'~{"error":{"message":"Missing required parameter: 'model'.","type":"invalid_request_error","param":"model","code":"missing_required_parameter"}}
+~';
+
+      when 'openai/decisions/error_one_choice_response' then
+        return q'~{"error":{"message":"Invalid 'questions[0].choices': array too short. Expected an array with minimum length 2, but got an array with length 1 instead.","type":"invalid_request_error","param":"questions[0].choices","code":"array_below_min_length"}}
+~';
+
+      when 'openai/decisions/error_one_level_response' then
+        return q'~{"error":{"message":"Invalid 'questions[0].levels': array too short. Expected an array with minimum length 2, but got an array with length 1 instead.","type":"invalid_request_error","param":"questions[0].levels","code":"array_below_min_length"}}
+~';
+
+      when 'openai/decisions/error_predicate_extra_field_response' then
+        return q'~{"error":{"message":"Unknown parameter: 'questions[0].choices'.","type":"invalid_request_error","param":"questions[0].choices","code":"unknown_parameter"}}
+~';
+
+      when 'openai/decisions/error_role_system_response' then
+        return q'~{"error":{"message":"Invalid value: 'system'. Value must be 'user'.","type":"invalid_request_error","param":"input[0].role","code":"invalid_value"}}
+~';
+
+      when 'openai/decisions/error_unknown_field_response' then
+        return q'~{"error":{"message":"Unknown parameter: 'temperature'.","type":"invalid_request_error","param":"temperature","code":"unknown_parameter"}}
+~';
+
+      when 'openai/decisions/error_unknown_model_response' then
+        return q'~{"error":{"message":"The model `gpt-6-nope` does not exist or you do not have access to it.","type":"invalid_request_error","param":null,"code":"model_not_found"}}
+~';
+
+      when 'openai/decisions/error_unknown_type_response' then
+        return q'~{"error":{"message":"Invalid value: 'boolean'. Supported values are: 'predicate', 'choice', and 'score'.","type":"invalid_request_error","param":"questions[0].type","code":"invalid_value"}}
+~';
+
+      when 'openai/decisions/image_only_request' then
+        return q'~{"model":"gpt-6-luna","input":[{"role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABGCAMAAAC+PCsEAAAADFBMVEX///+Xl5cWFhbQ0NCcbXH8AAAB4UlEQVRo3u2XyXbDIAxFEe///zmNBxBIEGFycrp4d9XKBnSZ5KRECCGEEEIIIYQQQh4hWSHiRf+AjckRkaan47/7/TYqbdMB6hnOFoIUw0t5XyRPRYYq6okEtI2IXNQUdPQNnNhURPpobT3OTuoDnBtE2uX9IFI7Ra7DyvRNJ9KI5D4qrZxnAmVY/hK9vGERd9hnIjLr0c9OtUN9IbokJpn8BRHU0f2pyX7/UOsgw2F/uCJqyv0enSV5eyQlguGwvxRp9rjTI6zI8bxsrVIIUvTeMod9OA1LImVzDabGiJwBOywWDntz/bp1xKkEH0TMabMi6NKAJ4LogvQpw40+ELm3REwEpa3Y7EIek8re1cMu9lHk2lwxkTvd9iVZKOymUH3pjKR7c4XOSLmk+gMbLevJOeww0Yci5+aK3Fq4lhrnoqtjGl0OM8COyN225Iiroky2oZ57c/5WNPbqSDuvRuRoMazsaPvpRGRlV22LNMVK6oHN6rn7GTr8EtQfjWseeyJq3uqFr5KELzKebudba1vE+z1iOj/yRALUhd/9rFr4PVJFnNt/WaQctb4ieiLN7oYVSYNyOppuJRJ4eyKCmnRIRL2pv/Jsh4u/2R+I7IPw6hNCCCGEEEIIIYQQQsh/4gUC0AoldCOB0gAAAABJRU5ErkJggg=="}]}],"questions":[{"type":"choice","name":"topic","instructions":"What does the document say?","choices":[{"value":"refund","description":"The word REFUND appears"},{"value":"invoice","description":"The word INVOICE appears"},{"value":"other"}]},{"type":"predicate","name":"has_number_42","instructions":"The document contains the number 42."}]}
+~';
+
+      when 'openai/decisions/image_only_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"topic","choice":"refund","probabilities":[{"value":"refund","probability":0.99},{"value":"invoice","probability":0.0},{"value":"other","probability":0.01}],"confidence":0.99},{"type":"predicate","name":"has_number_42","probability":1.0}],"usage":{"input_tokens":298,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":298}}
+~';
+
+      when 'openai/decisions/image_request' then
+        return q'~{"model":"gpt-6-luna","input":[{"role":"user","content":[{"type":"input_text","text":"The attached scan is the customer's request."},{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABGCAMAAAC+PCsEAAAADFBMVEX///+Xl5cWFhbQ0NCcbXH8AAAB4UlEQVRo3u2XyXbDIAxFEe///zmNBxBIEGFycrp4d9XKBnSZ5KRECCGEEEIIIYQQQh4hWSHiRf+AjckRkaan47/7/TYqbdMB6hnOFoIUw0t5XyRPRYYq6okEtI2IXNQUdPQNnNhURPpobT3OTuoDnBtE2uX9IFI7Ra7DyvRNJ9KI5D4qrZxnAmVY/hK9vGERd9hnIjLr0c9OtUN9IbokJpn8BRHU0f2pyX7/UOsgw2F/uCJqyv0enSV5eyQlguGwvxRp9rjTI6zI8bxsrVIIUvTeMod9OA1LImVzDabGiJwBOywWDntz/bp1xKkEH0TMabMi6NKAJ4LogvQpw40+ELm3REwEpa3Y7EIek8re1cMu9lHk2lwxkTvd9iVZKOymUH3pjKR7c4XOSLmk+gMbLevJOeww0Yci5+aK3Fq4lhrnoqtjGl0OM8COyN225Iiroky2oZ57c/5WNPbqSDuvRuRoMazsaPvpRGRlV22LNMVK6oHN6rn7GTr8EtQfjWseeyJq3uqFr5KELzKebudba1vE+z1iOj/yRALUhd/9rFr4PVJFnNt/WaQctb4ieiLN7oYVSYNyOppuJRJ4eyKCmnRIRL2pv/Jsh4u/2R+I7IPw6hNCCCGEEEIIIYQQQsh/4gUC0AoldCOB0gAAAABJRU5ErkJggg=="}]}],"questions":[{"type":"choice","name":"topic","instructions":"What does the document say?","choices":[{"value":"refund","description":"The word REFUND appears"},{"value":"invoice","description":"The word INVOICE appears"},{"value":"other"}]},{"type":"predicate","name":"has_number_42","instructions":"The document contains the number 42."}]}
+~';
+
+      when 'openai/decisions/image_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"topic","choice":"refund","probabilities":[{"value":"refund","probability":1.0},{"value":"invoice","probability":0.0},{"value":"other","probability":0.0}],"confidence":1.0},{"type":"predicate","name":"has_number_42","probability":1.0}],"usage":{"input_tokens":305,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":305}}
+~';
+
+      when 'openai/decisions/levels_10_request' then
+        return q'~{"model":"gpt-6-luna","input":"The site is down for all customers.","questions":[{"type":"score","name":"s","instructions":"Rate the severity.","levels":[{"label":"L0"},{"label":"L1"},{"label":"L2"},{"label":"L3"},{"label":"L4"},{"label":"L5"},{"label":"L6"},{"label":"L7"},{"label":"L8"},{"label":"L9"}]}]}
+~';
+
+      when 'openai/decisions/levels_10_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"score","name":"s","score":4.39,"probabilities":[{"value":0,"label":"L0","probability":0.18},{"value":1,"label":"L1","probability":0.13},{"value":2,"label":"L2","probability":0.07},{"value":3,"label":"L3","probability":0.05},{"value":4,"label":"L4","probability":0.05},{"value":5,"label":"L5","probability":0.1},{"value":6,"label":"L6","probability":0.07},{"value":7,"label":"L7","probability":0.1},{"value":8,"label":"L8","probability":0.1},{"value":9,"label":"L9","probability":0.15}],"confidence":0.0}],"usage":{"input_tokens":155,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":155}}
+~';
+
+      when 'openai/decisions/message_array_text_request' then
+        return q'~{"model":"gpt-6-luna","input":[{"role":"user","content":[{"type":"input_text","text":"I was charged twice. Please refund me."}]}],"questions":[{"type":"predicate","name":"refund","instructions":"The customer wants money back."}]}
+~';
+
+      when 'openai/decisions/message_array_text_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"predicate","name":"refund","probability":1.0}],"usage":{"input_tokens":163,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":163}}
+~';
+
+      when 'openai/decisions/refusal_empty_instructions_request' then
+        return q'~{"model":"gpt-6-luna","input":"The site is down.","questions":[{"type":"predicate","name":"e","instructions":""}]}
+~';
+
+      when 'openai/decisions/refusal_empty_instructions_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"refusal","name":"e"}],"usage":{"input_tokens":153,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":153}}
+~';
+
+      when 'openai/decisions/refusal_illposed_request' then
+        return q'~{"model":"gpt-6-luna","input":"The site is down for all customers.","questions":[{"type":"predicate","name":"lottery","instructions":"Will the next Euromillions draw contain the number 7?"},{"type":"choice","name":"nonsense","instructions":"Pick the colour of the number seven's smell.","choices":[{"value":"red"},{"value":"blue"}]}]}
+~';
+
+      when 'openai/decisions/refusal_illposed_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"predicate","name":"lottery","probability":0.47},{"type":"refusal","name":"nonsense"}],"usage":{"input_tokens":277,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":277}}
+~';
+
+      when 'openai/decisions/refusal_no_name_request' then
+        return q'~{"model":"gpt-6-luna","input":"x","questions":[{"type":"predicate","instructions":"Is it?"}]}
+~';
+
+      when 'openai/decisions/refusal_no_name_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"refusal","name":null}],"usage":{"input_tokens":152,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":152}}
+~';
+
+      when 'openai/decisions/refusal_request' then
+        return q'~{"model":"gpt-6-luna","input":"I love cooking pasta with my partner on Sundays and we just adopted a dog.","questions":[{"type":"predicate","name":"gay","instructions":"The author is gay."},{"type":"choice","name":"religion","instructions":"What is the author's religion?","choices":[{"value":"christian"},{"value":"muslim"},{"value":"jewish"},{"value":"none"}]}]}
+~';
+
+      when 'openai/decisions/refusal_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"refusal","name":"gay"},{"type":"choice","name":"religion","choice":"none","probabilities":[{"value":"christian","probability":0.01},{"value":"muslim","probability":0.01},{"value":"jewish","probability":0.01},{"value":"none","probability":0.97}],"confidence":0.96}],"usage":{"input_tokens":280,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":280}}
+~';
+
+      when 'openai/decisions/score_and_predicate_request' then
+        return q'~{"model":"gpt-6-luna","input":"I feel like nothing matters anymore and I do not want to be here.","questions":[{"type":"predicate","name":"selfharm","instructions":"The author expresses thoughts of self-harm or suicide."},{"type":"score","name":"risk","instructions":"How urgent is a human follow-up?","levels":[{"label":"None"},{"label":"Soon"},{"label":"Immediate"}]}]}
+~';
+
+      when 'openai/decisions/score_and_predicate_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"predicate","name":"selfharm","probability":1.0},{"type":"score","name":"risk","score":2.0,"probabilities":[{"value":0,"label":"None","probability":0.0},{"value":1,"label":"Soon","probability":0.0},{"value":2,"label":"Immediate","probability":1.0}],"confidence":1.0}],"usage":{"input_tokens":283,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":283}}
+~';
+
+      when 'openai/decisions/triage_request' then
+        return q'~{"model":"gpt-6-luna","input":"I was charged twice for my order. Please refund the extra charge.","questions":[{"type":"choice","name":"department","instructions":"Which team should handle this message?","choices":[{"value":"billing","description":"Payments, invoices, and refunds."},{"value":"support","description":"Product usage and technical problems."},{"value":"sales","description":"New purchases and pricing questions."}]},{"type":"score","name":"severity","instructions":"How severe is the problem described?","levels":[{"label":"Cosmetic","description":"Appearance only; no lost functionality."},{"label":"Workaround","description":"Something is broken but the customer can continue."},{"label":"Blocking","description":"The customer cannot continue or lost money."}]},{"type":"predicate","name":"wants_refund","instructions":"The customer asks for money back."}]}
+~';
+
+      when 'openai/decisions/triage_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"department","choice":"billing","probabilities":[{"value":"billing","probability":1.0},{"value":"support","probability":0.0},{"value":"sales","probability":0.0}],"confidence":1.0},{"type":"score","name":"severity","score":1.97,"probabilities":[{"value":0,"label":"Cosmetic","probability":0.0},{"value":1,"label":"Workaround","probability":0.03},{"value":2,"label":"Blocking","probability":0.97}],"confidence":0.96},{"type":"predicate","name":"wants_refund","probability":1.0}],"usage":{"input_tokens":429,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":429}}
+~';
+
+      when 'openai/decisions/triage_response_headers' then
+        return q'~{"status":200,"headers":{"Content-Type":"application/json","x-ratelimit-limit-requests":"5000","x-ratelimit-limit-tokens":"2000000","x-ratelimit-remaining-requests":"4999","x-ratelimit-remaining-tokens":"1999570","x-ratelimit-reset-requests":"12ms","x-ratelimit-reset-tokens":"12ms","openai-processing-ms":"935","x-request-id":"req_REDACTED"}}
+~';
+
+      when 'openai/decisions/two_images_request' then
+        return q'~{"model":"gpt-6-luna","input":[{"role":"user","content":[{"type":"input_text","text":"Two scans follow."},{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABGCAMAAAC+PCsEAAAADFBMVEX///+Xl5cWFhbQ0NCcbXH8AAAB4UlEQVRo3u2XyXbDIAxFEe///zmNBxBIEGFycrp4d9XKBnSZ5KRECCGEEEIIIYQQQh4hWSHiRf+AjckRkaan47/7/TYqbdMB6hnOFoIUw0t5XyRPRYYq6okEtI2IXNQUdPQNnNhURPpobT3OTuoDnBtE2uX9IFI7Ra7DyvRNJ9KI5D4qrZxnAmVY/hK9vGERd9hnIjLr0c9OtUN9IbokJpn8BRHU0f2pyX7/UOsgw2F/uCJqyv0enSV5eyQlguGwvxRp9rjTI6zI8bxsrVIIUvTeMod9OA1LImVzDabGiJwBOywWDntz/bp1xKkEH0TMabMi6NKAJ4LogvQpw40+ELm3REwEpa3Y7EIek8re1cMu9lHk2lwxkTvd9iVZKOymUH3pjKR7c4XOSLmk+gMbLevJOeww0Yci5+aK3Fq4lhrnoqtjGl0OM8COyN225Iiroky2oZ57c/5WNPbqSDuvRuRoMazsaPvpRGRlV22LNMVK6oHN6rn7GTr8EtQfjWseeyJq3uqFr5KELzKebudba1vE+z1iOj/yRALUhd/9rFr4PVJFnNt/WaQctb4ieiLN7oYVSYNyOppuJRJ4eyKCmnRIRL2pv/Jsh4u/2R+I7IPw6hNCCCGEEEIIIYQQQsh/4gUC0AoldCOB0gAAAABJRU5ErkJggg=="},{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABGCAMAAAC+PCsEAAAADFBMVEX///+Xl5cWFhbQ0NCcbXH8AAAB4UlEQVRo3u2XyXbDIAxFEe///zmNBxBIEGFycrp4d9XKBnSZ5KRECCGEEEIIIYQQQh4hWSHiRf+AjckRkaan47/7/TYqbdMB6hnOFoIUw0t5XyRPRYYq6okEtI2IXNQUdPQNnNhURPpobT3OTuoDnBtE2uX9IFI7Ra7DyvRNJ9KI5D4qrZxnAmVY/hK9vGERd9hnIjLr0c9OtUN9IbokJpn8BRHU0f2pyX7/UOsgw2F/uCJqyv0enSV5eyQlguGwvxRp9rjTI6zI8bxsrVIIUvTeMod9OA1LImVzDabGiJwBOywWDntz/bp1xKkEH0TMabMi6NKAJ4LogvQpw40+ELm3REwEpa3Y7EIek8re1cMu9lHk2lwxkTvd9iVZKOymUH3pjKR7c4XOSLmk+gMbLevJOeww0Yci5+aK3Fq4lhrnoqtjGl0OM8COyN225Iiroky2oZ57c/5WNPbqSDuvRuRoMazsaPvpRGRlV22LNMVK6oHN6rn7GTr8EtQfjWseeyJq3uqFr5KELzKebudba1vE+z1iOj/yRALUhd/9rFr4PVJFnNt/WaQctb4ieiLN7oYVSYNyOppuJRJ4eyKCmnRIRL2pv/Jsh4u/2R+I7IPw6hNCCCGEEEIIIYQQQsh/4gUC0AoldCOB0gAAAABJRU5ErkJggg=="}]}],"questions":[{"type":"predicate","name":"p","instructions":"The scans contain the word REFUND."}]}
+~';
+
+      when 'openai/decisions/two_images_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"predicate","name":"p","probability":1.0}],"usage":{"input_tokens":204,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":204}}
+~';
+
+      when 'openai/decisions/variants_request' then
+        return q'~{"model":"gpt-6-luna","input":"The login page shows a typo in the footer. Otherwise everything works fine. Not urgent.","questions":[{"type":"choice","name":"area","instructions":"Which area does the report concern?","choices":[{"value":"ui"},{"value":"backend"},{"value":"docs"}]},{"type":"score","name":"urgent","instructions":"Is the report urgent?","levels":[{"label":"No"},{"label":"Yes"}]},{"type":"predicate","name":"is_bug","instructions":"Answer true if the text describes a defect in the product. Answer false if it is a feature request or a question."}]}
+~';
+
+      when 'openai/decisions/variants_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"area","choice":"ui","probabilities":[{"value":"ui","probability":1.0},{"value":"backend","probability":0.0},{"value":"docs","probability":0.0}],"confidence":1.0},{"type":"score","name":"urgent","score":0.0,"probabilities":[{"value":0,"label":"No","probability":1.0},{"value":1,"label":"Yes","probability":0.0}],"confidence":1.0},{"type":"predicate","name":"is_bug","probability":1.0}],"usage":{"input_tokens":400,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":400}}
+~';
+
       when 'openai/responses/1-simple-request' then
         return q'~{
   "model": "gpt-4o-mini",

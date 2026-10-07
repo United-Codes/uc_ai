@@ -410,6 +410,28 @@ create or replace package body uc_ai as
     ).get_clob('markdown');
   end ocr_text;
 
+  function decide (
+    p_state     in clob
+  , p_questions in json_object_t
+  , p_provider  in provider_type
+  , p_model     in model_type default null
+  , p_files     in json_array_t default null
+  , p_options   in json_object_t default null
+  ) return json_object_t
+  as
+    l_settings uc_ai_settings.t_settings := uc_ai_settings.build_from_globals;
+  begin
+    return uc_ai_decisions.decide(
+      p_state     => p_state
+    , p_questions => p_questions
+    , p_provider  => p_provider
+    , p_model     => p_model
+    , p_files     => p_files
+    , p_options   => p_options
+    , p_settings  => l_settings
+    );
+  end decide;
+
   procedure reset_globals
   as
   begin

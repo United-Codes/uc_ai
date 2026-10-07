@@ -17,6 +17,7 @@ create or replace package body uc_ai_error as
       when c_err_unknown_provider       then c_msg_unknown_provider
       when c_err_structured_unsupported then c_msg_structured_unsupported
       when c_err_reasoning_budget       then c_msg_reasoning_budget
+      when c_err_decision_refused       then c_msg_decision_refused
       -- Agent
       when c_err_unknown_agent_type     then c_msg_unknown_agent_type
       when c_err_unknown_workflow_type  then c_msg_unknown_workflow_type

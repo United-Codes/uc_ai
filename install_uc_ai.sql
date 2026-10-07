@@ -39,6 +39,7 @@ PROMPT - Installing API package specifications...
 @@src/packages/uc_ai_http.pks
 @@src/packages/uc_ai_toon.pks
 @@src/packages/uc_ai_ocr.pks
+@@src/packages/uc_ai_decisions.pks
 @@src/packages/uc_ai_agents_api.pks
 @@src/packages/uc_ai_agent_exec_api.pks
 @@src/packages/uc_ai_agent_workflow_api.pks
@@ -68,6 +69,7 @@ PROMPT - Installing API package bodies...
 @@src/packages/uc_ai_http.pkb
 @@src/packages/uc_ai_toon.pkb
 @@src/packages/uc_ai_ocr.pkb
+@@src/packages/uc_ai_decisions.pkb
 @@src/packages/uc_ai_agents_api.pkb
 @@src/packages/uc_ai_agent_exec_api.pkb
 @@src/packages/uc_ai_agent_workflow_api.pkb

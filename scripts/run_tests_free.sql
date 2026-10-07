@@ -55,6 +55,8 @@ begin
   , 'test_uc_ai_ollama_wire'
   , 'test_uc_ai_ocr_wire'
   , 'test_uc_ai_tools_wire'
+  , 'test_uc_ai_decisions'
+  , 'test_uc_ai_decisions_wire'
   , 'test_uc_ai_spec_wire'
   ));
 end;

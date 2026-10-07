@@ -69,6 +69,8 @@ Open for the TypeSafe WP0: whether jev accepts images (if not, TypeSafe raises -
 
 ### Contradictions found (OpenAI calls against sections 2 and 3; decisions NOT edited)
 
+WP1 applied points 1, 2, 3 and 7 to section 3 (limits check, 2 options or levels minimum, criteria folded into the predicate instructions, images as message array). Points 4 and 5 are implemented as decided (refusal raises; null name handled). Point 6 is implemented (the label is dropped).
+
 1. **Limits exist.** The old table said "none documented". The API enforces 2 to 255 choices and 2 to 10 levels. Section 3 lists the 255/10 pre-flight check for TypeSafe only. Without a check for OpenAI, the caller gets -20302 (400 with `array_above_max_length`) after a network call. Decide: add the same check to the OpenAI path.
 2. **A choice needs at least 2 options.** Section 3 says "non-empty object" for choice `criteria`; the API rejects 1 option (400). A one-level or one-option question should raise -20503 in the neutral check.
 3. **Predicate has no `criteria`.** Section 3 makes `criteria` optional on `boolean`. The OpenAI predicate takes only `instructions`; an extra field is a 400. The adapter has to fold `criteria` text into `instructions`. TypeSafe `noul` was not checked.
@@ -122,9 +124,10 @@ Constants: `uc_ai.c_provider_typesafe = 'typesafe'`, `uc_ai_typesafe.c_model_jev
 }
 ```
 
-- `instructions` is a required string. `criteria` is required for `choice` (non-empty object) and `score` (array of at least 2). It is optional for `boolean`.
-- Question ids must match `^[A-Za-z][A-Za-z0-9_]{0,63}$`. Check before any request.
+- `instructions` is a required, non-blank string. `criteria` is required for `choice` (an object with **at least 2** options) and `score` (an array of **at least 2** levels; level 0 is the first element). A choice option or level without a description (null or empty) is sent without one. It is optional for `boolean`: an object `{"true": "...", "false": "..."}`; the OpenAI adapter folds it into the predicate `instructions` (a predicate takes only `instructions`; an extra field is a 400): the instructions, then a blank line and `Criteria for true:` plus a line feed plus the text, then the same for `false`, each only when given.
+- Question ids must match `^[A-Za-z][A-Za-z0-9_]{0,63}$` (a trailing line feed is rejected too). Check before any request. A key in a question other than `type`, `instructions` and `criteria` adds a warning and is ignored.
 - Read every string with `get_clob`, never `get_string` (32k limit).
+- The score levels go to OpenAI as `{"label": "0", "description": <criteria text>}`: the label is the zero-based index, so the answer index and the label always agree.
 
 ### Neutral result
 
@@ -153,15 +156,16 @@ Rules:
 ### Checks
 
 Before any request (no HTTP call is made if one fails):
-- Malformed question or id: `c_err_invalid_config` (-20503).
-- Question type or file the provider cannot take: `c_err_unsupported_content` (-20508). The message names the supported types. TypeSafe: more than 255 options or 10 levels. TypeSafe files: only if WP0 shows jev takes images.
-- Null or unknown provider: existing unknown-provider error (-20306).
+- Malformed question or id, a choice with fewer than 2 options, a score with fewer than 2 levels, an unknown type (`predicate` and `noul` are not neutral types), blank instructions, an empty state without files, a malformed file object, an option of the wrong type: `c_err_invalid_config` (-20503).
+- Question type or file the provider cannot take: `c_err_unsupported_content` (-20508). The message names the supported types. More than 255 options in a choice or more than 10 levels in a score (OpenAI, verified; TypeSafe has the same numbers). The limits are in one per-provider table in the body of `uc_ai_decisions` (`limits_of`). Files: only `image/png`, `image/jpeg` and `image/webp` pass for OpenAI (verified); other media types raise before any request. TypeSafe files: only if WP0 shows jev takes images.
+- Null or unknown provider: existing unknown-provider error (-20306), checked first. The message lists the providers that have decision support.
 
 After the response:
 - Errors (`c_err_format_processing`, -20304): a question has no answer or has an extra answer, the answer type differs from the question type, a choice is not one of the options, a score is outside [0, levels - 1], a probability is outside [0, 1].
-- Refusal: -20309 as in decision 5.
-- Warnings: a distribution does not sum to 1, or a score differs from the probability-weighted mean. Tolerance is 1e-6 plus half a unit in the last decimal for each rounded value, using the 2-decimal rounding both APIs report.
-- Provider HTTP or API error: `c_err_provider_response` (-20302) with the provider message.
+- Refusal: -20309 as in decision 5. The refusal handling is one procedure in the body (`raise_if_refused`) with a comment on how to change the policy. The message lists only the refused ids (`(no name)` for a refusal without a name); the raw response, with the sibling answers, goes to the logger.
+- Warnings: a distribution does not sum to 1, or a score differs from the probability-weighted mean. Tolerance is 1e-6 plus half a unit in the last decimal (0.005, the 2-decimal rounding both APIs report) for each rounded value that goes into the sum or the mean. For the sum that is `1e-6 + 0.005 * n` for n entries. For the mean, a rounding error of probability i moves the mean by up to `0.005 * i`, so the tolerance is `1e-6 + 0.005 (the score itself) + 0.005 * (sum of the indexes)`. The sum tolerance grows with n, so the check cannot fire on a choice with about 200 options or more (255 options allow a deviation of 1.3); it is a check for the small questions, not for the 255-option case.
+- Unknown keys in `p_options` add a warning and are ignored. Known keys: `safety_identifier` (string, sent as is) and `extra_body` (object, merged into the request; the keys `model`, `input` and `questions` always win).
+- Provider HTTP or API error (status 400 or more, or an `error` object in a 200 body): `c_err_provider_response` (-20302) with the provider message and, when the error has one, its `param`. A non-JSON error body (a 502 page) is reported with a preview of the body.
 
 ## 4. Footprint
 
