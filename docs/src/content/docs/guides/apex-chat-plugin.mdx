@@ -44,11 +44,15 @@ lists as attributes.
 
 ## Before you start
 
-You need these three things:
+You need these things:
 
 - **UC AI 26.3 or later** in the database schema. The package of the plug-in
   calls `execute_agent` with the parameter `p_run_context`, which is new in this
   version. On an older version the package body does not compile.
+- **UC AI 26.5 or later** for [chat widgets](/products/uc-ai/docs/guides/chat-widgets/).
+  The plug-in version that ships with widgets names the parameter
+  `p_prompt_addendum` and the column `uc_ai_agent_messages.tool_call_id`, which
+  are new in 26.5. A plug-in version without widgets still needs only 26.3.
 - An agent with the status `active`. See
   [Profile agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/).
 - Permission to create a `dbms_scheduler` job in the schema.
@@ -63,12 +67,16 @@ You need these three things:
    every message of every conversation.
 
    If the table exists from an earlier version, run the `alter table` blocks at
-   the end of the same script instead.
+   the end of the same script instead. The block for chat widgets adds the
+   columns `tool_call_id`, `widgets`, and `parts`. The package body of the plug-in
+   version with widgets reads these columns, so run the block on every upgrade to
+   this version.
 
 2. ### Install the packages
 
-   Run `uc_ai_chat.pks` and then `uc_ai_chat.pkb`. The package body calls
-   `uc_ai_agents_api`, so UC AI must be installed first.
+   In the plug-in version with widgets, run `uc_ai_chat_widgets.pks` and
+   `uc_ai_chat_widgets.pkb` first. Then run `uc_ai_chat.pks` and `uc_ai_chat.pkb`. The package
+   body calls `uc_ai_agents_api`, so UC AI must be installed first.
 
 3. ### Import the plug-in
 
@@ -123,7 +131,7 @@ job starts costs no tokens.
 
 ## Region attributes
 
-The plug-in has 18 attributes. **Agent Code** is the only one that you must fill
+The plug-in has 20 attributes. **Agent Code** is the only one that you must fill
 in. Six more attributes are required, but each one has a default value.
 
 ### Agent
@@ -198,11 +206,28 @@ that can read any table. Give the agent only the tools it needs.
 | **Suggested Prompts** | Textarea | — | Example questions, one for each line. They show as buttons above the message box, with the label "Try asking", while the conversation is empty. A click sends the question immediately. Each button shows the full question. |
 | **Auto Generate Title** | Checkbox | `N` | Names the conversation after the first answer, with the language model of the browser. |
 | **Collect Feedback** | Checkbox | `N` | Shows a row with the question "Was this helpful?" and two thumb buttons below the newest answer. |
+| **Widgets** | Checkboxes | none checked | The widget types that the agent can show in an answer: `stat_card`, `status`, `key_value`, `table`, and `chart`. Needs UC AI 26.5. |
+| **Custom Widgets** | Text | — | The names of widget types that you registered with `uc_ai_chat_widgets.register_type`. Separate several names with a comma, a colon, a semicolon, or a space. Needs UC AI 26.5. |
 
 **Auto Generate Title** uses the on-device model of the browser (Chrome 148 or
 later). No text goes to a server and the run costs no tokens. The plug-in never
 starts the download of the model. If the model is not available, the region keeps
 the configured **Header Title**.
+
+**Widgets** lets the agent show a key figure, a status notice, a short list, a
+table, or a chart in an answer. The plug-in adds a short protocol to the system
+prompt of the first turn. The server checks each widget, and the browser renders
+it as text only. The [Chat Widgets](/products/uc-ai/docs/guides/chat-widgets/)
+guide has the widget types, the data binding, the limits, and the security
+notes. **Custom Widgets** turns on a widget type that you wrote yourself, for
+example a list of records that the user can open. See [Custom Chat Widget
+Types](/products/uc-ai/docs/guides/chat-widgets-custom-types/).
+
+<LinkCard
+  title="Chat Widgets"
+  description="Show a stat card, a status, a key value list, a table, or a chart in the answer of an agent."
+  href="/products/uc-ai/docs/guides/chat-widgets/"
+/>
 
 The title goes to `uc_ai_agent_sessions.title`. The rating goes to
 `uc_ai_agent_sessions.feedback_rating`, with `feedback_comment` and
@@ -267,7 +292,8 @@ The function returns up to five flags:
 - `show_tools` — each tool call, with its arguments, its result, and its status.
 - `show_metadata` — the token counts next to each answer.
 - `show_debug` — a panel with the details of the run.
-- `show_errors` — the text of an error, instead of a general message.
+- `show_errors` — the text of an error, instead of a general message. It also
+  shows why a widget appears as text.
 
 Every flag is `false` when the attribute is empty, when the function raises an
 error, or when the JSON is not valid.
@@ -309,6 +335,10 @@ enforcer. The notices give no figure, no percentage, and no name of a limit.
   region run any agent in the schema.
 - **One user owns one conversation.** After the first message, only the user who
   sent it can read the conversation or add to it.
+- **A widget is rebuilt on the server.** The server builds each widget again from
+  allowed keys, and the browser renders every value as text. A widget has no HTML,
+  no link, and no image. The region decides which types the agent can use. See
+  [Security and trust](/products/uc-ai/docs/guides/chat-widgets/#security-and-trust).
 - **The answer is sanitized.** The plug-in shows the answer as Markdown. It
   removes dangerous HTML before the browser gets it.
 - **Errors stay in the database.** A failure of the background job writes the
@@ -317,13 +347,15 @@ enforcer. The notices give no figure, no percentage, and no name of a limit.
 
 ## Version history
 
-The current plug-in needs UC AI 26.3, because the package body calls
-`p_run_context`. This table gives the version that introduced each feature:
+A plug-in version without widgets needs UC AI 26.3, because the package body
+calls `p_run_context`. The plug-in version with widgets needs UC AI 26.5. This
+table gives the version that introduced each feature:
 
 | Feature | UC AI version |
 | --- | --- |
 | Chat region, tools, reasoning | 26.1 |
 | Auto Generate Title, Collect Feedback, Agent Run Context, Run Context Drift | 26.3 |
+| Widgets, Custom Widgets | 26.5 |
 
 <LinkCard
   title="The run context"

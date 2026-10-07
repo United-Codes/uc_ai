@@ -102,6 +102,8 @@ export default defineConfig({
 								variant: "success",
 							},
 						},
+						"guides/chat-widgets",
+						"guides/chat-widgets-custom-types",
 						"guides/execution-hooks",
 						"guides/agent-memory",
 						{

@@ -20,7 +20,7 @@ repository.
 
 ## At a glance
 
-Seven courses, in the order to take them. Each row is one course, with what it
+Eight courses, in the order to take them. Each row is one course, with what it
 builds and how long it takes. The section under [the courses in
 detail](#the-courses-in-detail) says what each one teaches that no guide covers.
 
@@ -52,6 +52,12 @@ detail](#the-courses-in-detail) says what each one teaches that no guide covers.
   title="Put an Agent in APEX →"
   description="6 lessons · 135 min · OpenAI. A chat region on an APEX page. Prove a conversation cannot read another customer’s record, find the answer that never reached the screen, and make the audit trail name the person who asked."
   href="/products/uc-ai/docs/tutorial/put-an-agent-in-apex/01-a-chat-region/"
+/>
+
+<LinkCard
+  title="Add Your Own Widget to the Chat →"
+  description="4 lessons · 90 min · OpenAI. Show a list of invoices in the chat, built by a PL/SQL package of yours. The model writes only invoice numbers, and you prove which numbers the widget refuses."
+  href="/products/uc-ai/docs/tutorial/add-a-widget-to-the-chat/01-render-without-a-model/"
 />
 
 <LinkCard
@@ -238,6 +244,32 @@ checks both.
   title="Start: Add a chat region to a page"
   description="Install the plug-in, put a working chat region on an APEX page, and send the first message."
   href="/products/uc-ai/docs/tutorial/put-an-agent-in-apex/01-a-chat-region/"
+/>
+
+### Add Your Own Widget to the Chat
+
+Take this one after **Put an Agent in APEX**. It adds a widget type of your own to
+the chat of the service-contract desk. The model writes a short block with invoice
+numbers, and a PL/SQL package that you write turns it into a list that the user can
+click.
+
+The lessons run in SQL. Lesson 3 also has an optional part for an APEX page. The
+widget feature needs UC AI 26.5 or later and the plug-in of the same release.
+
+What you practise:
+
+- **A widget inherits the rule of the tool.** The package shows an invoice only
+  when the tool returned it in the same answer. The course proves this with an
+  invoice of another contract, without a model.
+- **The click is a browser event, and the page must check it again.** The widget
+  limits what the model can show. It does not limit what the browser can send.
+- **A stored widget is a snapshot.** The chat renders the answer once, so a later
+  change in the tables does not change the badges of an older answer.
+
+<LinkCard
+  title="Start: Render a widget without a model"
+  description="Call the render step of the chat with an answer that you write, and read the parts that the chat stores."
+  href="/products/uc-ai/docs/tutorial/add-a-widget-to-the-chat/01-render-without-a-model/"
 />
 
 ### Secure an Agent
