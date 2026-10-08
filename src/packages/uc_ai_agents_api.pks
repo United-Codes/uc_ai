@@ -410,7 +410,7 @@ as
    * Validates the decision_config of a decision agent
    *
    * decision_config is a JSON object:
-   *   provider        string, required. A provider that supports uc_ai.decide: openai or typesafe
+   *   provider        string, required. A provider that supports uc_ai.decide: openai, typesafe or openrouter
    *   model           string, optional. Null uses the default model of the provider
    *   state_template  string, required, not empty. The shared text state sent to the provider
    *   questions       object, required, at least one key. One entry per named question.

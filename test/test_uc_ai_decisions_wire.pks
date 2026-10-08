@@ -301,5 +301,27 @@ create or replace package test_uc_ai_decisions_wire as
   --%test(TypeSafe: the validation echo of a 422 is not logged)
   procedure ts_422_echo_is_not_logged;
 
+  -- OpenRouter: the triage request and response are recorded from the API
+  --%test(OpenRouter: URL is base/alpha/decisions, the default model is typesafe/jev-1.13 and the credential is named)
+  procedure or_url_model_and_request_shape;
+
+  --%test(OpenRouter: base_url replaces the host and a trailing slash does not double)
+  procedure or_base_url_replaces_host;
+
+  --%test(OpenRouter: answers map to the neutral result, cost stays in provider_metadata usage)
+  procedure or_response_mapping;
+
+  --%test(OpenRouter: an error body raises -20302 with the OpenRouter message)
+  procedure or_error_body;
+
+  --%test(OpenRouter: extra_body carries provider preferences, reserved keys win, other options warn)
+  procedure or_extra_body_and_options;
+
+  --%test(OpenRouter: credential resolution is uc_ai.g_apex_web_credential, then uc_ai_openrouter.g_apex_web_credential)
+  procedure or_credential_resolution;
+
+  --%test(OpenRouter: a file raises -20508, the provider takes text only)
+  procedure or_files_unsupported;
+
 end test_uc_ai_decisions_wire;
 /

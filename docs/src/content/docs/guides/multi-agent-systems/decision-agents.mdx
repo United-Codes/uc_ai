@@ -15,7 +15,7 @@ A decision agent runs [`uc_ai.decide`](/products/uc-ai/docs/api/decide/) as an a
 
 The answers are a JSON object and not free text. A [workflow](/products/uc-ai/docs/guides/multi-agent-systems/workflows/) condition can therefore read an answer, for example `{$.steps.route.answers.department.choice}`.
 
-A decision agent has the same tracking as other agents. UC AI writes an execution row with the token counts, the run joins a session, and the agent has versions and a status. Two providers support it: OpenAI and TypeSafe.
+A decision agent has the same tracking as other agents. UC AI writes an execution row with the token counts, the run joins a session, and the agent has versions and a status. Three providers support it: OpenAI, TypeSafe and OpenRouter.
 
 ## When to use a decision agent
 
@@ -31,7 +31,7 @@ A decision agent has no prompt profile. Its `decision_config` column holds one J
 
 | Key | Required | Description |
 | --- | --- | --- |
-| `provider` | Yes | `openai` or `typesafe`. These are the values of `uc_ai.c_provider_openai` and `uc_ai.c_provider_typesafe`. |
+| `provider` | Yes | `openai`, `typesafe` or `openrouter`. These are the values of `uc_ai.c_provider_openai`, `uc_ai.c_provider_typesafe` and `uc_ai.c_provider_openrouter`. |
 | `model` | No | The model name. If you omit it, UC AI uses the default model of the provider. |
 | `state_template` | Yes | The text that the questions refer to. It is not empty. A `{name}` placeholder takes the value of the input parameter `name`. |
 | `questions` | Yes | An object with at least one question. It has the same format as `p_questions` of `uc_ai.decide`. See [Questions](/products/uc-ai/docs/api/decide/#questions). |
@@ -89,7 +89,7 @@ An invalid configuration raises `ORA-20503` when you save the agent. These error
 
 ```text
 ORA-20503: Invalid decision config: has an unknown key: temperature. Allowed: provider, model, state_template, questions, options, model_config
-ORA-20503: Invalid decision config: has a provider without decision support: anthropic. Allowed: openai, typesafe
+ORA-20503: Invalid decision config: has a provider without decision support: anthropic. Allowed: openai, typesafe, openrouter
 ```
 
 Versions, the status, and `change_status` work the same as for other agents. See [Removing an agent](/products/uc-ai/docs/guides/multi-agent-systems/#removing-an-agent) to delete one.
@@ -253,7 +253,7 @@ The step `not_red_note` did not run, although the answer is not `red`. Only the 
 
 A decision agent writes the tokens of its call to its own row in `uc_ai_agent_executions`. The session totals in `uc_ai_agent_sessions` include them. The query is the same as for other agents. See [Execution tracking](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/#execution-tracking).
 
-OpenAI reports no output tokens for a decision, so `total_output_tokens` is 0 for an OpenAI decision agent. TypeSafe reports both counts.
+OpenAI reports no output tokens for a decision, so `total_output_tokens` is 0 for an OpenAI decision agent. TypeSafe and OpenRouter report both counts.
 
 The [ticket workflow](/products/uc-ai/docs/api/decide/#route-a-ticket-with-a-workflow) ran with one billing message. These rows are from the session of that run on 2026-10-07:
 
@@ -269,7 +269,7 @@ A decision agent writes one `assistant` row to `uc_ai_agent_messages`. Its `cont
 
 ## Send images
 
-A decision agent takes images through the `p_files` parameter of `execute_agent`. Build the collection with `uc_ai_message_api.t_files`, as for a [profile agent](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/#attaching-files-documents--images). OpenAI reads `image/png`, `image/jpeg`, and `image/webp`. TypeSafe reads text only, and a file raises `ORA-20508`.
+A decision agent takes images through the `p_files` parameter of `execute_agent`. Build the collection with `uc_ai_message_api.t_files`, as for a [profile agent](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/#attaching-files-documents--images). OpenAI reads `image/png`, `image/jpeg`, and `image/webp`. TypeSafe and OpenRouter read text only, and a file raises `ORA-20508`.
 
 ```sql
 -- excerpt: l_files is a uc_ai_message_api.t_files with one image
@@ -323,6 +323,6 @@ An [orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/)
 - **No profile features.** A decision agent has no response schema, no tools, no tool tags, no `p_prompt_addendum`, and no follow-up message.
 - **Fixed timeout.** `uc_ai.decide` has a fixed HTTP timeout of 300 seconds. The `timeout_seconds` value of the agent row has no effect on a decision agent.
 - **Cost limits.** The cost [budgets](/products/uc-ai/docs/guides/guardrails/budget/) of UC AI Pro do not price a decision agent yet. The budget hook reads the model from the prompt profile, and a decision agent has none. The tokens are in `uc_ai_agent_executions`.
-- **Providers.** Only OpenAI and TypeSafe support decisions. Only OpenAI reads images and can refuse a question.
+- **Providers.** Only OpenAI, TypeSafe and OpenRouter support decisions. Only OpenAI reads images and can refuse a question.
 
 See [Decide](/products/uc-ai/docs/api/decide/) for the question types, the checks, and the limits of the providers.

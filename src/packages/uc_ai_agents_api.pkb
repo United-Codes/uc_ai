@@ -2508,12 +2508,12 @@ create or replace package body uc_ai_agents_api as
     -- provider: required. The same providers as the dispatcher of uc_ai_decisions
     l_value := l_json.get('provider');
     if l_value is null or not l_value.is_string then
-      return fail('requires provider (string): ' || uc_ai.c_provider_openai || ' or ' || uc_ai.c_provider_typesafe);
+      return fail('requires provider (string): ' || uc_ai.c_provider_openai || ', ' || uc_ai.c_provider_typesafe || ' or ' || uc_ai.c_provider_openrouter);
     end if;
     l_provider := l_json.get_string('provider');
-    if l_provider not in (uc_ai.c_provider_openai, uc_ai.c_provider_typesafe) then
+    if l_provider not in (uc_ai.c_provider_openai, uc_ai.c_provider_typesafe, uc_ai.c_provider_openrouter) then
       return fail('has a provider without decision support: ' || substr(l_provider, 1, 100)
-        || '. Allowed: ' || uc_ai.c_provider_openai || ', ' || uc_ai.c_provider_typesafe);
+        || '. Allowed: ' || uc_ai.c_provider_openai || ', ' || uc_ai.c_provider_typesafe || ', ' || uc_ai.c_provider_openrouter);
     end if;
 
     -- model: optional, null selects the default model of the provider

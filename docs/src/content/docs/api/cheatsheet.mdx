@@ -59,7 +59,7 @@ uc_ai.ocr_text(l_blob, 'application/pdf', uc_ai.c_provider_mistral) return clob;
 The next call is experimental. It answers named questions about a text with typed answers and probabilities. See [Decide](/products/uc-ai/docs/api/decide/).
 
 ```sql
--- Decide: typed answers with probabilities (OpenAI and TypeSafe only)
+-- Decide: typed answers with probabilities (OpenAI, TypeSafe and OpenRouter only)
 uc_ai.decide(
   p_state     => 'I was charged twice for my order.',
   p_questions => json_object_t('{
@@ -69,7 +69,7 @@ uc_ai.decide(
                    "criteria": ["Cosmetic", "Workaround exists", "Blocking"]},
     "refund":     {"type": "boolean", "instructions": "Does the customer ask for money back?"}
   }'),
-  p_provider  => uc_ai.c_provider_openai,   -- or c_provider_typesafe
+  p_provider  => uc_ai.c_provider_openai,   -- or c_provider_typesafe, c_provider_openrouter
   p_model     => null,                      -- optional. The provider default is used
   p_files     => null,                      -- optional. Images, OpenAI only
   p_options   => null                       -- optional. safety_identifier, extra_body

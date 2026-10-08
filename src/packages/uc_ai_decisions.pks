@@ -17,7 +17,8 @@ as
    * result can still change. Each provider has a private adapter in the body that
    * turns the neutral call into the provider request and the provider response
    * into the neutral result. Providers: openai (Decisions API, POST /decisions) and
-   * typesafe (TypeSafe jev, POST /systemone; text only, no refusals).
+   * typesafe (TypeSafe jev, POST /systemone; text only, no refusals) and
+   * openrouter (OpenRouter Decisions, POST /alpha/decisions; text only, no refusals).
    *
    * One shared state (text and optional images) and several named questions. Each
    * question has a type and gets a typed answer with probabilities.
@@ -77,6 +78,10 @@ as
    * (object, merged into the request; the keys model, input (OpenAI) or state
    * (TypeSafe) and questions always win). Every other key is ignored and adds a
    * text to warnings.
+   *
+   * OpenRouter takes the same request and gives the same answers as TypeSafe, so
+   * everything below for TypeSafe also holds for OpenRouter. Its alpha endpoint is
+   * <base_url>/alpha/decisions with the default base URL https://openrouter.ai/api.
    *
    * TypeSafe: the boolean question is a noul question and its criteria are sent
    * as they are (true and false texts); jev answers every question, so the answer

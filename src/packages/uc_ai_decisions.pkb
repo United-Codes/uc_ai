@@ -7,6 +7,8 @@ create or replace package body uc_ai_decisions as
 
   c_openai_base_url   constant varchar2(100 char) := 'https://api.openai.com/v1';
   c_typesafe_base_url constant varchar2(100 char) := 'https://api.typesafe.ai/v1';
+  -- OpenRouter Decisions is an alpha endpoint: <base>/alpha/decisions
+  c_openrouter_base_url constant varchar2(100 char) := 'https://openrouter.ai/api';
 
   -- neutral question types
   c_type_boolean constant varchar2(10 char) := 'boolean';
@@ -41,7 +43,7 @@ create or replace package body uc_ai_decisions as
   ) return boolean
   as
   begin
-    return p_provider in (uc_ai.c_provider_openai, uc_ai.c_provider_typesafe);
+    return p_provider in (uc_ai.c_provider_openai, uc_ai.c_provider_typesafe, uc_ai.c_provider_openrouter);
   end is_supported;
 
 
@@ -54,8 +56,9 @@ create or replace package body uc_ai_decisions as
     l_limits.max_choices := 255;
     l_limits.max_levels  := 10;
 
-    if p_provider = uc_ai.c_provider_typesafe then
-      -- TypeSafe jev: up to 255 choices, up to 10 levels, text only (no image input)
+    if p_provider in (uc_ai.c_provider_typesafe, uc_ai.c_provider_openrouter) then
+      -- TypeSafe jev: up to 255 choices, up to 10 levels, text only (no image input).
+      -- OpenRouter documents no limits and no image input; it uses the same ones.
       l_limits.media_types := null;
     else
       -- OpenAI Decisions: 2 to 255 choices, 2 to 10 levels, images as data URLs
@@ -76,6 +79,7 @@ create or replace package body uc_ai_decisions as
   begin
     return case p_provider
              when uc_ai.c_provider_typesafe then 'extra_body'
+             when uc_ai.c_provider_openrouter then 'extra_body'
              else 'safety_identifier,extra_body'
            end;
   end known_options;
@@ -88,6 +92,7 @@ create or replace package body uc_ai_decisions as
   begin
     return case p_provider
              when uc_ai.c_provider_typesafe then uc_ai_typesafe.c_model_jev_latest
+             when uc_ai.c_provider_openrouter then uc_ai_openrouter.c_decision_model_jev
              else uc_ai_openai.c_model_gpt_6_luna
            end;
   end default_model;
@@ -1369,7 +1374,9 @@ create or replace package body uc_ai_decisions as
   end decide_openai;
 
 
-  -- ---- TypeSafe jev adapter ---------------------------------------------------
+  -- ---- TypeSafe jev and OpenRouter adapter -----------------------------------
+  -- Both take the same request (model, state, questions with noul, choice and score)
+  -- and give the same answers, so one set of functions serves both.
 
   /*
    * One boolean criterion text for noul.criteria, or null when there is none.
@@ -1730,8 +1737,9 @@ create or replace package body uc_ai_decisions as
 
 
   -- @dblinter ignore(g-7440): pio_warnings is the warning list of the call, threaded through the adapter, so in out is intentional
-  function decide_typesafe (
-    p_state        in            clob
+  function decide_state_questions (
+    p_provider     in            varchar2
+  , p_state        in            clob
   , p_questions    in            json_object_t
   , p_model        in            varchar2
   , p_options      in            json_object_t
@@ -1739,7 +1747,8 @@ create or replace package body uc_ai_decisions as
   , pio_warnings   in out nocopy json_array_t
   ) return json_object_t
   as
-    l_scope          uc_ai_logger.scope := c_scope_prefix || 'decide_typesafe';
+    l_scope          uc_ai_logger.scope := c_scope_prefix || 'decide_' || p_provider;
+    l_label          varchar2(30 char);
     l_model          varchar2(255 char);
     l_url            varchar2(4000 char);
     l_body           clob;
@@ -1748,26 +1757,33 @@ create or replace package body uc_ai_decisions as
     l_resp_json      json_object_t;
     l_question_keys  json_key_list := p_questions.get_keys;
   begin
-    l_url   := rtrim(coalesce(p_settings.base_url, c_typesafe_base_url), '/') || '/systemone';
-    l_model := coalesce(p_model, default_model(uc_ai.c_provider_typesafe));
+    if p_provider = uc_ai.c_provider_openrouter then
+      l_label          := 'OpenRouter';
+      l_url            := rtrim(coalesce(p_settings.base_url, c_openrouter_base_url), '/') || '/alpha/decisions';
+      l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.or_apex_web_credential);
+    else
+      l_label          := 'TypeSafe';
+      l_url            := rtrim(coalesce(p_settings.base_url, c_typesafe_base_url), '/') || '/systemone';
+      l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.ts_apex_web_credential);
+    end if;
+
+    l_model := coalesce(p_model, default_model(p_provider));
     l_body  := typesafe_body(p_state, p_questions, l_model, p_options).to_clob;
 
     apex_web_service.clear_request_headers;
     apex_web_service.g_request_headers(1).name  := 'Content-Type';
     apex_web_service.g_request_headers(1).value := 'application/json';
 
-    l_web_credential := coalesce(p_settings.apex_web_credential, p_settings.ts_apex_web_credential);
-
     if l_web_credential is null then
       apex_web_service.g_request_headers(2).name  := 'Authorization';
-      apex_web_service.g_request_headers(2).value := 'Bearer ' || uc_ai_get_key(uc_ai.c_provider_typesafe);
+      apex_web_service.g_request_headers(2).value := 'Bearer ' || uc_ai_get_key(p_provider);
     end if;
 
     uc_ai_settings.apply_extra_headers(p_settings);
 
     -- Never log l_body: it holds the state
     uc_ai_logger.log(
-      'Calling TypeSafe at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null')
+      'Calling ' || l_label || ' at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null')
     , l_scope
     , 'model=' || l_model
       || ', questions=' || l_question_keys.count
@@ -1782,14 +1798,14 @@ create or replace package body uc_ai_decisions as
     , p_transfer_timeout     => c_transfer_timeout
     );
 
-    l_resp_json := parse_response(l_resp, 'TypeSafe', l_scope);
+    l_resp_json := parse_response(l_resp, l_label, l_scope);
 
     -- a 200 can still carry an error body
     if l_resp_json.has('error') and not l_resp_json.get('error').is_null then
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_provider_response
       , p_scope      => l_scope
-      , p0           => 'TypeSafe'
+      , p0           => l_label
       , p1           => case when l_resp_json.get('error').is_object
                              then coalesce(short_text_of(l_resp_json.get_object('error'), 'message'), 'error response')
                              else 'error response' end
@@ -1798,13 +1814,13 @@ create or replace package body uc_ai_decisions as
     end if;
 
     uc_ai_logger.log(
-      'TypeSafe response'
+      l_label || ' response'
     , l_scope
     , 'response length=' || sys.dbms_lob.getlength(l_resp)
     );
 
     return typesafe_to_neutral(l_resp_json, l_resp, p_questions, l_model, pio_warnings, l_scope);
-  end decide_typesafe;
+  end decide_state_questions;
 
 
   -- ---- dispatcher -------------------------------------------------------------
@@ -1829,7 +1845,7 @@ create or replace package body uc_ai_decisions as
         p_error_code => uc_ai_error.c_err_unknown_provider
       , p_scope      => l_scope
       , p_message    => 'Provider %0 has no decision support. Decision providers: '
-                        || uc_ai.c_provider_openai || ', ' || uc_ai.c_provider_typesafe
+                        || uc_ai.c_provider_openai || ', ' || uc_ai.c_provider_typesafe || ', ' || uc_ai.c_provider_openrouter
       , p0           => nvl(p_provider, 'null')
       );
     end if;
@@ -1843,9 +1859,10 @@ create or replace package body uc_ai_decisions as
     check_options(p_options, p_provider, l_warnings, l_scope);
 
     -- 3. adapter
-    if p_provider = uc_ai.c_provider_typesafe then
-      return decide_typesafe(
-        p_state      => p_state
+    if p_provider in (uc_ai.c_provider_typesafe, uc_ai.c_provider_openrouter) then
+      return decide_state_questions(
+        p_provider   => p_provider
+      , p_state      => p_state
       , p_questions  => p_questions
       , p_model      => p_model
       , p_options    => p_options

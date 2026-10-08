@@ -283,6 +283,29 @@ end;
 
 Check the [OpenRouter models page](https://openrouter.ai/models) and filter by "Embeddings" output modality to see available embedding models.
 
+## Typed Decisions
+
+OpenRouter supports [typed decisions](/products/uc-ai/docs/api/decide/) with `uc_ai.decide`. The endpoint is in alpha, and it reads text only. Use a model that OpenRouter lists for decisions. The default model is `uc_ai_openrouter.c_decision_model_jev`.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai_openrouter.g_apex_web_credential := 'OPENROUTER';
+
+  l_result := uc_ai.decide(
+    p_state     => 'I was charged twice for my order. Please refund the extra charge.'
+  , p_questions => json_object_t('{"wants_refund":{"type":"boolean","instructions":"Does the customer ask for money back?"}}')
+  , p_provider  => uc_ai.c_provider_openrouter
+  );
+
+  sys.dbms_output.put_line(l_result.get_object('answers').to_string);
+end;
+/
+```
+
+To set routing preferences such as `zdr` or `only`, pass them in `extra_body`. See [The p_options parameter](/products/uc-ai/docs/api/decide/#the-p_options-parameter).
+
 ## Benefits of Using OpenRouter
 
 ### Unified API

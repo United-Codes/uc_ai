@@ -297,7 +297,7 @@ as
    * keyed by question id; each question has a type (boolean, choice or score),
    * instructions and criteria (see uc_ai_decisions for the full shape). p_files
    * holds uc_ai_message_api.create_file_content objects; only images (png, jpeg,
-   * webp) are supported, and only by OpenAI (TypeSafe jev takes text only).
+   * webp) are supported, and only by OpenAI (TypeSafe jev and OpenRouter take text only).
    *
    * Returns a provider-neutral JSON object: answers (keyed by question id, with
    * probabilities), usage, model, provider_metadata (confidence), warnings and raw
@@ -305,9 +305,11 @@ as
    * provider refuses gets the answer {"type": "refused"} and the call does not
    * raise; check the answer type before you read choice, score or probability.
    *
-   * p_provider is required; the supported providers are c_provider_openai and
-   * c_provider_typesafe. p_model null uses the provider default (OpenAI:
-   * uc_ai_openai.c_model_gpt_6_luna, TypeSafe: uc_ai_typesafe.c_model_jev_latest).
+   * p_provider is required; the supported providers are c_provider_openai,
+   * c_provider_typesafe and c_provider_openrouter. p_model null uses the provider
+   * default (OpenAI: uc_ai_openai.c_model_gpt_6_luna, TypeSafe:
+   * uc_ai_typesafe.c_model_jev_latest, OpenRouter:
+   * uc_ai_openrouter.c_decision_model_jev).
    * p_options: safety_identifier (OpenAI only) and extra_body (an object merged
    * into the request; the keys model, input/state and questions always win). Other
    * keys are ignored with a warning.

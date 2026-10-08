@@ -15,6 +15,10 @@ create or replace package body test_uc_ai_decisions_wire as
   c_ts_url    constant varchar2(100 char) := 'https://api.typesafe.ai/v1/systemone';
   c_ts_prefix constant varchar2(100 char) := 'typesafe/decisions/';
 
+  c_or_url constant varchar2(100 char) := 'https://openrouter.ai/api/alpha/decisions';
+
+  c_or_prefix constant varchar2(100 char) := 'openrouter/decisions/';
+
   c_triage_state constant varchar2(200 char) := 'I was charged twice for my order. Please refund the extra charge.';
 
   -- one question of each type, with the ids of the simple hand written responses
@@ -2469,6 +2473,197 @@ create or replace package body test_uc_ai_decisions_wire as
        and (instr(text, c_marker) > 0 or sys.dbms_lob.instr(extra, c_marker) > 0);
     ut.expect(l_rows, 'no log row holds the echo').to_equal(0);
   end ts_422_echo_is_not_logged;
+
+  -- ---- OpenRouter Decisions (alpha) -------------------------------------------------------------
+  -- The request is the TypeSafe one with another URL, so the neutral mapping is covered by the
+  -- TypeSafe tests above. These tests cover what is OpenRouter's own: URL, model, credential,
+  -- error body and the usage object. triage_response and error_unknown_model_response were
+  -- recorded from the API on 2026-10-08 (the request id is redacted).
+
+  procedure or_enqueue(p_sample in varchar2 default 'triage_response', p_status in pls_integer default 200)
+  as
+  begin
+    uc_ai_test_http_mock.enqueue(uc_ai_test_samples.get(c_or_prefix || p_sample), p_status);
+  end or_enqueue;
+
+
+  function or_decide(
+    p_state     in clob
+  , p_questions in json_object_t
+  , p_options   in json_object_t default null
+  , p_files     in json_array_t default null
+  , p_model     in varchar2 default null
+  ) return json_object_t
+  as
+  begin
+    return uc_ai.decide(
+      p_state     => p_state
+    , p_questions => p_questions
+    , p_provider  => uc_ai.c_provider_openrouter
+    , p_model     => p_model
+    , p_options   => p_options
+    , p_files     => p_files
+    );
+  end or_decide;
+
+
+  procedure or_url_model_and_request_shape
+  as
+    l_result json_object_t;
+    l_body   json_object_t;
+  begin
+    or_enqueue;
+
+    l_result := or_decide(c_triage_state, ts_triage_questions);
+
+    test_uc_ai_wire.expect_url(1, c_or_url);
+    test_uc_ai_wire.expect_request(1, c_or_prefix || 'triage_request');
+    l_body := uc_ai_test_http_mock.request_json(1);
+    ut.expect(l_body.get_string('model'), 'default model').to_equal('typesafe/jev-1.13');
+    ut.expect(l_body.get_string('state'), 'state').to_equal(c_triage_state);
+    ut.expect(ts_wire_question(1, 'wants_refund').get_string('type'), 'boolean is noul').to_equal('noul');
+    ut.expect(ts_wire_question(1, 'department').get_string('type'), 'choice').to_equal('choice');
+    ut.expect(ts_wire_question(1, 'severity').get_array('criteria').get_size, 'levels').to_equal(3);
+    ut.expect(uc_ai_test_http_mock.request_header(1, 'Content-Type'), 'Content-Type').to_equal('application/json');
+    ut.expect(uc_ai_test_http_mock.request(1).credential, 'credential name').to_equal(c_credential);
+    ut.expect(uc_ai_test_http_mock.request_header(1, 'Authorization'), 'no key header when a credential is named').to_be_null();
+    test_uc_ai_wire.expect_all_consumed(1);
+  end or_url_model_and_request_shape;
+
+
+  procedure or_base_url_replaces_host
+  as
+    l_result json_object_t;
+  begin
+    or_enqueue;
+    or_enqueue;
+
+    uc_ai.g_base_url := 'https://proxy.example.test/or';
+    l_result := or_decide(c_triage_state, ts_triage_questions);
+
+    uc_ai.g_base_url := 'https://proxy.example.test/or/';
+    l_result := or_decide(c_triage_state, ts_triage_questions);
+
+    test_uc_ai_wire.expect_url(1, 'https://proxy.example.test/or/alpha/decisions');
+    test_uc_ai_wire.expect_url(2, 'https://proxy.example.test/or/alpha/decisions');
+    test_uc_ai_wire.expect_all_consumed(2);
+  end or_base_url_replaces_host;
+
+
+  procedure or_response_mapping
+  as
+    l_result  json_object_t;
+    l_answers json_object_t;
+    l_meta    json_object_t;
+  begin
+    or_enqueue;
+
+    l_result  := or_decide(c_triage_state, ts_triage_questions);
+    l_answers := l_result.get_object('answers');
+    l_meta    := l_result.get_object('provider_metadata');
+
+    ut.expect(l_answers.get_object('department').get_string('choice'), 'choice').to_equal('billing');
+    ut.expect(l_answers.get_object('severity').get_number('score'), 'score').to_equal(1.97);
+    ut.expect(l_answers.get_object('wants_refund').get_string('type'), 'boolean type').to_equal('boolean');
+    ut.expect(l_answers.get_object('wants_refund').get_number('probability'), 'boolean probability').to_equal(0.99);
+    ut.expect(l_result.get_string('model'), 'the model that answered').to_equal('typesafe/jev-1.13-20260917');
+    ut.expect(l_result.get_object('usage').get_number('input_tokens'), 'input tokens').to_equal(458);
+    ut.expect(l_result.get_object('usage').get_number('output_tokens'), 'output tokens').to_equal(71);
+    ut.expect(l_meta.get_object('usage').get_number('cost'), 'cost in provider usage').to_equal(0.000019236);
+    ut.expect(l_meta.get_object('confidence').get_number('severity'), 'confidence').to_equal(0.95);
+    ut.expect(l_meta.get_object('confidence').has('wants_refund'), 'noul has no confidence').to_be_false();
+    ut.expect(warnings_of(l_result).get_size, 'no warnings').to_equal(0);
+  end or_response_mapping;
+
+
+  procedure or_error_body
+  as
+    l_code    number := 0;
+    l_message varchar2(4000 char);
+    l_result  json_object_t;
+  begin
+    or_enqueue('error_unknown_model_response', 400);
+
+    begin
+      l_result := or_decide('state', json_object_t.parse(c_q_pred), p_model => 'typesafe/jev-nope');
+    exception
+      when others then
+        l_code    := sqlcode;
+        l_message := sqlerrm;
+    end;
+
+    ut.expect(l_code, 'code').to_equal(uc_ai_error.c_err_provider_response);
+    ut.expect(l_message, 'message').to_be_like('%provider OpenRouter: HTTP 400: Model typesafe/jev-nope does not exist%');
+  end or_error_body;
+
+
+  procedure or_extra_body_and_options
+  as
+    l_result json_object_t;
+    l_body   json_object_t;
+  begin
+    or_enqueue;
+
+    l_result := or_decide(
+      c_triage_state
+    , ts_triage_questions
+    , json_object_t.parse(
+        '{"safety_identifier":"user-4711","extra_body":{"provider":{"zdr":true,"only":["TypeSafe"]},"model":"evil","state":"evil","questions":[]}}'));
+
+    l_body := uc_ai_test_http_mock.request_json(1);
+    ut.expect(l_body.get_object('provider').get_boolean('zdr'), 'provider preferences').to_be_true();
+    ut.expect(l_body.get_string('model'), 'model wins').to_equal('typesafe/jev-1.13');
+    ut.expect(l_body.get_string('state'), 'state wins').to_equal(c_triage_state);
+    ut.expect(key_count(l_body.get_object('questions')), 'questions win').to_equal(3);
+    ut.expect(l_body.has('safety_identifier'), 'safety_identifier is OpenAI only').to_be_false();
+    ut.expect(warnings_of(l_result).get_size, 'one warning').to_equal(1);
+    ut.expect(warnings_of(l_result).get_string(0), 'warning').to_be_like('%safety_identifier%not supported for provider openrouter%');
+  end or_extra_body_and_options;
+
+
+  procedure or_credential_resolution
+  as
+    l_result json_object_t;
+  begin
+    or_enqueue;
+    l_result := or_decide(c_triage_state, ts_triage_questions);
+    ut.expect(uc_ai_test_http_mock.request(1).credential, 'common credential').to_equal(c_credential);
+
+    uc_ai.g_apex_web_credential := null;
+    uc_ai_openrouter.g_apex_web_credential := 'OR_WIRE_CREDENTIAL';
+    or_enqueue;
+    l_result := or_decide(c_triage_state, ts_triage_questions);
+    ut.expect(uc_ai_test_http_mock.request(2).credential, 'OpenRouter credential').to_equal('OR_WIRE_CREDENTIAL');
+    ut.expect(uc_ai_test_http_mock.request_header(2, 'Authorization'), 'no key header with a credential').to_be_null();
+
+    uc_ai.g_apex_web_credential := c_credential;
+    or_enqueue;
+    l_result := or_decide(c_triage_state, ts_triage_questions);
+    ut.expect(uc_ai_test_http_mock.request(3).credential, 'both set').to_equal(c_credential);
+  end or_credential_resolution;
+
+
+  procedure or_files_unsupported
+  as
+    l_files  json_array_t := json_array_t();
+    l_code   number := 0;
+    l_msg    varchar2(4000 char);
+    l_result json_object_t;
+  begin
+    l_files.append(uc_ai_message_api.create_file_content('image/png', 'AAAA', 'a.png'));
+
+    begin
+      l_result := or_decide('state', json_object_t.parse(c_q_pred), p_files => l_files);
+    exception
+      when others then
+        l_code := sqlcode;
+        l_msg  := sqlerrm;
+    end;
+
+    ut.expect(l_code, 'code').to_equal(-20508);
+    ut.expect(l_msg, 'message').to_be_like('%text only%');
+    ut.expect(uc_ai_test_http_mock.request_count, 'no request is sent').to_equal(0);
+  end or_files_unsupported;
 
 end test_uc_ai_decisions_wire;
 /

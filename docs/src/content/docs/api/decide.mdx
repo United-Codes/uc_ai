@@ -1,6 +1,6 @@
 ---
 title: Decide
-description: Reference for uc_ai.decide. Get typed answers with probabilities to several named questions about one text or image. Experimental. Works with OpenAI and TypeSafe.
+description: Reference for uc_ai.decide. Get typed answers with probabilities to several named questions about one text or image. Experimental. Works with OpenAI, TypeSafe and OpenRouter.
 sidebar:
   order: 16
 ---
@@ -15,14 +15,17 @@ A decision is one shared state and several named questions. The state is a text,
 
 Use a decision when your code must branch on the answer. The answers are not free text. A choice question returns one of the options that you define, and a score question returns a number from the levels that you define. Every answer comes with probabilities, so the code can test how sure the model is before it acts.
 
-Two providers support decisions:
+Three providers support decisions:
 
 | Provider | Constant | Endpoint | Default model |
 | --- | --- | --- | --- |
 | OpenAI | `uc_ai.c_provider_openai` | OpenAI Decisions (`/decisions`) | `uc_ai_openai.c_model_gpt_6_luna` |
 | TypeSafe | `uc_ai.c_provider_typesafe` | TypeSafe jev (`/systemone`) | `uc_ai_typesafe.c_model_jev_latest` |
+| OpenRouter | `uc_ai.c_provider_openrouter` | OpenRouter Decisions, alpha (`/alpha/decisions`) | `uc_ai_openrouter.c_decision_model_jev` |
 
 Decisions do not go through `generate_text`. The result has no messages and no tool calls. A provider that is not in this table raises `ORA-20306`. TypeSafe supports decisions only. See the [TypeSafe provider page](/products/uc-ai/docs/providers/typesafe/).
+
+The OpenRouter endpoint takes the same request and returns the same answers as TypeSafe. OpenRouter sends the request to a provider that it lists for the model, so use a model that supports decisions. The default model is `typesafe/jev-1.13`. A model that does not exist, or that has no decision support, raises `ORA-20302` with `HTTP 400: Model <name> does not exist`. The call to the default model on 2026-10-08 returned the model `typesafe/jev-1.13-20260917`.
 
 ## Signature
 
@@ -41,7 +44,7 @@ function decide (
 | --- | --- | --- | --- |
 | `p_state` | `clob` | Yes, if there is no file | The text that the questions refer to. It can be JSON that you serialize with `to_clob`. The provider reads JSON as text. |
 | `p_questions` | `json_object_t` | Yes | The questions, keyed by question id. See [Questions](#questions). |
-| `p_provider` | `provider_type` | Yes | `uc_ai.c_provider_openai` or `uc_ai.c_provider_typesafe`. |
+| `p_provider` | `provider_type` | Yes | `uc_ai.c_provider_openai`, `uc_ai.c_provider_typesafe` or `uc_ai.c_provider_openrouter`. |
 | `p_model` | `model_type` | No | `null` selects the default model of the provider. |
 | `p_files` | `json_array_t` | No | Images, made with `uc_ai_message_api.create_file_content`. See [Images](#images). |
 | `p_options` | `json_object_t` | No | Provider options. See [The p_options parameter](#the-p_options-parameter). |
@@ -163,7 +166,7 @@ The tolerance of the sum grows with the number of options. A choice with about 2
 
 OpenAI reads images. Pass them in `p_files`, as objects from `uc_ai_message_api.create_file_content`. OpenAI accepts `image/png`, `image/jpeg` and `image/webp`. UC AI sends each image to OpenAI as a Base64 `data:` URL. Any other media type raises `ORA-20508` before a request is sent.
 
-TypeSafe reads text only. A file in `p_files` raises `ORA-20508` before a request is sent.
+TypeSafe and OpenRouter read text only. A file in `p_files` raises `ORA-20508` before a request is sent.
 
 You can pass an image without text. If `p_files` holds an image, `p_state` can be empty. The call needs at least a text or a file.
 
@@ -175,7 +178,7 @@ UC AI checks the call before it sends a request. A failed check costs no request
 | --- | --- | --- |
 | `ORA-20306` | Before the request | `p_provider` is null, unknown, or has no decision support. The message lists the providers that have decision support. |
 | `ORA-20503` | Before the request | A question or an id is malformed. A choice with fewer than 2 options. A score with fewer than 2 levels. An unknown question type. Blank instructions. An empty state without a file. A file object or a value in `p_options` of the wrong type. |
-| `ORA-20508` | Before the request | The provider cannot take the call. More than 255 options in a choice. More than 10 levels in a score. An image type that the provider does not accept. A file for TypeSafe. |
+| `ORA-20508` | Before the request | The provider cannot take the call. More than 255 options in a choice. More than 10 levels in a score. An image type that the provider does not accept. A file for TypeSafe or OpenRouter. |
 | `ORA-20302` | After the request | The provider returned an error. The message holds the HTTP status and the message of the provider. |
 | `ORA-20304` | After the response | The answers do not match the questions. |
 
@@ -200,7 +203,7 @@ ORA-20503: Invalid question "dept": a choice question needs at least 2 options i
 ORA-20503: Invalid question "dept": type "predicate" is not supported. Use boolean, choice or score
 ORA-20503: Invalid question "dept": instructions are missing. Pass a non-empty string
 ORA-20503: Invalid state: it is null or empty and there is no file. Pass text, an image or both
-ORA-20306: Provider anthropic has no decision support. Decision providers: openai, typesafe
+ORA-20306: Provider anthropic has no decision support. Decision providers: openai, typesafe, openrouter
 ORA-20508: Unsupported content type: 256 options in question "big". The provider allows at most 255
 ORA-20508: Unsupported content type: files. The provider takes text only, pass the state as text
 ORA-20508: Unsupported content type: media type application/pdf for file 1. Supported: image/png, image/jpeg, image/webp
@@ -217,12 +220,14 @@ For a validation error, TypeSafe adds the path of the field to the message. UC A
 
 ## Limits
 
-| Limit | OpenAI | TypeSafe |
+| Limit | OpenAI | TypeSafe and OpenRouter |
 | --- | --- | --- |
 | Options in a choice | 2 to 255 | 2 to 255 |
 | Levels in a score | 2 to 10 | 2 to 10 |
 | Questions in one call | At least 1 | At least 1 |
 | Images | `image/png`, `image/jpeg`, `image/webp` | None |
+
+The OpenRouter reference does not list limits for choices, levels or images. UC AI applies the TypeSafe limits to OpenRouter.
 
 TypeSafe accepts a question with one option or one level. UC AI still requires 2, because a decision between one option is not a decision. The upper limit for the number of questions is not known. A call with 50 questions worked on OpenAI.
 
@@ -235,7 +240,7 @@ The vendor documentation lists the size of the context. For TypeSafe, see [docs.
 | Key | Provider | Description |
 | --- | --- | --- |
 | `safety_identifier` | OpenAI | A string. UC AI sends it as it is. For TypeSafe, the key adds a warning and UC AI ignores it. |
-| `extra_body` | OpenAI, TypeSafe | An object. UC AI merges its keys into the request body. The keys `model`, `questions` and `input` (OpenAI) or `state` (TypeSafe) always keep the value from UC AI. |
+| `extra_body` | OpenAI, TypeSafe, OpenRouter | An object. UC AI merges its keys into the request body. The keys `model`, `questions` and `input` (OpenAI) or `state` (TypeSafe, OpenRouter) always keep the value from UC AI. |
 
 A `safety_identifier` that is not a string, or an `extra_body` that is not an object, raises `ORA-20503`.
 
@@ -253,10 +258,11 @@ Decision calls use the configuration that `generate_text` reads from the package
 | --- | --- |
 | OpenAI | `uc_ai_openai.g_apex_web_credential` |
 | TypeSafe | `uc_ai_typesafe.g_apex_web_credential` |
+| OpenRouter | `uc_ai_openrouter.g_apex_web_credential` |
 
 If no web credential is set, UC AI reads the key with your function `uc_ai_get_key` and sends it as a Bearer header. See [Set up API Keys](/products/uc-ai/docs/guides/installation/#set-up-api-keys).
 
-`uc_ai.g_base_url` also applies to decision calls. If you set it, for example to a proxy, UC AI sends the decision calls to that URL as well. OpenAI receives `<g_base_url>/decisions`, and TypeSafe receives `<g_base_url>/systemone`. Without `uc_ai.g_base_url`, the URLs are `https://api.openai.com/v1/decisions` and `https://api.typesafe.ai/v1/systemone`.
+`uc_ai.g_base_url` also applies to decision calls. If you set it, for example to a proxy, UC AI sends the decision calls to that URL as well. OpenAI receives `<g_base_url>/decisions`, TypeSafe receives `<g_base_url>/systemone`, and OpenRouter receives `<g_base_url>/alpha/decisions`. Without `uc_ai.g_base_url`, the URLs are `https://api.openai.com/v1/decisions`, `https://api.typesafe.ai/v1/systemone` and `https://openrouter.ai/api/alpha/decisions`. The base URL of OpenRouter has no `/v1`, because the decisions endpoint is not under `/api/v1`.
 
 UC AI sets a transfer timeout of 300 seconds for a decision call.
 
@@ -268,17 +274,17 @@ UC AI never writes the request body to the log. The body holds your text and the
 
 ## Differences between the providers
 
-| | OpenAI | TypeSafe |
-| --- | --- | --- |
-| Endpoint | `POST <base>/decisions` | `POST <base>/systemone` |
-| Default model | `uc_ai_openai.c_model_gpt_6_luna` | `uc_ai_typesafe.c_model_jev_latest` |
-| `model` in the result | The name that you sent | The version that answered. `jev-latest` gave `jev-1.13.0`. |
-| Images | `image/png`, `image/jpeg`, `image/webp` | None. A file raises `ORA-20508`. |
-| Refusal | Per question. The answer has the type `refused`. | Never |
-| Boolean criteria | UC AI adds the texts to the instructions, because OpenAI takes no criteria for a boolean question | UC AI sends the criteria as they are |
-| `confidence` | Choice and score questions | Choice and score questions |
-| `usage` keys | `input_tokens`, `output_tokens` (always 0), `total_tokens` | `input_tokens`, `output_tokens` |
-| Error body | An `error` object | A `detail` text, object or list |
+| | OpenAI | TypeSafe | OpenRouter |
+| --- | --- | --- | --- |
+| Endpoint | `POST <base>/decisions` | `POST <base>/systemone` | `POST <base>/alpha/decisions` |
+| Default model | `uc_ai_openai.c_model_gpt_6_luna` | `uc_ai_typesafe.c_model_jev_latest` | `uc_ai_openrouter.c_decision_model_jev` |
+| `model` in the result | The name that you sent | The version that answered. `jev-latest` gave `jev-1.13.0`. | The model that OpenRouter reports in the response |
+| Images | `image/png`, `image/jpeg`, `image/webp` | None. A file raises `ORA-20508`. | None. A file raises `ORA-20508`. |
+| Refusal | Per question. The answer has the type `refused`. | Never | Never. The response has no refusal field. |
+| Boolean criteria | UC AI adds the texts to the instructions, because OpenAI takes no criteria for a boolean question | UC AI sends the criteria as they are | UC AI sends the criteria as they are |
+| `confidence` | Choice and score questions | Choice and score questions | Choice and score questions |
+| `usage` keys | `input_tokens`, `output_tokens` (always 0), `total_tokens` | `input_tokens`, `output_tokens` | `input_tokens`, `output_tokens`. The `cost` is in `provider_metadata.usage`. |
+| Error body | An `error` object | A `detail` text, object or list | An `error` object with `code` and `message` |
 
 For a boolean question on OpenAI, UC AI builds the instructions as follows. First the instructions of the question. Then a blank line, `Criteria for true:`, a line feed and the text for `true`. Then the same for `false`. UC AI leaves out the part of a key that has no text.
 

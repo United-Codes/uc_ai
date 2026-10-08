@@ -123,7 +123,7 @@ as
    * @param p_input_params Input parameters; fill the {name} placeholders of state_template
    * @param p_exec_id      Execution ID for tracking
    * @param p_files        Optional images, sent with the state (OpenAI only; TypeSafe
-   *                       raises -20508)
+   *                       and OpenRouter raise -20508)
    * @param p_run_context  Run context of this run (JSON object as a CLOB). Fills the
    *                       placeholders the input parameters do not supply.
    * @return JSON result of the decision
