@@ -56,14 +56,16 @@ create or replace package body uc_ai_decisions as
     l_limits.max_choices := 255;
     l_limits.max_levels  := 10;
 
-    if p_provider in (uc_ai.c_provider_typesafe, uc_ai.c_provider_openrouter) then
-      -- TypeSafe jev: up to 255 choices, up to 10 levels, text only (no image input).
-      -- OpenRouter documents no limits and no image input; it uses the same ones.
-      l_limits.media_types := null;
-    else
-      -- OpenAI Decisions: 2 to 255 choices, 2 to 10 levels, images as data URLs
-      l_limits.media_types := 'image/png,image/jpeg,image/webp';
-    end if;
+    -- TypeSafe jev: up to 255 choices, up to 10 levels, png and jpeg images (preview).
+    -- Size limits (16 MiB per image, 256 to 1568 px per side) are checked by jev.
+    -- OpenRouter documents no limits and no image input; it uses the TypeSafe limits
+    -- and takes text only (null media types).
+    -- OpenAI Decisions: 2 to 255 choices, 2 to 10 levels, images as data URLs.
+    l_limits.media_types := case p_provider
+                              when uc_ai.c_provider_typesafe then 'image/png,image/jpeg'
+                              when uc_ai.c_provider_openrouter then null
+                              else 'image/png,image/jpeg,image/webp'
+                            end;
 
     return l_limits;
   end limits_of;
@@ -1507,18 +1509,27 @@ create or replace package body uc_ai_decisions as
 
   /*
    * The request body. Order: extra_body, then the reserved keys model, state and
-   * questions, so extra_body cannot replace them. The state is always a string.
+   * questions (and assets when there are files), so extra_body cannot replace them.
+   * The state is always a string. Each file is an entry in assets under a unique
+   * reference, and the reference is written at the end of the state, one line per
+   * image. Every asset must be referenced, or jev answers 400.
    */
   function typesafe_body (
     p_state     in clob
   , p_questions in json_object_t
   , p_model     in varchar2
+  , p_files     in json_array_t
   , p_options   in json_object_t
   ) return json_object_t
   as
     l_body       json_object_t := json_object_t();
     l_extra      json_object_t;
     l_extra_keys json_key_list;
+    l_state      clob;
+    l_assets     json_object_t := json_object_t();
+    l_asset      json_object_t;
+    l_file       json_object_t;
+    l_ref        varchar2(100 char);
   begin
     if p_options is not null
        and p_options.has('extra_body') and p_options.get('extra_body').is_object
@@ -1531,8 +1542,38 @@ create or replace package body uc_ai_decisions as
       end loop extra_loop;
     end if;
 
+    if p_files is not null and p_files.get_size > 0 then
+      sys.dbms_lob.createtemporary(l_state, true);
+      if not is_blank(p_state) then
+        sys.dbms_lob.append(l_state, p_state);
+      end if;
+
+      <<file_loop>>
+      for i in 0 .. p_files.get_size - 1 loop
+        l_file := treat(p_files.get(i) as json_object_t);
+        l_ref  := 'uc-ai-image-' || (i + 1) || '-' || lower(rawtohex(sys_guid()));
+
+        l_asset := json_object_t();
+        l_asset.put('type', 'image');
+        l_asset.put('format', case normalize_media_type(short_text_of(l_file, 'mediaType'))
+                                when 'image/png' then 'png'
+                                else 'jpeg'
+                              end);
+        -- the base64 must be in one line
+        l_asset.put('data_base64', replace(replace(l_file.get_clob('data'), chr(10)), chr(13)));
+        l_assets.put(l_ref, l_asset);
+
+        append_text(l_state, case when sys.dbms_lob.getlength(l_state) > 0 then chr(10) || chr(10) end
+                             || 'Image ' || (i + 1) || ': ' || l_ref);
+      end loop file_loop;
+
+      l_body.put('assets', l_assets);
+    else
+      l_state := p_state;
+    end if;
+
     l_body.put('model', p_model);
-    l_body.put('state', p_state);
+    l_body.put('state', l_state);
     l_body.put('questions', typesafe_questions(p_questions));
     return l_body;
   end typesafe_body;
@@ -1742,6 +1783,7 @@ create or replace package body uc_ai_decisions as
   , p_state        in            clob
   , p_questions    in            json_object_t
   , p_model        in            varchar2
+  , p_files        in            json_array_t
   , p_options      in            json_object_t
   , p_settings     in            uc_ai_settings.t_settings
   , pio_warnings   in out nocopy json_array_t
@@ -1768,7 +1810,7 @@ create or replace package body uc_ai_decisions as
     end if;
 
     l_model := coalesce(p_model, default_model(p_provider));
-    l_body  := typesafe_body(p_state, p_questions, l_model, p_options).to_clob;
+    l_body  := typesafe_body(p_state, p_questions, l_model, p_files, p_options).to_clob;
 
     apex_web_service.clear_request_headers;
     apex_web_service.g_request_headers(1).name  := 'Content-Type';
@@ -1779,14 +1821,21 @@ create or replace package body uc_ai_decisions as
       apex_web_service.g_request_headers(2).value := 'Bearer ' || uc_ai_get_key(p_provider);
     end if;
 
+    -- jev takes images only with this header (preview feature)
+    if p_files is not null and p_files.get_size > 0 then
+      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count + 1).name  := 'TypeSafe-Danger-Zone-Images';
+      apex_web_service.g_request_headers(apex_web_service.g_request_headers.count).value     := 'true';
+    end if;
+
     uc_ai_settings.apply_extra_headers(p_settings);
 
-    -- Never log l_body: it holds the state
+    -- Never log l_body: it holds the state and base64 images
     uc_ai_logger.log(
       'Calling ' || l_label || ' at ' || l_url || '. Web Credential: ' || nvl(l_web_credential, 'null')
     , l_scope
     , 'model=' || l_model
       || ', questions=' || l_question_keys.count
+      || ', files=' || case when p_files is null then 0 else p_files.get_size end
       || ', request size=' || sys.dbms_lob.getlength(l_body) || ' characters'
       || ', option keys=' || nvl(option_keys(p_options), 'none')
     );
@@ -1865,6 +1914,7 @@ create or replace package body uc_ai_decisions as
       , p_state      => p_state
       , p_questions  => p_questions
       , p_model      => p_model
+      , p_files      => p_files
       , p_options    => p_options
       , p_settings   => p_settings
       , pio_warnings => l_warnings

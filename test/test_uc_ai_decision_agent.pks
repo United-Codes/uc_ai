@@ -226,8 +226,8 @@ create or replace package test_uc_ai_decision_agent as
   --%test(OpenAI: an image reaches the request as input_image)
   procedure exec_image_file;
 
-  --%test(TypeSafe: a file fails before any request and the execution fails)
-  procedure exec_typesafe_rejects_file;
+  --%test(OpenRouter: a file fails before any request and the execution fails)
+  procedure exec_openrouter_rejects_file;
 
   --%test(A provider error fails the execution with the error and zero tokens)
   procedure exec_provider_error;

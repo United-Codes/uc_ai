@@ -406,24 +406,47 @@ create or replace package body test_uc_ai_decisions as
   end bad_file_shape;
 
 
-  procedure typesafe_files_unsupported
+  procedure openrouter_files_unsupported
   as
     l_questions json_object_t := json_object_t.parse(c_valid_questions);
     l_files     json_array_t;
   begin
     l_files := json_array_t();
     l_files.append(uc_ai_message_api.create_file_content('image/png', 'AAAA', 'a.png'));
-    expect_error(l_questions, uc_ai_error.c_err_unsupported_content, '%text only%', 'png with state', p_files => l_files, p_provider => uc_ai.c_provider_typesafe);
-    expect_error(l_questions, -20508, '%text only%', 'png without state', p_state => null, p_files => l_files, p_provider => uc_ai.c_provider_typesafe);
+    expect_error(l_questions, uc_ai_error.c_err_unsupported_content, '%text only%', 'png with state', p_files => l_files, p_provider => uc_ai.c_provider_openrouter);
+    expect_error(l_questions, -20508, '%text only%', 'png without state', p_state => null, p_files => l_files, p_provider => uc_ai.c_provider_openrouter);
 
     -- an invalid file object is also a file: the provider cannot take it
     l_files := json_array_t('["a string"]');
-    expect_error(l_questions, -20508, '%text only%', 'not an object', p_files => l_files, p_provider => uc_ai.c_provider_typesafe);
+    expect_error(l_questions, -20508, '%text only%', 'not an object', p_files => l_files, p_provider => uc_ai.c_provider_openrouter);
+
+    -- an empty files array is no file
+    l_files := json_array_t();
+    expect_error(l_questions, -20503, '%state%', 'empty files array without state', p_state => null, p_files => l_files, p_provider => uc_ai.c_provider_openrouter);
+  end openrouter_files_unsupported;
+
+
+  procedure typesafe_media_types
+  as
+    l_questions json_object_t := json_object_t.parse(c_valid_questions);
+    l_files     json_array_t;
+  begin
+    l_files := json_array_t();
+    l_files.append(uc_ai_message_api.create_file_content('image/webp', 'AAAA', 'a.webp'));
+    expect_error(l_questions, -20508, '%image/webp for file 1%Supported: image/png, image/jpeg%', 'webp', p_files => l_files, p_provider => uc_ai.c_provider_typesafe);
+
+    l_files := json_array_t();
+    l_files.append(uc_ai_message_api.create_file_content('application/pdf', 'AAAA', 'a.pdf'));
+    expect_error(l_questions, -20508, '%application/pdf for file 1%', 'pdf', p_files => l_files, p_provider => uc_ai.c_provider_typesafe);
+
+    -- an invalid file object is checked as for every provider
+    l_files := json_array_t('["a string"]');
+    expect_error(l_questions, -20503, '%file 1%', 'not an object', p_files => l_files, p_provider => uc_ai.c_provider_typesafe);
 
     -- an empty files array is no file
     l_files := json_array_t();
     expect_error(l_questions, -20503, '%state%', 'empty files array without state', p_state => null, p_files => l_files, p_provider => uc_ai.c_provider_typesafe);
-  end typesafe_files_unsupported;
+  end typesafe_media_types;
 
 
   -- ---- options -------------------------------------------------------------------

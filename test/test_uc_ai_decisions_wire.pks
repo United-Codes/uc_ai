@@ -209,6 +209,12 @@ create or replace package test_uc_ai_decisions_wire as
   --%test(TypeSafe: the state is a plain string and texts longer than 32k reach the request unchanged)
   procedure ts_state_and_long_texts;
 
+  --%test(TypeSafe: files become assets, each is referenced in the state, and the images header is sent)
+  procedure ts_images_become_assets;
+
+  --%test(TypeSafe: without files there are no assets and no images header)
+  procedure ts_no_files_no_assets;
+
   --%test(TypeSafe: extra_body is merged but cannot replace model, state or questions; safety_identifier warns)
   procedure ts_extra_body_and_options;
 

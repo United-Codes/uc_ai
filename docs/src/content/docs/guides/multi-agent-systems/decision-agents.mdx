@@ -269,7 +269,7 @@ A decision agent writes one `assistant` row to `uc_ai_agent_messages`. Its `cont
 
 ## Send images
 
-A decision agent takes images through the `p_files` parameter of `execute_agent`. Build the collection with `uc_ai_message_api.t_files`, as for a [profile agent](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/#attaching-files-documents--images). OpenAI reads `image/png`, `image/jpeg`, and `image/webp`. TypeSafe and OpenRouter read text only, and a file raises `ORA-20508`.
+A decision agent takes images through the `p_files` parameter of `execute_agent`. Build the collection with `uc_ai_message_api.t_files`, as for a [profile agent](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/#attaching-files-documents--images). OpenAI reads `image/png`, `image/jpeg`, and `image/webp`. TypeSafe reads `image/png` and `image/jpeg`. OpenRouter reads text only, and a file raises `ORA-20508`.
 
 ```sql
 -- excerpt: l_files is a uc_ai_message_api.t_files with one image
@@ -323,6 +323,6 @@ An [orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/)
 - **No profile features.** A decision agent has no response schema, no tools, no tool tags, no `p_prompt_addendum`, and no follow-up message.
 - **Fixed timeout.** `uc_ai.decide` has a fixed HTTP timeout of 300 seconds. The `timeout_seconds` value of the agent row has no effect on a decision agent.
 - **Cost limits.** The cost [budgets](/products/uc-ai/docs/guides/guardrails/budget/) of UC AI Pro do not price a decision agent yet. The budget hook reads the model from the prompt profile, and a decision agent has none. The tokens are in `uc_ai_agent_executions`.
-- **Providers.** Only OpenAI, TypeSafe and OpenRouter support decisions. Only OpenAI reads images and can refuse a question.
+- **Providers.** Only OpenAI, TypeSafe and OpenRouter support decisions. OpenAI and TypeSafe read images. Only OpenAI can refuse a question.
 
 See [Decide](/products/uc-ai/docs/api/decide/) for the question types, the checks, and the limits of the providers.

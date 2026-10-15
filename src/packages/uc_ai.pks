@@ -297,7 +297,7 @@ as
    * keyed by question id; each question has a type (boolean, choice or score),
    * instructions and criteria (see uc_ai_decisions for the full shape). p_files
    * holds uc_ai_message_api.create_file_content objects; only images (png, jpeg,
-   * webp) are supported, and only by OpenAI (TypeSafe jev and OpenRouter take text only).
+   * webp) are supported, by OpenAI (png, jpeg, webp) and TypeSafe jev (png, jpeg). OpenRouter takes text only.
    *
    * Returns a provider-neutral JSON object: answers (keyed by question id, with
    * probabilities), usage, model, provider_metadata (confidence), warnings and raw

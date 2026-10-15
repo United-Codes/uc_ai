@@ -73,8 +73,11 @@ create or replace package test_uc_ai_decisions as
   --%test(A file object of another shape raises -20503)
   procedure bad_file_shape;
 
-  --%test(TypeSafe takes text only: any file raises -20508 before any request, with or without state)
-  procedure typesafe_files_unsupported;
+  --%test(OpenRouter takes text only: any file raises -20508 before any request, with or without state)
+  procedure openrouter_files_unsupported;
+
+  --%test(TypeSafe takes png and jpeg only: any other media type raises -20508 before any request)
+  procedure typesafe_media_types;
 
   -- options -------------------------------------------------------------------------
   --%test(An option of the wrong type raises -20503)

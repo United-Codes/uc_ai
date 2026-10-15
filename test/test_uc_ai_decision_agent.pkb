@@ -1308,9 +1308,9 @@ create or replace package body test_uc_ai_decision_agent as
   end exec_image_file;
 
 
-  procedure exec_typesafe_rejects_file
+  procedure exec_openrouter_rejects_file
   as
-    l_code   varchar2(50 char) := gc_prefix || 'TS_FILE';
+    l_code   varchar2(50 char) := gc_prefix || 'OR_FILE';
     l_files  uc_ai_message_api.t_files := uc_ai_message_api.t_files();
     l_err    number;
     l_msg    varchar2(4000 char);
@@ -1321,7 +1321,7 @@ create or replace package body test_uc_ai_decision_agent as
     l_error  varchar2(4000 char);
     l_output clob;
   begin
-    make_triage_agent(l_code, uc_ai.c_provider_typesafe);
+    make_triage_agent(l_code, uc_ai.c_provider_openrouter);
     l_files.extend;
     l_files(1).media_type := 'image/png';
     l_files(1).data_blob  := sys.utl_raw.cast_to_raw('image bytes');
@@ -1334,7 +1334,7 @@ create or replace package body test_uc_ai_decision_agent as
     latest_execution(l_code, l_exec, l_status, l_in, l_out, l_error, l_output);
     ut.expect(l_status).to_equal(uc_ai_agents_api.c_exec_failed);
     ut.expect(l_error).to_be_like('%text only%');
-  end exec_typesafe_rejects_file;
+  end exec_openrouter_rejects_file;
 
 
   procedure exec_provider_error

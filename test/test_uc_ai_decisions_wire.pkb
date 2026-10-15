@@ -1778,6 +1778,67 @@ create or replace package body test_uc_ai_decisions_wire as
   end ts_state_and_long_texts;
 
 
+  procedure ts_images_become_assets
+  as
+    l_files  json_array_t := json_array_t();
+    l_result json_object_t;
+    l_body   json_object_t;
+    l_assets json_object_t;
+    l_keys   json_key_list;
+    l_state  clob;
+    l_asset  json_object_t;
+  begin
+    ts_enqueue('triage_response');
+
+    l_files.append(uc_ai_message_api.create_file_content('image/png', 'AAAA' || chr(10) || 'BBBB', 'a.png'));
+    l_files.append(uc_ai_message_api.create_file_content('image/jpg', 'CCCC', 'b.jpg'));
+
+    l_result := uc_ai.decide(
+      p_state     => c_triage_state
+    , p_questions => ts_triage_questions
+    , p_provider  => uc_ai.c_provider_typesafe
+    , p_files     => l_files
+    , p_options   => json_object_t.parse('{"extra_body":{"assets":{"evil":{"format":"png","data_base64":"x"}}}}')
+    );
+
+    ut.expect(uc_ai_test_http_mock.request_header(1, 'TypeSafe-Danger-Zone-Images'), 'images header').to_equal('true');
+    ut.expect(uc_ai_test_http_mock.request_header(1, 'Content-Type'), 'Content-Type').to_equal('application/json');
+
+    l_body   := uc_ai_test_http_mock.request_json(1);
+    l_assets := l_body.get_object('assets');
+    l_keys   := l_assets.get_keys;
+    l_state  := l_body.get_clob('state');
+
+    ut.expect(l_keys.count, 'two assets, extra_body assets replaced').to_equal(2);
+    ut.expect(l_state, 'state text stays first').to_be_like(c_triage_state || '%');
+
+    <<asset_loop>>
+    for i in 1 .. l_keys.count loop
+      ut.expect(instr(l_state, l_keys(i)), 'asset ' || i || ' is referenced in the state').to_be_greater_than(0);
+      ut.expect(l_assets.get_object(l_keys(i)).get_string('type'), 'asset ' || i || ' type').to_equal('image');
+    end loop asset_loop;
+
+    l_asset := l_assets.get_object(l_keys(1));
+    ut.expect(l_asset.get_string('format'), 'png format').to_equal('png');
+    ut.expect(l_asset.get_string('data_base64'), 'base64 is one line').to_equal('AAAABBBB');
+    ut.expect(l_assets.get_object(l_keys(2)).get_string('format'), 'image/jpg becomes jpeg').to_equal('jpeg');
+    ut.expect(l_assets.get_object(l_keys(2)).get_string('data_base64'), 'second data').to_equal('CCCC');
+  end ts_images_become_assets;
+
+
+  procedure ts_no_files_no_assets
+  as
+    l_result json_object_t;
+  begin
+    ts_enqueue('triage_response');
+
+    l_result := ts_decide(c_triage_state, ts_triage_questions);
+
+    ut.expect(uc_ai_test_http_mock.request_json(1).has('assets'), 'no assets').to_be_false();
+    ut.expect(uc_ai_test_http_mock.request_header(1, 'TypeSafe-Danger-Zone-Images'), 'no images header').to_be_null();
+  end ts_no_files_no_assets;
+
+
   procedure ts_extra_body_and_options
   as
     l_result   json_object_t;
@@ -2432,7 +2493,7 @@ create or replace package body test_uc_ai_decisions_wire as
      where id > l_last_id
        and text like 'Calling TypeSafe at ' || c_ts_url || '%'
        and text like '%Web Credential: ' || c_credential
-       and extra like 'model=jev-latest, questions=3, request size=%';
+       and extra like 'model=jev-latest, questions=3, files=0, request size=%';
     ut.expect(l_calls, 'the call is logged with counts').to_equal(1);
 
     select count(*)

@@ -221,6 +221,47 @@ create or replace package body test_uc_ai_decisions_live as
   end ts_triage_example;
 
 
+  /*
+   * jev takes images from 256 to 1568 px per side. This PNG is 320x320 and solid red
+   * (RGB 220, 30, 30), made for this test.
+   */
+  procedure ts_image_example
+  as
+    l_files  json_array_t := json_array_t();
+    l_result json_object_t;
+    l_png    clob;
+  begin
+    if ts_credential_missing then
+      sys.dbms_output.put_line('SKIPPED: the web credential ' || c_ts_credential || ' is not available here');
+      return;
+    end if;
+
+    l_png := 'iVBORw0KGgoAAAANSUhEUgAAAUAAAAFACAIAAABC8jL9AAADuUlEQVR4nO3TQQkAMAzAwCqpf1ETMw/7jMDBCcgnc3aBqPleADwzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIM'
+      || 'DGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczA'
+      || 'EGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwM'
+      || 'YQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQ'
+      || 'ZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxh'
+      || 'BoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBm'
+      || 'YAgzMIQZGMIMDGEGhjADQ5iBIczAEGZgCDMwhBkYwgwMYQaGMANDmIEhzMAQZmAIMzCEGRjCDAxhBoYwA0OYgSHMwBBmYAgzMIQZGMIMDGEGhjADQ5iBIewCCtqZnHV2ptQAAAAASUVORK5CYII=';
+    l_files.append(uc_ai_message_api.create_file_content('image/png', l_png, 'red.png'));
+
+    l_result := uc_ai.decide(
+      p_state     => 'The attached image was taken by a user.'
+    , p_questions => json_object_t.parse(
+        '{"color":{"type":"choice","instructions":"What is the main color of the image?","criteria":{'
+        || '"red":"Mostly red.","green":"Mostly green.","blue":"Mostly blue."}}}')
+    , p_provider  => uc_ai.c_provider_typesafe
+    , p_files     => l_files
+    );
+
+    sys.dbms_output.put_line('TypeSafe image: ' || l_result.get_object('answers').to_string);
+
+    ut.expect(l_result.get_object('answers').get_object('color').get_string('choice'), 'color').to_equal('red');
+    ut.expect(l_result.get_array('warnings').get_size, 'no warnings').to_equal(0);
+    ut.expect(l_result.get_object('usage').get_number('input_tokens'), 'image tokens are counted').to_be_greater_than(100);
+  end ts_image_example;
+
+
   procedure ts_bad_model
   as
     l_code    number := 0;

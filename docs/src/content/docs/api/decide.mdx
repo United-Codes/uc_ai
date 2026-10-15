@@ -164,9 +164,13 @@ The tolerance of the sum grows with the number of options. A choice with about 2
 
 ## Images
 
-OpenAI reads images. Pass them in `p_files`, as objects from `uc_ai_message_api.create_file_content`. OpenAI accepts `image/png`, `image/jpeg` and `image/webp`. UC AI sends each image to OpenAI as a Base64 `data:` URL. Any other media type raises `ORA-20508` before a request is sent.
+OpenAI and TypeSafe read images. Pass them in `p_files`, as objects from `uc_ai_message_api.create_file_content`. Any media type that the provider does not accept raises `ORA-20508` before a request is sent.
 
-TypeSafe and OpenRouter read text only. A file in `p_files` raises `ORA-20508` before a request is sent.
+- **OpenAI** accepts `image/png`, `image/jpeg` and `image/webp`. UC AI sends each image as a Base64 `data:` URL.
+- **TypeSafe** accepts `image/png` and `image/jpeg`. UC AI sends each image in the `assets` object of the request and writes a reference to it at the end of the state, for example `Image 1: uc-ai-image-1-<id>`. The questions see the images through the state. UC AI also sends the header `TypeSafe-Danger-Zone-Images: true`, which jev requires for images.
+- **OpenRouter** reads text only. A file in `p_files` raises `ORA-20508`.
+
+Images on TypeSafe are a preview feature. TypeSafe can change the request format, the answers and the limits. Each image must be 256 to 1568 pixels wide and high, and at most 16 MiB. The request must be at most 32 MiB, and Base64 makes the images about one third larger. UC AI does not check the size of the pixels. jev rejects an image outside these limits and does not resize it. The call then raises `ORA-20302` with the message of jev. Rotate the pixels of a photo upright before you send it, because jev ignores the EXIF orientation. TypeSafe lists the limits on [docs.typesafe.ai/images](https://docs.typesafe.ai/images).
 
 You can pass an image without text. If `p_files` holds an image, `p_state` can be empty. The call needs at least a text or a file.
 
@@ -225,7 +229,7 @@ For a validation error, TypeSafe adds the path of the field to the message. UC A
 | Options in a choice | 2 to 255 | 2 to 255 |
 | Levels in a score | 2 to 10 | 2 to 10 |
 | Questions in one call | At least 1 | At least 1 |
-| Images | `image/png`, `image/jpeg`, `image/webp` | None |
+| Images | `image/png`, `image/jpeg`, `image/webp` | TypeSafe: `image/png`, `image/jpeg`. OpenRouter: none. |
 
 The OpenRouter reference does not list limits for choices, levels or images. UC AI applies the TypeSafe limits to OpenRouter.
 
@@ -279,7 +283,7 @@ UC AI never writes the request body to the log. The body holds your text and the
 | Endpoint | `POST <base>/decisions` | `POST <base>/systemone` | `POST <base>/alpha/decisions` |
 | Default model | `uc_ai_openai.c_model_gpt_6_luna` | `uc_ai_typesafe.c_model_jev_latest` | `uc_ai_openrouter.c_decision_model_jev` |
 | `model` in the result | The name that you sent | The version that answered. `jev-latest` gave `jev-1.13.0`. | The model that OpenRouter reports in the response |
-| Images | `image/png`, `image/jpeg`, `image/webp` | None. A file raises `ORA-20508`. | None. A file raises `ORA-20508`. |
+| Images | `image/png`, `image/jpeg`, `image/webp` | `image/png`, `image/jpeg` (preview) | None. A file raises `ORA-20508`. |
 | Refusal | Per question. The answer has the type `refused`. | Never | Never. The response has no refusal field. |
 | Boolean criteria | UC AI adds the texts to the instructions, because OpenAI takes no criteria for a boolean question | UC AI sends the criteria as they are | UC AI sends the criteria as they are |
 | `confidence` | Choice and score questions | Choice and score questions | Choice and score questions |
@@ -466,7 +470,7 @@ The `smell` answer has no `choice`. A call to `get_string('choice')` on it retur
 
 ### Read an image
 
-The example asks which fruit an image shows. `uc_ai_test_utils.get_apple_png` returns a PNG from the UC AI tests. Replace it with your own blob. Only OpenAI reads images.
+The example asks which fruit an image shows. `uc_ai_test_utils.get_apple_png` returns a PNG from the UC AI tests. Replace it with your own blob. OpenAI and TypeSafe read images. The apple image is 200 by 200 pixels, which is too small for TypeSafe (minimum 256).
 
 ```sql
 declare

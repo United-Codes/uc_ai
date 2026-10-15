@@ -29,6 +29,9 @@ create or replace package test_uc_ai_decisions_live as
   --%test(TypeSafe triage example: a choice, a score and a boolean on one message)
   procedure ts_triage_example;
 
+  --%test(TypeSafe image example: a 320x320 PNG is read through assets and the images header)
+  procedure ts_image_example;
+
   --%test(TypeSafe: a bad model name raises -20302 with the vendor message)
   procedure ts_bad_model;
 

@@ -17,7 +17,7 @@ as
    * uc_ai.c_provider_typesafe. jev cannot chat: uc_ai.generate_text does not
    * accept this provider, and the model is not part of uc_ai_utils.get_models.
    *
-   * jev takes text only: a file in p_files raises -20508.
+   * jev takes png and jpeg images (preview): any other media type in p_files raises -20508.
    *
    * Credential: a web credential through g_apex_web_credential (or the common
    * uc_ai.g_apex_web_credential), or, when none is set, the key that

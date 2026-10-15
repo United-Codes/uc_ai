@@ -19,7 +19,7 @@ TypeSafe supports decisions only. jev has no chat interface and no embeddings. `
 - Question types: choice, score and boolean
 - Probabilities for every option and level
 - No refusals: jev answers every question
-- Text only: jev reads no images
+- Images in PNG and JPEG format (preview)
 
 ## Prerequisites
 
@@ -112,7 +112,9 @@ If a new model is not yet available as a constant, you can pass the model name d
 
 ## Limits
 
-- Text only. A file in `p_files` raises `ORA-20508` before UC AI sends a request.
+- Images. `p_files` accepts `image/png` and `image/jpeg`. Any other media type raises `ORA-20508` before UC AI sends a request. UC AI sends the images in the `assets` object and the header `TypeSafe-Danger-Zone-Images: true`. Images are a preview feature of TypeSafe.
+- Each image must be 256 to 1568 pixels wide and high, and at most 16 MiB. The whole request must be at most 32 MiB. UC AI does not check these limits. jev rejects an image outside them, and the call raises `ORA-20302`.
+- The Box question type of jev 1.14 is not available. It returns a bounding box and not a decision.
 - A choice question has at most 255 options. A score question has at most 10 levels. UC AI requires at least 2 options or 2 levels.
 - The TypeSafe documentation names a context of 64k tokens for each request.
 - jev does not refuse a question. A question that has no sense gets a low `confidence`.

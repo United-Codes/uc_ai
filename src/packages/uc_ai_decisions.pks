@@ -17,7 +17,7 @@ as
    * result can still change. Each provider has a private adapter in the body that
    * turns the neutral call into the provider request and the provider response
    * into the neutral result. Providers: openai (Decisions API, POST /decisions) and
-   * typesafe (TypeSafe jev, POST /systemone; text only, no refusals) and
+   * typesafe (TypeSafe jev, POST /systemone; text and png/jpeg images, no refusals) and
    * openrouter (OpenRouter Decisions, POST /alpha/decisions; text only, no refusals).
    *
    * One shared state (text and optional images) and several named questions. Each
@@ -59,7 +59,7 @@ as
    *   -20508  the provider cannot take it: more choices or levels than the
    *           provider allows (limits table in the body), an image media type the
    *           provider does not accept, any file for a provider that takes text
-   *           only (typesafe)
+   *           only (openrouter)
    *
    * After the response:
    *   -20302  the provider reported an error (HTTP status 400 or more, or an error body)
@@ -82,6 +82,11 @@ as
    * OpenRouter takes the same request and gives the same answers as TypeSafe, so
    * everything below for TypeSafe also holds for OpenRouter. Its alpha endpoint is
    * <base_url>/alpha/decisions with the default base URL https://openrouter.ai/api.
+   *
+   * TypeSafe images: each file goes into the assets object of the request under a
+   * generated reference, and the reference is written at the end of the state (one
+   * line per image). The request carries the header TypeSafe-Danger-Zone-Images.
+   * The pixel limits (256 to 1568 px per side, 16 MiB) are left to jev.
    *
    * TypeSafe: the boolean question is a noul question and its criteria are sent
    * as they are (true and false texts); jev answers every question, so the answer
