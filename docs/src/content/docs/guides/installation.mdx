@@ -26,7 +26,7 @@ The GitHub release page of each UC AI version contains scripts. These scripts in
 
 - `install_uc_ai_complete.sql` installs all UC AI objects
 - `install_uc_ai_complete_with_logger.sql` installs all UC AI objects and the [Logger](https://github.com/OraOpenSource/Logger) package
-- `upgrade_packages.sql` upgrades the UC AI packages. Most releases change only the packages. For these releases, run this script to get the new version. Read the [release notes](https://github.com/United-Codes/uc_ai/releases) also. A release can contain changes that need the complete installation script.
+- `upgrade_uc_ai.sql` upgrades an existing UC AI installation to the new version. See [Upgrades](#upgrades).
 
 Run the script that you need in your SQL client. It installs the UC AI packages and their dependencies.
 
@@ -140,9 +140,17 @@ END;
 
 ## Upgrades
 
-For most versions, run only the `upgrade_packages.sql` script. It upgrades the packages that changed since the last version.
+Run the `upgrade_uc_ai.sql` script of the new release. It upgrades an installation of v25.7 or later. The script does these tasks in order:
 
-Read the [release notes](https://github.com/United-Codes/uc_ai/releases) also. A release can contain changes that need the complete installation script.
+1. It adds the tables, columns, constraints, and indexes that the installation does not have yet.
+2. It sets the table and column comments and creates the triggers again.
+3. It compiles the packages and creates the views again.
+
+Before each change, the script checks the data dictionary. A schema that is up to date does not change, so you can run the script more than once. If an earlier upgrade stopped half way, run the script again. It adds only what is missing.
+
+Run the script in the UC AI schema, in SQLcl or SQL*Plus. Do this when no one uses UC AI, because a table change needs a lock on the table. The script prints each change that it makes. If a schema step fails, the script prints the failed step and the error, and then stops. Correct the cause and run the script again.
+
+If the schema is older than v25.7, upgrade it to v25.7 first. Read the [release notes](/products/uc-ai/docs/other/release-history/) also. A release can contain a behavior change that needs your attention.
 
 ## Next steps
 

@@ -54,11 +54,11 @@ begin
   sys.dbms_output.put_line('Checking the schema ' || sys_context('userenv', 'current_schema') || ' ...');
 
   l_failed := l_failed + report('UC AI 26.5 (tool_call_id)', has_column('UC_AI_AGENT_MESSAGES', 'TOOL_CALL_ID'),
-         'upgrade UC AI to 26.5 (script v26.4_to_v26.5.sql)');
+         'upgrade UC AI to 26.5 (run upgrade_uc_ai.sql)');
   l_failed := l_failed + report('UC AI 26.5 (prompt addendum)',
          count_of('select count(*) from user_arguments where package_name = ''UC_AI_AGENTS_API'' '
                   || 'and object_name = ''EXECUTE_AGENT'' and argument_name = ''P_PROMPT_ADDENDUM''') > 0,
-         'upgrade UC AI to 26.5 (run upgrade_packages.sql)');
+         'upgrade UC AI to 26.5 (run upgrade_uc_ai.sql)');
   l_failed := l_failed + report('Chat table: widgets, parts', has_column('UC_AI_CHAT_MESSAGES', 'WIDGETS') and has_column('UC_AI_CHAT_MESSAGES', 'PARTS'),
          'run the upgrade block of ai_tables.sql of the plug-in');
   l_failed := l_failed + report('Registry table', has_column('UC_AI_CHAT_WIDGET_TYPES', 'PROVIDER_PACKAGE'),

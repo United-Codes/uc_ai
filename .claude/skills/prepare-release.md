@@ -29,27 +29,28 @@ Spot-check any commit whose message is ambiguous with `git show <sha> --stat` (a
 - **New models** (usually grouped as one bullet)
 - **Internal** (triggers, authid changes, refactors worth calling out)
 
-### 2. Decide: migration script or package-only?
+### 2. Check the schema upgrade steps
+
+There is one upgrade script for every release: `upgrade_uc_ai.sql`. It is generated, and it works from v25.7 on. There are no per-release migration scripts.
 
 ```bash
-git diff v<PREV>..HEAD --stat -- src/tables/ src/triggers/ src/migrations/
+git diff v<PREV>..HEAD --stat -- src/tables/ src/triggers/ src/upgrade/
 ```
 
-- **No DDL changes** → package-only release. Users run `upgrade_packages.sql`.
-- **DDL changes** (new/altered tables, new triggers, new columns):
-  - Ask the user whether the DDL was a hotfix to the previous release (and thus already in users' schemas) or genuinely new.
-  - If genuinely new, create `src/migrations/v<PREV>_to_v<NEW>.sql` with the DDL and reference it in the changelog as the first-run step before `upgrade_packages.sql`.
-  - Confirm with `grep -n "trigger\|table" scripts/generate_upgrade_script.sh` that `upgrade_packages.sql` still skips DDL (it should).
-  - Views are the exception: `src/views/views.sql` is `create or replace`, so
-    `upgrade_packages.sql` ships it. A new view on a new table still needs the
-    table in the migration script, which users run first.
+- **No change in `src/tables/`** → nothing to add. The upgrade script still recompiles packages, triggers, views and post-scripts.
+- **A change in `src/tables/`** → `src/upgrade/upgrade_schema.sql` must have a matching guarded step in the section of the new release (add a `release_vYY_N` procedure and call it at the end of the main block). The rules are in the header of that file: one column per `ensure_column` call, backfills through `execute immediate` and guarded with `if g_changed then`.
+  - Ask the user whether the DDL was a hotfix to the previous release (and thus already in users' schemas). The guarded step is safe either way.
+  - Run `make test-upgrade`. It installs the v25.7 ... previous release tags, runs the upgrade, and compares the schema with a fresh install. Add the tag of the release you just shipped to the default list in `scripts/test_upgrade.sh`. `make test-upgrade TAGS="v<PREV>"` tests one baseline. The generated script also ends with a verify phase that fails on any object of `install.sql` the steps did not create.
+  - Table and column comments need no step: the generator takes the `comment on` lines from `install.sql`.
+- Triggers, views and post-scripts are `create or replace` and always run.
+- The release notes say what a change does to existing data. The upgrade script itself needs no mention as a first-run step.
 
 ### 2b. Register any new package with the generators
 
 `scripts/package_utils.sh` drives every generator from three hardcoded arrays
 (`API_PACKAGES`, `PROVIDER_PACKAGES`, `SANDBOX_PACKAGES`). A `.pks`/`.pkb` pair that
 is in none of them is silently left out of `install_uc_ai.sql`,
-`upgrade_packages.sql` and `uninstall.sql` — the generators only print
+`upgrade_uc_ai.sql` and `uninstall.sql` — the generators only print
 `WARNING: Unknown package found`, and nothing fails.
 
 ```bash
@@ -272,7 +273,7 @@ Any link validator failures need to be fixed before release.
 
 ### 9. Final regen pass
 
-Rerun all `generate_*.sh` scripts once more after any package changes made during test triage or audits. Commit the regenerated `install_uc_ai.sql`, `upgrade_packages.sql`, `install_uc_ai_complete*.sql`, `uninstall.sql`, and `src/packages/uc_ai_utils.pkb` alongside the code changes.
+Rerun all `generate_*.sh` scripts once more after any package changes made during test triage or audits. Commit the regenerated `install_uc_ai.sql`, `upgrade_uc_ai.sql`, `install_uc_ai_complete*.sql`, `uninstall.sql`, and `src/packages/uc_ai_utils.pkb` alongside the code changes.
 
 ## Do not
 

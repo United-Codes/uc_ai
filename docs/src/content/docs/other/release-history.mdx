@@ -7,7 +7,12 @@ sidebar:
 
 ## Next release
 
-To upgrade first run `v26.4_to_v26.5.sql` followed by the `upgrade_packages.sql` script. The migration adds the column `uc_ai_agents.decision_config` and the agent type `decision`. It adds the column `uc_ai_agent_messages.tool_call_id` too.
+To upgrade run the `upgrade_uc_ai.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases). The script changes the tables, the triggers, the packages, and the views in one run. It replaces `upgrade_packages.sql` and the migration scripts. See [Upgrades](/products/uc-ai/docs/guides/installation/#upgrades).
+
+**Upgrade script**:
+
+- **One upgrade script for every release.** `upgrade_uc_ai.sql` upgrades a schema from v25.7 or later. Before each table change, the script checks the data dictionary, so you can run it more than once. It also completes a schema that has only part of an older migration. The script stops at the first failed schema step. The release no longer has a separate migration script.
+- **This release changes two tables.** The script adds the column `uc_ai_agents.decision_config` and the agent type `decision`. It adds the column `uc_ai_agent_messages.tool_call_id` too.
 
 **Behavior notes**:
 

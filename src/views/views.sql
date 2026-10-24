@@ -1,7 +1,7 @@
 -- ============================================================================
 -- UC AI reporting views
 -- ============================================================================
--- Installed after the tables, and refreshed by upgrade_packages.sql: a view is
+-- Installed after the tables, and refreshed by upgrade_uc_ai.sql: a view is
 -- code, so a changed definition ships with a package upgrade.
 
 -- Every memory file with its store context: what is stored where, how big it

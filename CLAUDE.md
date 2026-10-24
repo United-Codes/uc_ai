@@ -7,7 +7,7 @@ License: LGPL v3.0 | Docs: https://www.united-codes.com/products/uc-ai/docs/
 ## Tech Stack
 
 - **Source code**: PL/SQL (Oracle database packages)
-- **Database**: Oracle (tables, triggers, migrations)
+- **Database**: Oracle (tables, triggers, re-runnable upgrade steps)
 - **Test framework**: utPLSQL (`ut.run()`)
 - **Documentation site**: Astro + Starlight (in `docs/`), built with Bun
 - **CI/CD**: GitLab CI (`.gitlab-ci.yml`)
@@ -20,8 +20,8 @@ src/
   packages/         PL/SQL package specs (.pks) and bodies (.pkb)
   tables/           Table DDL (install.sql)
   triggers/         Database triggers
-  views/            Reporting views (views.sql; recreated by upgrade_packages.sql)
-  migrations/       Schema migration scripts
+  views/            Reporting views (views.sql; recreated by upgrade_uc_ai.sql)
+  upgrade/          upgrade_schema.sql (guarded, re-runnable DDL steps) and verify_schema.sql; README.md explains both
   post-scripts/     Post-install verification and built-in tool registration
   dependencies/     External deps (Logger framework)
 test/
@@ -34,7 +34,8 @@ docs/
   package.json       Docs site config
 scripts/
   generate_install_script.sh         Generate install_uc_ai.sql
-  generate_upgrade_script.sh         Generate upgrade_packages.sql
+  generate_upgrade_script.sh         Generate upgrade_uc_ai.sql
+  test_upgrade.sh                    Upgrade old release tags and compare with a fresh install (make test-upgrade)
   generate_uninstall_script.sh       Generate uninstall.sql
   generate_install_script_complete.sh  Install with Logger bundled
   package_utils.sh                   Shared build utilities
@@ -68,7 +69,7 @@ Generate install/upgrade scripts (run from repo root):
 # Generate fresh install script
 bash scripts/generate_install_script.sh
 
-# Generate upgrade script (packages only, no table changes)
+# Generate the upgrade script (schema steps, triggers, packages, views; re-runnable, from v25.7 on)
 bash scripts/generate_upgrade_script.sh
 
 # Generate complete install with Logger dependency
@@ -76,6 +77,15 @@ bash scripts/generate_install_script_complete.sh
 ```
 
 You can use SQLcl with `sql -name local-23ai-uc_ai` to connect to the dev database to run queries, compile packages, and execute tests.
+
+**A DDL change needs two edits.** Change `src/tables/install.sql`, and add a guarded step to
+`src/upgrade/upgrade_schema.sql` (the header of that file lists the rules). The upgrade script is
+re-runnable: every step checks the data dictionary first, and a one-time data change runs only when
+its structural change ran in the same run. `make test-upgrade` upgrades old release tags and compares
+the result with a fresh install. It fails when the two edits disagree. The last phase of
+`upgrade_uc_ai.sql` checks every object of `install.sql` and fails when one is missing, so the
+customer run catches a forgotten step too. ADM calls `upgrade_uc_ai.sql` from its own upgrade:
+keep it free of `exit` and of other file calls (see `src/upgrade/README.md`).
 
 Installation order is dependency-aware: tables -> triggers -> specs (core first, then API, then providers) -> bodies -> post-scripts. See `install_uc_ai.sql` for exact order.
 
