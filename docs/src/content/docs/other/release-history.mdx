@@ -15,6 +15,10 @@ To upgrade first run `v26.4_to_v26.5.sql` followed by the `upgrade_packages.sql`
 
 **Features**:
 
+Request timeout:
+
+- **Transfer timeout.** The new global `uc_ai.g_transfer_timeout` sets the HTTP timeout in seconds for every provider request. It covers chat, embeddings, OCR, and decisions. Before, the timeout was fixed: 180 seconds for chat and embeddings, and 300 seconds for OCR and decisions. These values stay the default. A prompt profile or a `model_config` can set it with the key `g_transfer_timeout`, also for a decision agent. See [Prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/).
+
 Decisions:
 
 - **[Decide](/products/uc-ai/docs/api/decide/)** (`uc_ai.decide`, experimental): get typed answers with probabilities to several named questions about one text or image. A question is a choice, a score or a boolean. One call evaluates all questions, and the result has the same shape for every provider. Two providers support it: **OpenAI** (the Decisions API with `uc_ai_openai.c_model_gpt_6_luna`, with images) and the new provider **TypeSafe** (`uc_ai.c_provider_typesafe` with `uc_ai_typesafe.c_model_jev_latest`, text only). TypeSafe supports decisions only. It has no chat and no embeddings. The provider APIs are in beta, so the result can still change. See the pages for [OpenAI](/products/uc-ai/docs/providers/openai/#decisions) and [TypeSafe](/products/uc-ai/docs/providers/typesafe/).

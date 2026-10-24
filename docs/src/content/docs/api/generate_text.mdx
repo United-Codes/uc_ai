@@ -378,8 +378,8 @@ that calls UC AI directly and self-contained:
 `p_config` takes the same JSON structure as
 [`uc_ai_prompt_profiles_api.apply_model_config`](/products/uc-ai/docs/guides/prompt-profiles).
 It holds root-level keys such as `g_base_url`, `g_enable_tools`, `g_tool_tags`,
-`g_reasoning_level`, `g_max_tool_calls`, `g_apex_web_credential`, and
-`g_extra_headers`. It also takes an optional nested object with the name of the
+`g_reasoning_level`, `g_max_tool_calls`, `g_transfer_timeout`, `g_apex_web_credential`,
+and `g_extra_headers`. It also takes an optional nested object with the name of the
 provider, for the provider-specific settings. An unknown key raises `ORA-20503`.
 An unknown provider raises `ORA-20306`.
 

@@ -447,6 +447,7 @@ create or replace package body uc_ai as
     g_apex_web_credential := null;
     g_provider_override := null;
     g_max_tool_calls := null;
+    g_transfer_timeout := null;
     g_extra_headers.delete();
     g_extra_body := null;
     g_provider_tools := null;

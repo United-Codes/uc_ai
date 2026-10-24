@@ -28,7 +28,7 @@ create or replace package body test_uc_ai_agent_validation as
       p_user_prompt_template   => 'Say hi.',
       p_provider               => uc_ai.c_provider_openai,
       p_model                  => 'gpt-4o-mini',
-      p_model_config_json      => '{"g_enable_tools": true, "g_max_tool_calls": 7}',
+      p_model_config_json      => '{"g_enable_tools": true, "g_max_tool_calls": 7, "g_transfer_timeout": 600}',
       p_response_schema        => '{"type":"object","properties":{"confidence":{"type":"number"}}}',
       p_status                 => 'active'
     );
@@ -593,6 +593,7 @@ create or replace package body test_uc_ai_agent_validation as
     -- from model_config_json of the profile
     ut.expect(uc_ai.g_enable_tools).to_be_true();
     ut.expect(uc_ai.g_max_tool_calls).to_equal(7);
+    ut.expect(uc_ai.g_transfer_timeout).to_equal(600);
   end ctx_applies_profile_config;
 
 
@@ -603,6 +604,7 @@ create or replace package body test_uc_ai_agent_validation as
     l_schema   json_object_t;
   begin
     uc_ai.g_max_tool_calls := 99;
+    uc_ai.g_transfer_timeout := 99;
 
     -- an override replaces the profile config entirely; an empty override
     -- means the globals end up at framework defaults
@@ -615,6 +617,7 @@ create or replace package body test_uc_ai_agent_validation as
     );
 
     ut.expect(uc_ai.g_max_tool_calls).to_be_null();
+    ut.expect(uc_ai.g_transfer_timeout).to_be_null();
     ut.expect(uc_ai.g_enable_tools).to_be_false();
   end ctx_resets_stale_globals;
 

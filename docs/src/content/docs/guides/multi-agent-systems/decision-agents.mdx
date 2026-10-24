@@ -321,7 +321,7 @@ An [orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/)
 
 - **No chat.** A decision agent cannot be a handoff target or a conversation participant. `create_agent` raises `ORA-20503` for these configurations. `p_follow_up_message` raises `ORA-20503` too. The [APEX chat plug-in](/products/uc-ai/docs/guides/apex-chat-plugin/) cannot use a decision agent.
 - **No profile features.** A decision agent has no response schema, no tools, no tool tags, no `p_prompt_addendum`, and no follow-up message.
-- **Fixed timeout.** `uc_ai.decide` has a fixed HTTP timeout of 300 seconds. The `timeout_seconds` value of the agent row has no effect on a decision agent.
+- **Transfer timeout.** The HTTP timeout of a decision call is 300 seconds. To change it, set `g_transfer_timeout` (in seconds) in the `model_config` of the agent. The `timeout_seconds` value of the agent row has no effect on a decision agent.
 - **Cost limits.** The cost [budgets](/products/uc-ai/docs/guides/guardrails/budget/) of UC AI Pro do not price a decision agent yet. The budget hook reads the model from the prompt profile, and a decision agent has none. The tokens are in `uc_ai_agent_executions`.
 - **Providers.** Only OpenAI, TypeSafe and OpenRouter support decisions. OpenAI and TypeSafe read images. Only OpenAI can refuse a question.
 

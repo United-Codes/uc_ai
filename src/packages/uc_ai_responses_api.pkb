@@ -642,7 +642,8 @@ create or replace package body uc_ai_responses_api as
     l_resp := uc_ai_http.post(
       p_url => l_url,
       p_body => l_input_copy.to_clob,
-      p_credential_static_id => l_web_credential
+      p_credential_static_id => l_web_credential,
+      p_transfer_timeout => p_settings.transfer_timeout
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);

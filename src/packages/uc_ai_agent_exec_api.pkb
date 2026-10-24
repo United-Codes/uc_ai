@@ -910,9 +910,9 @@ create or replace package body uc_ai_agent_exec_api as
       end loop file_loop;
     end if;
 
-    -- The HTTP timeout of a decision call is fixed in uc_ai_decisions
-    -- (c_transfer_timeout) and has no option, so timeout_seconds of the agent
-    -- row is not passed on.
+    -- The HTTP timeout of a decision call is g_transfer_timeout of the settings
+    -- (300 seconds if not set). timeout_seconds of the agent row is not passed
+    -- on: put g_transfer_timeout into model_config.
     l_decision := uc_ai_decisions.decide(
       p_state     => l_state
     , p_questions => l_questions

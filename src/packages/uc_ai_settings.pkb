@@ -30,6 +30,7 @@ as
     l_s.reasoning_level                := null;
     l_s.tool_tags                      := apex_t_varchar2();
     l_s.max_tool_calls                 := null;
+    l_s.transfer_timeout               := null;
     l_s.extra_headers.delete();
     l_s.extra_body                     := null;
     l_s.provider_tools                 := null;
@@ -122,6 +123,7 @@ as
     l_s.reasoning_level                := uc_ai.g_reasoning_level;
     l_s.tool_tags                      := uc_ai.g_tool_tags;
     l_s.max_tool_calls                 := uc_ai.g_max_tool_calls;
+    l_s.transfer_timeout               := uc_ai.g_transfer_timeout;
     l_s.extra_headers                  := uc_ai.g_extra_headers;
     l_s.extra_body                     := uc_ai.g_extra_body;
     l_s.provider_tools                 := uc_ai.g_provider_tools;
@@ -247,6 +249,10 @@ as
         when 'g_max_tool_calls' then
           if l_value.is_number then
             l_s.max_tool_calls := p_config.get_number(l_key);
+          end if;
+        when 'g_transfer_timeout' then
+          if l_value.is_number then
+            l_s.transfer_timeout := p_config.get_number(l_key);
           end if;
         when 'g_apex_web_credential' then
           if l_value.is_string then

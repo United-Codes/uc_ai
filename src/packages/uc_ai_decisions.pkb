@@ -1348,7 +1348,7 @@ create or replace package body uc_ai_decisions as
       p_url                  => l_url
     , p_body                 => l_body
     , p_credential_static_id => l_web_credential
-    , p_transfer_timeout     => c_transfer_timeout
+    , p_transfer_timeout     => coalesce(p_settings.transfer_timeout, c_transfer_timeout)
     );
 
     l_resp_json := parse_response(l_resp, 'OpenAI', l_scope);
@@ -1844,7 +1844,7 @@ create or replace package body uc_ai_decisions as
       p_url                  => l_url
     , p_body                 => l_body
     , p_credential_static_id => l_web_credential
-    , p_transfer_timeout     => c_transfer_timeout
+    , p_transfer_timeout     => coalesce(p_settings.transfer_timeout, c_transfer_timeout)
     );
 
     l_resp_json := parse_response(l_resp, l_label, l_scope);

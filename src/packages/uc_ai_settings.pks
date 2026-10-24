@@ -60,6 +60,7 @@ as
   , reasoning_level                varchar2(10 char)
   , tool_tags                      apex_t_varchar2
   , max_tool_calls                 pls_integer
+  , transfer_timeout               pls_integer
   , extra_headers                  uc_ai.t_extra_headers
   , extra_body                     json_object_t
   , provider_tools                 json_array_t

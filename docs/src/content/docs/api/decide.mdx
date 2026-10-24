@@ -268,9 +268,9 @@ If no web credential is set, UC AI reads the key with your function `uc_ai_get_k
 
 `uc_ai.g_base_url` also applies to decision calls. If you set it, for example to a proxy, UC AI sends the decision calls to that URL as well. OpenAI receives `<g_base_url>/decisions`, TypeSafe receives `<g_base_url>/systemone`, and OpenRouter receives `<g_base_url>/alpha/decisions`. Without `uc_ai.g_base_url`, the URLs are `https://api.openai.com/v1/decisions`, `https://api.typesafe.ai/v1/systemone` and `https://openrouter.ai/api/alpha/decisions`. The base URL of OpenRouter has no `/v1`, because the decisions endpoint is not under `/api/v1`.
 
-UC AI sets a transfer timeout of 300 seconds for a decision call.
+A decision call has a transfer timeout of 300 seconds. To change it, set `uc_ai.g_transfer_timeout` to a number of seconds.
 
-A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) does not read these globals. It reads the credential and the base URL from the `model_config` of the agent.
+A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) does not read these globals. It reads the credential, the base URL, and the transfer timeout (`g_transfer_timeout`) from the `model_config` of the agent.
 
 ## Logging
 

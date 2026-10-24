@@ -738,6 +738,10 @@ create or replace package body uc_ai_prompt_profiles_api as
           if l_value.is_number then
             uc_ai.g_max_tool_calls := p_config.get_number(l_key);
           end if;
+        when 'g_transfer_timeout' then
+          if l_value.is_number then
+            uc_ai.g_transfer_timeout := p_config.get_number(l_key);
+          end if;
         when 'g_apex_web_credential' then
           if l_value.is_string then
             uc_ai.g_apex_web_credential := coalesce(p_config.get_string(l_key), uc_ai.g_apex_web_credential);

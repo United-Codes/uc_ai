@@ -153,6 +153,9 @@ uc_ai.g_base_url := 'host.containers.internal:11434/api';    -- e.g. Ollama
 uc_ai.g_apex_web_credential := 'OPENAI';                     -- APEX Web Credential static id
 uc_ai_openai.g_apex_web_credential := 'OPENAI';              -- or per-provider
 
+-- HTTP timeout in seconds for each provider request (default 180; 300 for OCR and decide)
+uc_ai.g_transfer_timeout := 600;
+
 -- Extra HTTP headers on every request
 uc_ai.g_extra_headers('X-Tenant-Id') := 'acme';
 

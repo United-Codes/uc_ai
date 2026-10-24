@@ -79,6 +79,11 @@ as
   g_enable_tools boolean := false;
   g_tool_tags apex_t_varchar2;
   g_max_tool_calls pls_integer;
+
+  -- HTTP transfer timeout in seconds for every provider REST request (chat,
+  -- embeddings, OCR, decisions). null keeps the default: 180 seconds, or 300
+  -- for OCR and decisions.
+  g_transfer_timeout pls_integer;
   -- Programmatic tool calling ("code mode"): when true (and tools are enabled),
   -- generate_text also offers the uc_ai__run_code meta-tool, letting the model
   -- author a JS program that orchestrates the other tools in-database via Oracle

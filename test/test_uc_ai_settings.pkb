@@ -16,6 +16,7 @@ create or replace package body test_uc_ai_settings as
     uc_ai.g_reasoning_level     := uc_ai.c_reasoning_level_high;
     uc_ai.g_tool_tags           := apex_t_varchar2('tag_a', 'tag_b');
     uc_ai.g_max_tool_calls      := 42;
+    uc_ai.g_transfer_timeout    := 600;
     uc_ai.g_extra_headers('x-sentinel') := 'hdr-val';
 
     uc_ai_openai.g_use_responses_api := false;
@@ -72,6 +73,7 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.reasoning_level).to_equal(uc_ai.c_reasoning_level_high);
     ut.expect(l_s.tool_tags.count).to_equal(2);
     ut.expect(l_s.max_tool_calls).to_equal(42);
+    ut.expect(l_s.transfer_timeout).to_equal(600);
     ut.expect(l_s.extra_headers.count).to_equal(1);
     ut.expect(l_s.extra_headers('x-sentinel')).to_equal('hdr-val');
     -- openai
@@ -143,6 +145,7 @@ create or replace package body test_uc_ai_settings as
       "g_reasoning_level": "high",
       "g_enable_tools": true,
       "g_max_tool_calls": 7,
+      "g_transfer_timeout": 900,
       "g_apex_web_credential": "CFG_CRED",
       "g_tool_tags": ["alpha", "beta"],
       "g_extra_headers": {"x-tenant": "acme", "x-trace": "1"},
@@ -161,6 +164,7 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.reasoning_level).to_equal('high');
     ut.expect(l_s.enable_tools).to_be_true();
     ut.expect(l_s.max_tool_calls).to_equal(7);
+    ut.expect(l_s.transfer_timeout).to_equal(900);
     ut.expect(l_s.apex_web_credential).to_equal('CFG_CRED');
     ut.expect(l_s.tool_tags.count).to_equal(2);
     ut.expect(l_s.extra_headers.count).to_equal(2);
@@ -184,6 +188,7 @@ create or replace package body test_uc_ai_settings as
     ut.expect(l_s.enable_tools).to_be_false();
     ut.expect(l_s.enable_reasoning).to_be_false();
     ut.expect(l_s.max_tool_calls).to_be_null();
+    ut.expect(l_s.transfer_timeout).to_be_null();
     ut.expect(l_s.tool_tags.count).to_equal(0);
     ut.expect(l_s.extra_headers.count).to_equal(0);
     ut.expect(l_s.oa_use_responses_api).to_be_true();
@@ -202,6 +207,7 @@ create or replace package body test_uc_ai_settings as
     uc_ai.reset_globals;
     uc_ai.g_base_url            := 'https://global.sentinel/v1';
     uc_ai.g_enable_tools        := true;
+    uc_ai.g_transfer_timeout    := 777;
     uc_ai.g_apex_web_credential := 'GLOBAL_CRED';
     uc_ai.g_extra_headers('x-global') := 'leak';
 
@@ -213,6 +219,7 @@ create or replace package body test_uc_ai_settings as
     -- Config did not set these -> they stay at defaults, NOT the global values.
     ut.expect(l_s.base_url).to_be_null();
     ut.expect(l_s.enable_tools).to_be_false();
+    ut.expect(l_s.transfer_timeout).to_be_null();
     ut.expect(l_s.apex_web_credential).to_be_null();
     ut.expect(l_s.extra_headers.count).to_equal(0);
     -- The one key the config did set is honoured.
