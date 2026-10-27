@@ -1848,6 +1848,12 @@ create or replace package body uc_ai_a2a_core as
   /*
    * Runs the agent for a task that is in the state WORKING, and finishes the
    * task. Never raises: a failed run is a task in the state FAILED.
+   *
+   * The run is one transaction. A run that completes commits the writes of its
+   * tools before the task shows COMPLETED, so a client that reads the task never
+   * sees the state before the data. A run that fails rolls its tool writes back:
+   * a FAILED task leaves no half-done work, although the handler returns
+   * normally and ORDS (or the job) would commit otherwise.
    */
   procedure run_agent_task(
     p_endpoint   in uc_ai_a2a_endpoints%rowtype,
@@ -1872,6 +1878,8 @@ create or replace package body uc_ai_a2a_core as
       from uc_ai_agent_executions
      where session_id = p_context_id
        and parent_execution_id is null;
+
+    savepoint a2a_run;
 
     begin
       l_agent := uc_ai_agents_api.get_agent(p_endpoint.agent_code, p_endpoint.agent_version);
@@ -1898,6 +1906,10 @@ create or replace package body uc_ai_a2a_core as
       end if;
 
       l_artifact := build_artifact(p_task_id, l_agent, l_result, p_request);
+
+      -- @dblinter ignore(G-3310): the run is the transaction; its writes must be durable before the task shows COMPLETED
+      commit;
+
       finish_task(
         p_task_id      => p_task_id
       , p_state        => c_state_completed
@@ -1912,6 +1924,20 @@ create or replace package body uc_ai_a2a_core as
           l_scope,
           sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace
         );
+
+        -- Undo the writes of the failed run. The savepoint is gone when something
+        -- in the run committed; then there is nothing left to undo here.
+        begin
+          rollback to savepoint a2a_run;
+        exception
+          -- @dblinter ignore(G-5040): ORA-01086 (savepoint gone) only means the run committed itself
+          when others then
+            uc_ai_logger.log_warn(
+              'A2A task ' || p_task_id || ': no savepoint to roll back to (' || sqlerrm || ')'
+            , l_scope
+            , sys.dbms_utility.format_error_backtrace
+            );
+        end;
 
         -- The run did not return its ID: find it as the newest turn of the session
         select max(id)

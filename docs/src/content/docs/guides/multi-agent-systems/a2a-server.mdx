@@ -314,6 +314,16 @@ The task also has `metadata.usage` with `inputTokens` and `outputTokens`, when t
 
 When the run fails, the task has the state `TASK_STATE_FAILED` and the status message `The agent run failed.` The response never contains an `ORA-` text or a backtrace. The real error is in the logger and on the execution row of the run. A timeout of the agent ends in the state `TASK_STATE_FAILED` too.
 
+### Transactions
+
+Each run is one transaction, and the server owns it. Tools that write data do not commit.
+
+- When the run completes, the server commits the changes of the tools. Then it sets the task to `TASK_STATE_COMPLETED`. A client that reads a completed task finds the changed rows.
+- When the run fails, the server rolls back the changes of the tools. A failed task leaves no rows of a half-done run. The trace rows of the run stay, because UC AI writes them in their own transaction.
+- When a client cancels a running task, the database rolls back the uncommitted changes of the stopped job.
+
+If a tool must keep a row also when the run fails, for example an audit row, write that row in an autonomous transaction.
+
 ## Authenticate clients
 
 The mode is set per endpoint with `p_auth_mode`. The agent card is always public. The card lists the mode in `securitySchemes`.

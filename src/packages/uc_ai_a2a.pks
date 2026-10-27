@@ -256,6 +256,10 @@ as
    * Answers one HTTP request. Pure: reads no CGI variables and writes no output,
    * so tests and other HTTP front ends can call it.
    *
+   * An agent run is one transaction: a run that completes commits the writes of
+   * its tools (and with them the open transaction of the caller) before the task
+   * shows COMPLETED; a run that fails rolls them back to the start of the run.
+   *
    * @param p_endpoint_code  Code of the endpoint (URL segment)
    * @param p_route          c_route_card, c_route_jsonrpc or c_route_rest
    * @param p_method         HTTP method

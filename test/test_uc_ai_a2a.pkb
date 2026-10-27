@@ -22,6 +22,9 @@ create or replace package body test_uc_ai_a2a as
   gc_echo_agent constant varchar2(50 char) := 'TEST_A2A_ECHO';
   gc_json_agent constant varchar2(50 char) := 'TEST_A2A_JSON';
   gc_fail_agent constant varchar2(50 char) := 'TEST_A2A_FAIL';
+  gc_txw_agent  constant varchar2(50 char) := 'TEST_A2A_TXW';   -- writes a row, then fails
+  gc_txok_agent constant varchar2(50 char) := 'TEST_A2A_TXOK';  -- writes a row, then succeeds
+  gc_tx_table   constant varchar2(30 char) := 'TEST_UC_AI_A2A_WRITES';
 
   gc_ep_echo    constant varchar2(50 char) := 'test-a2a-echo';
   gc_ep_open    constant varchar2(50 char) := 'test-a2a-open';
@@ -33,6 +36,8 @@ create or replace package body test_uc_ai_a2a as
   gc_ep_base    constant varchar2(50 char) := 'test-a2a-base';
   gc_ep_extras  constant varchar2(50 char) := 'test-a2a-extras';
   gc_ep_keys    constant varchar2(50 char) := 'test-a2a-keys';
+  gc_ep_txw     constant varchar2(50 char) := 'test-a2a-txw';
+  gc_ep_txok    constant varchar2(50 char) := 'test-a2a-txok';
 
   gc_card_url   constant varchar2(200 char) := 'https://h.example/ords/s/a2a/';
   gc_push_url   constant varchar2(200 char) := 'https://push.example/hook';
@@ -142,8 +147,70 @@ dnMpQo4Q+8D6VN6swnKkB64=
   end create_workflow;
 
 
+  -- A workflow whose first step writes a marker row and whose second step runs p_second
+  procedure create_writing_workflow(
+    p_code   in varchar2,
+    p_second in varchar2
+  )
+  as
+    l_def json_object_t := json_object_t('{"workflow_type":"sequential","steps":[]}');
+    l_list json_array_t := json_array_t();
+    l_step json_object_t;
+    l_id   number;
+  begin
+    l_step := json_object_t();
+    l_step.put('step_type', 'plsql');
+    l_step.put('plsql_function_call',
+      -- one bind only (:parameters) is allowed in a step, so the marker goes in as a quoted literal
+      'begin execute immediate ''insert into ' || gc_tx_table || ' (marker) values ('' || sys.dbms_assert.enquote_literal(json_object_t(:parameters).get_object(''input'').get_string(''text'')) || '')''; return ''written''; end;');
+    l_step.put('output_key', 'w');
+    l_list.append(l_step);
+    l_step := json_object_t();
+    l_step.put('step_type', 'plsql');
+    l_step.put('plsql_function_call', p_second);
+    l_step.put('output_key', 'r');
+    l_list.append(l_step);
+    l_def.put('steps', l_list);
+
+    l_id := uc_ai_agents_api.create_agent(
+      p_code                => p_code,
+      p_description         => 'A2A transaction test agent ' || p_code,
+      p_agent_type          => uc_ai_agents_api.c_type_workflow,
+      p_workflow_definition => l_def.to_clob,
+      p_input_schema        => '{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}',
+      p_status              => uc_ai_agents_api.c_status_active
+    );
+    commit;
+    ut.expect(l_id).to_be_not_null();
+  end create_writing_workflow;
+
+
+  -- Rows of the scratch table with this marker (dynamic: the table is created by setup)
+  function tx_rows(p_marker in varchar2) return number
+  as
+    l_sql   varchar2(200 char) := 'select count(*) from ' || gc_tx_table || ' where marker = :m';
+    l_count number;
+  begin
+    execute immediate l_sql into l_count using p_marker;
+    return l_count;
+  end tx_rows;
+
+
+  -- Whether the scratch table of the transaction tests exists
+  function tx_table_exists return boolean
+  as
+    l_found pls_integer;
+  begin
+    select case when exists (select 1 from user_tables where table_name = gc_tx_table) then 1 else 0 end
+      into l_found
+      from dual;
+    return l_found = 1;
+  end tx_table_exists;
+
+
   procedure setup
   as
+    l_ddl varchar2(200 char);
   begin
     uc_ai.g_enable_tools := false;
     uc_ai.g_enable_reasoning := false;
@@ -164,6 +231,15 @@ dnMpQo4Q+8D6VN6swnKkB64=
       gc_fail_agent
     , q'#declare l_x varchar2(10); begin raise_application_error(-20999, 'boom secret ORA-01017 detail'); return l_x; end;#'
     );
+
+    if not tx_table_exists then
+      l_ddl := 'create table ' || gc_tx_table || ' (marker varchar2(200 char))';
+      execute immediate l_ddl;
+    end if;
+    create_writing_workflow(gc_txw_agent, q'#declare l_x varchar2(10); begin raise_application_error(-20998, 'second step fails'); return l_x; end;#');
+    create_writing_workflow(gc_txok_agent, q'#return 'ok';#');
+    uc_ai_a2a.expose_agent(gc_ep_txw, gc_txw_agent, p_auth_mode => uc_ai_a2a.c_auth_none);
+    uc_ai_a2a.expose_agent(gc_ep_txok, gc_txok_agent, p_auth_mode => uc_ai_a2a.c_auth_none);
 
     uc_ai_a2a.expose_agent(gc_ep_echo, gc_echo_agent, p_name => 'Test Echo', p_card_version => '2.1.0');
     uc_ai_a2a.expose_agent(gc_ep_open, gc_echo_agent, p_auth_mode => uc_ai_a2a.c_auth_none);
@@ -189,8 +265,12 @@ dnMpQo4Q+8D6VN6swnKkB64=
 
   procedure teardown
   as
+    l_ddl varchar2(200 char) := 'drop table ' || gc_tx_table || ' purge';
   begin
     purge;
+    if tx_table_exists then
+      execute immediate l_ddl;
+    end if;
   end teardown;
 
 
@@ -1675,6 +1755,31 @@ dnMpQo4Q+8D6VN6swnKkB64=
     -- the status message is stored for the task
     ut.expect(db_state(l_task.get_string('id'))).to_equal(uc_ai_a2a_core.c_state_failed);
   end failure_hides_internals;
+
+
+  procedure failed_run_rolls_back_writes
+  as
+    l_marker varchar2(100 char) := 'txw-' || next_id;
+    l_task   json_object_t;
+  begin
+    l_task := rpc_task(rpc(gc_ep_txw, 'SendMessage', params_of('[{"text":"' || l_marker || '"}]'), null));
+    ut.expect(state_of(l_task)).to_equal('TASK_STATE_FAILED');
+    -- the first step wrote the row in the same session; the failed run took it back
+    ut.expect(tx_rows(l_marker)).to_equal(0);
+  end failed_run_rolls_back_writes;
+
+
+  procedure completed_run_commits_writes
+  as
+    l_marker varchar2(100 char) := 'txok-' || next_id;
+    l_task   json_object_t;
+  begin
+    l_task := rpc_task(rpc(gc_ep_txok, 'SendMessage', params_of('[{"text":"' || l_marker || '"}]'), null));
+    ut.expect(state_of(l_task)).to_equal('TASK_STATE_COMPLETED');
+    -- committed by the server, so a rollback of the caller cannot take it back
+    rollback;
+    ut.expect(tx_rows(l_marker)).to_equal(1);
+  end completed_run_commits_writes;
 
 
   -- ==========================================================================

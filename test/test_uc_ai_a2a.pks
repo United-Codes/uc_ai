@@ -171,6 +171,12 @@ create or replace package test_uc_ai_a2a as
   --%test(A failing agent run is FAILED without internals)
   procedure failure_hides_internals;
 
+  --%test(A failed run rolls back what its steps wrote; the task is FAILED and the row is gone)
+  procedure failed_run_rolls_back_writes;
+
+  --%test(A completed run has committed what its steps wrote when the task shows COMPLETED)
+  procedure completed_run_commits_writes;
+
   -- Push notifications
 
   --%test(Push configurations can be created, read, listed and deleted)
