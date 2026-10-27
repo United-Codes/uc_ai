@@ -782,6 +782,110 @@ end;]';
     -- No existing row can have the type 'decision'.
     ensure_constraint('uc_ai_agents', 'uc_ai_agents_decision_ck', q'[check (
       agent_type <> 'decision' or decision_config is not null) enable novalidate]');
+
+    step('v26.5: A2A server');
+
+    ensure_sequence('uc_ai_a2a_endpoints_seq');
+    ensure_table('uc_ai_a2a_endpoints', q'[create table uc_ai_a2a_endpoints (
+  id                number default on null uc_ai_a2a_endpoints_seq.nextval not null,
+  code              varchar2(100 char)  not null,
+  agent_code        varchar2(255 char)  not null,
+  agent_version     number,
+  name              varchar2(255 char)  not null,
+  description       varchar2(4000 char),
+  card_version      varchar2(50 char)   default on null '1.0.0' not null,
+  text_input_param  varchar2(255 char),
+  auth_mode         varchar2(20 char)   default on null 'api_key' not null,
+  accept_files      varchar2(1 char)    default on null 'Y' not null,
+  allow_async       varchar2(1 char)    default on null 'Y' not null,
+  enabled           varchar2(1 char)    default on null 'Y' not null,
+  base_url          varchar2(1000 char),
+  card_extras       clob,
+  signing_kid       varchar2(255 char),
+  signing_key       clob,
+  signing_jku       varchar2(1000 char),
+  created_by  varchar2(255 char) default on null coalesce(sys_context('APEX$SESSION','APP_USER'), user) not null,
+  created_at  timestamp          default on null systimestamp not null,
+  updated_by  varchar2(255 char) default on null coalesce(sys_context('APEX$SESSION','APP_USER'), user) not null,
+  updated_at  timestamp          default on null systimestamp not null,
+  constraint uc_ai_a2a_endpoints_pk primary key (id),
+  constraint uc_ai_a2a_endpoints_uk unique (code),
+  constraint uc_ai_a2a_endpoints_code_ck check (regexp_like(code, '^[a-z0-9][a-z0-9_-]*$')),
+  constraint uc_ai_a2a_endpoints_auth_ck check (auth_mode in ('api_key', 'oauth2', 'none')),
+  constraint uc_ai_a2a_endpoints_files_ck check (accept_files in ('Y', 'N')),
+  constraint uc_ai_a2a_endpoints_async_ck check (allow_async in ('Y', 'N')),
+  constraint uc_ai_a2a_endpoints_en_ck check (enabled in ('Y', 'N')),
+  constraint uc_ai_a2a_endpoints_extras_ck check (card_extras is json)
+)]');
+
+    ensure_sequence('uc_ai_a2a_api_keys_seq');
+    ensure_table('uc_ai_a2a_api_keys', q'[create table uc_ai_a2a_api_keys (
+  id            number default on null uc_ai_a2a_api_keys_seq.nextval not null,
+  endpoint_id   number              not null,
+  client_name   varchar2(255 char)  not null,
+  key_prefix    varchar2(20 char)   not null,
+  key_hash      varchar2(64 char)   not null,
+  expires_at    timestamp,
+  revoked_at    timestamp,
+  last_used_at  timestamp,
+  created_by  varchar2(255 char) default on null coalesce(sys_context('APEX$SESSION','APP_USER'), user) not null,
+  created_at  timestamp          default on null systimestamp not null,
+  constraint uc_ai_a2a_api_keys_pk primary key (id),
+  constraint uc_ai_a2a_api_keys_hash_uk unique (key_hash),
+  constraint uc_ai_a2a_api_keys_client_uk unique (endpoint_id, client_name),
+  constraint uc_ai_a2a_api_keys_ep_fk foreign key (endpoint_id)
+    references uc_ai_a2a_endpoints(id) on delete cascade
+)]');
+
+    ensure_table('uc_ai_a2a_tasks', q'[create table uc_ai_a2a_tasks (
+  task_id         varchar2(36 char)   not null,
+  context_id      varchar2(255 char)  not null,
+  endpoint_id     number              not null,
+  client_id       varchar2(255 char)  not null,
+  message_id      varchar2(255 char),
+  execution_id    number,
+  state           varchar2(30 char)   not null,
+  status_message  varchar2(4000 char),
+  request_message clob,
+  pending_request clob,
+  result          clob,
+  job_name        varchar2(128 char),
+  created_at      timestamp           not null,
+  updated_at      timestamp           not null,
+  constraint uc_ai_a2a_tasks_pk primary key (task_id),
+  constraint uc_ai_a2a_tasks_msg_uk unique (endpoint_id, client_id, message_id),
+  constraint uc_ai_a2a_tasks_ep_fk foreign key (endpoint_id)
+    references uc_ai_a2a_endpoints(id) on delete cascade,
+  constraint uc_ai_a2a_tasks_exec_fk foreign key (execution_id)
+    references uc_ai_agent_executions(id) on delete cascade,
+  constraint uc_ai_a2a_tasks_state_ck check (state in (
+    'TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING', 'TASK_STATE_COMPLETED', 'TASK_STATE_FAILED',
+    'TASK_STATE_CANCELED', 'TASK_STATE_INPUT_REQUIRED', 'TASK_STATE_REJECTED', 'TASK_STATE_AUTH_REQUIRED')),
+  constraint uc_ai_a2a_tasks_reqmsg_ck check (request_message is json),
+  constraint uc_ai_a2a_tasks_pending_ck check (pending_request is json),
+  constraint uc_ai_a2a_tasks_result_ck check (result is json)
+)]');
+    ensure_index('uc_ai_a2a_tasks_ctx_idx', 'create index uc_ai_a2a_tasks_ctx_idx on uc_ai_a2a_tasks(context_id)');
+    ensure_index('uc_ai_a2a_tasks_client_idx', 'create index uc_ai_a2a_tasks_client_idx on uc_ai_a2a_tasks(endpoint_id, client_id, updated_at)');
+    ensure_index('uc_ai_a2a_tasks_exec_idx', 'create index uc_ai_a2a_tasks_exec_idx on uc_ai_a2a_tasks(execution_id)');
+
+    ensure_table('uc_ai_a2a_push_configs', q'[create table uc_ai_a2a_push_configs (
+  id                varchar2(36 char)   not null,
+  task_id           varchar2(36 char)   not null,
+  config_id         varchar2(255 char)  not null,
+  url               varchar2(4000 char) not null,
+  token             varchar2(4000 char),
+  auth_scheme       varchar2(100 char),
+  auth_credentials  varchar2(4000 char),
+  last_status       number,
+  last_error        varchar2(4000 char),
+  last_attempt_at   timestamp,
+  created_at        timestamp           not null,
+  constraint uc_ai_a2a_push_configs_pk primary key (id),
+  constraint uc_ai_a2a_push_configs_uk unique (task_id, config_id),
+  constraint uc_ai_a2a_push_configs_task_fk foreign key (task_id)
+    references uc_ai_a2a_tasks(task_id) on delete cascade
+)]');
   end release_v26_5;
 begin
   say('Upgrading the UC AI schema objects...');

@@ -207,6 +207,8 @@ opens a connection, and `memory` drives `uc_ai_memory.execute_command` directly 
 its one `execute_agent` call is the test that expects the run to fail at start.
 `agent_prompt_addendum` answers every request from `uc_ai_test_http_mock`.
 Keep that property when you add a test to them.
+`test_uc_ai_a2a` (the A2A server) is in the set too: it calls `uc_ai_a2a.process_request`
+on workflow agents with `plsql` steps only, and catches push notifications with `uc_ai_test_http_mock`.
 
 **Do not** put these in the LLM-free set: `test_uc_ai_prompt_profiles_api` calls
 `execute_profile` 25 times, and every `test_uc_ai_agent_*` suite not named above

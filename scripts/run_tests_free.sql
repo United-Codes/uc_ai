@@ -60,6 +60,7 @@ begin
   , 'test_uc_ai_decisions_wire'
   , 'test_uc_ai_tools_wire'
   , 'test_uc_ai_spec_wire'
+  , 'test_uc_ai_a2a'
   ));
 end;
 /

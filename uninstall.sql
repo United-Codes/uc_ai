@@ -48,6 +48,8 @@ DROP PACKAGE uc_ai_google;
 DROP PACKAGE uc_ai_anthropic;
 
 PROMPT Dropping API packages...
+DROP PACKAGE uc_ai_a2a;
+DROP PACKAGE uc_ai_a2a_core;
 DROP PACKAGE uc_ai_utils;
 DROP PACKAGE uc_ai_agent_workflow_api;
 DROP PACKAGE uc_ai_agent_exec_api;

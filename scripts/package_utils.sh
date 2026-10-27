@@ -40,6 +40,10 @@ declare -a API_PACKAGES=(
     "uc_ai_agent_exec_api"
     "uc_ai_agent_workflow_api"
     "uc_ai_utils"
+    # a2a_core before a2a: the a2a body calls the core. Both call agents_api and the
+    # message api (all specs exist before any body). Only dynamic SQL touches ORDS.
+    "uc_ai_a2a_core"
+    "uc_ai_a2a"
 )
 
 # Provider packages (alphabetical order)

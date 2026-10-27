@@ -198,6 +198,17 @@ uc_ai_message_api.create_file_content(
 )
 ```
 
+## Publishing an agent over A2A
+
+```sql
+uc_ai_a2a.install_ords_module;                          -- once per schema
+uc_ai_a2a.expose_agent('support', 'support_bot');       -- endpoint code, agent code
+dbms_output.put_line(uc_ai_a2a.create_api_key('support', 'crm_system'));
+commit;                                                  -- ORDS reads committed rows
+```
+
+The card is at `<ords>/<schema>/a2a/support/.well-known/agent-card.json`. See the [A2A server](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/) guide.
+
 ## Config-driven calls vs globals
 
 There are two ways to configure a call:
