@@ -54,6 +54,7 @@ export default defineConfig({
 				{
 					label: "UC AI",
 					items: ["index"],
+					collapsed: true,
 				},
 				{
 					// ONE menu entry for everything: tutorial/index.mdx lists the
@@ -63,12 +64,12 @@ export default defineConfig({
 					// under tutorial/ plus a card on that index page — no config
 					// change at all.
 					label: "Tutorials",
-					collapsed: false,
 					badge: {
 						text: "New",
 						variant: "success",
 					},
 					items: ["tutorial"],
+					collapsed: true,
 				},
 				{
 					label: "Guides",
@@ -98,6 +99,7 @@ export default defineConfig({
 								"guides/toon",
 								"guides/event-callbacks",
 							],
+							collapsed: true,
 						},
 						{
 							label: "Agents",
@@ -140,10 +142,12 @@ export default defineConfig({
 				{
 					label: "Provider Setup",
 					items: [{ autogenerate: { directory: "providers" } }],
+					collapsed: true,
 				},
 				{
 					label: "API Reference",
 					items: [{ autogenerate: { directory: "api" } }],
+					collapsed: true,
 				},
 				{
 					label: "Other",
