@@ -119,7 +119,7 @@ END;
   match a parameter with the name 'country'.
 </Aside>
 
-UC AI fills the placeholders of a template in one pass and inserts each value as it is. A value that contains `{other}` stays unchanged, and it does not take the value of the parameter `other`. A backslash in a value stays, and a value of more than 32,767 characters works.
+UC AI replaces each placeholder with the parameter value that you supply. It preserves the text inside that value. For example, `{other}` inside a value stays as text instead of referring to another parameter. Backslashes also stay unchanged. Parameter values can exceed 32,767 characters.
 
 In an agent run, a placeholder can also take its value from the
 [run context](/products/uc-ai/docs/guides/tools/#the-run-context). A caller that

@@ -56,7 +56,7 @@ uc_ai.ocr(p_url => 'https://...', p_provider => uc_ai.c_provider_mistral) return
 uc_ai.ocr_text(l_blob, 'application/pdf', uc_ai.c_provider_mistral) return clob;
 ```
 
-The next call is experimental. It answers named questions about a text with typed answers and probabilities. See [Decide](/products/uc-ai/docs/api/decide/).
+The next call is experimental. It answers questions about a text with choices, scores, and probabilities. See [Decide](/products/uc-ai/docs/api/decide/).
 
 ```sql
 -- Decide: typed answers with probabilities (OpenAI, TypeSafe and OpenRouter only)
@@ -112,7 +112,7 @@ dbms_output.put_line( l_result.get_clob('final_message') );
 | --- | --- | --- |
 | `answers` | object | One answer for each question id. `type` is `boolean`, `choice`, `score` or `refused`. |
 | `usage` | object | `input_tokens`, `output_tokens` and `total_tokens`, where the provider reports them. |
-| `model` | string | The model that answered. TypeSafe reports the pinned version. |
+| `model` | string | The model that answered. TypeSafe reports the specific model version that answered. |
 | `provider_metadata` | object | `confidence` for choice and score questions, and `usage`. |
 | `warnings` | array | Problems that did not stop the call. |
 | `raw` | object | The response of the provider. |

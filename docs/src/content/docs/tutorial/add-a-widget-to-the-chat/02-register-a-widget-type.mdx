@@ -31,12 +31,14 @@ have:
 | A row the user can click | No | Yes. The row raises an event in your page |
 
 The chat calls your package in the step that renders the answer. Your package
-returns a list, and the browser draws it. The browser has no code of yours.
+returns a list, and the browser draws it. The built-in list component needs no custom JavaScript.
 
 ## The two members of a provider package
 
-A **provider** is a package in your schema with these two members. The names of
-the members and of the parameters are fixed, because the chat calls them by name.
+A widget **provider package** supplies the `get_protocol` function and `build_spec`
+procedure. This package builds widgets. It does not connect to an AI provider.
+Use the exact routine and parameter names shown here, because the chat calls
+them by name.
 `register_type` does not check the parameters, so test `build_spec` by calling it,
 as lesson 4 does.
 
@@ -55,8 +57,8 @@ subtitle, an icon, badges, short texts, and one action. The
 [guide](/products/uc-ai/docs/guides/chat-widgets-custom-types/#the-item_list-render-type) has
 the exact limits.
 
-The chat does not trust the result. It builds the list again from the allowed
-keys, so your package cannot add HTML or a link. A value outside the limits makes
+The chat keeps only allowed keys from your package's result. Your package cannot
+add HTML or links to the list. A value outside the limits makes
 the widget invalid, and the user sees the block as text.
 
 The chat passes the registered name in `p_type`. One package can serve several
@@ -70,7 +72,7 @@ types if you register it under several names.
 {"type":"sc_invoices","invoice_nos":["INV-1003","INV-1001"],"title":"Two invoices"}
 ```
 
-`build_spec` makes three decisions. The complete package is in the script.
+`build_spec` applies three rules. The complete package is in the script.
 
 **1. The package shows an invoice only when a tool returned it.** The query looks
 for the invoice number in the result of `SC_LIST_INVOICES` in the same answer:
@@ -93,9 +95,8 @@ and exists (
 
 `SC_LIST_INVOICES` reads only the contract of the run, which comes from the run
 context. An invoice that this tool did not return cannot appear in the list. The
-widget uses the rule of the tool, and the package does not repeat it. The name
-matches in a tolerant way (`upper` and `like`), because the chat gives the package the
-name of the tool as the model provider wrote it.
+widget uses the rule of the tool, and the package does not repeat it. The package uses `upper` and `like` to match tool names regardless of letter case
+or provider-added prefixes.
 
 **2. The database writes every visible value.** The package reads the amounts and
 the date from `sc_invoices`, and the credit total from `sc_credit_notes`. It sets
@@ -208,7 +209,7 @@ The widget part, shortened to two items and joined on fewer lines:
 
 The dates depend on the day on which you set up the schema, because the setup
 script sets each date relative to `sysdate`. The amounts and the badges come from
-the seed data. A credit note that you raise changes the badge.
+the seed data. A new credit note changes the badge the next time the package builds the list.
 
 The part has the type `item_list`, and not `sc_invoices`. `sc_invoices` is the
 name that the model uses. `item_list` is the type that the browser draws. The

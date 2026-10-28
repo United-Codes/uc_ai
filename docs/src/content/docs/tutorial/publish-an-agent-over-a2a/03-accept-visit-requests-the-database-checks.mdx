@@ -21,8 +21,8 @@ import AiOutput from "../../../../components/AiOutput.astro";
 ## Four rules decide a visit request
 
 A partner can now ask for a service visit on one of its machines. The model collects the machine and
-the date. The database decides. `partner_desk_pkg.check_visit` returns the reason code of the first rule
-that refuses, or `null` when the visit is allowed:
+the date. The database applies four rules. `partner_desk_pkg.check_visit` returns the reason code
+for the first failed rule, or `null` if all rules pass:
 
 | Order | Rule | Reason code |
 | --- | --- | --- |
@@ -35,9 +35,8 @@ Working days are Monday to Friday. The course does not model holidays. The weekd
 `trunc(d) - trunc(d, 'IW')`, where 0 is Monday and 5 and 6 are the weekend. It does not
 depend on the NLS parameters of the session. Today is a parameter, `p_today`, so a test can fix it.
 
-A booking creates a `partner_visits` row with the status `REQUESTED`. It never creates a
-confirmed visit. A person at the service company confirms the request. In this course,
-"confirm" has its business meaning: a planner accepts the request.
+A booking creates a `partner_visits` row with the status `REQUESTED`. A planner at the service company must accept the request before the visit is
+confirmed.
 
 ## Test the booking rule without a model
 
@@ -80,14 +79,17 @@ The new rules of the prompt are these:
 - The database decides. When a tool refuses, the agent tells the partner the reason.
 - A visit is a request until a planner confirms it. The agent never says that a visit is confirmed.
 
-Version 1 stays active, as the version to go back to. To go back, call `update_agent` with
-`p_prompt_profile_version => 1`. The endpoint has no agent version, so it runs the active
-agent version, and that agent now uses profile version 2. The next message to the endpoint uses the new prompt.
+Profile version 1 stays active, so you can restore it with `update_agent` and
+`p_prompt_profile_version => 1`.
+
+The endpoint does not specify an agent version, so it runs the active agent.
+That agent now uses profile version 2. The next message to the endpoint uses the new prompt.
 
 <Aside type="tip" title="Pin the profile version of a published agent">
-An agent without a pinned profile version runs the latest active version. Then each new active version
-goes to all partners at once. With a pinned version, a change of the prompt is one `update_agent` call
-that you make on purpose, and the way back is the same call with the old version.
+An agent without a pinned profile version runs the latest active version. A newly activated profile version then
+affects all partners. To control when the agent changes prompts, assign a specific
+profile version with `update_agent`. To restore an earlier prompt, call it again
+with the old version.
 </Aside>
 
 The verification output of the script:
@@ -150,7 +152,8 @@ curl -X POST "$A2A_BASE/jsonrpc" \
 Visit requested for FX-PRESS-01 on 2026-11-03. A planner still needs to confirm it.
 </AiOutput>
 
-The wording changes from run to run. Which request the database refuses does not.
+The wording can change between runs. The database still rejects a second open
+request for the same machine.
 
 ## Read the tool result next to the answer
 
@@ -175,8 +178,7 @@ _____ ______________ ________________ ____________ __________________
     2 FX-PRESS-01    2026-11-03       REQUESTED    apikey:ferrolux
 ```
 
-The `tool_result` row has the reason `OPEN_REQUEST` and a message. The artifact text is the model
-explaining that row. The artifact does not show the reason code. To see why a request failed, read the
+The `tool_result` row has the reason `OPEN_REQUEST` and a message. The artifact text is the model's explanation of that result. The artifact does not show the reason code. To see why a request failed, read the
 `tool_result` row. The table has exactly one new row, for the press, with `client_id` `apikey:ferrolux`.
 
 The press now has an open request. To repeat this lesson, delete that row, or run `00_setup.sql` again:
@@ -188,8 +190,8 @@ commit;
 
 ## A booking is a request
 
-The model can pick the wrong machine on a valid date. The run completes, so no rollback helps, and the
-row exists. The row has the status `REQUESTED`. A planner at the service company sees it and
+The model can request the wrong machine even if the machine and date pass all rules.
+A successful run commits that request. The row has the status `REQUESTED`. A planner at the service company sees it and
 decides. The database checks the rules. A person confirms the visit.
 
 ## The run is one transaction
@@ -234,7 +236,8 @@ refuses every tool call:
 I can’t find your company as a known partner, so I can’t list its machines or contract status.
 </AiOutput>
 
-A valid key opens the endpoint. It does not give the client any data. The row in `partner_clients` does.
+A valid key authenticates the client at the endpoint. The handlers use
+`partner_clients` to determine which customer's data that client can access.
 Lesson 4 revokes this key.
 
 ## The text of a partner is untrusted input
@@ -247,9 +250,9 @@ The course [Secure an Agent](/products/uc-ai/docs/tutorial/secure-an-agent/01-th
 
 ## Run the model-free checks
 
-`99_check.sql` runs 25 checks without a model. The checks refuse every rule once, run the accept paths, and
-test both sides of the 2-working-day boundary. They also call the handlers with `ferrolux`, `northwind`,
-an unknown client, a forged asset and a forged `customer_id` argument. It changes no data. The one booking that it makes is rolled back.
+`99_check.sql` runs 25 checks without a model. The checks exercise each rejection rule, requests that pass the rules, and
+both sides of the 2-working-day boundary. They also call the handlers with `ferrolux`, `northwind`,
+an unknown client, a forged asset and a forged `customer_id` argument. The script rolls back its test booking, so it keeps no changes to the visit data.
 Run `@99_check.sql`:
 
 ```text
@@ -295,8 +298,8 @@ ________________________________
                                0
 ```
 
-The check ran after the press booking of this lesson. It does not depend on that row: the accept paths use the chiller of
-Northwind, which has no request.
+The check ran after the press booking of this lesson. It does not depend on that row: the accepted test requests use Northwind's
+chiller, which has no open request at this point.
 
 <LinkCard
   title="Next lesson: Prepare the endpoint for partners"

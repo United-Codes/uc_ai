@@ -38,18 +38,17 @@ it records a request, and a person at the service company decides.
 
 ## Choose A2A or your own ORDS endpoint
 
-You can also write an ORDS REST service for the desk. A2A gives the partner these
-things, and you write none of them:
+You can also write an ORDS REST service for the desk. A2A provides a standard interface with these features:
 
 - An **agent card**: a public JSON document. It tells a client where the agent is,
   how to call it, and how to authenticate.
-- Clients that already exist. The official A2A SDKs and agent frameworks read the
-  card, so the partner writes no integration code.
+- Existing client libraries. Official A2A SDKs and compatible agent frameworks
+  read the card, so the partner can use a standard client.
 - Tasks, conversations and error codes that the protocol defines.
 
-A plain REST endpoint is the better choice when you write both the caller and the
-service, and the call is fixed. A2A pays off when the caller is a system that you
-do not control. The reference page [A2A Server](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/)
+A custom REST endpoint can suit a fixed operation when you control both the
+caller and the service. A2A provides a shared protocol for systems that you do
+not control. The reference page [A2A Server](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/)
 lists everything the server supports.
 
 ## Before you start
@@ -163,7 +162,7 @@ The profile has one required input, a string named `question`:
 
 One required string input is what lets the server map the text of an A2A message to
 the agent. The script creates the profile `PARTNER_DESK_PROFILE` and the agent
-`partner_desk`, and activates both. A draft is invisible to a call that names no version.
+`partner_desk`, and activates both. A call without a version number uses the active version and ignores drafts.
 
 ## Publish the endpoint and create the API keys
 
@@ -218,7 +217,8 @@ export A2A_BASE=https://api.example.com/ords/demo/a2a/service-desk
 curl "$A2A_BASE/.well-known/agent-card.json"
 ```
 
-Three parts of the card matter for a partner. This is the recorded card, shortened:
+The shortened card shows the interfaces, authentication requirements, and agent
+capability that a partner client reads:
 
 ```json
 {
@@ -304,11 +304,11 @@ Contract SC-2024-088, GOLD coverage, valid 2025-10-27 to 2027-04-25.
 </AiOutput>
 
 The answer lists two machines. Northwind's chiller is not in it, because the handler
-read the customer of `apikey:ferrolux`. The artifact is the final message of the agent.
+read the customer of `apikey:ferrolux`. The response stores the agent's final message in an A2A artifact.
 `metadata.usage` holds the tokens of the run: 666 input and 89 output. The wording, the
 tokens and the seconds change from run to run. The state, the two machine tags and the contract number come from the database.
 
-The same request without the `X-API-Key` header answers HTTP 401. The card is public. The calls are not:
+The same request without the `X-API-Key` header answers HTTP 401. The card is public, but messages require authentication:
 
 ```json
 {"jsonrpc":"2.0","id":"1","error":{"code":-32000,"message":"Authentication is required.","data":[]}}

@@ -1,6 +1,6 @@
 ---
 title: Prepare the endpoint for partners
-description: Run the whole desk job as a second partner, read the tokens of each partner, put the endpoint behind a proxy URL, run a request in the background, and turn off a key and an endpoint.
+description: Operate the endpoint for two partners. Track token usage, set a public URL, run background requests, and disable access.
 sidebar:
   order: 4
 ---
@@ -59,11 +59,11 @@ _____ ______________ ________________ ____________ ___________________
 ```
 
 The Northwind task called `PARTNER_ASSET_HISTORY`, and then `PARTNER_BOOK_VISIT`. The table has one request for each partner.
-Id 3 is missing. `99_check.sql` booked the chiller and rolled the booking back, and a rolled-back insert still uses a number
-of the identity column.
+ID 3 is missing because `99_check.sql` inserted a test booking and then rolled it back.
+A rollback does not reuse the number assigned by the identity column.
 
-The next queries sum the tokens of each client. A task has an `execution_id`, and the sum follows the runs
-that the execution started with `connect by`. It is the count that `metadata.usage` shows:
+The next queries sum the tokens of each client. Each task has an `execution_id`. The query uses `connect by` to include the
+execution and all its child runs. This gives the same totals as `metadata.usage`:
 
 ```text
 CLIENT_ID              TASKS    COMPLETED    FAILED    INPUT_TOKENS    OUTPUT_TOKENS
@@ -104,11 +104,11 @@ apikey:northwind           1 3.6            3.6            3.6
 
 ## Limit what a hostile key can do
 
-Assume that a key reaches a person that you did not intend. In this course:
+Consider what happens if someone obtains a partner's API key. In this course:
 
-- The worst result is token spend on your provider account, and what the tools can read or write for that one customer.
+- The key lets that person spend tokens on your provider account and use the tools available to that customer.
 - The agent card is public. It shows the name, the description and the URLs.
-- No rate limit exists in UC AI, so a limit in front of the endpoint is your control.
+- UC AI has no endpoint rate limit. Configure one in ORDS or the reverse proxy.
 
 Revoke the key of one client to stop it. The other clients keep working.
 [Secure the endpoint](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/#secure-the-endpoint) in the reference page lists the measures.
@@ -137,7 +137,8 @@ end;
 /
 ```
 
-The recorded database sits behind `localhost:8443`, so the URLs on the card show it. The card before the call:
+The recorded request reached ORDS through `localhost:8443`, so the original card
+advertises that host. The card before the call:
 
 ```text
 https://localhost:8443/ords/uc_ai/a2a/service-desk/jsonrpc
@@ -179,8 +180,8 @@ The press was last serviced on 2026-10-17 for its annual safety inspection.
 ```
 
 Three recorded runs gave the same result. In each run, the first answer came after less than 0.1 s, and the first poll at 2.1 s already
-showed `TASK_STATE_WORKING`. All three tasks completed after 4.1 s. A background run needs about 1 s more than a blocking
-call (2.5 s to 2.9 s in lesson 2). The job and the poll interval cause the difference. A busy database starts a job later: the
+showed `TASK_STATE_WORKING`. All three tasks completed after 4.1 s. In these recordings, a background request took about 1 s longer than a blocking
+call (2.5 s to 2.9 s in lesson 2). Job scheduling and the poll interval affect this time. A busy database starts a job later: the
 reference page says a minute or more. The advantage is that no ORDS connection waits for the run.
 
 A push notification sends the final task to a URL that the client registers, so the client does not poll. The
@@ -222,8 +223,9 @@ Call `set_enabled('service-desk', true)` to turn it on again. The recorded card 
 
 ## Remove the course objects
 
-Run `@00_teardown.sql` when you are done. It removes these objects: the endpoint with its keys and tasks, the tools, the
-profile with both versions, the agent with its history, the package, and the two `partner_` tables. It prints
+When you finish the course, run `@00_teardown.sql`. It deletes the endpoint, its
+keys and tasks, the tools, both profile versions, and the agent with its history.
+It also drops the package and the two `partner_` tables. It prints
 this when all the objects are gone:
 
 ```text

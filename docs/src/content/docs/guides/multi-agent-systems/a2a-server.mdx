@@ -7,7 +7,7 @@ sidebar:
 
 import { Aside } from "@astrojs/starlight/components";
 
-**The A2A server publishes an agent of UC AI as an [Agent2Agent (A2A)](https://a2a-protocol.org/) agent.** Other systems find the agent through its agent card and send it messages over HTTP. The package `uc_ai_a2a` does this work. ORDS serves the HTTP routes.
+**The A2A server publishes an agent of UC AI as an [Agent2Agent (A2A)](https://a2a-protocol.org/) agent.** Other systems read its **agent card**, a public JSON document with its URLs and authentication requirements. They then send messages over HTTP. The package `uc_ai_a2a` does this work. ORDS serves the HTTP routes.
 
 An A2A client can be another agent framework, an integration platform, or your own code with the official A2A SDK. The client does not need to know UC AI.
 
@@ -17,7 +17,7 @@ Use the A2A server when a system outside the database must call an agent. Use [a
 
 ## What the server supports
 
-- **Protocol version.** The server speaks A2A 1.0 only.
+- **Protocol version.** The server supports A2A 1.0 only.
 - **HTTP bindings.** JSON-RPC at `<base>/jsonrpc` and HTTP+JSON (REST) at `<base>/rest`.
 - **Operations.** `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask`, `SubscribeToTask`, the four push notification configuration methods, and `GetExtendedAgentCard`.
 - **Agent card.** `<base>/.well-known/agent-card.json`. The card is public.
@@ -83,7 +83,7 @@ Without `p_base_url`, the card shows the host and the path of the request that O
 
 ## Make a first call with curl
 
-The values in this section are recorded from a real run. The host is replaced with `api.example.com`. The agent is a workflow that echoes the question. The model-dependent text is therefore the echo text of this test agent, not the answer of a model. Replace `$API_KEY` with your key.
+The examples in this section come from a recorded run, with the host replaced by `api.example.com`. The test agent is a workflow that repeats the question without a model call. Set `$API_KEY` to your key before you run the requests.
 
 Get the agent card. This request needs no key:
 
@@ -200,9 +200,9 @@ The response:
 }
 ```
 
-The call blocks until the agent run ends. The `task` holds the state, the artifact with the result, and the message history. The `contextId` identifies the conversation for later messages.
+The call waits until the agent run ends. The response contains a **task**, which records this run's status, result, and message history. The result appears in an **artifact**, the A2A container for agent output. The `contextId` identifies the conversation and lets later messages continue it.
 
-The REST binding does the same without the JSON-RPC envelope. The path of the operation is `message:send`:
+The HTTP+JSON (REST) interface performs the same operation without the JSON-RPC wrapper. The path of the operation is `message:send`:
 
 ```sh
 curl -X POST https://api.example.com/ords/uc_ai/a2a/smoke/rest/message:send \
@@ -219,7 +219,7 @@ ORDS delivers an empty body when a POST has no `Content-Type` header. The server
 
 ## Call the endpoint from Python
 
-The official A2A SDK (`a2a-sdk`, tested with version 1.3) reads the card and chooses a binding. Pass an `httpx` client that sends the API key in each request, including the request for the card.
+The official A2A SDK (`a2a-sdk`, tested with version 1.3) reads the card and selects an interface, either JSON-RPC or HTTP+JSON. Pass an `httpx` client that sends the API key in each request, including the request for the card.
 
 ```python
 import asyncio
@@ -269,7 +269,7 @@ A message has parts. Each part is exactly one of `text`, `raw` (file bytes, base
 
 ### Text input
 
-The input parameter for text is `p_text_input_param`. If you leave it `null`, the server uses the only required string property of the input schema of the agent. If the agent has no such property, a text part is refused with an error that lists the expected properties. Clients must then send a `data` part:
+The input parameter for text is `p_text_input_param`. If you leave it `null`, the server uses the only required string property of the input schema of the agent. If the server cannot identify a single required string property, it rejects a text part with an error that lists the expected properties. Clients must then send a `data` part:
 
 ```json
 {
@@ -294,7 +294,7 @@ A message with the `contextId` of an earlier task continues the conversation in 
 
 A new `contextId` that the client picks must match `^[A-Za-z0-9._:-]{1,128}$` and must not belong to another client. A message without a `contextId` starts a new context. A `contextId` that the client does not own is refused with the same error as a malformed one. The error does not show whether the context exists.
 
-A message that sets the `taskId` of an own task is refused with `UnsupportedOperation`, because a task is one run. A `taskId` of another client answers `TaskNotFound`. To continue, send a new message with the `contextId` and without the `taskId`. If a client sends the same `messageId` again, the server returns the task of the first call and does not run the agent again.
+A message with a `taskId` for one of the client's tasks returns `UnsupportedOperation`. Each task represents one run and cannot receive another message. A `taskId` that belongs to another client returns `TaskNotFound`. To continue, send a new message with the `contextId` and without the `taskId`. If a client sends the same `messageId` again, the server returns the task of the first call and does not run the agent again.
 
 ## Read the output
 
@@ -319,10 +319,10 @@ When the run fails, the task has the state `TASK_STATE_FAILED` and the status me
 Each run is one transaction, and the server owns it. Tools that write data do not commit.
 
 - When the run completes, the server commits the changes of the tools. Then it sets the task to `TASK_STATE_COMPLETED`. A client that reads a completed task finds the changed rows.
-- When the run fails, the server rolls back the changes of the tools. A failed task leaves no rows of a half-done run. The trace rows of the run stay, because UC AI writes them in their own transaction.
+- When the run fails, the server rolls back the changes of the tools. A failed task does not keep partial changes made by those tools. The trace rows of the run stay, because UC AI writes them in their own transaction.
 - When a client cancels a running task, the database rolls back the uncommitted changes of the stopped job.
 
-If a tool must keep a row also when the run fails, for example an audit row, write that row in an autonomous transaction.
+If a tool must keep a row even when the run fails, for example an audit row, write that row in an autonomous transaction.
 
 ## Authenticate clients
 
@@ -439,7 +439,9 @@ The client polls with `GetTask`:
 { "jsonrpc": "2.0", "id": "2", "method": "GetTask", "params": { "id": "c11fb3e7-a681-435d-8d39-53d873d10887", "historyLength": 0 } }
 ```
 
-`historyLength` limits the messages in the answer. Unset returns all messages, and `0` returns none. `ListTasks` returns the tasks of the client, newest first. It accepts `contextId`, `status`, `pageSize` (1 to 100, default 50), `pageToken`, `statusTimestampAfter` and `includeArtifacts`. In the REST binding, these are query parameters:
+`historyLength` limits the messages returned with the task. If you omit it, the response includes all messages. A value of `0` excludes messages.
+
+`ListTasks` returns the tasks of the client, newest first. It accepts `contextId`, `status`, `pageSize` (1 to 100, default 50), `pageToken`, `statusTimestampAfter` and `includeArtifacts`. In the REST binding, these are query parameters:
 
 ```sh
 curl "https://api.example.com/ords/uc_ai/a2a/smoke/rest/tasks?pageSize=1" -H "X-API-Key: $API_KEY"
@@ -505,11 +507,11 @@ A client can give a URL that the server calls when a task reaches a final state 
 
 The response has the new configuration with its generated `id`. The server sends `POST {"task": {...}}` to the URL, with `Content-Type: application/a2a+json`. When the task is in a final state already, the server sends the task to the new URL at once. It adds the header `X-A2A-Notification-Token` when the configuration has a `token`. It adds `Authorization: <scheme> <credentials>` when the configuration has `authentication`. A failed delivery is logged and stored with the configuration. It does not raise an error. Deleting a configuration that does not exist is not an error.
 
-With `p_allow_async => false`, the push notification methods answer `PushNotificationNotSupported`.
+If `p_allow_async` is `false`, the push notification methods return `PushNotificationNotSupported`.
 
 ## Add card content
 
-The server builds the card from the endpoint and the agent. The skill has the agent code as `id`, and the agent type as the only tag. `p_card_extras` adds more content as a JSON object:
+The server builds the card from the endpoint and the agent. The card describes the agent as an A2A **skill**: an advertised capability that clients can discover. Its `id` is the agent code, and its only default tag is the agent type. `p_card_extras` adds more content as a JSON object:
 
 ```sql
 begin
@@ -561,7 +563,7 @@ end;
 The procedure tries the key once and raises `-20435` if the key does not work. The public card and the extended card both carry the `signatures` field. Pass a null key to stop signing. The signature of a test card passed the signature verifier of the A2A SDK.
 
 <Aside type="caution" title="Protect the key table">
-UC AI stores the private key as given, in the column `uc_ai_a2a_endpoints.signing_key`. Restrict access to this table.
+UC AI stores the private key directly, in the column `uc_ai_a2a_endpoints.signing_key`. Restrict access to this table.
 </Aside>
 
 A card of about 24 KB or more is too large to sign. The server then serves it without a signature and logs the error.
@@ -577,7 +579,7 @@ An A2A client is a third party. Its message text and data reach the agent as inp
 
 ## Known limits
 
-- The server speaks A2A 1.0 only. A client for version 0.3 gets `VersionNotSupported` (`-32009`). The old method names, for example `message/send`, get the same error.
+- The server supports A2A 1.0 only. A client for version 0.3 gets `VersionNotSupported` (`-32009`). The old method names, for example `message/send`, get the same error.
 - A request without an `A2A-Version` header is treated as version 1.0. This differs from the specification. It makes calls with curl simpler.
 - The server ignores the `A2A-Extensions` header.
 - ORDS buffers streams. All events arrive when the run ends.

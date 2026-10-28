@@ -19,15 +19,14 @@ import LessonHeader from "../../../../components/LessonHeader.astro";
 
 ## Call the package without a model
 
-A model that does not show an invoice of another contract is not evidence that the
-widget cannot show it. The model can write any invoice number, and an injected
-instruction in a tool result can change what it writes. The rule must hold when the
-model does the wrong thing.
+Test whether the package rejects invoice numbers from another contract. The model
+can supply any number, including one suggested by a hostile instruction in a tool
+result. The package must enforce the contract restriction for those inputs too.
 
-`04_prove_limits.sql` calls `SC_WIDGET_PKG.BUILD_SPEC` directly. It sends specs that
-a model can write, together with the real result of `SC_LIST_INVOICES` for
-contract 88. The contract 88 owns `INV-1001`, `INV-1002`, and `INV-1003`. The
-contract 99 owns `INV-2001`. The script first reads `INV-2001`, so you see that it
+`04_prove_limits.sql` calls `SC_WIDGET_PKG.BUILD_SPEC` directly. It passes sample widget
+specifications together with the real result of `SC_LIST_INVOICES` for
+contract 88. Contract 88 has `INV-1001`, `INV-1002`, and `INV-1003`.
+Contract 99 has `INV-2001`. The script first reads `INV-2001`, so you see that it
 exists.
 
 ```sh
@@ -59,7 +58,7 @@ INV-2001 exists and belongs to contract 99
 
 | Case | What it establishes |
 | --- | --- |
-| 1, 2 | A grounded invoice is shown. The list keeps the order of the model |
+| 1, 2 | An invoice from the tool result is shown. The list keeps the order requested by the model |
 | 3 | `INV-2001` exists in the table, as the first line of the output shows. `SC_LIST_INVOICES` did not return it for contract 88, so the widget does not show it |
 | 4 | The package leaves out the invoice that no tool returned, and it shows the other one. The list does not say which one it left out |
 | 5 | Without a tool call in the answer, no invoice can be shown |
@@ -78,9 +77,9 @@ returns invoices of other contracts, the widget shows them. Keep the rule in the
 tool, and test the tool as the course Build an Agent does.
 
 <Aside type="caution" title="The package must still check access">
-Grounding limits the widget to what a tool returned. It does not replace an access
-check in your package. If your widget shows data that a tool did not filter by
-user, check the permission of the current user in `build_spec`. The package runs in
+An invoice identifier in a tool result is sufficient here because the tool already
+restricts results to the current contract. If your tool does not apply access
+restrictions, make sure that the current user can access each record in `build_spec`. The package runs in
 the job of the answer, after the attribute **Session Init Code** of the region has run.
 </Aside>
 
@@ -103,8 +102,8 @@ Two more behaviors follow from how the chat renders:
 
 ## Key takeaways
 
-- Test a check by calling the package with values that a model must not use. A
-  refusal of a model proves nothing about the package.
+- Call the package directly with invoice numbers outside the current contract.
+  This tests the package's access restriction independently of model behavior.
 - The widget has the limit of the tool. It shows an invoice only when the tool
   returned it in the same answer.
 - A rejected block shows as text. An error in the package does not fail the answer.

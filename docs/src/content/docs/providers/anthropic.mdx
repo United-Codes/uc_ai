@@ -43,7 +43,9 @@ Also set `Valid for URLs` to the Anthropic API (https://api.anthropic.com/) to l
 </TabItem>
 <TabItem label="PL/SQL">
 
-Run this block as the schema that holds UC AI. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the Anthropic API. The `apex_util.set_workspace` call is only necessary outside an APEX session, for example in SQLcl.
+Connect to the schema that holds UC AI, then run this block. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the Anthropic API.
+
+Outside an APEX session, for example in SQLcl, uncomment the `apex_util.set_workspace` call. Replace `MY_WORKSPACE` with the name of the APEX workspace associated with your schema.
 
 ```sql
 begin
@@ -212,7 +214,7 @@ Refer to the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) f
 Claude models support reasoning. When you enable it, Claude reasons internally before it gives its final answer. Refer to Anthropics [Extended Thinking guide](https://platform.claude.com/docs/en/build-with-claude/extended-thinking) for model support and best practices.
 
 :::caution
-Anthropic removed the extended thinking parameter for Claude Opus 4.7 and later models. These models think adaptively, and UC AI cannot set a reasoning budget for them. Use Claude Haiku 4.5 if you want to control the budget. Claude Sonnet 4.5 also takes a budget, but Anthropic retires it on 2026-11-30.
+Anthropic removed the extended thinking parameter for Claude Opus 4.7 and later models. These models control how much reasoning they use. UC AI cannot set a reasoning token budget for them. Use Claude Haiku 4.5 if you want to control the budget. Claude Sonnet 4.5 also takes a budget, but Anthropic retires it on 2026-11-30.
 :::
 
 Make sure to set the `uc_ai.g_enable_reasoning` variable to `true`. Additionally you can configure the reasoning budget to limit the number of tokens used for reasoning:

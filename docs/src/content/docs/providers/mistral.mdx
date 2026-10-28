@@ -43,7 +43,9 @@ Also set `Valid for URLs` to the Mistral API (https://api.mistral.ai/) to limit 
 </TabItem>
 <TabItem label="PL/SQL">
 
-Run this block as the schema that holds UC AI. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the Mistral API. The `apex_util.set_workspace` call is only necessary outside an APEX session, for example in SQLcl.
+Connect to the schema that holds UC AI, then run this block. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the Mistral API.
+
+Outside an APEX session, for example in SQLcl, uncomment the `apex_util.set_workspace` call. Replace `MY_WORKSPACE` with the name of the APEX workspace associated with your schema.
 
 ```sql
 begin
@@ -103,7 +105,9 @@ Mistral offers a range of models optimized for different use cases. The UC AI Mi
 - `uc_ai_mistral.c_model_mistral_embed` - General purpose text embeddings
 - `uc_ai_mistral.c_model_codestral_embed` - Code-specific embeddings
 
-Most of these constants hold a `-latest` name, such as `mistral-small-latest`. Mistral resolves such a name to the newest version of that model family. The two embedding constants hold a fixed name. `c_model_ministral_3_14b`, `c_model_zai_glm_5_3`, and `c_model_zai_glm_5_3_flash` hold a fixed name too, because Mistral documents no `-latest` alias for them.
+Most constants use an alias ending in `-latest`, such as `mistral-small-latest`. Mistral maps this alias to the newest version of that model family.
+
+The two embedding constants use fixed model IDs. So do `c_model_ministral_3_14b`, `c_model_zai_glm_5_3`, and `c_model_zai_glm_5_3_flash`, because Mistral documents no `-latest` alias for them.
 
 This list shows the newest model of each family. The package keeps the constants of older models for code that still references them.
 
@@ -264,7 +268,7 @@ See the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for mo
 
 ### Reasoning / Thinking
 
-Mistral has no reasoning effort setting in UC AI. `uc_ai.g_enable_reasoning` and `uc_ai.g_reasoning_level` are ignored for this provider. The Magistral models were the dedicated reasoning models. Mistral retired them. Mistral Small 4 now unifies instruct, reasoning, and coding in one model.
+UC AI does not send a reasoning effort parameter to Mistral. The variables `uc_ai.g_enable_reasoning` and `uc_ai.g_reasoning_level` have no effect for this provider. Mistral retired the dedicated Magistral reasoning models. Mistral Small 4 supports instruction tasks, reasoning, and coding.
 
 ```sql
 declare

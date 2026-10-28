@@ -198,7 +198,7 @@ UC AI records the effective context in `uc_ai_agent_executions.run_context` and 
 
 ### Adding text to the system prompt
 
-`p_prompt_addendum` adds text to the end of the system prompt of one run. Use it
+`p_prompt_addendum` adds instructions to an agent's system prompt on the first turn. Use it
 for an instruction that depends on the caller and not on the prompt profile, for
 example the rules of one APEX region:
 
@@ -210,7 +210,7 @@ l_result := uc_ai_agents_api.execute_agent(
 );
 ```
 
-UC AI renders the system prompt of the prompt profile first. Then it adds a blank
+UC AI replaces the placeholders in the profile's system prompt first. Then it adds a blank
 line and the addendum. If the agent uses [agent
 memory](/products/uc-ai/docs/guides/agent-memory/), the addendum follows the
 memory protocol block. An [execution hook](/products/uc-ai/docs/guides/execution-hooks/)
@@ -218,7 +218,7 @@ that implements `augment_system_prompt` sees the prompt with the addendum.
 
 - Only a profile agent and an orchestrator agent accept an addendum. For any other
   agent type, `execute_agent` raises `ORA-20503` before it creates a run.
-- Only the first turn of a conversation renders the system prompt. A follow-up
+- UC AI builds the system prompt only on the first turn of a conversation. A follow-up
   turn reuses the system message in the stored history, and this message already
   holds the addendum. A follow-up call can pass the same text again: UC AI does
   not add it twice. A different text on a follow-up call has no effect.
@@ -651,6 +651,6 @@ glance"** section with its exact output.
 - **Start simple**: begin with a profile agent. Compose workflows or conversations later, when the task grows
 - **Write a clear agent description**: an orchestrator uses the agent descriptions to decide which agent to call. A clear description improves the delegation
 - **Set the limits**: always set `max_turns`, `max_iterations`, and `max_delegations`. These limits stop a runaway run
-- **Use structured output for a decision point**: if an exit condition or the routing logic depends on the output of an agent, use a response schema. The values are then reliable and easy to parse. A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) also gives the probability of each answer
+- **Use structured output for a decision point**: if your code uses an agent's answer to select the next action, use a response schema. The output then has a defined structure that your code can read. A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) also gives the probability of each answer
 - **Match the model to the task**: use a capable model for an orchestrator or a moderator, because it must make decisions. Use a faster model for a leaf agent with one narrow task
 - **Test with small limits first**: start with `max_turns: 2` or `max_iterations: 2`. Validate the flow, then increase the limits

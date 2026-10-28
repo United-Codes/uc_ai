@@ -160,8 +160,8 @@ Put single quotes around a **string** reference, as in `'{$.steps.x}'` above. Le
 
 <Aside type="caution" title="A refused answer">
   OpenAI can refuse a question of a decision agent. The answer then has no
-  `choice`. A condition with a path that does not resolve is false, also for
-  `!=`. Branch on `answers.<id>.type = 'refused'`. See [Branch on a refused
+  `choice`. If a condition refers to a missing value, it is false. This also applies to
+   the not-equal operator, `!=`. Branch on `answers.<id>.type = 'refused'`. See [Branch on a refused
   answer](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/#branch-on-a-refused-answer).
 </Aside>
 

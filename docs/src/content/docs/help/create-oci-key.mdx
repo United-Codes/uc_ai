@@ -71,9 +71,11 @@ You can now reference it via the Static ID you entered.
 </TabItem>
 <TabItem label="PL/SQL">
 
-Run this block as the schema that holds UC AI. Replace the placeholders with the values from the previous step. For `p_client_secret`, use the content of the `*.pem` file **without** the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines.
+Connect to the schema that holds UC AI, then run this block. Replace the placeholders with the values from the previous step. For `p_client_secret`, use the content of the `*.pem` file **without** the `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines.
 
-The `p_allowed_urls` parameter limits the credential to the OCI Generative AI and Document Understanding endpoints of your region. Replace `us-ashburn-1` with your region. The `apex_util.set_workspace` call is only necessary outside an APEX session, for example in SQLcl.
+The `p_allowed_urls` parameter limits the credential to the OCI Generative AI and Document Understanding endpoints of your region. Replace `us-ashburn-1` with your region.
+
+Outside an APEX session, for example in SQLcl, uncomment the `apex_util.set_workspace` call. Replace `MY_WORKSPACE` with the name of the APEX workspace associated with your schema.
 
 ```sql
 begin

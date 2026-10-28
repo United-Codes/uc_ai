@@ -9,7 +9,7 @@ import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
   TypeSafe support is experimental. The jev API is in beta, and the result of `uc_ai.decide` can still change.
 </Aside>
 
-The UC AI TypeSafe package connects the TypeSafe jev model to [`uc_ai.decide`](/products/uc-ai/docs/api/decide/). jev answers typed questions about a text. It returns a choice, a score or a probability for each question, with the probabilities of all options.
+The UC AI TypeSafe package connects the TypeSafe jev model to [`uc_ai.decide`](/products/uc-ai/docs/api/decide/). jev answers questions about text or images. Each question requests a choice, a score, or the probability that a statement is true. Choice and score answers also include probabilities for every option or level.
 
 TypeSafe supports decisions only. jev has no chat interface and no embeddings. `uc_ai.generate_text` and `uc_ai.generate_embeddings` do not accept `uc_ai.c_provider_typesafe`. For the same reason, `uc_ai_utils.get_providers` and `uc_ai_utils.get_models` do not list TypeSafe.
 
@@ -48,7 +48,9 @@ Also set `Valid for URLs` to the TypeSafe API (https://api.typesafe.ai/) to limi
 </TabItem>
 <TabItem label="PL/SQL">
 
-Run this block as the schema that holds UC AI. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the TypeSafe API. The `apex_util.set_workspace` call is only necessary outside an APEX session, for example in SQLcl.
+Connect to the schema that holds UC AI, then run this block. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the TypeSafe API.
+
+Outside an APEX session, for example in SQLcl, uncomment the `apex_util.set_workspace` call. Replace `MY_WORKSPACE` with the name of the APEX workspace associated with your schema.
 
 ```sql
 begin
@@ -104,7 +106,7 @@ The package has one model constant:
 
 - `uc_ai_typesafe.c_model_jev_latest` - the alias `jev-latest`. This is the default model of `uc_ai.decide` for TypeSafe.
 
-`jev-latest` points to a pinned version of jev. The response reports the version that answered, for example `jev-1.13.0`. `uc_ai.decide` returns this version in `model`. See the [TypeSafe models page](https://docs.typesafe.ai/models) for the current models.
+`jev-latest` selects a specific release of jev. The response reports the version that answered, for example `jev-1.13.0`. `uc_ai.decide` returns this version in `model`. See the [TypeSafe models page](https://docs.typesafe.ai/models) for the current models.
 
 :::tip
 If a new model is not yet available as a constant, you can pass the model name directly as a string. See the [FAQ](/products/uc-ai/docs/other/faq/#custom-model-strings) for details.
@@ -116,8 +118,8 @@ If a new model is not yet available as a constant, you can pass the model name d
 - Each image must be 256 to 1568 pixels wide and high, and at most 16 MiB. The whole request must be at most 32 MiB. UC AI does not check these limits. jev rejects an image outside them, and the call raises `ORA-20302`.
 - The Box question type of jev 1.14 is not available. It returns a bounding box and not a decision.
 - A choice question has at most 255 options. A score question has at most 10 levels. UC AI requires at least 2 options or 2 levels.
-- The TypeSafe documentation names a context of 64k tokens for each request.
-- jev does not refuse a question. A question that has no sense gets a low `confidence`.
+- TypeSafe documents a context limit of 64k tokens per request.
+- jev does not refuse a question. A meaningless question gets a low `confidence`.
 
 ## Base URL
 

@@ -63,14 +63,14 @@ You need these things:
    Both scripts create the table `uc_ai_chat_messages`, the table
    `uc_ai_chat_widget_types`, and the packages `uc_ai_chat_widgets`,
    `uc_ai_chat`, and `uc_ai_chat_hook`. The hook package lets the chat show the name of
-   the tool that runs now. The upgrade script adds the columns that an
-   earlier version of the plug-in table does not have, for example `tool_call_id`,
+   the tool that is currently active. The upgrade script adds any columns missing from
+   an earlier version of the plug-in table, for example `tool_call_id`,
    `widgets`, and `parts`. You can run it more than once.
 
 2. ### Import the plug-in
 
    Import the file `region_type_plugin_com_united_codes_uc_ai_chat.sql`
-   into your APEX application. The file is a normal APEX component export. In the
+   into your APEX application. The file is a normal APEX component export. In
    APEX Builder, go to **Shared Components > Plug-ins > Import**.
 
    Import the file again after each UC AI upgrade. A region that uses an older
@@ -132,7 +132,7 @@ own schema and put the chat objects in the schema of the application.
    grant execute on uc_ai_chat_hook to uc_ai_schema;
    ```
 
-   Without this grant, the plug-in leaves the tool progress off.
+   Without this grant, the plug-in does not show tool progress.
 
 5. ### Import the plug-in
 
@@ -278,9 +278,9 @@ starts the download of the model. If the model is not available, the region keep
 the configured **Header Title**.
 
 **Widgets** lets the agent show a key figure, a status notice, a short list, a
-table, or a chart in an answer. The plug-in adds a short protocol to the system
-prompt of the first turn. The server checks each widget, and the browser renders
-it as text only. The [Chat Widgets](/products/uc-ai/docs/guides/chat-widgets/)
+table, or a chart in an answer. The plug-in adds widget instructions to the system
+prompt of the first turn. The server checks each widget. The browser displays the
+widget and treats its labels and values as plain text. The [Chat Widgets](/products/uc-ai/docs/guides/chat-widgets/)
 guide has the widget types, the data binding, the limits, and the security
 notes. **Custom Widgets** turns on a widget type that you wrote yourself, for
 example a list of records that the user can open. See [Custom Chat Widget
@@ -398,9 +398,9 @@ enforcer. The notices give no figure, no percentage, and no name of a limit.
   region run any agent in the schema.
 - **One user owns one conversation.** After the first message, only the user who
   sent it can read the conversation or add to it.
-- **A widget is rebuilt on the server.** The server builds each widget again from
-  allowed keys, and the browser renders every value as text. A widget has no HTML,
-  no link, and no image. The region decides which types the agent can use. See
+- **A widget is rebuilt on the server.** The server creates each widget specification with
+  only allowed keys. The browser treats every value as plain text, so values
+  cannot contain HTML, links, or images. The region decides which types the agent can use. See
   [Security and trust](/products/uc-ai/docs/guides/chat-widgets/#security-and-trust).
 - **The answer is sanitized.** The plug-in shows the answer as Markdown. It
   removes dangerous HTML before the browser gets it.

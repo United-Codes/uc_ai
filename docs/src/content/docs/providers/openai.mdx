@@ -50,7 +50,9 @@ Also set `Valid for URLs` to the OpenAI API (https://api.openai.com/) to limit t
 </TabItem>
 <TabItem label="PL/SQL">
 
-Run this block as the schema that holds UC AI. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the OpenAI API. The `apex_util.set_workspace` call is only necessary outside an APEX session, for example in SQLcl.
+Connect to the schema that holds UC AI, then run this block. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the OpenAI API.
+
+Outside an APEX session, for example in SQLcl, uncomment the `apex_util.set_workspace` call. Replace `MY_WORKSPACE` with the name of the APEX workspace associated with your schema.
 
 ```sql
 begin

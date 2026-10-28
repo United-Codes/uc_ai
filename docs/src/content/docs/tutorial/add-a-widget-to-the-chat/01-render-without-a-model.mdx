@@ -1,6 +1,6 @@
 ---
 title: Render a widget without a model
-description: Call the render step of the chat with an answer that you write, and read the parts that the chat stores. The lesson uses no model and no tokens.
+description: Display a widget from a sample answer and read the stored result. This lesson needs no model call or tokens.
 sidebar:
   order: 1
 ---
@@ -42,8 +42,8 @@ yourself.
 
 You need these parts:
 
-- **UC AI 26.5 or later, able to reach a model.** The chat widgets use a column and
-  a parameter that are new in 26.5. If a call to a model works, you are ready.
+- **UC AI 26.5 or later, able to reach a model.** Make sure that a model call
+  works in your schema.
   Otherwise the [installation guide](/products/uc-ai/docs/guides/installation/)
   covers the network and key setup.
 - **The APEX Chat plug-in of the same release, with its database objects.** The
@@ -91,8 +91,8 @@ To remove everything that the course creates, run `00_teardown.sql` after lesson
 
 ## How the chat renders an answer
 
-The model writes its answer as text. A widget is a fenced block inside that text,
-with the language `ucai-widget`. The block holds one JSON object.
+The model writes its answer as text. To request a widget, it includes a code block
+marked `ucai-widget`. A JSON object inside the block describes the widget.
 
 After the run, the chat calls `uc_ai_chat_widgets.render`. The function takes three
 inputs:
@@ -103,7 +103,7 @@ inputs:
 | `p_types` | The widget types that the region enables |
 | `p_tool_calls` | The tool calls of this answer, each with its name, arguments, and result |
 
-The function cuts the answer into **parts**. A part is a piece of text or one
+The function splits the answer into **parts**. A part is a piece of text or one
 widget. The chat stores the parts in `uc_ai_chat_messages.parts`, and the browser
 draws them. A widget that fails a check stays in the answer as text, and the
 answer does not fail.
@@ -170,8 +170,7 @@ Read the parts in order:
 
 - **The first widget has rows, and the script did not write them.** The block
   names the columns and the source `tool:SC_LIST_INVOICES`. The server read the
-  rows from the tool result. A model that writes a widget does not type the
-  data.
+  rows from the tool result. With this tool source, the model supplies no row values.
 - **The second widget is a text part.** It holds the original block and the field
   `rejected` with the reason. The user sees the block as text. The browser shows
   the reason only when the flag `show_errors` is on in **Debug Config**.
@@ -189,10 +188,10 @@ The next lesson adds a type that is not in this list. It uses a second attribute
 
 ## Key takeaways
 
-- `render` is a function of the answer, the enabled types, and the tool calls. You
-  can call it in SQL and read the result.
-- The rows of a table widget come from a tool result. The model writes only the
-  columns and the source.
+- `render` takes the answer text, enabled widget types, and tool calls as inputs.
+  You can call it in SQL and read the result.
+- With a tool source, table rows come from the tool result. The model supplies
+  only the column names and source.
 - A widget that fails a check stays as text with a reason.
 
 <LinkCard

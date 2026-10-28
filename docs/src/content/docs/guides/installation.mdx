@@ -147,7 +147,7 @@ Run the `upgrade_uc_ai.sql` script of the new release. It upgrades an installati
 2. It sets the table and column comments and creates the triggers again.
 3. It compiles the packages and creates the views again.
 
-Before each change, the script checks the data dictionary. A schema that is up to date does not change, so you can run the script more than once. If an earlier upgrade stopped half way, run the script again. It adds only what is missing.
+Before each schema change, the script checks whether that change is necessary. You can run it more than once. If an earlier upgrade did not finish, run the script again. It completes missing schema changes and recreates the code objects.
 
 Run the script in the UC AI schema, in SQLcl or SQL*Plus. Do this when no one uses UC AI, because a table change needs a lock on the table. The script prints each change that it makes. If a schema step fails, the script prints the failed step and the error, and then stops. Correct the cause and run the script again.
 

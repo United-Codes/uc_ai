@@ -1,6 +1,6 @@
 ---
 title: Decide
-description: Reference for uc_ai.decide. Get typed answers with probabilities to several named questions about one text or image. Experimental. Works with OpenAI, TypeSafe and OpenRouter.
+description: Reference for uc_ai.decide. Ask several questions about one text or image and get choices, scores, or probabilities. Experimental. Works with OpenAI, TypeSafe and OpenRouter.
 sidebar:
   order: 16
 ---
@@ -8,12 +8,12 @@ sidebar:
 import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
 
 <Aside type="caution" title="Experimental">
-  `uc_ai.decide` is experimental. The provider APIs behind it are in beta, so the shape of the result can still change. Test your code again after you upgrade UC AI.
+  `uc_ai.decide` is experimental. The provider APIs behind it are in beta, so the structure of the result can still change. Test your code again after you upgrade UC AI.
 </Aside>
 
-A decision is one shared state and several named questions. The state is a text, optionally with images. Each question has a type and gets a typed answer with probabilities. One call to `uc_ai.decide` evaluates all questions.
+`uc_ai.decide` answers several questions about the same text or images in one call. You supply this content as the **state**. Each question requests a choice, a score, or the probability that a statement is true.
 
-Use a decision when your code must branch on the answer. The answers are not free text. A choice question returns one of the options that you define, and a score question returns a number from the levels that you define. Every answer comes with probabilities, so the code can test how sure the model is before it acts.
+Use a decision to select the next action in your code. For example, classify a customer message as `billing` or `support`, then send it to that team. A choice question returns one of your defined options. A score question returns a number within your defined levels. The model also estimates probabilities, which your code can compare with a threshold before it acts.
 
 Three providers support decisions:
 
@@ -25,7 +25,7 @@ Three providers support decisions:
 
 Decisions do not go through `generate_text`. The result has no messages and no tool calls. A provider that is not in this table raises `ORA-20306`. TypeSafe supports decisions only. See the [TypeSafe provider page](/products/uc-ai/docs/providers/typesafe/).
 
-The OpenRouter endpoint takes the same request and returns the same answers as TypeSafe. OpenRouter sends the request to a provider that it lists for the model, so use a model that supports decisions. The default model is `typesafe/jev-1.13`. A model that does not exist, or that has no decision support, raises `ORA-20302` with `HTTP 400: Model <name> does not exist`. The call to the default model on 2026-10-08 returned the model `typesafe/jev-1.13-20260917`.
+The OpenRouter endpoint uses the same request and answer formats as TypeSafe. OpenRouter sends the request to a provider that it lists for the model, so use a model that supports decisions. The default model is `typesafe/jev-1.13`. A model that does not exist, or that has no decision support, raises `ORA-20302` with `HTTP 400: Model <name> does not exist`. The call to the default model on 2026-10-08 returned the model `typesafe/jev-1.13-20260917`.
 
 ## Signature
 
@@ -82,7 +82,7 @@ A question has these keys:
 | Key | Required | Description |
 | --- | --- | --- |
 | `type` | Yes | `boolean`, `choice` or `score`. |
-| `instructions` | Yes | The question as a text. A blank text raises `ORA-20503`. |
+| `instructions` | Yes | The text of the question. Blank instructions raise `ORA-20503`. |
 | `criteria` | Depends on the type | See the question types below. |
 
 A question with any other key adds a warning, and UC AI ignores the key.
@@ -116,7 +116,7 @@ The answer is the probability that the statement is true. `criteria` is optional
 | `warnings` | array of strings | Problems that did not stop the call. The array is empty when there are none. |
 | `raw` | object | The response of the provider as it came back. |
 
-`raw` is the only place for data that the neutral shape does not carry. An example is the `legend` of a TypeSafe score.
+`raw` contains provider-specific fields that UC AI does not include in its common result structure. For example, a TypeSafe score can include a `legend` there.
 
 ### Answers
 
@@ -129,9 +129,9 @@ Each answer has a `type`. The type of an answer is the type of its question, or 
 | `score` | `score`, `probabilities` | The probability-weighted mean of the level indexes, rounded to 2 decimals. `probabilities` is keyed by the level index as a string (`"0"`, `"1"`, ...). |
 | `refused` | None | The provider refused the question. See [Refused answers](#refused-answers). |
 
-The providers return probabilities with 2 decimals. A `probabilities` object lists every option or level, also with the probability 0. The order of its keys is not the order of the options. Both providers return `probabilities`. Test with `has` before you read it, because a later provider can leave it out.
+The providers return probabilities with 2 decimals. A `probabilities` object lists every option or level, including those with probability 0. Its keys can appear in a different order from your options. Use `has` to make sure that `probabilities` exists before you read it. This keeps your code compatible with providers that omit it.
 
-The index of a level starts at 0. A score of 1.01 on three levels is close to the second level.
+Levels start at index 0. With three levels, the indexes are 0, 1, and 2. A score of 1.01 is close to the second level.
 
 ### Refused answers
 
@@ -139,7 +139,7 @@ OpenAI can refuse a question. It refuses each question on its own and answers th
 
 Read the `type` of an answer before you read `choice`, `score` or `probability`. A refused answer has none of these keys.
 
-OpenAI refused questions that have no clear answer. Examples are a question with meaningless instructions, and a question that infers a protected trait of a person. TypeSafe never refuses. It answers every question. A question that has no sense gets a low `confidence`.
+OpenAI refused questions that have no clear answer. Examples are a question with meaningless instructions, and a question that infers a protected trait of a person. TypeSafe never refuses. It answers every question. A meaningless question gets a low `confidence`.
 
 A refused question still costs the input tokens of the call.
 
@@ -151,16 +151,18 @@ Boolean questions and refused questions have no confidence. `provider_metadata.u
 
 ### Warnings
 
-A warning describes a problem that did not stop the call. The call still returns a result. A warning is one text. These cases add a warning:
+A warning describes a problem that did not stop the call. The call still returns a result. Each warning is a string. These cases add a warning:
 
 - The probabilities of a question do not add up to 1.
 - A score differs from the probability-weighted mean of its levels.
 - A question has a key other than `type`, `instructions` and `criteria`.
 - `p_options` has a key that the provider does not use.
 
-The providers round probabilities and scores to 2 decimals. A rounded value can be wrong by 0.005. UC AI allows for this. The tolerance of the sum is 0.000001, plus 0.005 for each probability in the sum. The tolerance of the score is 0.000001, plus 0.005 for the rounding of the score, plus 0.005 multiplied by the level index for each level.
+The providers round probabilities and scores to 2 decimals. Rounding can change a value by up to 0.005. UC AI allows for this difference.
 
-The tolerance of the sum grows with the number of options. A choice with about 200 options or more can therefore never give this warning. The check is for questions with few options.
+The tolerance of the sum is 0.000001, plus 0.005 for each probability in the sum. The score tolerance starts at 0.000001, plus 0.005 for rounding the score. For each level, it also adds 0.005 multiplied by that level's index.
+
+The tolerance of the sum grows with the number of options. With about 200 options or more, this tolerance is too large to detect an incorrect sum. This check is useful for questions with fewer options.
 
 ## Images
 
@@ -170,13 +172,17 @@ OpenAI and TypeSafe read images. Pass them in `p_files`, as objects from `uc_ai_
 - **TypeSafe** accepts `image/png` and `image/jpeg`. UC AI sends each image in the `assets` object of the request and writes a reference to it at the end of the state, for example `Image 1: uc-ai-image-1-<id>`. The questions see the images through the state. UC AI also sends the header `TypeSafe-Danger-Zone-Images: true`, which jev requires for images.
 - **OpenRouter** reads text only. A file in `p_files` raises `ORA-20508`.
 
-Images on TypeSafe are a preview feature. TypeSafe can change the request format, the answers and the limits. Each image must be 256 to 1568 pixels wide and high, and at most 16 MiB. The request must be at most 32 MiB, and Base64 makes the images about one third larger. UC AI does not check the size of the pixels. jev rejects an image outside these limits and does not resize it. The call then raises `ORA-20302` with the message of jev. Rotate the pixels of a photo upright before you send it, because jev ignores the EXIF orientation. TypeSafe lists the limits on [docs.typesafe.ai/images](https://docs.typesafe.ai/images).
+Images on TypeSafe are a preview feature. TypeSafe can change the request format, the answers and the limits. Each image must be 256 to 1568 pixels wide and high, and at most 16 MiB. The request must be at most 32 MiB, and Base64 makes the images about one third larger.
 
-You can pass an image without text. If `p_files` holds an image, `p_state` can be empty. The call needs at least a text or a file.
+UC AI does not check image dimensions. jev rejects an image outside these limits and does not resize it. The call then raises `ORA-20302` with the message of jev.
+
+Rotate the image itself upright before you send it. jev ignores the EXIF metadata that tells viewers how to rotate a photo. TypeSafe lists the limits on [docs.typesafe.ai/images](https://docs.typesafe.ai/images).
+
+You can pass an image without text. If `p_files` holds an image, `p_state` can be empty. The call needs text, a file, or both.
 
 ## Checks and errors
 
-UC AI checks the call before it sends a request. A failed check costs no request. The check of the provider is the first check.
+UC AI first makes sure that the provider supports decisions, then checks the input. If an input check fails, UC AI raises an error without a provider request.
 
 | Code | When | Cause |
 | --- | --- | --- |
@@ -188,14 +194,14 @@ UC AI checks the call before it sends a request. A failed check costs no request
 
 `ORA-20304` has these causes:
 
-- A question has no answer, or the response has an answer for no question.
+- A question has no answer, or the response contains an answer for an unknown question.
 - An answer has no name, or two answers have the same name.
 - The type of an answer is not the type of its question.
 - A chosen option is not one of the options of the question.
-- A score is outside the levels.
+- A score is outside the range of the defined levels.
 - A probability is outside the range from 0 to 1.
 
-A refused answer is the answer of its question. It skips the checks for the type, the option, the score and the probability.
+A refused answer counts as a response to its question. UC AI does not require it to contain a choice, score, or probability.
 
 If the probabilities do not add up, the call does not raise an error. It adds a warning.
 
@@ -233,13 +239,13 @@ For a validation error, TypeSafe adds the path of the field to the message. UC A
 
 The OpenRouter reference does not list limits for choices, levels or images. UC AI applies the TypeSafe limits to OpenRouter.
 
-TypeSafe accepts a question with one option or one level. UC AI still requires 2, because a decision between one option is not a decision. The upper limit for the number of questions is not known. A call with 50 questions worked on OpenAI.
+TypeSafe accepts a question with one option or one level. UC AI requires at least 2 options or levels for every provider. The upper limit for the number of questions is not known. A call with 50 questions worked on OpenAI.
 
 The vendor documentation lists the size of the context. For TypeSafe, see [docs.typesafe.ai](https://docs.typesafe.ai/). For OpenAI, see the [OpenAI API reference](https://platform.openai.com/docs/api-reference).
 
 ## The p_options parameter
 
-`p_options` is one JSON object. UC AI knows two keys. Every other key adds a warning and UC AI ignores it.
+`p_options` is a JSON object with the two supported keys listed here. UC AI ignores other keys and adds a warning for each one.
 
 | Key | Provider | Description |
 | --- | --- | --- |
@@ -290,7 +296,7 @@ UC AI never writes the request body to the log. The body holds your text and the
 | `usage` keys | `input_tokens`, `output_tokens` (always 0), `total_tokens` | `input_tokens`, `output_tokens` | `input_tokens`, `output_tokens`. The `cost` is in `provider_metadata.usage`. |
 | Error body | An `error` object | A `detail` text, object or list | An `error` object with `code` and `message` |
 
-For a boolean question on OpenAI, UC AI builds the instructions as follows. First the instructions of the question. Then a blank line, `Criteria for true:`, a line feed and the text for `true`. Then the same for `false`. UC AI leaves out the part of a key that has no text.
+For an OpenAI boolean question, UC AI appends the criteria to the question instructions. It adds a blank line, `Criteria for true:`, and the `true` description on the next line. It does the same for `false`. It omits a criterion if its description is empty.
 
 ## Examples
 
@@ -729,7 +735,7 @@ step support_draft: "Sorry you’re having trouble with the export button after 
 Notes on this example:
 
 - The fourth step reads `type`, not `choice`. A refused question has no `choice`, and a condition with a path that does not resolve is false, also with `!=`. See [Branch on a refused answer](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/#branch-on-a-refused-answer). In the two runs above, OpenAI refused no question, so the fourth step did not run.
-- To send an unsure routing to a person too, add a fifth step with a numeric condition, for example `{$.steps.route.provider_metadata.confidence.department} < 0.8`. Use a separate step. A condition with `or` is false if one of its paths does not resolve, and a refused question has no `confidence`.
+- To send low-confidence answers to a person, add a fifth step with a numeric condition, for example `{$.steps.route.provider_metadata.confidence.department} < 0.8`. Use a separate step. If either path is missing, a condition with `or` is false. A refused question has no `confidence`.
 - The tokens of the decision step count in the run. In the first run, `ticket_router` used 135 input tokens and `billing_reply` used 52 input tokens and 102 output tokens. The session totals show 187 and 102. See [Read the tokens](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/#read-the-tokens).
 
 To delete the example, call `uc_ai_agents_api.purge_agent` for each of the five agent codes. Commit, and delete the three prompt profiles with `uc_ai_prompt_profiles_api.delete_prompt_profile`. The profiles stay after a purge.

@@ -1,6 +1,6 @@
 ---
 title: Decision Agents
-description: Run uc_ai.decide as an agent. Get typed answers with probabilities, count the tokens, and use the answers in workflow conditions.
+description: Run uc_ai.decide as an agent. Get choices, scores, and probabilities, track token usage, and use the answers in workflow conditions.
 sidebar:
   order: 15
 ---
@@ -11,11 +11,11 @@ import { Aside } from "@astrojs/starlight/components";
   A decision agent uses [`uc_ai.decide`](/products/uc-ai/docs/api/decide/), which is experimental. The provider APIs behind it are in beta, so the result can still change. Test your agents again after you upgrade UC AI.
 </Aside>
 
-A decision agent runs [`uc_ai.decide`](/products/uc-ai/docs/api/decide/) as an agent. The agent has a text template for the state and a set of named questions. Each run fills the template with the input parameters. The agent then returns a typed answer with probabilities for every question.
+A decision agent runs [`uc_ai.decide`](/products/uc-ai/docs/api/decide/) as an agent. You configure a text template and questions about that text. Each run replaces the template placeholders with your input values, then asks the model all questions. Each question returns a choice, a score, or a probability.
 
 The answers are a JSON object and not free text. A [workflow](/products/uc-ai/docs/guides/multi-agent-systems/workflows/) condition can therefore read an answer, for example `{$.steps.route.answers.department.choice}`.
 
-A decision agent has the same tracking as other agents. UC AI writes an execution row with the token counts, the run joins a session, and the agent has versions and a status. Three providers support it: OpenAI, TypeSafe and OpenRouter.
+UC AI records each run and its token usage in an agent session. Decision agents also have versions and a status, like other agents. Three providers support it: OpenAI, TypeSafe and OpenRouter.
 
 ## When to use a decision agent
 
@@ -40,7 +40,7 @@ A decision agent has no prompt profile. Its `decision_config` column holds one J
 
 A key that is not in this table is an error. UC AI checks the keys, the provider, and the structure of `model_config` when you save the agent. `uc_ai.decide` checks each question when the agent runs.
 
-The placeholders follow the rules of a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/). UC AI fills the template in one pass and inserts each value as it is. A value that contains `{other}` stays unchanged, a backslash stays, and a value of more than 32,767 characters works. If an input parameter is missing, the run raises `ORA-20506`.
+The placeholders follow the rules of a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/). UC AI replaces each placeholder with your input value and preserves the text inside that value. For example, `{other}` inside a value stays as text instead of referring to another input parameter. Backslashes stay unchanged, and input values can exceed 32,767 characters. If an input parameter is missing, the run raises `ORA-20506`.
 
 ## Create a decision agent
 
@@ -160,7 +160,7 @@ The section [Route a ticket with a workflow](/products/uc-ai/docs/api/decide/#ro
 
 ### Branch on a refused answer
 
-OpenAI can refuse a question. The answer has no `choice` then. A condition with a path that does not resolve is false. This is also true for `!=`. A condition such as `'{$.steps.route.answers.department.choice}' != 'billing'` therefore does not catch a refusal. Use a condition on `type`.
+OpenAI can refuse a question. The answer has no `choice` then. If a condition refers to a missing value, the condition is false. This also applies to the not-equal operator, `!=`. A condition such as `'{$.steps.route.answers.department.choice}' != 'billing'` therefore does not catch a refusal. Use a condition on `type`.
 
 The next example shows this. The agent `odd_question` asks a question that has no answer. The workflow `refusal_demo` has two conditional steps after it. The first condition uses `!=` on the `choice`. The second condition tests for `refused`. Both steps run the agent `human_review_note` from the [ticket example](/products/uc-ai/docs/api/decide/#route-a-ticket-with-a-workflow).
 
@@ -295,7 +295,7 @@ Put the credential and the base URL of the agent in `model_config`. The keys are
 }
 ```
 
-A key for one provider can also sit under the name of the provider:
+You can also group provider-specific configuration in an object named after the provider:
 
 ```json
 {
@@ -322,7 +322,7 @@ An [orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/)
 - **No chat.** A decision agent cannot be a handoff target or a conversation participant. `create_agent` raises `ORA-20503` for these configurations. `p_follow_up_message` raises `ORA-20503` too. The [APEX chat plug-in](/products/uc-ai/docs/guides/apex-chat-plugin/) cannot use a decision agent.
 - **No profile features.** A decision agent has no response schema, no tools, no tool tags, no `p_prompt_addendum`, and no follow-up message.
 - **Transfer timeout.** The HTTP timeout of a decision call is 300 seconds. To change it, set `g_transfer_timeout` (in seconds) in the `model_config` of the agent. The `timeout_seconds` value of the agent row has no effect on a decision agent.
-- **Cost limits.** The cost [budgets](/products/uc-ai/docs/guides/guardrails/budget/) of UC AI Pro do not price a decision agent yet. The budget hook reads the model from the prompt profile, and a decision agent has none. The tokens are in `uc_ai_agent_executions`.
+- **Cost limits.** UC AI Pro [budgets](/products/uc-ai/docs/guides/guardrails/budget/) do not yet calculate the costs of decision agents. The budget hook reads the model from the prompt profile, and a decision agent has none. The tokens are in `uc_ai_agent_executions`.
 - **Providers.** Only OpenAI, TypeSafe and OpenRouter support decisions. OpenAI and TypeSafe read images. Only OpenAI can refuse a question.
 
 See [Decide](/products/uc-ai/docs/api/decide/) for the question types, the checks, and the limits of the providers.

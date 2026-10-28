@@ -56,7 +56,7 @@ detail](#the-courses-in-detail) says what each one teaches that no guide covers.
 
 <LinkCard
   title="Add Your Own Widget to the Chat →"
-  description="4 lessons · 90 min · OpenAI. Show a list of invoices in the chat, built by a PL/SQL package of yours. The model writes only invoice numbers, and you prove which numbers the widget refuses."
+  description="4 lessons · 90 min · OpenAI. Show a list of invoices in the chat, built by a PL/SQL package of yours. The model supplies invoice numbers. Test that the package rejects invoices outside the current contract."
   href="/products/uc-ai/docs/tutorial/add-a-widget-to-the-chat/01-render-without-a-model/"
 />
 
@@ -74,7 +74,7 @@ detail](#the-courses-in-detail) says what each one teaches that no guide covers.
 
 <LinkCard
   title="Publish an Agent over A2A →"
-  description="4 lessons · 90 min · OpenAI and ORDS. Publish a service desk as an A2A endpoint with one API key for each partner company. Call it from the official SDK and from Google ADK, take visit requests that four PL/SQL rules can refuse, and read each partner's tokens."
+  description="4 lessons · 90 min · OpenAI and ORDS. Publish a service desk with one API key per partner company. Call it through A2A clients, apply PL/SQL rules to visit requests, and track token usage per partner."
   href="/products/uc-ai/docs/tutorial/publish-an-agent-over-a2a/01-publish-a-read-only-service-desk/"
 />
 
@@ -360,16 +360,16 @@ only, and can ask for a service visit.
 The course calls the endpoint with curl, with the official Python SDK and with Google ADK, an agent framework that
 knows nothing about UC AI. It reuses the tables of Build an Agent, so run its setup first.
 
-Four things it teaches that no guide covers:
+The course covers these tasks:
 
-- **How a partner is scoped.** The server puts the client of the API key into the run context, and the tools read
-  it from there. A key without a row in your partner table opens the endpoint and gives no data.
-- **A booking rule the database owns.** Four rules refuse a visit request. The refusal is in the `tool_result` row
+- **Restrict data access to one partner.** The server puts the authenticated client identity into the run
+  context. Tool handlers map it to a customer in the partner table. An unknown client gets no data.
+- **Apply booking rules in the database.** Four rules determine whether to accept a visit request. The refusal is in the `tool_result` row
   of the trace, next to the sentence the model wrote about it.
-- **Model-free checks.** 25 checks run the rule and every handler without a model, and show both sides of the
+- **Run checks without a model.** 25 checks call the booking rule and every handler, including both sides of the
   2-working-day boundary.
-- **What an endpoint needs before real partners use it.** Tokens for each client, a proxy URL on the card, a
-  background run, and how to turn off a key or the endpoint.
+- **Operate a partner endpoint.** Track token usage per client, set a public URL, run background requests,
+  and disable a key or the endpoint.
 
 <LinkCard
   title="Start: Publish an agent as an A2A endpoint"

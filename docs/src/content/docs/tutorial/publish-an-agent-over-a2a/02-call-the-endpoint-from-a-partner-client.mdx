@@ -20,10 +20,10 @@ import AiOutput from "../../../../components/AiOutput.astro";
 
 ## Call the desk with the A2A SDK
 
-In lesson 1 you called the desk with curl. A partner system uses a client library. This lesson
-plays the partner: it calls the endpoint of lesson 1 with the key of Ferrolux.
+In lesson 1 you called the desk with curl. A partner system uses a client library. In this lesson,
+your client acts as Ferrolux and calls the endpoint from lesson 1 with its API key.
 
-The official `a2a-sdk` reads the agent card, picks a binding from it, and sends the message. The
+The official `a2a-sdk` reads the agent card, selects an HTTP interface, and sends the message. The
 script `svc_client.py` wraps this in about 50 lines. Install the packages and set the
 endpoint URL and the key as environment variables. Do not write the key into a file:
 
@@ -156,7 +156,7 @@ agent = RemoteA2aAgent(
 runner = InMemoryRunner(agent=agent, app_name="partner")
 ```
 
-The runner needs no model key. The remote agent does the model work. ADK keeps one session for both
+The local ADK runner needs no model API key. UC AI calls the model from the database with the agent's credential. ADK keeps one session for both
 questions and sends the same `contextId` each time. ADK prints warnings about its experimental A2A support to
 `stderr`. The recorded output below shows `stdout`:
 
@@ -179,7 +179,7 @@ names. The desk answered through the same tools and the same `partner_clients` l
 ## Hand a key to a partner
 
 A partner needs a key and a row in `partner_clients`. You generate the key with `create_api_key`.
-The call returns it once, so send it over a channel that you use for a password.
+The call returns the key only once. Share it through a secure channel, such as your organization's password manager.
 
 To rotate a key, create a key under a new client name, for example `ferrolux2`. Add the row
 `apikey:ferrolux2` to `partner_clients`. Revoke the old key with `revoke_api_key` after the
