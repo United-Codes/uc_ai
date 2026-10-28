@@ -25,7 +25,7 @@ Currently, UC AI supports eight AI providers:
 - **OCI** (Oracle Cloud Infrastructure Generative AI)
 - **Ollama** (Open source models like Llama, Mistral, Qwen, etc.)
 - **xAI** (Grok models)
-- **Mistral** (Mistral Large/Medium/Small, Magistral, Codestral models)
+- **Mistral** (Mistral Large/Medium/Small, Codestral models)
 - **OpenRouter** (Unified access to models from many providers)
 
 The framework provides a common API for calls to different providers.

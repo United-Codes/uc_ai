@@ -109,7 +109,16 @@ This list shows the newest model of each family. The package keeps the constants
 
 All GPT-5.x models reason internally. You control the amount of reasoning with `uc_ai_openai.g_reasoning_effort`, as described in the [Reasoning / Thinking](#reasoning--thinking) section.
 
-The package also has constants for the older `o` series (`c_model_gpt_o1`, `c_model_gpt_o3`, `c_model_gpt_o4_mini`, and more) and for the GPT-4 and GPT-3.5 generations. These models are legacy. OpenAI can retire them at any time, so use a GPT-5.x model for new code.
+The package also has constants for older models that are legacy. OpenAI announced shutdown dates for them: 2026-12-11 for GPT-5 (including mini, nano, and pro), `o3`, and `o3-pro`, and 2027-01-14 for GPT-4o, GPT-4o mini, GPT-4.1, and GPT-4.1 mini. Use a GPT-5.6 or GPT-6 model for new code. See [OpenAI's deprecations page](https://developers.openai.com/api/docs/deprecations) for the full list.
+
+### Retired Models
+
+OpenAI shut down these models. Requests to them fail. The package keeps the constants for code that still references them.
+
+- The `o` series: `c_model_gpt_o1`, `c_model_gpt_o1_pro`, `c_model_gpt_o1_mini`, `c_model_gpt_o3_mini`, `c_model_gpt_o4_mini`, `c_model_gpt_o3_deep_research`, and `c_model_gpt_o4_mini_deep_research`
+- GPT-4.5 preview: `c_model_gpt_4_5`
+- GPT-4 and earlier: `c_model_gpt_4`, `c_model_gpt_4_32k`, `c_model_gpt_4_turbo`, `c_model_chatgpt_4o`, `c_model_gpt_3_5_turbo`
+- GPT-4.1 nano: `c_model_gpt_4_1_nano`
 
 See [OpenAI's pricing page](https://developers.openai.com/api/docs/pricing) for the latest model information and costs. Also see [Artificial Analysis](https://artificialanalysis.ai/providers/openai) for a comparison of intelligence, speed, and price.
 

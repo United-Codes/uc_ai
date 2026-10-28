@@ -135,7 +135,7 @@ begin
   l_result := uc_ai.generate_text(
     p_messages => l_messages
   , p_provider => uc_ai.c_provider_anthropic
-  , p_model    => uc_ai_anthropic.c_model_claude_4_5_haiku
+  , p_model    => uc_ai_anthropic.c_model_claude_5_5_haiku
   );
 
   dbms_output.put_line('Answer: ' || l_result.get_clob('final_message'));

@@ -134,7 +134,7 @@ l_result := uc_ai.generate_text(
   p_user_prompt => 'How do I optimize this SQL query?',
   p_system_prompt => 'You are a friendly database expert. Use simple language and provide step-by-step guidance.',
   p_provider => uc_ai.c_provider_anthropic,
-  p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
+  p_model => uc_ai_anthropic.c_model_claude_5_5_haiku
 );
 ```
 
@@ -269,7 +269,7 @@ begin
   l_result := uc_ai.generate_text(
     p_messages => l_messages,
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_3_7_flash
+    p_model => uc_ai_google.c_model_gemini_3_8_flash
   );
 
   dbms_output.put_line('Follow-up response: ' || l_result.get_string('final_message'));
@@ -523,7 +523,7 @@ BEGIN
     l_result := uc_ai.generate_text(
       p_user_prompt => 'What is the latest stable version of Oracle APEX?'
     , p_provider    => uc_ai.c_provider_anthropic
-    , p_model       => uc_ai_anthropic.c_model_claude_4_5_haiku
+    , p_model       => uc_ai_anthropic.c_model_claude_5_5_haiku
     );
   END;
 END;

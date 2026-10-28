@@ -138,7 +138,7 @@ l_result := uc_ai_prompt_profiles_api.execute_profile(
   p_code              => 'CLASSIFY_ISSUE'
 , p_parameters        => l_params
 , p_provider_override => uc_ai.c_provider_anthropic
-, p_model_override    => uc_ai_anthropic.c_model_claude_4_5_haiku
+, p_model_override    => uc_ai_anthropic.c_model_claude_5_5_haiku
 , p_config_override   => json_object_t('{"anthropic": {"g_max_tokens": 2000}}')
 );
 ```

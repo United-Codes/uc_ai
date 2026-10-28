@@ -60,21 +60,21 @@ as
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_5_mini; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_5_nano; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_5_pro; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_4_5; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_4_1; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_4_1_mini; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_4_1_nano; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_4o; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_4o_mini; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o1; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o1_pro; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o1_mini; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o3; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o3_pro; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o3_deep_research; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_4_1_nano; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o1; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o1_pro; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o3_mini; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o4_mini; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o3_deep_research; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o4_mini_deep_research; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_4_5; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_o1_mini; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_chatgpt_4o; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_4_turbo; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'openai'; l_rec.model_id := uc_ai_openai.c_model_gpt_4; l_rec.model_type := c_chat; pipe row (l_rec);
@@ -89,6 +89,7 @@ as
     if p_provider is null or p_provider = uc_ai.c_provider_anthropic then
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_5_5_opus; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_5_5_sonnet; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_5_5_haiku; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_5_1_fable; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_5_fable; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'anthropic'; l_rec.model_id := uc_ai_anthropic.c_model_claude_5_opus; l_rec.model_type := c_chat; pipe row (l_rec);
@@ -111,6 +112,7 @@ as
 
     -- Google
     if p_provider is null or p_provider = uc_ai.c_provider_google then
+      l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_4_argon; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_8_flash; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_7_flash; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'google'; l_rec.model_id := uc_ai_google.c_model_gemini_3_6_flash; l_rec.model_type := c_chat; pipe row (l_rec);
@@ -137,14 +139,10 @@ as
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_llama_4_maverick; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_llama_4_scout; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_llama_3_3_70b; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_llama_3_2_90b_vision; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_llama_3_2_11b_vision; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_llama_3_1_405b; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_cohere_command_a_reasoning; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_cohere_command_a_vision; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_cohere_command_a_03_2025; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_cohere_command_r_plus; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_cohere_command_r; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_google_gemini_2_5_pro; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_google_gemini_2_5_flash; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_google_gemini_2_5_flash_lite; l_rec.model_type := c_chat; pipe row (l_rec);
@@ -153,6 +151,12 @@ as
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_4_3; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_4_20_multi_agent; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_4_20; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_gpt_oss_120b; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_gpt_oss_20b; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_llama_3_2_90b_vision; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_llama_3_1_405b; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_cohere_command_r_plus; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_cohere_command_r; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_code_fast_1; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_4_1_fast; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_4_fast; l_rec.model_type := c_chat; pipe row (l_rec);
@@ -161,8 +165,6 @@ as
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_3_mini; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_3_fast; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_grok_3_mini_fast; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_gpt_oss_120b; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_gpt_oss_20b; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_cohere_embed_4; l_rec.model_type := c_embedding; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_cohere_embed_english_image_3; l_rec.model_type := c_embedding; pipe row (l_rec);
       l_rec.provider := 'oci'; l_rec.model_id := uc_ai_oci.c_model_cohere_embed_english_light_image_3; l_rec.model_type := c_embedding; pipe row (l_rec);
@@ -184,13 +186,13 @@ as
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_20_reasoning; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_20_non_reasoning; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_20_multi_agent; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_3_mini; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_2_vision; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_1_fast_reasoning; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_1_fast; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4_fast; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_4; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_3_mini; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_3; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_2_vision; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'xai'; l_rec.model_id := uc_ai_xai.c_model_grok_code_fast_1; l_rec.model_type := c_chat; pipe row (l_rec);
     end if;
 
@@ -199,17 +201,18 @@ as
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_mistral_large; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_mistral_medium; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_mistral_small; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_codestral; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_ministral_3_14b; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_zai_glm_5_3_flash; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_zai_glm_5_3; l_rec.model_type := c_chat; pipe row (l_rec);
+      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_zai_glm_5_2; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_magistral_medium; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_magistral_small; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_codestral; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_devstral_medium; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_devstral_small; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_ministral_3_14b; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_ministral_8b; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_ministral_3b; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_pixtral_large; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_zai_glm_5_3; l_rec.model_type := c_chat; pipe row (l_rec);
-      l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_zai_glm_5_2; l_rec.model_type := c_chat; pipe row (l_rec);
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_mistral_embed; l_rec.model_type := c_embedding; pipe row (l_rec);
       l_rec.provider := 'mistral'; l_rec.model_id := uc_ai_mistral.c_model_codestral_embed; l_rec.model_type := c_embedding; pipe row (l_rec);
     end if;

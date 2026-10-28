@@ -54,8 +54,8 @@ end;
 | Provider | Constant | Example model constants |
 |----------|----------|------------------------|
 | OpenAI | `uc_ai.c_provider_openai` | `uc_ai_openai.c_model_gpt_6_astra`, `c_model_gpt_6_luna`, `c_model_gpt_5_6_terra` |
-| Anthropic | `uc_ai.c_provider_anthropic` | `uc_ai_anthropic.c_model_claude_5_5_opus`, `c_model_claude_5_5_sonnet`, `c_model_claude_4_5_haiku` |
-| Google | `uc_ai.c_provider_google` | `uc_ai_google.c_model_gemini_3_1_pro`, `c_model_gemini_3_8_flash` |
+| Anthropic | `uc_ai.c_provider_anthropic` | `uc_ai_anthropic.c_model_claude_5_5_opus`, `c_model_claude_5_5_sonnet`, `c_model_claude_5_5_haiku` |
+| Google | `uc_ai.c_provider_google` | `uc_ai_google.c_model_gemini_4_argon`, `c_model_gemini_3_8_flash` |
 | Ollama (local) | `uc_ai.c_provider_ollama` | see `uc_ai_ollama` spec; also set `uc_ai.g_base_url` |
 | OCI GenAI | `uc_ai.c_provider_oci` | `uc_ai_oci.c_model_llama_4_maverick`, `c_model_cohere_command_a_reasoning` |
 | xAI | `uc_ai.c_provider_xai` | `uc_ai_xai.c_model_grok_4_7`, `c_model_grok_4_20_multi_agent` |

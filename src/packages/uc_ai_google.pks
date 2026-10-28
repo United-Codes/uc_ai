@@ -15,6 +15,8 @@ as
 
   -- Google Gemini models
   -- See https://ai.google.dev/gemini-api/docs/models/gemini
+  c_model_gemini_4_argon          constant uc_ai.model_type := 'gemini-4-argon';
+
   c_model_gemini_3_8_flash        constant uc_ai.model_type := 'gemini-3.8-flash';
   c_model_gemini_3_7_flash        constant uc_ai.model_type := 'gemini-3.7-flash';
   c_model_gemini_3_6_flash        constant uc_ai.model_type := 'gemini-3.6-flash';

@@ -9,7 +9,7 @@ The UC AI Google package integrates Google's Gemini models into your Oracle data
 
 ## Features
 
-- Support for the current Gemini models (Gemini 3.x Flash and Flash-Lite, Gemini 3.1 Pro, Gemini 2.5 series)
+- Support for the current Gemini models (Gemini 4 Argon, Gemini 3.x Flash and Flash-Lite, Gemini 3.1 Pro, Gemini 2.5 series)
 - Full function calling (tools) support
 - Reasoning capabilities with reasoning budget control
 - Multi-modal support (text, images, PDFs)
@@ -80,11 +80,15 @@ uc_ai_google.g_apex_web_credential := 'GOOGLE';
 
 Google offers the Gemini family of models with different capabilities and performance characteristics. The UC AI Google package provides constants for the current models:
 
+### Gemini 4 Series
+
+- `uc_ai_google.c_model_gemini_4_argon` - Gemini 4 Argon, the flagship reasoning model
+
 ### Gemini 3 Series
 
 - `uc_ai_google.c_model_gemini_3_8_flash` - Latest Flash model, fast and good for most tasks
 - `uc_ai_google.c_model_gemini_3_5_flash_lite` - Lightweight model for simple tasks
-- `uc_ai_google.c_model_gemini_3_1_pro` - Most capable model for complex tasks
+- `uc_ai_google.c_model_gemini_3_1_pro` - Pro model for complex tasks (preview)
 
 This list shows the newest model of each family. The package keeps the constants of older models for code that still references them.
 
@@ -109,7 +113,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is Oracle APEX?',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_3_7_flash
+    p_model => uc_ai_google.c_model_gemini_3_8_flash
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -161,7 +165,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_3_7_flash
+    p_model => uc_ai_google.c_model_gemini_3_8_flash
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));

@@ -17,17 +17,23 @@ as
   c_model_mistral_large    constant uc_ai.model_type := 'mistral-large-latest';
   c_model_mistral_medium   constant uc_ai.model_type := 'mistral-medium-latest';
   c_model_mistral_small    constant uc_ai.model_type := 'mistral-small-latest';
+  c_model_codestral        constant uc_ai.model_type := 'codestral-latest';
+  c_model_ministral_3_14b  constant uc_ai.model_type := 'ministral-14b-2512';
+  c_model_zai_glm_5_3_flash constant uc_ai.model_type := 'zai-glm-5-3-flash';
+  c_model_zai_glm_5_3      constant uc_ai.model_type := 'zai-glm-5-3';
+  -- Mistral deprecated this model on 2026-09-29 and retires it on 2026-10-31
+  c_model_zai_glm_5_2      constant uc_ai.model_type := 'zai-glm-5-2';
+
+  -- Mistral retired these models. Requests to them fail.
+  -- They stay here for backward compatibility of code that references the constants.
+  -- See https://docs.mistral.ai/models (section Deprecated and retired models)
   c_model_magistral_medium constant uc_ai.model_type := 'magistral-medium-latest';
   c_model_magistral_small  constant uc_ai.model_type := 'magistral-small-latest';
-  c_model_codestral        constant uc_ai.model_type := 'codestral-latest';
   c_model_devstral_medium  constant uc_ai.model_type := 'devstral-medium-latest';
   c_model_devstral_small   constant uc_ai.model_type := 'devstral-small-latest';
-  c_model_ministral_3_14b  constant uc_ai.model_type := 'ministral-3-14b-25-12';
   c_model_ministral_8b     constant uc_ai.model_type := 'ministral-8b-latest';
   c_model_ministral_3b     constant uc_ai.model_type := 'ministral-3b-latest';
   c_model_pixtral_large    constant uc_ai.model_type := 'pixtral-large-latest';
-  c_model_zai_glm_5_3      constant uc_ai.model_type := 'zai-glm-5-3';
-  c_model_zai_glm_5_2      constant uc_ai.model_type := 'zai-glm-5-2';
 
   -- embedding models
   c_model_mistral_embed    constant uc_ai.model_type := 'mistral-embed';
@@ -37,7 +43,7 @@ as
   c_model_mistral_ocr      constant uc_ai.model_type := 'mistral-ocr-latest';
   c_model_mistral_ocr_4_1  constant uc_ai.model_type := 'mistral-ocr-4-1';
 
-  -- Note: Mistral has no reasoning effort parameter; the magistral models reason by default.
+  -- Note: UC AI sends no reasoning effort parameter to Mistral.
 
   -- type: HTTP-Header, credential-name: Authorization, value: Bearer <token>
   g_apex_web_credential varchar2(255 char);

@@ -14,7 +14,7 @@ Currently the framework supports the following AI providers:
 - **Google**: Gemini
 - **OCI**: Oracle Cloud Infrastructure
 - **xAI**: Grok
-- **Mistral**: Mistral Large/Medium/Small, Magistral, Codestral
+- **Mistral**: Mistral Large/Medium/Small, Codestral
 - **Ollama**: Open source models (Llama, Mistral, Qwen, and more)
 - **OpenRouter**: Unified API for 300+ models from multiple providers
 
@@ -44,7 +44,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is APEX Office Print?',
     p_provider => uc_ai.c_provider_anthropic,
-    p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
+    p_model => uc_ai_anthropic.c_model_claude_5_5_haiku
   );
   DBMS_OUTPUT.PUT_LINE('Anthropic Response: '
   || l_result.get_string('final_message'));
@@ -53,7 +53,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is APEX Office Print?',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_3_7_flash
+    p_model => uc_ai_google.c_model_gemini_3_8_flash
   );
   DBMS_OUTPUT.PUT_LINE('Google Response: '
   || l_result.get_string('final_message'));
