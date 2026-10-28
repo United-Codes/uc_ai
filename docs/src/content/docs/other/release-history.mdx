@@ -7,48 +7,76 @@ sidebar:
 
 ## v26.5
 
-To upgrade run the `upgrade_uc_ai.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases). The script changes the tables, the triggers, the packages, and the views in one run. It replaces `upgrade_packages.sql` and the migration scripts. See [Upgrades](/products/uc-ai/docs/guides/installation/#upgrades).
+To upgrade, run the `upgrade_uc_ai.sql` script attached to the [GitHub release](https://github.com/United-Codes/uc_ai/releases). The script changes the tables, the triggers, the packages, and the views in one run. It replaces `upgrade_packages.sql` and the migration scripts. See [Upgrades](/products/uc-ai/docs/guides/installation/#upgrades).
 
 **Upgrade script**:
 
-- **One upgrade script for every release.** `upgrade_uc_ai.sql` upgrades a schema from v25.7 or later. Before each table change, the script checks the data dictionary, so you can run it more than once. It also completes a schema that has only part of an older migration. The script stops at the first failed schema step. The release no longer has a separate migration script.
-- **This release changes two tables.** The script adds the column `uc_ai_agents.decision_config` and the agent type `decision`. It adds the column `uc_ai_agent_messages.tool_call_id` too.
-- **The script creates the tables of the chat plug-in.** It creates `uc_ai_chat_messages` and `uc_ai_chat_widget_types`. If `uc_ai_chat_messages` exists from the separate plug-in bundle, the script adds every column that the table does not have yet.
+- **Upgrade from v25.7 or later with one script.** Use `upgrade_uc_ai.sql` for all schema and package changes. Before each table change, the script checks whether the change is necessary. You can run the script more than once. It also completes changes from an older migration that did not finish. The script stops at the first failed schema step. The release no longer has a separate migration script.
+- **The upgrade adds support for decision agents and tool call tracking.** The script adds the column `uc_ai_agents.decision_config` and the agent type `decision`. It adds the column `uc_ai_agent_messages.tool_call_id` too.
+- **The upgrade includes the chat plug-in tables.** It creates `uc_ai_chat_messages` and `uc_ai_chat_widget_types`. If `uc_ai_chat_messages` exists from the separate plug-in bundle, the script adds any missing columns.
 
 **Behavior notes**:
 
-- **Placeholders in a prompt profile are filled in one pass.** UC AI now inserts each value as it is. A value that contains `{other}` no longer expands to the value of another parameter. A backslash in a value stays as it is, and UC AI no longer reads it as an escape. A value of more than 32,767 characters now works. Before, it raised `ORA-06502`. A profile that relied on the old expansion of a nested placeholder needs the final text in the value. See [Prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/).
+- **Prompt profiles preserve the text in parameter values.** For example, if you supply `{other}` as part of a value, that text stays in the prompt. UC AI no longer replaces it with the value of the `other` parameter. Backslashes also stay unchanged. If your profile uses one parameter to refer to another, supply the complete text instead. See [Prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/).
+- **Prompt profiles accept parameter values longer than 32,767 characters.** These values previously raised `ORA-06502`.
+- **Corrected model IDs for Mistral and OCI.** Three constants now use the IDs that the providers expect:
+  - Mistral: `uc_ai_mistral.c_model_ministral_3_14b` uses `ministral-14b-2512`.
+  - OCI: `uc_ai_oci.c_model_gpt_oss_120b` uses `openai.gpt-oss-120b`.
+  - OCI: `uc_ai_oci.c_model_gpt_oss_20b` uses `openai.gpt-oss-20b`.
 
-- **Two model constants have a new value.** `uc_ai_mistral.c_model_ministral_3_14b` is now `ministral-14b-2512`. `uc_ai_oci.c_model_gpt_oss_120b` and `c_model_gpt_oss_20b` are now `openai.gpt-oss-120b` and `openai.gpt-oss-20b`, the ids that OCI uses. Code that passes the constant needs no change. Code that passes the old id as a string must use the new id.
+  If your code uses these constants, no change is necessary. If your code passes the old model IDs as strings, replace them with the IDs listed here.
 
 **Features**:
 
 Chat plug-in:
 
-- **The APEX Chat plug-in ships with UC AI.** `install_uc_ai.sql` and `upgrade_uc_ai.sql` create the tables and the packages `uc_ai_chat`, `uc_ai_chat_widgets`, and `uc_ai_chat_hook`. The plug-in export file is attached to the release. The plug-in has the same version as UC AI, and there is no separate `uc-ai-chat` archive. To use UC AI in a schema other than the schema of the application, see [Use UC AI in a different schema](/products/uc-ai/docs/guides/apex-chat-plugin/#use-uc-ai-in-a-different-schema).
+- **The APEX Chat plug-in is now part of the UC AI release.** `install_uc_ai.sql` and `upgrade_uc_ai.sql` create the tables and the packages `uc_ai_chat`, `uc_ai_chat_widgets`, and `uc_ai_chat_hook`. The plug-in export file is attached to the release. The plug-in has the same version as UC AI, and there is no separate `uc-ai-chat` archive. To use UC AI in a schema other than the schema of the application, see [Use UC AI in a different schema](/products/uc-ai/docs/guides/apex-chat-plugin/#use-uc-ai-in-a-different-schema).
 
 Request timeout:
 
-- **Transfer timeout.** The new global `uc_ai.g_transfer_timeout` sets the HTTP timeout in seconds for every provider request. It covers chat, embeddings, OCR, and decisions. Before, the timeout was fixed: 180 seconds for chat and embeddings, and 300 seconds for OCR and decisions. These values stay the default. A prompt profile or a `model_config` can set it with the key `g_transfer_timeout`, also for a decision agent. See [Prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/).
+- **Set how long a provider request can wait.** The new global `uc_ai.g_transfer_timeout` sets the HTTP timeout in seconds for every provider request. It covers chat, embeddings, OCR, and decisions. Before, the timeout was fixed: 180 seconds for chat and embeddings, and 300 seconds for OCR and decisions. These default values stay unchanged. You can also set `g_transfer_timeout` in a prompt profile or `model_config`, including the configuration of a decision agent. See [Prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/).
 
 Decisions:
 
-- **[Decide](/products/uc-ai/docs/api/decide/)** (`uc_ai.decide`, experimental): get typed answers with probabilities to several named questions about one text or image. A question is a choice, a score or a boolean. One call evaluates all questions, and the result has the same shape for every provider. Three providers support it: **OpenAI** (the Decisions API with `uc_ai_openai.c_model_gpt_6_luna`, with images), **TypeSafe** (`uc_ai.c_provider_typesafe` with `uc_ai_typesafe.c_model_jev_latest`, with PNG and JPEG images), and **OpenRouter** (`uc_ai.c_provider_openrouter` with `uc_ai_openrouter.c_decision_model_jev`, text only). TypeSafe supports decisions only. It has no chat and no embeddings. The provider APIs are in beta, so the result can still change. When OpenAI refuses a question, the answer has the type `refused` and the call does not raise an error. See the pages for [OpenAI](/products/uc-ai/docs/providers/openai/#decisions), [TypeSafe](/products/uc-ai/docs/providers/typesafe/) and [OpenRouter](/products/uc-ai/docs/providers/openrouter/).
-- **[Decision agents](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/)** (new agent type `decision`): run `uc_ai.decide` as an agent. Create one with `uc_ai_agents_api.c_type_decision` and a `p_decision_config`. This JSON holds the provider, the model, the `state_template`, and the questions. An optional `model_config` holds the credential and the base URL. A decision agent has an execution row with the token counts, so the session totals include it. A workflow uses it as a normal `agent` step, and a condition can read `{$.steps.<key>.answers.<id>.choice}`. A refused question has no `choice`: branch on `answers.<id>.type = 'refused'`. A decision agent cannot chat. It cannot be a handoff target or a conversation participant. The cost budgets of UC AI Pro do not price a decision agent yet. See [Route a ticket with a workflow](/products/uc-ai/docs/api/decide/#route-a-ticket-with-a-workflow).
+- **[Decide](/products/uc-ai/docs/api/decide/)** (`uc_ai.decide`, experimental): ask several questions about one text or image. Each answer contains a choice, a score, or a boolean, with probabilities. One call evaluates all questions, and the result has the same structure for every provider.
+
+  Three providers support it:
+
+  - **OpenAI**: the Decisions API with `uc_ai_openai.c_model_gpt_6_luna`, with image support.
+  - **TypeSafe**: `uc_ai.c_provider_typesafe` with `uc_ai_typesafe.c_model_jev_latest`, with PNG and JPEG support.
+  - **OpenRouter**: `uc_ai.c_provider_openrouter` with `uc_ai_openrouter.c_decision_model_jev`, text only.
+
+  TypeSafe supports decisions only. It has no chat and no embeddings. The provider APIs are in beta, so the result can still change. When OpenAI refuses a question, the answer has the type `refused` and the call does not raise an error. See the pages for [OpenAI](/products/uc-ai/docs/providers/openai/#decisions), [TypeSafe](/products/uc-ai/docs/providers/typesafe/) and [OpenRouter](/products/uc-ai/docs/providers/openrouter/).
+- **[Decision agents](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/)** (new agent type `decision`): run `uc_ai.decide` as an agent. Create one with `uc_ai_agents_api.c_type_decision` and a `p_decision_config`. This JSON holds the provider, the model, the `state_template`, and the questions. An optional `model_config` holds the credential and the base URL. Each run records token counts, which contribute to the session totals.
+
+  A workflow calls the decision agent through an `agent` step, and a condition can read `{$.steps.<key>.answers.<id>.choice}`. A refused question has no `choice`: branch on `answers.<id>.type = 'refused'`. A decision agent cannot chat. It cannot be a handoff target or a conversation participant. UC AI Pro cost budgets do not yet calculate the costs of decision agents. See [Route a ticket with a workflow](/products/uc-ai/docs/api/decide/#route-a-ticket-with-a-workflow).
 
 Agent2Agent (A2A):
 
-- **[A2A server](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/)** (`uc_ai_a2a`): publish an agent as an A2A 1.0 agent over ORDS. Call `uc_ai_a2a.install_ords_module` one time, then `expose_agent` and `create_api_key`. Other systems read the agent card at `<base>/.well-known/agent-card.json` and send messages with JSON-RPC or HTTP+JSON. The server supports blocking and streaming messages, background tasks with `returnImmediately`, cancel, subscribe, push notifications, an extended card, and signed cards. A client authenticates with an API key or with an ORDS OAuth2 client. Each client sees only its own tasks. The run context of each run holds `a2a_client` and `a2a_endpoint`. The release adds four tables with the prefix `uc_ai_a2a_`. The server speaks A2A 1.0 only. ORDS buffers a stream, so all events arrive when the run ends.
+- **[A2A server](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/)** (`uc_ai_a2a`): let other systems call your agents through ORDS with the A2A 1.0 protocol. Call `uc_ai_a2a.install_ords_module` one time, then `expose_agent` and `create_api_key`. Other systems read the agent card at `<base>/.well-known/agent-card.json` and send messages with JSON-RPC or HTTP+JSON.
+
+  The server supports blocking requests, streaming, and background tasks with `returnImmediately`. Clients can cancel tasks, subscribe to updates, and receive push notifications. The server also supports extended and signed agent cards.
+
+  A client authenticates with an API key or with an ORDS OAuth2 client. Each client sees only its own tasks.
+
+  The run context of each run holds `a2a_client` and `a2a_endpoint`. The release adds four tables with the prefix `uc_ai_a2a_`. Only A2A 1.0 is supported. ORDS collects streaming events and delivers them together when the run ends.
 
 Chat widgets:
 
-- **[Chat widgets](/products/uc-ai/docs/guides/chat-widgets/)**: an agent can show a stat card, a status, a key value list, a table, or a chart in an answer of the [APEX Chat plug-in](/products/uc-ai/docs/guides/apex-chat-plugin/). The plug-in has two new attributes, **Widgets** and **Custom Widgets**. A [custom widget type](/products/uc-ai/docs/guides/chat-widgets-custom-types/) shows your own list of records. The plug-in version with widgets needs UC AI 26.5. The course [Add Your Own Widget to the Chat](/products/uc-ai/docs/tutorial/add-a-widget-to-the-chat/01-render-without-a-model/) builds an invoice list widget.
-- **Two additions for front ends.** Both overloads of `uc_ai_agents_api.execute_agent` have the new parameter `p_prompt_addendum`. It adds text to the system prompt of the first turn of a profile agent or an orchestrator agent. A follow-up turn uses the stored system message. The new column `uc_ai_agent_messages.tool_call_id` holds the provider tool call id of the rows with the role `tool_call` and `tool_result`. Pair the rows on `execution_id` and `tool_call_id`. A row from before this release has no value.
+- **[Chat widgets](/products/uc-ai/docs/guides/chat-widgets/)**: agents can show stat cards, statuses, key-value lists, tables, and charts in answers through the [APEX Chat plug-in](/products/uc-ai/docs/guides/apex-chat-plugin/). The plug-in has two new attributes, **Widgets** and **Custom Widgets**. A [custom widget type](/products/uc-ai/docs/guides/chat-widgets-custom-types/) shows your own list of records. The plug-in version with widgets needs UC AI 26.5. The course [Add Your Own Widget to the Chat](/products/uc-ai/docs/tutorial/add-a-widget-to-the-chat/01-render-without-a-model/) builds an invoice list widget.
+- **Add instructions to the first turn of an agent.** Both overloads of `uc_ai_agents_api.execute_agent` have the new parameter `p_prompt_addendum`. It adds text to the system prompt of the first turn of a profile agent or an orchestrator agent. A follow-up turn uses the stored system message.
+- **Match tool calls with their results in the message log.** The new `uc_ai_agent_messages.tool_call_id` column stores the provider's tool call ID for `tool_call` and `tool_result` rows. Match the rows with `execution_id` and `tool_call_id`. Messages from before this release have no tool call ID.
 
 New models:
 
 - **New model constants.** Anthropic: `c_model_claude_5_5_haiku`. Google: `c_model_gemini_4_argon`. Mistral: `c_model_zai_glm_5_3_flash`.
-- **Retired models.** The providers retired many models. The constants of these models stay in the packages, in a group of retired models, so existing code compiles. OpenAI: the `o1`, `o3-mini`, `o4-mini`, deep research, `gpt-4.5`, `gpt-4-turbo`, `gpt-4`, and `gpt-3.5-turbo` models, and more. xAI: `grok-4-1-fast`, `grok-4-fast`, `grok-4`, `grok-3`, and `grok-code-fast-1`. Mistral: the Magistral, Devstral, Ministral 8B and 3B, and Pixtral Large models. OCI: the Llama 3.1 405B, Llama 3.2 90B Vision and Cohere Command R models, and the older Grok models. Each provider page lists the models that are current and the models that the provider announced for retirement, for example Claude Sonnet 4.5 on 2026-11-30. The examples in the documentation use current models.
+- **Retired model constants remain available so existing code compiles.** These constants do not restore access to models that providers no longer offer. Retired models include:
+  - OpenAI: the `o1`, `o3-mini`, `o4-mini`, deep research, `gpt-4.5`, `gpt-4-turbo`, `gpt-4`, and `gpt-3.5-turbo` models, and more.
+  - xAI: `grok-4-1-fast`, `grok-4-fast`, `grok-4`, `grok-3`, and `grok-code-fast-1`.
+  - Mistral: the Magistral, Devstral, Ministral 8B and 3B, and Pixtral Large models.
+  - OCI: the Llama 3.1 405B, Llama 3.2 90B Vision and Cohere Command R models, and the older Grok models.
+
+  Each provider page lists current models and announced retirement dates, such as 2026-11-30 for Claude Sonnet 4.5. The examples in the documentation use current models.
 
 ## v26.4
 
