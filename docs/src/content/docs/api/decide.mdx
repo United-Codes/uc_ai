@@ -182,7 +182,7 @@ UC AI checks the call before it sends a request. A failed check costs no request
 | --- | --- | --- |
 | `ORA-20306` | Before the request | `p_provider` is null, unknown, or has no decision support. The message lists the providers that have decision support. |
 | `ORA-20503` | Before the request | A question or an id is malformed. A choice with fewer than 2 options. A score with fewer than 2 levels. An unknown question type. Blank instructions. An empty state without a file. A file object or a value in `p_options` of the wrong type. |
-| `ORA-20508` | Before the request | The provider cannot take the call. More than 255 options in a choice. More than 10 levels in a score. An image type that the provider does not accept. A file for TypeSafe or OpenRouter. |
+| `ORA-20508` | Before the request | The provider cannot take the call. More than 255 options in a choice. More than 10 levels in a score. An image type that the provider does not accept. A file for OpenRouter. |
 | `ORA-20302` | After the request | The provider returned an error. The message holds the HTTP status and the message of the provider. |
 | `ORA-20304` | After the response | The answers do not match the questions. |
 

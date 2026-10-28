@@ -137,81 +137,20 @@ If provider model constants changed, also run `bash scripts/generate_uc_ai_utils
 
 Connection: `sql -name local-23ai-uc_ai`. Use `set serveroutput on size unlimited; set feedback off;` in each session.
 
-There is **no full-suite runner and no LLM-free entry point**. `ut.run` with no
+There is **no full-suite runner for the LLM-backed suites**. `ut.run` with no
 argument hits every live provider suite, and the `--%suitepath` coverage is partial
-(16 of the 37 suites carry none), so `ut.run('uc_ai')` silently reaches about half.
-Run the LLM-free suites by name.
+(16 of the suites carry none), so `ut.run('uc_ai')` silently reaches about half.
 
-**LLM-free suites** — verified: none of these calls `generate_text`,
-`generate_embeddings`, `execute_agent` or `execute_profile` in a way that reaches a
-provider. 612 tests, all of them fast and free:
+The LLM-free suites have a runner. It runs a curated list, pins the NLS
+separators and enables the test HTTP transport:
 
-```sql
-begin ut.run('test_uc_ai_toon'); end;                    -- 22
-/
-begin ut.run('test_uc_ai_error'); end;                   -- 10
-/
-begin ut.run('test_uc_ai_utils'); end;                   --  6
-/
-begin ut.run('test_uc_ai_message_api'); end;             -- 17
-/
-begin ut.run('test_uc_ai_structured_output'); end;       -- 37
-/
-begin ut.run('test_uc_ai_tools_api'); end;               -- 12
-/
-begin ut.run('test_uc_ai_settings'); end;                -- 11
-/
-begin ut.run('test_uc_ai_reset_globals'); end;           --  3
-/
-begin ut.run('test_uc_ai_passthrough'); end;             --  8
-/
-begin ut.run('test_uc_ai_reasoning_replay'); end;        -- 14
-/
-begin ut.run('test_uc_ai_workflow_mapping'); end;        -- 33
-/
-begin ut.run('test_uc_ai_agent_session_meta'); end;      -- 28
-/
-begin ut.run('test_uc_ai_agent_validation'); end;        -- 41
-/
-begin ut.run('test_uc_ai_decision_agent'); end;         -- 47
-/
-begin ut.run('test_uc_ai_agent_as_tool'); end;           -- 20
-/
-begin ut.run('test_uc_ai_agent_purge'); end;             --  9
-/
-begin ut.run('test_uc_ai_memory'); end;                  -- 84
-/
-begin ut.run('test_uc_ai_run_context'); end;             -- 46
-/
-begin ut.run('test_uc_ai_agent_prompt_addendum'); end;   -- 10
-/
-begin ut.run('test_uc_ai_hook'); end;                    -- 12
-/
-begin ut.run('test_uc_ai_wire'); end;                    -- 24
-/
-begin ut.run('test_uc_ai_wire_2'); end;                  -- 22 (5 disabled: known bugs, see the spec)
-/
-begin ut.run('test_uc_ai_wire_3'); end;                  -- 17
-/
-begin ut.run('test_uc_ai_anthropic_wire'); end;          -- 13
-/
-begin ut.run('test_uc_ai_google_wire'); end;             -- 13
-/
-begin ut.run('test_uc_ai_openai_wire'); end;             --  7
-/
-begin ut.run('test_uc_ai_responses_wire'); end;          -- 13
-/
-begin ut.run('test_uc_ai_oci_wire'); end;                -- 14
-/
-begin ut.run('test_uc_ai_ollama_wire'); end;             --  8
-/
-begin ut.run('test_uc_ai_ocr_wire'); end;                -- 37
-/
-begin ut.run('test_uc_ai_tools_wire'); end;              -- 11
-/
-begin ut.run('test_uc_ai_spec_wire'); end;               --  5
-/
+```bash
+make test-free     # sql -name local-23ai-uc_ai @scripts/run_tests_free.sql
 ```
+
+`scripts/run_tests_free.sql` is the list. Add a new LLM-free suite there, and
+keep the property that none of its tests reaches a provider. Read the end of the
+output for the failure count. Do not count on the exit code alone.
 
 The last two of the wire suites do call `execute_agent`, but only on an agent that
 must fail first — uncommitted, or pointing at a missing prompt profile — so no
