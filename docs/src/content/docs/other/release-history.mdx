@@ -13,6 +13,7 @@ To upgrade run the `upgrade_uc_ai.sql` script attached to the [GitHub release](h
 
 - **One upgrade script for every release.** `upgrade_uc_ai.sql` upgrades a schema from v25.7 or later. Before each table change, the script checks the data dictionary, so you can run it more than once. It also completes a schema that has only part of an older migration. The script stops at the first failed schema step. The release no longer has a separate migration script.
 - **This release changes two tables.** The script adds the column `uc_ai_agents.decision_config` and the agent type `decision`. It adds the column `uc_ai_agent_messages.tool_call_id` too.
+- **The script creates the tables of the chat plug-in.** It creates `uc_ai_chat_messages` and `uc_ai_chat_widget_types`. If `uc_ai_chat_messages` exists from the separate plug-in bundle, the script adds every column that the table does not have yet.
 
 **Behavior notes**:
 
@@ -21,6 +22,10 @@ To upgrade run the `upgrade_uc_ai.sql` script attached to the [GitHub release](h
 **Features**:
 
 Request timeout:
+
+Chat plug-in:
+
+- **The APEX Chat plug-in ships with UC AI.** `install_uc_ai.sql` and `upgrade_uc_ai.sql` create the tables and the packages `uc_ai_chat`, `uc_ai_chat_widgets`, and `uc_ai_chat_hook`. The plug-in export file is attached to the release. The plug-in has the same version as UC AI, and there is no separate `uc-ai-chat` archive. To use UC AI in a schema other than the schema of the application, see [Use UC AI in a different schema](/products/uc-ai/docs/guides/apex-chat-plugin/#use-uc-ai-in-a-different-schema).
 
 - **Transfer timeout.** The new global `uc_ai.g_transfer_timeout` sets the HTTP timeout in seconds for every provider request. It covers chat, embeddings, OCR, and decisions. Before, the timeout was fixed: 180 seconds for chat and embeddings, and 300 seconds for OCR and decisions. These values stay the default. A prompt profile or a `model_config` can set it with the key `g_transfer_timeout`, also for a decision agent. See [Prompt profiles](/products/uc-ai/docs/guides/prompt-profiles/).
 

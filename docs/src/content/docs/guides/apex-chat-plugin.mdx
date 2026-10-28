@@ -16,11 +16,9 @@ background job, it polls for the answer, and it keeps the conversation.
 ![An empty UC AI chat region: the title APEX Helper, a welcome message next to the assistant avatar, and a row of three outlined suggested-prompt buttons labelled "Try asking" directly above the message box](../../../assets/apex-chat/chat-empty-state.png)
 
 <Aside type="note" title="Where to get the plug-in">
-The plug-in is not part of the UC AI installation. Download the
-`uc-ai-chat-*.zip` file from the [latest UC AI
-release](https://github.com/United-Codes/uc_ai/releases/latest). The archive
-holds the table script, the two packages, the optional hook package, and the
-plug-in export file.
+The plug-in is part of UC AI. `install_uc_ai.sql` and `upgrade_uc_ai.sql` create
+its tables and packages. The plug-in export file is attached to the release, next
+to the scripts. The plug-in has the same version as UC AI.
 </Aside>
 
 ## Why the agent needs a background job
@@ -46,13 +44,9 @@ lists as attributes.
 
 You need these things:
 
-- **UC AI 26.3 or later** in the database schema. The package of the plug-in
-  calls `execute_agent` with the parameter `p_run_context`, which is new in this
-  version. On an older version the package body does not compile.
-- **UC AI 26.5 or later** for [chat widgets](/products/uc-ai/docs/guides/chat-widgets/).
-  The plug-in version that ships with widgets names the parameter
-  `p_prompt_addendum` and the column `uc_ai_agent_messages.tool_call_id`, which
-  are new in 26.5. A plug-in version without widgets still needs only 26.3.
+- **UC AI 26.5 or later** in the database schema that parses the APEX
+  application. If the application parses in another schema, read [Use UC AI in a
+  different schema](#use-uc-ai-in-a-different-schema).
 - An agent with the status `active`. See
   [Profile agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/).
 - Permission to create a `dbms_scheduler` job in the schema.
@@ -61,37 +55,106 @@ You need these things:
 
 <Steps>
 
-1. ### Create the table
+1. ### Install or upgrade UC AI
 
-   Run `ai_tables.sql`. This script creates `uc_ai_chat_messages`, which holds
-   every message of every conversation.
+   In the schema that parses the application, run `install_uc_ai.sql` for a new
+   installation. Run `upgrade_uc_ai.sql` for an existing installation.
 
-   If the table exists from an earlier version, run the `alter table` blocks at
-   the end of the same script instead. The block for chat widgets adds the
-   columns `tool_call_id`, `widgets`, and `parts`. The package body of the plug-in
-   version with widgets reads these columns, so run the block on every upgrade to
-   this version.
+   Both scripts create the table `uc_ai_chat_messages`, the table
+   `uc_ai_chat_widget_types`, and the packages `uc_ai_chat_widgets`,
+   `uc_ai_chat`, and `uc_ai_chat_hook`. The hook package lets the chat show the name of
+   the tool that runs now. The upgrade script adds the columns that an
+   earlier version of the plug-in table does not have, for example `tool_call_id`,
+   `widgets`, and `parts`. You can run it more than once.
 
-2. ### Install the packages
+2. ### Import the plug-in
 
-   In the plug-in version with widgets, run `uc_ai_chat_widgets.pks` and
-   `uc_ai_chat_widgets.pkb` first. Then run `uc_ai_chat.pks` and `uc_ai_chat.pkb`. The package
-   body calls `uc_ai_agents_api`, so UC AI must be installed first.
+   Import the file `region_type_plugin_com_united_codes_uc_ai_chat.sql`
+   into your APEX application. The file is a normal APEX component export. In the
+   APEX Builder, go to **Shared Components > Plug-ins > Import**.
 
-3. ### Import the plug-in
+   Import the file again after each UC AI upgrade. A region that uses an older
+   export keeps working, but it does not get the new attributes.
 
-   Import `region_type_plugin_com_united_codes_uc_ai_chat.sql` into your APEX
-   application. The file is a normal APEX component export.
+</Steps>
+
+## Use UC AI in a different schema
+
+The default is one schema: UC AI and the chat objects are in the schema that parses
+the application. If the application parses in another schema, keep UC AI in its
+own schema and put the chat objects in the schema of the application.
+
+<Steps>
+
+1. ### Install UC AI in its own schema
+
+   Run `install_uc_ai.sql` in the UC AI schema. You can leave the chat objects
+   there. The plug-in does not use them.
+
+2. ### Create the chat objects in the application schema
+
+   In the schema that parses the application, run the chat block of
+   `src/tables/install.sql`. It starts at the heading `UC AI CHAT PLUG-IN` and
+   ends at the end of the file. Then run these package files in this order:
+   `uc_ai_chat_widgets`, `uc_ai_chat`, and `uc_ai_chat_hook`. Run each
+   specification (`.pks`) before its body (`.pkb`).
+
+3. ### Give the application schema access to UC AI
+
+   In the UC AI schema, grant access to the objects that the chat packages use:
+
+   ```sql
+   grant execute on uc_ai_agents_api to app_schema;
+   grant execute on uc_ai_error to app_schema;
+   grant select on uc_ai_agent_sessions to app_schema;
+   grant select on uc_ai_agent_messages to app_schema;
+   grant select on uc_ai_agent_executions to app_schema;
+   ```
+
+   Then create a synonym for each of these objects in the application schema:
+
+   ```sql
+   create synonym uc_ai_agents_api for uc_ai_schema.uc_ai_agents_api;
+   create synonym uc_ai_error for uc_ai_schema.uc_ai_error;
+   create synonym uc_ai_agent_sessions for uc_ai_schema.uc_ai_agent_sessions;
+   create synonym uc_ai_agent_messages for uc_ai_schema.uc_ai_agent_messages;
+   create synonym uc_ai_agent_executions for uc_ai_schema.uc_ai_agent_executions;
+   ```
+
+   Replace `uc_ai_schema` and `app_schema` with the names of your schemas.
 
 4. ### Optional: show the tool progress
 
-   Run `uc_ai_chat_hook.pks` and then `uc_ai_chat_hook.pkb`. With this package,
-   the chat shows the name of the tool that runs now.
+   UC AI calls the hook package from its own schema. Grant it the right to run the
+   package of the application schema:
 
-   If UC AI is in a different schema, grant `execute` on the hook package to
-   that schema. Without the grant the plug-in leaves this feature off.
+   ```sql
+   grant execute on uc_ai_chat_hook to uc_ai_schema;
+   ```
+
+   Without this grant, the plug-in leaves the tool progress off.
+
+5. ### Import the plug-in
+
+   Import the plug-in file as described in [Install the
+   plug-in](#install-the-plug-in).
 
 </Steps>
+
+### Upgrade the chat objects in the application schema
+
+The script `upgrade_uc_ai.sql` changes the tables of the UC AI schema only. It does
+not change the chat tables in the application schema. Do these steps after each UC AI
+upgrade:
+
+1. Read the release notes. They name each change to the tables
+   `uc_ai_chat_messages` and `uc_ai_chat_widget_types`.
+2. Apply each change to the table in the application schema. The guarded steps in
+   `src/upgrade/upgrade_schema.sql`, under the heading `UC AI Chat plug-in`, show
+   the statements.
+3. Run the specifications and the bodies of the three chat packages again in the
+   application schema.
+4. Import the plug-in file again.
 
 ## Add a chat region to a page
 
@@ -347,9 +410,8 @@ enforcer. The notices give no figure, no percentage, and no name of a limit.
 
 ## Version history
 
-A plug-in version without widgets needs UC AI 26.3, because the package body
-calls `p_run_context`. The plug-in version with widgets needs UC AI 26.5. This
-table gives the version that introduced each feature:
+The plug-in has the same version as UC AI. The first release that includes the
+plug-in is 26.5. This table gives the UC AI version that introduced each feature:
 
 | Feature | UC AI version |
 | --- | --- |

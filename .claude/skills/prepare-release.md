@@ -45,6 +45,23 @@ git diff v<PREV>..HEAD --stat -- src/tables/ src/triggers/ src/upgrade/
 - Triggers, views and post-scripts are `create or replace` and always run.
 - The release notes say what a change does to existing data. The upgrade script itself needs no mention as a first-run step.
 
+### 2a. Sync the chat plug-in export
+
+The UC AI Chat plug-in ships with UC AI. This repository is the source of its database side:
+the packages `src/packages/uc_ai_chat*` and the tables in `src/tables/install.sql`. Edit them
+here, never in the `apex-chat` repository. Only the APEX export file
+(`region_type_plugin_com_united_codes_uc_ai_chat.sql` in the repository root) comes from
+`apex-chat`.
+
+```bash
+bash scripts/sync_chat_plugin_export.sh   # default source: ../apex-chat
+```
+
+Run it before the generators. `release.yml` attaches the export file to the release. A change to `uc_ai_chat_messages` or
+`uc_ai_chat_widget_types` needs a guarded step (section 2) and a line in the release notes
+for the readers of the guide section "Use UC AI in a different schema". These readers
+change the tables in their application schema by hand.
+
 ### 2b. Register any new package with the generators
 
 `scripts/package_utils.sh` drives every generator from three hardcoded arrays

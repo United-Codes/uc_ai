@@ -66,6 +66,7 @@ jobs:
             ./src/dependencies/logger_3.1.1/logger_no_op.sql
             upgrade_uc_ai.sql
             uninstall.sql
+            region_type_plugin_com_united_codes_uc_ai_chat.sql
             install_ptc_sandbox_complete.sql
             ./scripts/uninstall_ptc_sandbox.sql
         env:

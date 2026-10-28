@@ -48,6 +48,9 @@ DROP PACKAGE uc_ai_google;
 DROP PACKAGE uc_ai_anthropic;
 
 PROMPT Dropping API packages...
+DROP PACKAGE uc_ai_chat_hook;
+DROP PACKAGE uc_ai_chat;
+DROP PACKAGE uc_ai_chat_widgets;
 DROP PACKAGE uc_ai_a2a;
 DROP PACKAGE uc_ai_a2a_core;
 DROP PACKAGE uc_ai_utils;

@@ -765,7 +765,7 @@ end;]';
   end release_v26_3;
 
   -- ==========================================================================
-  -- v26.5: tool call ids on messages, the decision agent type
+  -- v26.5: tool call ids on messages, the decision agent type, A2A server, chat plug-in
   -- ==========================================================================
 
   procedure release_v26_5 is
@@ -885,6 +885,107 @@ end;]';
   constraint uc_ai_a2a_push_configs_uk unique (task_id, config_id),
   constraint uc_ai_a2a_push_configs_task_fk foreign key (task_id)
     references uc_ai_a2a_tasks(task_id) on delete cascade
+)]');
+
+    step('v26.5: UC AI Chat plug-in');
+
+    -- The chat tables used to ship in the separate plug-in bundle (ai_tables.sql),
+    -- so a schema can hold any older shape of uc_ai_chat_messages. The table is
+    -- created in its current shape; an existing one gets every later column.
+    ensure_sequence('uc_ai_chat_messages_seq');
+    ensure_table('uc_ai_chat_messages', q'[create table uc_ai_chat_messages (
+  id                    number default on null uc_ai_chat_messages_seq.nextval not null,
+  execution_id          number,
+  session_id            varchar2(255 char) not null,
+  role                  varchar2(20 char) not null,
+  content               clob,
+  reasoning_content     clob,
+  tool_name             varchar2(255 char),
+  tool_call_id          varchar2(255 char),
+  tool_input            clob,
+  tool_output           clob,
+  tool_status           varchar2(50 char),
+  input_tokens          number,
+  output_tokens         number,
+  agent_code            varchar2(255 char),
+  agent_version         number,
+  agent_request_params  clob,
+  session_init_code     clob,
+  run_context           clob,
+  turn_status           varchar2(20 char),
+  widgets               varchar2(200 char),
+  parts                 clob,
+  error_detail          varchar2(4000 char),
+  created_by            varchar2(255 char) not null,
+  created_at            timestamp default on null systimestamp not null,
+  constraint uc_ai_chat_messages_pk primary key (id),
+  constraint uc_ai_chat_msg_parts_ck check (parts is json),
+  constraint uc_ai_chat_msg_role_ck check (role in ('user', 'assistant', 'tool_call', 'tool_result')),
+  constraint uc_ai_chat_msg_tool_ck check (tool_status is null or tool_status in ('running', 'success', 'error')),
+  constraint uc_ai_chat_msg_tstatus_ck check (
+    turn_status is null
+    or (role = 'user' and turn_status in ('pending', 'processing', 'done', 'error', 'cancelled'))
+  )
+)]');
+    ensure_column('uc_ai_chat_messages', 'agent_code', 'varchar2(255 char)');
+    ensure_column('uc_ai_chat_messages', 'agent_version', 'number');
+    ensure_column('uc_ai_chat_messages', 'agent_request_params', 'clob');
+    ensure_column('uc_ai_chat_messages', 'session_init_code', 'clob');
+    ensure_column('uc_ai_chat_messages', 'tool_call_id', 'varchar2(255 char)');
+    ensure_column('uc_ai_chat_messages', 'run_context', 'clob');
+    ensure_column('uc_ai_chat_messages', 'widgets', 'varchar2(200 char)');
+    ensure_column('uc_ai_chat_messages', 'parts', 'clob');
+    ensure_column('uc_ai_chat_messages', 'error_detail', 'varchar2(4000 char)');
+
+    ensure_column('uc_ai_chat_messages', 'turn_status', 'varchar2(20 char)');
+    if g_changed then
+      -- turns that exist before turn tracking are complete; mark them done so a
+      -- poller does not treat them as pending
+      execute immediate q'[update uc_ai_chat_messages
+   set turn_status = 'done'
+ where role = 'user'
+   and turn_status is null]';
+      commit;
+    end if;
+
+    -- Rows written through the plug-in already follow these checks, so the
+    -- constraints are created ENABLE NOVALIDATE.
+    ensure_constraint('uc_ai_chat_messages', 'uc_ai_chat_msg_tstatus_ck', q'[check (
+  turn_status is null
+  or (role = 'user' and turn_status in ('pending', 'processing', 'done', 'error', 'cancelled')))
+  enable novalidate]');
+    ensure_constraint('uc_ai_chat_messages', 'uc_ai_chat_msg_parts_ck', q'[check (parts is json)
+  enable novalidate]');
+
+    ensure_index('uc_ai_chat_msg_session_idx', 'create index uc_ai_chat_msg_session_idx on uc_ai_chat_messages(session_id, created_at)');
+    ensure_index('uc_ai_chat_msg_exec_idx', 'create index uc_ai_chat_msg_exec_idx on uc_ai_chat_messages(execution_id)');
+    ensure_index('uc_ai_chat_msg_session_user_idx', 'create index uc_ai_chat_msg_session_user_idx on uc_ai_chat_messages(session_id, created_by)');
+
+    -- Early chat installs briefly kept the conversation title on the message
+    -- table. It lives on uc_ai_agent_sessions.title now (same session_id).
+    if column_exists('uc_ai_chat_messages', 'session_title') then
+      execute immediate q'[update uc_ai_agent_sessions s
+   set s.title = (select max(m.session_title)
+                    from uc_ai_chat_messages m
+                   where m.session_id = s.session_id)
+ where s.title is null
+   and exists (select 1
+                 from uc_ai_chat_messages m
+                where m.session_id = s.session_id
+                  and m.session_title is not null)]';
+      commit;
+      run_ddl('alter table uc_ai_chat_messages drop column session_title',
+        'dropped column uc_ai_chat_messages.session_title');
+    end if;
+
+    ensure_table('uc_ai_chat_widget_types', q'[create table uc_ai_chat_widget_types (
+  type_code         varchar2(30 char) not null,
+  provider_package  varchar2(261 char) not null,
+  enabled           varchar2(1 char) default on null 'Y' not null,
+  created_at        timestamp default on null systimestamp not null,
+  constraint uc_ai_chat_wtypes_pk primary key (type_code),
+  constraint uc_ai_chat_wtypes_code_ck check (regexp_like(type_code, '^[a-z][a-z0-9_]{1,29}$')),
+  constraint uc_ai_chat_wtypes_en_ck check (enabled in ('Y', 'N'))
 )]');
   end release_v26_5;
 begin

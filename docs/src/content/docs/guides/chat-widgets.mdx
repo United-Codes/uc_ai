@@ -60,22 +60,7 @@ To add widgets to an existing installation, do these steps in order:
    In the UC AI schema, run `upgrade_uc_ai.sql`.
    You can run the script more than once.
 
-2. ### Add the columns and the table
-
-   Open `ai_tables.sql` of the plug-in. At the end of the script, find the block
-   "Upgrade path for installs created before chat widgets existed". Remove the
-   comment marks and run the block once. It adds the columns `tool_call_id`,
-   `widgets`, and `parts` to `uc_ai_chat_messages`.
-
-   Then run the statement `create table uc_ai_chat_widget_types` once. A new
-   installation creates the columns and the table in the same script.
-
-3. ### Install the packages
-
-   Run `uc_ai_chat_widgets.pks` and `uc_ai_chat_widgets.pkb`. Then run
-   `uc_ai_chat.pks` and `uc_ai_chat.pkb` again.
-
-4. ### Import the plug-in
+2. ### Import the plug-in
 
    Import the plug-in export file of the new plug-in version into your APEX
    application. A region that uses an older export keeps the feature off. It

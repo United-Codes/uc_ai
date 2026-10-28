@@ -44,6 +44,11 @@ declare -a API_PACKAGES=(
     # message api (all specs exist before any body). Only dynamic SQL touches ORDS.
     "uc_ai_a2a_core"
     "uc_ai_a2a"
+    # The UC AI Chat plug-in (export file in the repository root). widgets before chat: the chat body calls
+    # the widgets package. The hook is called by UC AI through dynamic SQL only.
+    "uc_ai_chat_widgets"
+    "uc_ai_chat"
+    "uc_ai_chat_hook"
 )
 
 # Provider packages (alphabetical order)
@@ -162,6 +167,15 @@ get_package_description() {
             ;;
         "uc_ai_settings")
             echo "Per-call Settings/Run-state Types Package"
+            ;;
+        "uc_ai_chat")
+            echo "UC AI Chat Plug-in Package"
+            ;;
+        "uc_ai_chat_widgets")
+            echo "UC AI Chat Widgets Package"
+            ;;
+        "uc_ai_chat_hook")
+            echo "UC AI Chat Progress Hook Package"
             ;;
         *)
             echo "$package_name Package"

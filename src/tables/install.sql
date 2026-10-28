@@ -691,3 +691,90 @@ comment on table  uc_ai_a2a_push_configs is 'Push notification configurations of
 comment on column uc_ai_a2a_push_configs.config_id is 'ID of the configuration as the client sees it; unique per task';
 comment on column uc_ai_a2a_push_configs.last_status is 'HTTP status of the latest delivery';
 comment on column uc_ai_a2a_push_configs.last_error is 'Error of the latest delivery; null when it worked';
+
+
+-- ============================================================================
+-- UC AI CHAT PLUG-IN
+-- ============================================================================
+-- Tables of the AI mode of the UC AI Chat region plug-in (plugin/). See the
+-- package uc_ai_chat.
+
+create sequence uc_ai_chat_messages_seq;
+
+create table uc_ai_chat_messages (
+  id                    number default on null uc_ai_chat_messages_seq.nextval not null,
+  execution_id          number,
+  session_id            varchar2(255 char) not null,
+  role                  varchar2(20 char) not null,
+  content               clob,
+  reasoning_content     clob,
+  tool_name             varchar2(255 char),
+  -- Id the provider gave the tool call, copied from uc_ai_agent_messages.tool_call_id
+  -- on tool_call / tool_result rows. Unique only per execution_id: pair a call with
+  -- its result on (execution_id, tool_call_id).
+  tool_call_id          varchar2(255 char),
+  tool_input            clob,
+  tool_output           clob,
+  tool_status           varchar2(50 char),
+  input_tokens          number,
+  output_tokens         number,
+  agent_code            varchar2(255 char),
+  agent_version         number,
+  agent_request_params  clob,
+  session_init_code     clob,
+  -- Effective UC AI run context for this turn (JSON object), resolved from the
+  -- agent_run_context region attribute while the APEX session is still live.
+  -- Doubles as the drift baseline: a later turn's context is compared against
+  -- the newest non-null value on this session's user rows.
+  run_context           clob,
+  -- Turn lifecycle, tracked only on the 'user' row (one turn = one user row).
+  -- pending -> processing -> done | error | cancelled
+  turn_status           varchar2(20 char),
+  -- Widget types enabled for this turn (colon separated, e.g. 'stat_card:chart'),
+  -- tracked only on the 'user' row. Resolved from the widgets region attribute in
+  -- AI_SEND_MESSAGE, never from the client; null = widgets off.
+  widgets               varchar2(200 char),
+  -- Widget snapshot of the answer (JSON array of parts), tracked only on the
+  -- 'assistant' row. Rendered once by execute_agent_job and stored only when the
+  -- answer holds a widget or a rejected one; null for a plain answer.
+  parts                 clob,
+  -- sqlerrm of a failed turn (no backtrace); exposed to clients only when the
+  -- show_errors debug flag is on
+  error_detail          varchar2(4000 char),
+  created_by            varchar2(255 char) not null,
+  created_at            timestamp default on null systimestamp not null,
+  constraint uc_ai_chat_messages_pk primary key (id),
+  constraint uc_ai_chat_msg_parts_ck check (parts is json),
+  constraint uc_ai_chat_msg_role_ck check (role in ('user', 'assistant', 'tool_call', 'tool_result')),
+  constraint uc_ai_chat_msg_tool_ck check (tool_status is null or tool_status in ('running', 'success', 'error')),
+  constraint uc_ai_chat_msg_tstatus_ck check (
+    turn_status is null
+    or (role = 'user' and turn_status in ('pending', 'processing', 'done', 'error', 'cancelled'))
+  )
+);
+
+create index uc_ai_chat_msg_session_idx on uc_ai_chat_messages(session_id, created_at);
+create index uc_ai_chat_msg_exec_idx on uc_ai_chat_messages(execution_id);
+-- Supports the session-ownership authorization check (assert_session_owner)
+create index uc_ai_chat_msg_session_user_idx on uc_ai_chat_messages(session_id, created_by);
+
+-- To show your own kind of widget (for example a list of files) you register the
+-- model-facing type name here together with the package that checks and builds it.
+-- See uc_ai_chat_widgets.register_type. A table, not a package global: the answer
+-- is rendered by a scheduler job, which does not share package state with the
+-- session that registered the type.
+create table uc_ai_chat_widget_types (
+  type_code         varchar2(30 char) not null,
+  provider_package  varchar2(261 char) not null,
+  enabled           varchar2(1 char) default on null 'Y' not null,
+  created_at        timestamp default on null systimestamp not null,
+  constraint uc_ai_chat_wtypes_pk primary key (type_code),
+  constraint uc_ai_chat_wtypes_code_ck check (regexp_like(type_code, '^[a-z][a-z0-9_]{1,29}$')),
+  constraint uc_ai_chat_wtypes_en_ck check (enabled in ('Y', 'N'))
+);
+
+comment on table  uc_ai_chat_messages is 'Messages of the AI mode of the UC AI Chat plug-in: one row per user message, answer, tool call and tool result';
+comment on column uc_ai_chat_messages.session_id is 'Chat session. Equals uc_ai_agent_sessions.session_id';
+comment on column uc_ai_chat_messages.execution_id is 'Agent execution (uc_ai_agent_executions.id) that produced the row';
+
+comment on table  uc_ai_chat_widget_types is 'Custom widget types of the UC AI Chat plug-in and the package that checks and builds each one';
