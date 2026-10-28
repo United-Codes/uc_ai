@@ -227,7 +227,7 @@ guardrail with the audience `any` governs a chat turn.
 | Attribute | Type | Default | What it does |
 | --- | --- | --- | --- |
 | **Agent Run Context** | Textarea | — | A JSON object that binds the conversation to one record. Every tool of the run gets these values under the key `_ctx`. |
-| **Run Context Drift** | Select List | `ignore` | What the plug-in does when the values change during a conversation. |
+| **Run Context Drift** | Select List | `error` | What the plug-in does when the values change during a conversation. |
 
 The [run context](/products/uc-ai/docs/guides/tools/#the-run-context) is the way
 to make a chat region talk about one contract, one case, or one tenant. The model
@@ -307,7 +307,7 @@ query gives you the conversations with a negative rating.
 | **Avatar Icon** | Icon | `fa-robot` | The icon of the assistant, and the icon of the button in dialog mode. |
 | **Min Height** | Text | `450px` | The minimum height of the region. |
 | **Thinking Animation** | Select List | `dots` | The animation during a run: `dots`, `braille`, `plasma`, or `matrix`. |
-| **Thinking Detail** | Select List | `status` | How much the indicator says: `off`, `status`, or `tools`. |
+| **Thinking Detail** | Select List | `tools` | How much the indicator says: `off`, `status`, or `tools`. |
 
 With `display_mode` set to `dialog`, the region becomes a small button. A click
 on the button opens the chat above the page.
