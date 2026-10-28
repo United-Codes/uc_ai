@@ -56,6 +56,26 @@ uc_ai.ocr(p_url => 'https://...', p_provider => uc_ai.c_provider_mistral) return
 uc_ai.ocr_text(l_blob, 'application/pdf', uc_ai.c_provider_mistral) return clob;
 ```
 
+The next call is experimental. It answers questions about a text with choices, scores, and probabilities. See [Decide](/products/uc-ai/docs/api/decide/).
+
+```sql
+-- Decide: typed answers with probabilities (OpenAI, TypeSafe and OpenRouter only)
+uc_ai.decide(
+  p_state     => 'I was charged twice for my order.',
+  p_questions => json_object_t('{
+    "department": {"type": "choice", "instructions": "Which team handles this?",
+                   "criteria": {"billing": "Payments", "support": "Technical problems"}},
+    "severity":   {"type": "score", "instructions": "How severe is it?",
+                   "criteria": ["Cosmetic", "Workaround exists", "Blocking"]},
+    "refund":     {"type": "boolean", "instructions": "Does the customer ask for money back?"}
+  }'),
+  p_provider  => uc_ai.c_provider_openai,   -- or c_provider_typesafe, c_provider_openrouter
+  p_model     => null,                      -- optional. The provider default is used
+  p_files     => null,                      -- optional. Images, OpenAI only
+  p_options   => null                       -- optional. safety_identifier, extra_body
+) return json_object_t;   -- answers, usage, model, provider_metadata, warnings, raw
+```
+
 Both `generate_text` and `generate_embeddings` also have a **config-driven overload** with an extra `p_config json_object_t` parameter — see [Config vs globals](#config-driven-calls-vs-globals) below.
 
 ## Reading the result
@@ -84,6 +104,23 @@ dbms_output.put_line( l_result.get_clob('final_message') );
 | `warnings` | array | Problems that did not stop the call. |
 | `raw` | object | The response of the provider. |
 
+## Reading a decision result
+
+`uc_ai.decide` returns a `json_object_t`. Keys:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `answers` | object | One answer for each question id. `type` is `boolean`, `choice`, `score` or `refused`. |
+| `usage` | object | `input_tokens`, `output_tokens` and `total_tokens`, where the provider reports them. |
+| `model` | string | The model that answered. TypeSafe reports the specific model version that answered. |
+| `provider_metadata` | object | `confidence` for choice and score questions, and `usage`. |
+| `warnings` | array | Problems that did not stop the call. |
+| `raw` | object | The response of the provider. |
+
+Read `type` before you read `choice`, `score` or `probability`. A `refused` answer has none of them.
+
+A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) runs `uc_ai.decide` as an agent. Create it with `p_agent_type => uc_ai_agents_api.c_type_decision` and `p_decision_config` (`provider`, `model`, `state_template`, `questions`, `options`, `model_config`). The `final_message` of `execute_agent` is the same object without `raw`.
+
 ## Providers
 
 ```sql
@@ -91,9 +128,10 @@ uc_ai.c_provider_openai       uc_ai.c_provider_anthropic
 uc_ai.c_provider_google       uc_ai.c_provider_ollama
 uc_ai.c_provider_oci          uc_ai.c_provider_xai
 uc_ai.c_provider_mistral      uc_ai.c_provider_openrouter
+uc_ai.c_provider_typesafe     -- decide only, no chat and no embeddings
 ```
 
-Model constants live in each provider package, e.g. `uc_ai_openai.c_model_gpt_5_6_luna`, `uc_ai_anthropic.c_model_claude_4_5_haiku`, `uc_ai_google.c_model_gemini_3_7_flash`. See each [provider page](/products/uc-ai/docs/guides/providers/) for the full list, or use the [utility functions](/products/uc-ai/docs/api/utils/) to list them at runtime.
+Model constants live in each provider package, e.g. `uc_ai_openai.c_model_gpt_5_6_luna`, `uc_ai_anthropic.c_model_claude_5_5_haiku`, `uc_ai_google.c_model_gemini_3_8_flash`. See each [provider page](/products/uc-ai/docs/guides/providers/) for the full list, or use the [utility functions](/products/uc-ai/docs/api/utils/) to list them at runtime.
 
 ## Global configuration
 
@@ -114,6 +152,9 @@ uc_ai.g_reasoning_level  := uc_ai.c_reasoning_level_medium;  -- low | medium | h
 uc_ai.g_base_url := 'host.containers.internal:11434/api';    -- e.g. Ollama
 uc_ai.g_apex_web_credential := 'OPENAI';                     -- APEX Web Credential static id
 uc_ai_openai.g_apex_web_credential := 'OPENAI';              -- or per-provider
+
+-- HTTP timeout in seconds for each provider request (default 180; 300 for OCR and decide)
+uc_ai.g_transfer_timeout := 600;
 
 -- Extra HTTP headers on every request
 uc_ai.g_extra_headers('X-Tenant-Id') := 'acme';
@@ -156,6 +197,17 @@ uc_ai_message_api.create_file_content(
   p_filename   => 'doc.pdf'
 )
 ```
+
+## Publishing an agent over A2A
+
+```sql
+uc_ai_a2a.install_ords_module;                          -- once per schema
+uc_ai_a2a.expose_agent('support', 'support_bot');       -- endpoint code, agent code
+dbms_output.put_line(uc_ai_a2a.create_api_key('support', 'crm_system'));
+commit;                                                  -- ORDS reads committed rows
+```
+
+The card is at `<ords>/<schema>/a2a/support/.well-known/agent-card.json`. See the [A2A server](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/) guide.
 
 ## Config-driven calls vs globals
 

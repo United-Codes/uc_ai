@@ -5,7 +5,7 @@ sidebar:
   order: 10
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
 
 ## Parameters
 
@@ -72,7 +72,10 @@ FUNCTION generate_text (
 
 ### Parameter Reference
 
-#### For Signature 1 (Individual Prompts)
+The parameters depend on the signature. Select the signature to see its parameters.
+
+<Tabs>
+<TabItem label="Signature 1: Individual Prompts">
 
 | Parameter                | Type            | Required | Description                                                                      |
 | ------------------------ | --------------- | -------- | -------------------------------------------------------------------------------- |
@@ -84,7 +87,8 @@ FUNCTION generate_text (
 | `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. The response then conforms to this schema. |
 | `p_run_context`          | `JSON_OBJECT_T` | No       | Name/value pairs bound to this call. Every tool receives them under `_ctx`. See [the run context](/products/uc-ai/docs/guides/tools/#the-run-context). |
 
-#### For Signature 2 (Message Array)
+</TabItem>
+<TabItem label="Signature 2: Message Array">
 
 | Parameter                | Type            | Required | Description                                                                          |
 | ------------------------ | --------------- | -------- | ------------------------------------------------------------------------------------ |
@@ -94,6 +98,9 @@ FUNCTION generate_text (
 | `p_max_tool_calls`       | `PLS_INTEGER`   | No       | Maximum number of tool calls allowed in the conversation (default: 10).              |
 | `p_response_json_schema` | `JSON_OBJECT_T` | No       | JSON schema for structured output. The response then conforms to this schema.     |
 | `p_run_context`          | `JSON_OBJECT_T` | No       | Name/value pairs bound to this call. Every tool receives them under `_ctx`. See [the run context](/products/uc-ai/docs/guides/tools/#the-run-context). |
+
+</TabItem>
+</Tabs>
 
 ### Parameter Details
 
@@ -127,7 +134,7 @@ l_result := uc_ai.generate_text(
   p_user_prompt => 'How do I optimize this SQL query?',
   p_system_prompt => 'You are a friendly database expert. Use simple language and provide step-by-step guidance.',
   p_provider => uc_ai.c_provider_anthropic,
-  p_model => uc_ai_anthropic.c_model_claude_4_5_haiku
+  p_model => uc_ai_anthropic.c_model_claude_5_5_haiku
 );
 ```
 
@@ -262,7 +269,7 @@ begin
   l_result := uc_ai.generate_text(
     p_messages => l_messages,
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_3_7_flash
+    p_model => uc_ai_google.c_model_gemini_3_8_flash
   );
 
   dbms_output.put_line('Follow-up response: ' || l_result.get_string('final_message'));
@@ -371,8 +378,8 @@ that calls UC AI directly and self-contained:
 `p_config` takes the same JSON structure as
 [`uc_ai_prompt_profiles_api.apply_model_config`](/products/uc-ai/docs/guides/prompt-profiles).
 It holds root-level keys such as `g_base_url`, `g_enable_tools`, `g_tool_tags`,
-`g_reasoning_level`, `g_max_tool_calls`, `g_apex_web_credential`, and
-`g_extra_headers`. It also takes an optional nested object with the name of the
+`g_reasoning_level`, `g_max_tool_calls`, `g_transfer_timeout`, `g_apex_web_credential`,
+and `g_extra_headers`. It also takes an optional nested object with the name of the
 provider, for the provider-specific settings. An unknown key raises `ORA-20503`.
 An unknown provider raises `ORA-20306`.
 
@@ -516,7 +523,7 @@ BEGIN
     l_result := uc_ai.generate_text(
       p_user_prompt => 'What is the latest stable version of Oracle APEX?'
     , p_provider    => uc_ai.c_provider_anthropic
-    , p_model       => uc_ai_anthropic.c_model_claude_4_5_haiku
+    , p_model       => uc_ai_anthropic.c_model_claude_5_5_haiku
     );
   END;
 END;

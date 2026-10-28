@@ -48,7 +48,7 @@ GENERATOR_DEPS := scripts/package_utils.sh
 .DEFAULT_GOAL := help
 # `docs`, `test` and `check` all collide with a real file or folder in this repo,
 # so without this make would say "up to date" and silently do nothing.
-.PHONY: help generate test test-free test-install test-uninstall lint lint-changed \
+.PHONY: help generate test test-free test-install test-upgrade test-uninstall lint lint-changed \
         docs docs-dev app-export app-import check-packages check
 # Nothing here benefits from parallelism, and two targets sharing a schema is bad.
 .NOTPARALLEL:
@@ -72,7 +72,7 @@ install_uc_ai.sql: $(SOURCES) $(GENERATOR_DEPS) scripts/generate_install_script.
 install_uc_ai_complete.sql: $(SOURCES) $(GENERATOR_DEPS) scripts/generate_install_script_complete.sh
 	bash scripts/generate_install_script_complete.sh
 
-upgrade_packages.sql: $(SOURCES) $(GENERATOR_DEPS) scripts/generate_upgrade_script.sh
+upgrade_uc_ai.sql: $(SOURCES) $(GENERATOR_DEPS) scripts/generate_upgrade_script.sh scripts/list_install_objects.awk
 	bash scripts/generate_upgrade_script.sh
 
 uninstall.sql: $(SOURCES) $(GENERATOR_DEPS) scripts/generate_uninstall_script.sh
@@ -88,11 +88,11 @@ SAMPLES := $(shell find test/samples -type f -name '*.json')
 test/uc_ai_test_samples.pkb: $(SAMPLES) scripts/generate_test_samples.sh
 	bash scripts/generate_test_samples.sh
 
-generate: install_uc_ai.sql install_uc_ai_complete.sql upgrade_packages.sql uninstall.sql install_ptc_sandbox_complete.sql test/uc_ai_test_samples.pkb ## Regenerate every stale generated file (install scripts, test samples package)
+generate: install_uc_ai.sql install_uc_ai_complete.sql upgrade_uc_ai.sql uninstall.sql install_ptc_sandbox_complete.sql test/uc_ai_test_samples.pkb ## Regenerate every stale generated file (install scripts, test samples package)
 
 # --- Tests -------------------------------------------------------------------
 
-test-free: ## Run the 416 LLM-free tests (fast, no provider calls, no cost)
+test-free: ## Run the 919 LLM-free tests (fast, no provider calls, no cost)
 	sql -name $(DB_CONN) @scripts/run_tests_free.sql
 
 test: ## Run one suite/package/test - make test SUITE=test_uc_ai_hook (may call a real LLM)
@@ -100,6 +100,11 @@ test: ## Run one suite/package/test - make test SUITE=test_uc_ai_hook (may call 
 
 test-install: generate ## Generate the install scripts and install them into a fresh schema
 	bash scripts/test_installs.sh
+
+# make test-upgrade TAGS="v26.3" tests one baseline; the default list is in scripts/test_upgrade.sh
+TAGS ?=
+test-upgrade: ## Upgrade every baseline release (or TAGS="v26.3 ...") in the install-test schema and compare with a fresh install
+	bash scripts/test_upgrade.sh $(TAGS)
 
 test-uninstall: ## Install, then run the generated uninstall.sql and list what is left
 	bash scripts/test_uninstall_script.sh

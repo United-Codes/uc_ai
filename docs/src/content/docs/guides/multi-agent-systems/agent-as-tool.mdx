@@ -55,7 +55,7 @@ BEGIN
                              || 'Answer short and precise. Give prices in EUR.',
     p_user_prompt_template   => 'Catalog question: {prompt}',
     p_provider               => uc_ai.c_provider_anthropic,
-    p_model                  => uc_ai_anthropic.c_model_claude_4_5_haiku,
+    p_model                  => uc_ai_anthropic.c_model_claude_5_5_haiku,
     p_status                 => uc_ai_prompt_profiles_api.c_status_active
   );
 
@@ -278,8 +278,10 @@ end;~'
 ```
 
 A conversation-type agent returns no `final_message`, so `run_agent_as_tool`
-cannot run it. Use a profile, workflow, orchestrator, or handoff agent as the
+cannot run it. Use a profile, workflow, orchestrator, handoff, or decision agent as the
 specialist.
+
+A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) is a valid specialist. Its `final_message` is a JSON object with the answers. The handler returns it as JSON text, so the calling model reads the answers and their probabilities. See [Use a decision agent as a tool or a delegate](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/#use-a-decision-agent-as-a-tool-or-a-delegate).
 
 Each tool call starts a new run of the specialist. The specialist does not
 remember the previous call, because the handler sends input parameters and no

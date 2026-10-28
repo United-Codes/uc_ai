@@ -221,6 +221,23 @@ as
 
 
   /*
+   * Renders a template the way a prompt profile renders its prompts: every
+   * {name} placeholder is replaced with the value of the same key in
+   * p_parameters (case-insensitive; numbers and booleans become text, an object
+   * or array becomes its JSON text). A placeholder without a key raises
+   * c_err_missing_placeholder, exactly as execute_profile does.
+   *
+   * @param p_template   Template text with {name} placeholders
+   * @param p_parameters JSON object with the values; null counts as no values
+   * @return             The rendered text
+   */
+  function render_template(
+    p_template   in clob,
+    p_parameters in json_object_t default null
+  ) return clob;
+
+
+  /*
    * Executes a prompt profile with parameter substitution
    * 
    * Replaces placeholders (#placeholder#) in system and user prompt templates
@@ -233,6 +250,9 @@ as
    * @param p_model_override      Override the profile's model setting
    * @param p_config_override     Override the profile's model_config_json setting
    * @param p_files               Optional files (documents/images) to attach to the user message
+   * @param p_prompt_addendum     Optional text appended to the rendered system prompt, after a blank
+   *                              line and after the MEMORY PROTOCOL block. Null or empty text leaves
+   *                              the prompt unchanged.
    *
    * @return                      JSON object response from AI provider
    */
@@ -243,7 +263,8 @@ as
     p_provider_override in uc_ai_prompt_profiles.provider%type default null,
     p_model_override    in uc_ai_prompt_profiles.model%type default null,
     p_config_override   in json_object_t default null,
-    p_files             in uc_ai_message_api.t_files default null
+    p_files             in uc_ai_message_api.t_files default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t;
 
 

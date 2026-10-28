@@ -1,0 +1,201 @@
+---
+title: Render a widget without a model
+description: Display a widget from a sample answer and read the stored result. This lesson needs no model call or tokens.
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+
+<LessonHeader
+  lesson={1}
+  of={4}
+  minutes={20}
+  promise="you can render a built-in widget from a tool result in SQL, and read the parts that the chat stores."
+  scripts={["00_precheck.sql", "01_render.sql"]}
+  course="add-a-widget-to-the-chat"
+/>
+
+## What you build in this course
+
+You add a new kind of widget to the chat of the service-contract desk. The widget
+is a list of invoices, and the user can open each invoice with a click.
+
+The model writes only invoice numbers. A PL/SQL package that you write adds the
+date, the amounts, and the credit status from your tables. The model cannot
+change these values.
+
+By the end of the course you have:
+
+- a PL/SQL package that builds the list, and a registration that connects it to
+  the chat,
+- a message to the desk that returns the list, recorded from a real run,
+- optionally, a page event that receives the click on a row,
+- a test that shows which invoices the list can show and which it rejects.
+
+The [Chat Widgets guide](/products/uc-ai/docs/guides/chat-widgets/) describes the
+widget types that the plug-in has. This course is about a type that you add
+yourself.
+
+## Before you start
+
+You need these parts:
+
+- **UC AI 26.5 or later, able to reach a model.** Make sure that a model call
+  works in your schema.
+  Otherwise the [installation guide](/products/uc-ai/docs/guides/installation/)
+  covers the network and key setup.
+- **The APEX Chat plug-in of the same release, with its database objects.** The
+  [Chat Widgets guide](/products/uc-ai/docs/guides/chat-widgets/#requirements-and-upgrade)
+  lists the steps for a new installation and for an upgrade.
+- **The service-contract desk.** Run `00_setup.sql` of the course [Put an Agent in
+  APEX](/products/uc-ai/docs/tutorial/put-an-agent-in-apex/01-a-chat-region/).
+  The script creates the six `sc_*` tables, the four tools, and the agent
+  `SC_DESK`. You do not need to do the lessons of that course.
+
+Run every script of this course in the schema that holds the chat tables and the
+desk. The scripts are in the folder `examples/add-a-widget-to-the-chat` of the
+UC AI repository.
+
+Lesson 3 has an optional part for an APEX page. That part needs the chat region
+and the page item `P10_CONTRACT_ID` from lessons 1 and 2 of Put an Agent in APEX.
+The other parts of the course run in SQL.
+
+Run the precheck from the directory of the course scripts. It changes nothing.
+
+```sh
+sql your_user/your_password@your_db @00_precheck.sql
+```
+
+Every line must say `OK`:
+
+```text
+Checking the schema UC_AI ...
+UC AI 26.5 (tool_call_id)         : OK
+UC AI 26.5 (prompt addendum)      : OK
+Chat table: widgets, parts        : OK
+Registry table                    : OK
+Package UC_AI_CHAT_WIDGETS        : OK
+Package UC_AI_CHAT                : OK
+Desk tables (sc_*)                : OK
+Desk package SC_DESK_PKG          : OK
+Desk tools (4)                    : OK
+Desk agent SC_DESK (active)       : OK
+Precheck OK. Start lesson 1.
+```
+
+A line that does not say `OK` names the step that fixes it.
+
+To remove everything that the course creates, run `00_teardown.sql` after lesson 4.
+
+## How the chat renders an answer
+
+The model writes its answer as text. To request a widget, it includes a code block
+marked `ucai-widget`. A JSON object inside the block describes the widget.
+
+After the run, the chat calls `uc_ai_chat_widgets.render`. The function takes three
+inputs:
+
+| Input | Content |
+| --- | --- |
+| `p_answer` | The text of the model, with its widget blocks |
+| `p_types` | The widget types that the region enables |
+| `p_tool_calls` | The tool calls of this answer, each with its name, arguments, and result |
+
+The function splits the answer into **parts**. A part is a piece of text or one
+widget. The chat stores the parts in `uc_ai_chat_messages.parts`, and the browser
+draws them. A widget that fails a check stays in the answer as text, and the
+answer does not fail.
+
+## Render an answer that you write
+
+`01_render.sql` calls `render` with an answer that you can read in the script. The
+script has four steps:
+
+1. It calls the real tool `SC_LIST_INVOICES` for contract 88. The key `_ctx` is
+   the run context that UC AI adds to the arguments of every tool.
+2. It puts the result in the form that the chat uses for a tool call.
+3. It writes an answer with two table widgets. The first one is valid. The second
+   one names a column that the rows do not have.
+4. It enables the type `table` and prints the parts.
+
+```sh
+sql your_user/your_password@your_db @01_render.sql
+```
+
+Recorded output. The page joins short lists on one line. The script prints one
+value on each line.
+
+```text
+Enabled types : table
+Parts          :
+[
+  {
+    "kind" : "text",
+    "text" : "Contract 88 has three invoices.\n"
+  },
+  {
+    "kind" : "widget",
+    "type" : "table",
+    "spec" :
+    {
+      "type" : "table",
+      "title" : "Invoices",
+      "columns" : [ "invoice_no", "total_amount", "uncredited_amount" ],
+      "rows" :
+      [
+        { "invoice_no" : "INV-1003", "total_amount" : 200, "uncredited_amount" : 0 },
+        { "invoice_no" : "INV-1001", "total_amount" : 780, "uncredited_amount" : 780 },
+        { "invoice_no" : "INV-1002", "total_amount" : 350, "uncredited_amount" : 350 }
+      ],
+      "truncated" : false
+    }
+  },
+  { "kind" : "text", "text" : "\nThis second table names a column that does not exist:\n" },
+  {
+    "kind" : "text",
+    "text" : "```ucai-widget\n{\"type\":\"table\",\"columns\":[\"Invoice Number\"],\"source\":\"tool:SC_LIST_INVOICES\"}\n```",
+    "rejected" : "column Invoice Number is not in the rows; use the exact keys of the rows"
+  }
+]
+```
+
+The amounts come from the seed data of `00_setup.sql`, where only the credit note
+`CN-9001` exists. A credit note that you raise later changes `uncredited_amount`.
+The setup script sets the dates relative to the day you run it, and the parts
+above do not show them.
+
+Read the parts in order:
+
+- **The first widget has rows, and the script did not write them.** The block
+  names the columns and the source `tool:SC_LIST_INVOICES`. The server read the
+  rows from the tool result. With this tool source, the model supplies no row values.
+- **The second widget is a text part.** It holds the original block and the field
+  `rejected` with the reason. The user sees the block as text. The browser shows
+  the reason only when the flag `show_errors` is on in **Debug Config**.
+- **The `spec` of a widget is not the JSON of the model.** The server builds
+  `spec` from a list of allowed keys.
+
+## Turn on built-in types in a region
+
+The region decides which types the model can use. Open the region, go to the group
+**Conversation**, and check the types under **Widgets**. The
+[guide](/products/uc-ai/docs/guides/chat-widgets/#turn-on-widgets) has the details.
+
+The next lesson adds a type that is not in this list. It uses a second attribute,
+**Custom Widgets**.
+
+## Key takeaways
+
+- `render` takes the answer text, enabled widget types, and tool calls as inputs.
+  You can call it in SQL and read the result.
+- With a tool source, table rows come from the tool result. The model supplies
+  only the column names and source.
+- A widget that fails a check stays as text with a reason.
+
+<LinkCard
+  title="Next: Register an invoice list widget type"
+  description="Write the package that turns invoice numbers into a list, and register it with the chat."
+  href="/products/uc-ai/docs/tutorial/add-a-widget-to-the-chat/02-register-a-widget-type/"
+/>

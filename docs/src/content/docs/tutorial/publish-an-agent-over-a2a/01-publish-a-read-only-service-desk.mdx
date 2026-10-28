@@ -1,0 +1,337 @@
+---
+title: Publish an agent as an A2A endpoint
+description: Publish a read-only service desk as an A2A endpoint, give two partner companies an API key each, and call it with curl.
+sidebar:
+  order: 1
+---
+
+import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={1}
+  of={4}
+  minutes={25}
+  promise="you can publish a UC AI agent as an A2A endpoint, give each partner company its own API key, and call the endpoint with curl."
+  scripts={["00_setup.sql", "partner_desk_pkg.pks", "partner_desk_pkg.pkb", "01_publish.sql"]}
+  course="publish-an-agent-over-a2a"
+/>
+
+## What you build in this course
+
+You publish the **partner service desk** of a field-service company. Two partner
+companies, Ferrolux and Northwind, call it from their own systems. They ask which
+of their machines are under contract and when a machine was last serviced. They
+also ask for a service visit.
+
+The desk is a UC AI agent. You publish it over **A2A** (Agent2Agent), an open
+protocol for calls between agents. In this course:
+
+- Lesson 1 publishes a read-only desk and calls it with curl.
+- Lesson 2 calls it from a Python client and from an agent framework that does not know UC AI.
+- Lesson 3 adds the visit request. The database refuses a request that breaks a rule.
+- Lesson 4 reads the token use of each partner, and turns the endpoint and a key off.
+
+Each partner sees its own machines only. The desk never confirms a visit by itself:
+it records a request, and a person at the service company decides.
+
+## Choose A2A or your own ORDS endpoint
+
+You can also write an ORDS REST service for the desk. A2A provides a standard interface with these features:
+
+- An **agent card**: a public JSON document. It tells a client where the agent is,
+  how to call it, and how to authenticate.
+- Existing client libraries. Official A2A SDKs and compatible agent frameworks
+  read the card, so the partner can use a standard client.
+- Tasks, conversations and error codes that the protocol defines.
+
+A custom REST endpoint can suit a fixed operation when you control both the
+caller and the service. A2A provides a shared protocol for systems that you do
+not control. The reference page [A2A Server](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/)
+lists everything the server supports.
+
+## Before you start
+
+You need a UC AI installation that can reach OpenAI, and these three things:
+
+- The schema is REST-enabled in ORDS. The base URL of your schema looks like
+  `https://<host>/ords/<schema alias>/`. This course uses `https://api.example.com/ords/demo/`.
+- The schema has `execute` on `sys.dbms_crypto`. `create_api_key` needs it.
+- Python 3.10 or later, for lesson 2.
+
+If a model call does not work yet, the [installation guide](/products/uc-ai/docs/guides/installation/) covers the key and the network setup.
+
+Download the files from
+[examples/publish-an-agent-over-a2a](https://github.com/United-Codes/uc_ai/tree/main/examples/publish-an-agent-over-a2a)
+into one directory. Open SQLcl in that directory and connect to your demo schema.
+
+The desk uses the machines and contracts of the course [Build an Agent](/products/uc-ai/docs/tutorial/build-an-agent/01-the-scenario/).
+Run its `00_setup.sql` first. **That script deletes and recreates the six `sc_` tables,
+so it resets the data of Build an Agent if you did that course.**
+
+<Steps>
+
+1. Run `@../build-an-agent/00_setup.sql`, or the copy of the file in your directory.
+   It creates the customers Ferrolux and Northwind, their contracts, and their machines.
+
+2. Run `@00_setup.sql`. It adds two tables, `partner_clients` and `partner_visits`.
+   It deletes its own tables first, so run it again after each run of the setup of
+   Build an Agent. The setup of Build an Agent removes the foreign keys that point at its tables.
+
+3. Run `@partner_desk_pkg.pks`, then `@partner_desk_pkg.pkb`. These files compile the
+   tool handlers and the booking rule. Use `show errors` to read compilation errors.
+
+</Steps>
+
+`00_teardown.sql` removes everything this course creates.
+
+## Scope the tools to the partner
+
+The partner calls the desk from outside, so the agent must know which partner is
+calling. The server tells it. In every run, the server puts two values into the
+[run context](/products/uc-ai/docs/guides/tools/#the-run-context): `a2a_client` and `a2a_endpoint`.
+`a2a_client` holds the identity of the caller. For an API key it is `apikey:` followed by the
+client name of the key. The model cannot set these values.
+
+The handlers of this course read `a2a_client` and look the client up in
+`partner_clients`. This excerpt is from `partner_desk_pkg.pkb`:
+
+```sql
+function client_customer_id(p_arguments in clob) return number
+as
+  l_context  json_object_t := json_object_t(p_arguments).get_object(uc_ai.c_run_context_key);
+  l_customer number;
+begin
+  -- max() returns null for no row, so an unknown client gets null and never "all customers"
+  select max(pc.customer_id)
+    into l_customer
+    from partner_clients pc
+   where pc.client_id = l_context.get_string('a2a_client');
+
+  return l_customer;
+end client_customer_id;
+```
+
+The real function also handles a missing context. Every handler refuses when this
+function returns null. The tool schemas have no customer parameter, so the model
+cannot name a customer.
+
+Run these calls without a model. Each one passes the arguments the way UC AI does, with the
+run context under `_ctx`. `01_publish.sql` runs them, after it registers the tools
+`PARTNER_LIST_ASSETS` and `PARTNER_ASSET_HISTORY` with the tag `partner`:
+
+```sql
+select partner_desk_pkg.list_assets('{"_ctx":{"a2a_client":"apikey:northwind"}}') from dual;
+select partner_desk_pkg.get_asset_history(
+         '{"asset_tag":"NW-CHILL-02","_ctx":{"a2a_client":"apikey:ferrolux"}}') from dual;
+select partner_desk_pkg.list_assets('{"_ctx":{"a2a_client":"apikey:unknown"}}') from dual;
+```
+
+Recorded result of the script:
+
+```text
+northwind, list_assets:
+  {"count":1,"assets":[{"asset_tag":"NW-CHILL-02","model":"Northwind blast chiller 200L","installed_on":"2025-02-14","contract_no":"SC-2024-099","coverage_level":"SILVER","coverage_from":"2025-10-27","coverage_to":"2027-04-25","under_contract":true}]}
+ferrolux asks for the asset of northwind:
+  {"status":"refused","reason":"NO_ASSET","message":"There is no asset NW-CHILL-02 for your company."}
+an unknown client, list_assets:
+  {"status":"refused","reason":"UNKNOWN_CLIENT","message":"This client is not a known partner."}
+```
+
+The dates are relative to the day of the setup. A client without a `partner_clients` row gets
+a refusal and not an empty list, because an empty list reads as "no machines".
+
+## Create the prompt profile and the agent
+
+The agent is a profile agent: a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/) with a system
+prompt, the model `gpt-5.6-terra`, and the tag `partner`. The tag gives the agent exactly these tools.
+Build an Agent [lesson 2](/products/uc-ai/docs/tutorial/build-an-agent/02-profile-and-agent/) explains profiles and agents in detail.
+
+The profile has one required input, a string named `question`:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "question": { "type": "string", "description": "What the partner asked" }
+  },
+  "required": ["question"]
+}
+```
+
+One required string input is what lets the server map the text of an A2A message to
+the agent. The script creates the profile `PARTNER_DESK_PROFILE` and the agent
+`partner_desk`, and activates both. A call without a version number uses the active version and ignores drafts.
+
+## Publish the endpoint and create the API keys
+
+The endpoint publishes the agent. This excerpt shows the calls of `01_publish.sql`:
+
+```sql
+begin
+  uc_ai_a2a.install_ords_module;          -- once per schema
+
+  uc_ai_a2a.expose_agent(
+    p_code             => 'service-desk',
+    p_agent_code       => 'partner_desk',
+    p_name             => 'Partner service desk',
+    p_description      => 'Answers questions of a partner company about its machines and service contracts.',
+    p_text_input_param => 'question'
+  );
+
+  -- the keys are visible only now
+  dbms_output.put_line('ferrolux key:  ' || uc_ai_a2a.create_api_key('service-desk', 'ferrolux'));
+  dbms_output.put_line('northwind key: ' || uc_ai_a2a.create_api_key('service-desk', 'northwind'));
+
+  commit;
+end;
+/
+```
+
+The commit is required, because the ORDS handler reads the committed endpoint. The
+client names `ferrolux` and `northwind` must match the rows in `partner_clients`.
+The server builds the client id `apikey:ferrolux` from the name, and the handlers look
+that id up. A key with another name is a valid key, but the tools refuse every call.
+
+Run `@01_publish.sql`. If the script is complete, it prints this:
+
+```text
+ferrolux key:  a2a_…
+northwind key: a2a_…
+
+ENDPOINT        AGENT_CODE      AUTH_MODE    ENABLED       API_KEYS
+_______________ _______________ ____________ __________ ___________
+service-desk    partner_desk    api_key      Y                    2
+```
+
+Copy both keys. UC AI stores a hash only, and you cannot read a key again. A second run of the
+script deletes the endpoint and creates new keys, and the old keys stop working.
+
+## Read the agent card
+
+The agent card needs no key. Set the endpoint URL and request the card:
+
+```sh
+export A2A_BASE=https://api.example.com/ords/demo/a2a/service-desk
+curl "$A2A_BASE/.well-known/agent-card.json"
+```
+
+The shortened card shows the interfaces, authentication requirements, and agent
+capability that a partner client reads:
+
+```json
+{
+  "name": "Partner service desk",
+  "description": "Answers questions of a partner company about its machines and service contracts.",
+  "supportedInterfaces": [
+    { "url": "https://api.example.com/ords/demo/a2a/service-desk/jsonrpc", "protocolBinding": "JSONRPC", "protocolVersion": "1.0" },
+    { "url": "https://api.example.com/ords/demo/a2a/service-desk/rest", "protocolBinding": "HTTP+JSON", "protocolVersion": "1.0" }
+  ],
+  "securitySchemes": {
+    "apiKey": { "apiKeySecurityScheme": { "location": "header", "name": "X-API-Key" } }
+  },
+  "skills": [
+    { "id": "partner_desk", "name": "Partner service desk", "tags": ["profile"] }
+  ]
+}
+```
+
+`supportedInterfaces` lists the URLs and the two bindings. `securitySchemes` tells the client
+to send the key in the header `X-API-Key`. The reference page shows the full card.
+
+## Send a message with curl
+
+Export the key of Ferrolux, then send a question with JSON-RPC. Send the header `Content-Type`.
+ORDS delivers an empty body without it.
+
+```sh
+export A2A_API_KEY=a2a_…        # the ferrolux key from 01_publish.sql
+
+curl -X POST "$A2A_BASE/jsonrpc" \
+  -H "X-API-Key: $A2A_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "m-1001",
+        "role": "ROLE_USER",
+        "parts": [{ "text": "Which of our machines are under contract?" }]
+      }
+    }
+  }'
+```
+
+The call blocks until the run ends. The recorded response, with the `history` removed:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "result": {
+    "task": {
+      "id": "cba012fa-e4c5-4b28-8243-4f3b24d900f3",
+      "contextId": "6a453a33-1590-43b3-8aea-569d1338ec31",
+      "status": { "state": "TASK_STATE_COMPLETED", "timestamp": "2026-10-27T21:16:13.991Z" },
+      "artifacts": [
+        {
+          "artifactId": "cba012fa-e4c5-4b28-8243-4f3b24d900f3-result",
+          "name": "result",
+          "parts": [
+            {
+              "text": "Both machines are currently under contract:\n\n- FX-CONV-07 — Ferrolux belt conveyor 7m\n- FX-PRESS-01 — Ferrolux HP-400 hydraulic press\n\nContract SC-2024-088, GOLD coverage, valid 2025-10-27 to 2027-04-25.",
+              "mediaType": "text/plain"
+            }
+          ]
+        }
+      ],
+      "metadata": { "usage": { "inputTokens": 666, "outputTokens": 89 } }
+    }
+  }
+}
+```
+
+<AiOutput model="gpt-5.6-terra" date="2026-10-27" seconds={3.1}>
+Both machines are currently under contract:
+
+- FX-CONV-07 — Ferrolux belt conveyor 7m
+- FX-PRESS-01 — Ferrolux HP-400 hydraulic press
+
+Contract SC-2024-088, GOLD coverage, valid 2025-10-27 to 2027-04-25.
+</AiOutput>
+
+The answer lists two machines. Northwind's chiller is not in it, because the handler
+read the customer of `apikey:ferrolux`. The response stores the agent's final message in an A2A artifact.
+`metadata.usage` holds the tokens of the run: 666 input and 89 output. The wording, the
+tokens and the seconds change from run to run. The state, the two machine tags and the contract number come from the database.
+
+The same request without the `X-API-Key` header answers HTTP 401. The card is public, but messages require authentication:
+
+```json
+{"jsonrpc":"2.0","id":"1","error":{"code":-32000,"message":"Authentication is required.","data":[]}}
+```
+
+### Capacity of a blocking call
+
+A blocking call holds one ORDS connection until the agent run ends. In this installation, the
+ORDS pool has `jdbc.MaxLimit` 30 (`jdbc.InitialLimit` 10), and the call above took 3.1 s. At most
+30 handler calls can hold a connection at the same time. To read your own value, run
+`ords --config <config directory> config get jdbc.MaxLimit` on the ORDS host. Lesson 4 shows
+how to run a request in the background.
+
+<Aside type="note" title="Run this lesson again">
+A second run of `01_publish.sql` keeps the tools, the profile and the agent. It deletes the
+endpoint and creates new keys, so export the new keys.
+</Aside>
+
+**Full reference:** [A2A Server](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/#set-up-an-endpoint)
+covers the parameters of `expose_agent` and the other authentication modes.
+
+<LinkCard
+  title="Next lesson: Call the endpoint from a partner client"
+  description="Call the desk with the official A2A SDK and with Google ADK, and continue a conversation."
+  href="/products/uc-ai/docs/tutorial/publish-an-agent-over-a2a/02-call-the-endpoint-from-a-partner-client/"
+/>

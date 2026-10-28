@@ -39,10 +39,16 @@ PROMPT - Installing API package specifications...
 @@src/packages/uc_ai_http.pks
 @@src/packages/uc_ai_toon.pks
 @@src/packages/uc_ai_ocr.pks
+@@src/packages/uc_ai_decisions.pks
 @@src/packages/uc_ai_agents_api.pks
 @@src/packages/uc_ai_agent_exec_api.pks
 @@src/packages/uc_ai_agent_workflow_api.pks
 @@src/packages/uc_ai_utils.pks
+@@src/packages/uc_ai_a2a_core.pks
+@@src/packages/uc_ai_a2a.pks
+@@src/packages/uc_ai_chat_widgets.pks
+@@src/packages/uc_ai_chat.pks
+@@src/packages/uc_ai_chat_hook.pks
 
 PROMPT - Installing AI provider package specifications...
 @@src/packages/uc_ai_anthropic.pks
@@ -51,6 +57,7 @@ PROMPT - Installing AI provider package specifications...
 @@src/packages/uc_ai_oci.pks
 @@src/packages/uc_ai_ollama.pks
 @@src/packages/uc_ai_openai.pks
+@@src/packages/uc_ai_typesafe.pks
 @@src/packages/uc_ai_xai.pks
 @@src/packages/uc_ai_openrouter.pks
 @@src/packages/uc_ai_responses_api.pks
@@ -68,10 +75,16 @@ PROMPT - Installing API package bodies...
 @@src/packages/uc_ai_http.pkb
 @@src/packages/uc_ai_toon.pkb
 @@src/packages/uc_ai_ocr.pkb
+@@src/packages/uc_ai_decisions.pkb
 @@src/packages/uc_ai_agents_api.pkb
 @@src/packages/uc_ai_agent_exec_api.pkb
 @@src/packages/uc_ai_agent_workflow_api.pkb
 @@src/packages/uc_ai_utils.pkb
+@@src/packages/uc_ai_a2a_core.pkb
+@@src/packages/uc_ai_a2a.pkb
+@@src/packages/uc_ai_chat_widgets.pkb
+@@src/packages/uc_ai_chat.pkb
+@@src/packages/uc_ai_chat_hook.pkb
 PROMPT - Installing AI provider package bodies...
 @@src/packages/uc_ai_anthropic.pkb
 @@src/packages/uc_ai_google.pkb

@@ -3,6 +3,8 @@ title: xAI
 description: UC AI provider documentation for xAI Grok models
 ---
 
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
 The UC AI xAI package integrates xAI's Grok models into your Oracle database applications.
 
 ## Features
@@ -24,13 +26,52 @@ You can get an API key by signing up at [xAI Console](https://console.x.ai/).
 
 ## Creating a Web Credential
 
-To use your xAI key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following configuration:
+To use your xAI key with APEX Web Credentials, create a web credential in your APEX workspace. You can use the APEX user interface or PL/SQL.
+
+<Tabs>
+<TabItem label="APEX user interface">
+
+Go to Workspace Utilities → Web Credentials and create a web credential with the following configuration:
 
 - Authentication Type: HTTP Header
 - Credential Name: `Authorization`
 - Credential Secret: `Bearer <your_api_key>`
 
 Also set `Valid for URLs` to the xAI API (https://api.x.ai/) to limit the scope of the credential.
+
+</TabItem>
+<TabItem label="PL/SQL">
+
+Connect to the schema that holds UC AI, then run this block. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the xAI API.
+
+Outside an APEX session, for example in SQLcl, uncomment the `apex_util.set_workspace` call. Replace `MY_WORKSPACE` with the name of the APEX workspace associated with your schema.
+
+```sql
+begin
+  -- apex_util.set_workspace(p_workspace => 'MY_WORKSPACE');
+
+  apex_credential.create_credential(
+    p_credential_name      => 'XAI',
+    p_credential_static_id => 'XAI',
+    p_authentication_type  => apex_credential.C_TYPE_HTTP_HEADER,
+    p_allowed_urls         => apex_t_varchar2('https://api.x.ai/'),
+    p_prompt_on_install    => false,
+    p_credential_comment   => 'Credential for xAI'
+  );
+
+  apex_credential.set_persistent_credentials(
+    p_credential_static_id => 'XAI',
+    p_key                  => 'Authorization',
+    p_value                => 'Bearer <your_api_key>'
+  );
+
+  commit;
+end;
+/
+```
+
+</TabItem>
+</Tabs>
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_xai.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
@@ -57,7 +98,7 @@ This list shows the newest model of each family. The package keeps the constants
 
 ### Retired Models
 
-xAI no longer lists the Grok 2, Grok 3, Grok 4, and Grok 4.1 models, and `grok-code-fast-1`. The package keeps their constants for code that still references them, but requests with these models can fail.
+xAI retired `grok-3`, `grok-4`, the Grok 4 fast and Grok 4.1 fast models, and `grok-code-fast-1` on 2026-05-15. Requests to these names now go to `grok-4.3` and use its prices. See the [xAI retirement notice](https://docs.x.ai/developers/migration/may-15-retirement). xAI no longer lists `grok-3-mini` and `grok-2-vision`. The package keeps all of these constants for code that still references them.
 
 See [xAI's models documentation](https://docs.x.ai/docs/models) for the latest model information and capabilities.
 

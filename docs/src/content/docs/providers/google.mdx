@@ -3,11 +3,13 @@ title: Google
 description: UC AI provider documentation for Google Gemini models
 ---
 
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
 The UC AI Google package integrates Google's Gemini models into your Oracle database applications.
 
 ## Features
 
-- Support for the current Gemini models (Gemini 3.x Flash and Flash-Lite, Gemini 3.1 Pro, Gemini 2.5 series)
+- Support for the current Gemini models (Gemini 4 Argon, Gemini 3.x Flash and Flash-Lite, Gemini 3.1 Pro, Gemini 2.5 series)
 - Full function calling (tools) support
 - Reasoning capabilities with reasoning budget control
 - Multi-modal support (text, images, PDFs)
@@ -23,13 +25,52 @@ You can get an API key by signing up at [Google AI Studio](https://aistudio.goog
 
 ## Creating a Web Credential
 
-To use your Google key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following configuration:
+To use your Google key with APEX Web Credentials, create a web credential in your APEX workspace. You can use the APEX user interface or PL/SQL.
+
+<Tabs>
+<TabItem label="APEX user interface">
+
+Go to Workspace Utilities → Web Credentials and create a web credential with the following configuration:
 
 - Authentication Type: URL Query String
 - Credential Name: `key`
 - Credential Secret: `<your_api_key>`
 
 Also set `Valid for URLs` to the Google API (https://generativelanguage.googleapis.com/) to limit the scope of the credential.
+
+</TabItem>
+<TabItem label="PL/SQL">
+
+Connect to the schema that holds UC AI, then run this block. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the Google API.
+
+Outside an APEX session, for example in SQLcl, uncomment the `apex_util.set_workspace` call. Replace `MY_WORKSPACE` with the name of the APEX workspace associated with your schema.
+
+```sql
+begin
+  -- apex_util.set_workspace(p_workspace => 'MY_WORKSPACE');
+
+  apex_credential.create_credential(
+    p_credential_name      => 'GOOGLE',
+    p_credential_static_id => 'GOOGLE',
+    p_authentication_type  => apex_credential.C_TYPE_HTTP_QUERY_STRING,
+    p_allowed_urls         => apex_t_varchar2('https://generativelanguage.googleapis.com/'),
+    p_prompt_on_install    => false,
+    p_credential_comment   => 'Credential for Google'
+  );
+
+  apex_credential.set_persistent_credentials(
+    p_credential_static_id => 'GOOGLE',
+    p_key                  => 'key',
+    p_value                => '<your_api_key>'
+  );
+
+  commit;
+end;
+/
+```
+
+</TabItem>
+</Tabs>
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_google.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
@@ -41,11 +82,15 @@ uc_ai_google.g_apex_web_credential := 'GOOGLE';
 
 Google offers the Gemini family of models with different capabilities and performance characteristics. The UC AI Google package provides constants for the current models:
 
+### Gemini 4 Series
+
+- `uc_ai_google.c_model_gemini_4_argon` - Gemini 4 Argon, the flagship reasoning model
+
 ### Gemini 3 Series
 
 - `uc_ai_google.c_model_gemini_3_8_flash` - Latest Flash model, fast and good for most tasks
 - `uc_ai_google.c_model_gemini_3_5_flash_lite` - Lightweight model for simple tasks
-- `uc_ai_google.c_model_gemini_3_1_pro` - Most capable model for complex tasks
+- `uc_ai_google.c_model_gemini_3_1_pro` - Pro model for complex tasks (preview)
 
 This list shows the newest model of each family. The package keeps the constants of older models for code that still references them.
 
@@ -70,7 +115,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'What is Oracle APEX?',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_3_7_flash
+    p_model => uc_ai_google.c_model_gemini_3_8_flash
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));
@@ -122,7 +167,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_3_7_flash
+    p_model => uc_ai_google.c_model_gemini_3_8_flash
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));

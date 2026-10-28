@@ -1,0 +1,615 @@
+---
+title: A2A Server
+description: Publish a UC AI agent as an Agent2Agent (A2A) 1.0 agent that other systems call over HTTP
+sidebar:
+  order: 50
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+**The A2A server publishes an agent of UC AI as an [Agent2Agent (A2A)](https://a2a-protocol.org/) agent.** Other systems read its **agent card**, a public JSON document with its URLs and authentication requirements. They then send messages over HTTP. The package `uc_ai_a2a` does this work. ORDS serves the HTTP routes.
+
+An A2A client can be another agent framework, an integration platform, or your own code with the official A2A SDK. The client does not need to know UC AI.
+
+<Aside type="tip" title="When to use this">
+Use the A2A server when a system outside the database must call an agent. Use [agent as tool](/products/uc-ai/docs/guides/multi-agent-systems/agent-as-tool/) when the caller is another agent in the same database.
+</Aside>
+
+## What the server supports
+
+- **Protocol version.** The server supports A2A 1.0 only.
+- **HTTP bindings.** JSON-RPC at `<base>/jsonrpc` and HTTP+JSON (REST) at `<base>/rest`.
+- **Operations.** `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask`, `SubscribeToTask`, the four push notification configuration methods, and `GetExtendedAgentCard`.
+- **Agent card.** `<base>/.well-known/agent-card.json`. The card is public.
+- **Authentication.** An API key, ORDS OAuth2 client credentials, or none.
+
+`<base>` is `https://<host>/ords/<schema alias>/a2a/<endpoint code>`. The endpoint code is the name that you give in `expose_agent`.
+
+## Set up an endpoint
+
+An **endpoint** publishes one agent. The agent must exist already. See [Agentic AI](/products/uc-ai/docs/guides/agentic-ai/).
+
+**Prerequisites:**
+
+- The schema is REST-enabled in ORDS (`ords.enable_schema`).
+- The schema has `execute` on `dbms_crypto`. `create_api_key` needs it.
+- For background runs, the schema has the `CREATE JOB` privilege.
+
+Run this block in the schema of UC AI:
+
+```sql
+begin
+  -- once per schema: creates the ORDS module
+  uc_ai_a2a.install_ords_module;
+
+  uc_ai_a2a.expose_agent(
+    p_code        => 'support',
+    p_agent_code  => 'support_bot',
+    p_description => 'Answers questions about orders and invoices'
+  );
+
+  -- the key is visible only now
+  dbms_output.put_line(uc_ai_a2a.create_api_key('support', 'crm_system'));
+
+  commit;
+end;
+/
+```
+
+Keep the printed key. UC AI stores only a hash of it. The commit is required, because the request handler of ORDS reads the committed endpoint.
+
+`expose_agent` replaces the configuration of an endpoint with the same code. It has these parameters:
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `p_code` | | URL name of the endpoint. Lowercase letters, digits, `_` and `-`. |
+| `p_agent_code` | | Code of the agent to run. |
+| `p_agent_version` | `null` | Version of the agent. `null` runs the active version. |
+| `p_name` | agent code | Name on the agent card. |
+| `p_description` | agent description | Description on the agent card. |
+| `p_text_input_param` | `null` | Input parameter that the text of a message fills. See [Map a message to the agent input](#map-a-message-to-the-agent-input). |
+| `p_auth_mode` | `api_key` | `uc_ai_a2a.c_auth_api_key`, `c_auth_oauth2` or `c_auth_none`. |
+| `p_accept_files` | `true` | Accept file parts and pass them to the agent. |
+| `p_allow_async` | `true` | Allow `returnImmediately` and push notifications. |
+| `p_card_version` | `1.0.0` | Version on the agent card. |
+| `p_base_url` | `null` | Public URL of the endpoint. `null` derives the URL from each request. |
+| `p_card_extras` | `null` | JSON with more card content. See [Add card content](#add-card-content). |
+
+`set_enabled(p_code, false)` turns an endpoint off. A disabled endpoint answers 404 on every route. `remove_endpoint` deletes the endpoint with its API keys, tasks and push notification configurations. The agent and its executions stay.
+
+<Aside type="note" title="Reverse proxy">
+Without `p_base_url`, the card shows the host and the path of the request that ORDS received. If a reverse proxy changes the host or the path, set `p_base_url` to the public URL.
+</Aside>
+
+## Make a first call with curl
+
+The examples in this section come from a recorded run, with the host replaced by `api.example.com`. The test agent is a workflow that repeats the question without a model call. Set `$API_KEY` to your key before you run the requests.
+
+Get the agent card. This request needs no key:
+
+```sh
+curl https://api.example.com/ords/uc_ai/a2a/smoke/.well-known/agent-card.json
+```
+
+The card, shortened:
+
+```json
+{
+  "name": "Smoke Echo",
+  "description": "Echoes the question (A2A smoke test)",
+  "version": "1.0.0",
+  "supportedInterfaces": [
+    {
+      "url": "https://api.example.com/ords/uc_ai/a2a/smoke/jsonrpc",
+      "protocolBinding": "JSONRPC",
+      "protocolVersion": "1.0"
+    },
+    {
+      "url": "https://api.example.com/ords/uc_ai/a2a/smoke/rest",
+      "protocolBinding": "HTTP+JSON",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "capabilities": {
+    "streaming": true,
+    "pushNotifications": true,
+    "extendedAgentCard": true
+  },
+  "securitySchemes": {
+    "apiKey": {
+      "apiKeySecurityScheme": { "location": "header", "name": "X-API-Key" }
+    }
+  },
+  "securityRequirements": [{ "schemes": { "apiKey": { "list": [] } } }],
+  "defaultInputModes": ["text/plain", "application/json", "application/pdf", "image/png"],
+  "defaultOutputModes": ["text/plain"],
+  "skills": [
+    {
+      "id": "a2a_smoke_echo",
+      "name": "Smoke Echo",
+      "description": "Echoes the question (A2A smoke test)",
+      "tags": ["workflow"]
+    }
+  ]
+}
+```
+
+Send a message with JSON-RPC:
+
+```sh
+curl -X POST https://api.example.com/ords/uc_ai/a2a/smoke/jsonrpc \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "messageId": "m-1001",
+        "role": "ROLE_USER",
+        "parts": [{ "text": "What is the capital of France?" }]
+      }
+    }
+  }'
+```
+
+The response:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "1",
+  "result": {
+    "task": {
+      "id": "c11fb3e7-a681-435d-8d39-53d873d10887",
+      "contextId": "82f17938-1c55-4fa6-8899-2211d55b9963",
+      "status": {
+        "state": "TASK_STATE_COMPLETED",
+        "timestamp": "2026-10-27T16:01:42.026Z"
+      },
+      "artifacts": [
+        {
+          "artifactId": "c11fb3e7-a681-435d-8d39-53d873d10887-result",
+          "name": "result",
+          "parts": [
+            { "text": "echo: What is the capital of France?", "mediaType": "text/plain" }
+          ]
+        }
+      ],
+      "history": [
+        {
+          "messageId": "m-1001",
+          "role": "ROLE_USER",
+          "parts": [{ "text": "What is the capital of France?" }],
+          "taskId": "c11fb3e7-a681-435d-8d39-53d873d10887",
+          "contextId": "82f17938-1c55-4fa6-8899-2211d55b9963"
+        },
+        {
+          "messageId": "c11fb3e7-a681-435d-8d39-53d873d10887-reply",
+          "contextId": "82f17938-1c55-4fa6-8899-2211d55b9963",
+          "taskId": "c11fb3e7-a681-435d-8d39-53d873d10887",
+          "role": "ROLE_AGENT",
+          "parts": [
+            { "text": "echo: What is the capital of France?", "mediaType": "text/plain" }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+The call waits until the agent run ends. The response contains a **task**, which records this run's status, result, and message history. The result appears in an **artifact**, the A2A container for agent output. The `contextId` identifies the conversation and lets later messages continue it.
+
+The HTTP+JSON (REST) interface performs the same operation without the JSON-RPC wrapper. The path of the operation is `message:send`:
+
+```sh
+curl -X POST https://api.example.com/ords/uc_ai/a2a/smoke/rest/message:send \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"message":{"messageId":"m-1002","role":"ROLE_USER","parts":[{"text":"Hello"}]}}'
+```
+
+The response is `{"task": {...}}` with the same task fields.
+
+<Aside type="caution" title="Send a Content-Type header">
+ORDS delivers an empty body when a POST has no `Content-Type` header. The server then answers a parse error (`-32700`). Send `Content-Type: application/json` or `application/a2a+json`.
+</Aside>
+
+## Call the endpoint from Python
+
+The official A2A SDK (`a2a-sdk`, tested with version 1.3) reads the card and selects an interface, either JSON-RPC or HTTP+JSON. Pass an `httpx` client that sends the API key in each request, including the request for the card.
+
+```python
+import asyncio
+import os
+import uuid
+
+import httpx
+from a2a.client import ClientConfig, create_client
+from a2a.types import Message, Part, Role, SendMessageRequest
+
+BASE = os.environ["A2A_BASE"]        # https://api.example.com/ords/uc_ai/a2a/support
+API_KEY = os.environ["A2A_API_KEY"]
+
+
+async def main():
+    async with httpx.AsyncClient(headers={"X-API-Key": API_KEY}, timeout=300) as http:
+        client = await create_client(
+            BASE,
+            client_config=ClientConfig(streaming=False, httpx_client=http),
+        )
+        request = SendMessageRequest(
+            message=Message(
+                role=Role.ROLE_USER,
+                message_id=str(uuid.uuid4()),
+                parts=[Part(text="What is the capital of France?")],
+            )
+        )
+        async for event in client.send_message(request):
+            print(event)
+
+
+asyncio.run(main())
+```
+
+The loop prints one `task` event with the state `TASK_STATE_COMPLETED` and the artifact `echo: What is the capital of France?`. To pick one binding, set `supported_protocol_bindings=["JSONRPC"]` or `["HTTP+JSON"]` in `ClientConfig`.
+
+## Map a message to the agent input
+
+A message has parts. Each part is exactly one of `text`, `raw` (file bytes, base64 in JSON), `url` or `data`. The server maps the parts to the input of the agent.
+
+| Part | First turn of a context | Follow-up turn of a profile, orchestrator or handoff agent |
+| --- | --- | --- |
+| `text` | Fills the input parameter `text_input_param`. Several text parts are joined with a blank line. | The text of the follow-up message. |
+| `data` with an object | Merged into the input parameters. | Serialized as JSON text and added to the follow-up message. |
+| `raw` | Passed to the agent as a file, with its `mediaType` and `filename`. | Same. |
+| `url` | Refused with `ContentTypeNotSupported`. | Same. |
+
+### Text input
+
+The input parameter for text is `p_text_input_param`. If you leave it `null`, the server uses the only required string property of the input schema of the agent. If the server cannot identify a single required string property, it rejects a text part with an error that lists the expected properties. Clients must then send a `data` part:
+
+```json
+{
+  "messageId": "m-2001",
+  "role": "ROLE_USER",
+  "parts": [{ "data": { "invoice_id": "INV-1001", "language": "en" } }]
+}
+```
+
+If a `data` part sets the same key as `text_input_param`, the `data` part wins.
+
+### Files
+
+A `raw` part becomes a file for the agent, so the agent needs a model that accepts that media type. See [File analysis](/products/uc-ai/docs/guides/file_analysis/). The stored message history replaces the bytes with the text `[file <filename> (<mediaType>) omitted]`. Set `p_accept_files => false` to refuse file parts with `ContentTypeNotSupported`.
+
+### Follow-up messages
+
+A message with the `contextId` of an earlier task continues the conversation in the same agent session.
+
+- A **profile**, **orchestrator** or **handoff** agent receives the text as the next user message. The agent sees the earlier messages.
+- A **workflow**, **conversation** or **decision** agent starts a new run in the same session. The first-turn mapping applies again.
+
+A new `contextId` that the client picks must match `^[A-Za-z0-9._:-]{1,128}$` and must not belong to another client. A message without a `contextId` starts a new context. A `contextId` that the client does not own is refused with the same error as a malformed one. The error does not show whether the context exists.
+
+A message with a `taskId` for one of the client's tasks returns `UnsupportedOperation`. Each task represents one run and cannot receive another message. A `taskId` that belongs to another client returns `TaskNotFound`. To continue, send a new message with the `contextId` and without the `taskId`. If a client sends the same `messageId` again, the server returns the task of the first call and does not run the agent again.
+
+## Read the output
+
+The final message of the agent becomes one artifact with the name `result`. The `artifactId` is `<task id>-result`.
+
+| Final message | Artifact part |
+| --- | --- |
+| A JSON object or array | A `data` part, `mediaType` `application/json`. |
+| A JSON string, while the agent has an output schema | A `data` part, `mediaType` `application/json`. |
+| Other text | A `text` part, `mediaType` `text/plain`. |
+
+If the client sets `acceptedOutputModes` without `application/json` and without `*/*`, but with `text/plain`, the server returns the data as JSON text. The card lists `application/json` in `defaultOutputModes` when the agent has an output schema. See [Structured output](/products/uc-ai/docs/guides/structured_output/).
+
+The task also has `metadata.usage` with `inputTokens` and `outputTokens`, when the agent run reports them.
+
+### Failed runs
+
+When the run fails, the task has the state `TASK_STATE_FAILED` and the status message `The agent run failed.` The response never contains an `ORA-` text or a backtrace. The real error is in the logger and on the execution row of the run. A timeout of the agent ends in the state `TASK_STATE_FAILED` too.
+
+### Transactions
+
+Each run is one transaction, and the server owns it. Tools that write data do not commit.
+
+- When the run completes, the server commits the changes of the tools. Then it sets the task to `TASK_STATE_COMPLETED`. A client that reads a completed task finds the changed rows.
+- When the run fails, the server rolls back the changes of the tools. A failed task does not keep partial changes made by those tools. The trace rows of the run stay, because UC AI writes them in their own transaction.
+- When a client cancels a running task, the database rolls back the uncommitted changes of the stopped job.
+
+If a tool must keep a row even when the run fails, for example an audit row, write that row in an autonomous transaction.
+
+## Authenticate clients
+
+The mode is set per endpoint with `p_auth_mode`. The agent card is always public. The card lists the mode in `securitySchemes`.
+
+| Mode | Client sends | Identity of the client |
+| --- | --- | --- |
+| `api_key` | Header `X-API-Key` | `apikey:<client name>` |
+| `oauth2` | Header `Authorization: Bearer <token>` | The OAuth client ID |
+| `none` | Nothing | `anonymous` |
+
+<Aside type="caution" title="Use none only in development">
+Mode `none` lets every caller that reaches the URL run the agent.
+</Aside>
+
+A failed authentication answers HTTP 401. A JSON-RPC response then has the error code `-32000`, as this recorded response shows:
+
+```json
+{ "jsonrpc": "2.0", "id": "1", "error": { "code": -32000, "message": "Authentication is required.", "data": [] } }
+```
+
+### API keys
+
+`create_api_key(p_endpoint_code, p_client_name, p_expires_at)` returns a key that starts with `a2a_`. The client name is unique for each endpoint. UC AI stores a SHA-256 hash of the key, so the key is visible only at creation. `revoke_api_key` makes the key fail with 401 at once.
+
+To rotate a key, revoke the old key, then create a new one for the same client name.
+
+### OAuth2
+
+In mode `oauth2`, ORDS protects the `jsonrpc` and `rest` routes with a privilege. The client uses the client credentials flow.
+
+```sql
+declare
+  l_client_id     varchar2(255 char);
+  l_client_secret varchar2(255 char);
+begin
+  uc_ai_a2a.expose_agent(
+    p_code       => 'support',
+    p_agent_code => 'support_bot',
+    p_auth_mode  => uc_ai_a2a.c_auth_oauth2
+  );
+
+  uc_ai_a2a.create_oauth_client(
+    p_endpoint_code  => 'support',
+    p_client_name    => 'crm_system',
+    p_support_email  => 'ops@example.com',
+    po_client_id     => l_client_id,
+    po_client_secret => l_client_secret
+  );
+
+  -- the secret is visible only now
+  dbms_output.put_line(l_client_id || ' / ' || l_client_secret);
+  commit;
+end;
+/
+```
+
+If you create the endpoint before you call `install_ords_module`, call `install_ords_module` again. It creates the privileges for existing `oauth2` endpoints.
+
+The client requests a token from the token URL of ORDS. The URL is on the card as `tokenUrl`. To set another URL, use `oauthTokenUrl` in `p_card_extras`.
+
+```sh
+curl -u "$CLIENT_ID:$CLIENT_SECRET" \
+  -d "grant_type=client_credentials" \
+  https://api.example.com/ords/uc_ai/oauth/token
+```
+
+Then the client sends the `access_token` of the response:
+
+```sh
+curl -X POST https://api.example.com/ords/uc_ai/a2a/support/jsonrpc \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"SendMessage","params":{...}}'
+```
+
+### Task isolation
+
+Each task and each context belongs to the client that created it. A client sees only its own tasks in `GetTask` and `ListTasks`. A task of another client behaves like a missing task and answers `TaskNotFound`.
+
+## Run in the background
+
+A client that sets `configuration.returnImmediately` to `true` gets the task at once, in the state `TASK_STATE_SUBMITTED`. The agent run continues in a `dbms_scheduler` job. This needs `p_allow_async => true` and the `CREATE JOB` privilege. Without the privilege, the task is `TASK_STATE_FAILED`.
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "3",
+  "method": "SendMessage",
+  "params": {
+    "message": {
+      "messageId": "m-1003",
+      "role": "ROLE_USER",
+      "parts": [{ "text": "Later" }]
+    },
+    "configuration": { "returnImmediately": true }
+  }
+}
+```
+
+The response is the task with the state `TASK_STATE_SUBMITTED` and no artifact. The task then moves to `TASK_STATE_WORKING` and to a final state.
+
+<Aside type="note" title="Job start time">
+The database scheduler starts the job. On a busy database, the job can start a minute or more after the request.
+</Aside>
+
+If `p_allow_async` is `false`, the server ignores `returnImmediately` and the call blocks. `SendStreamingMessage` ignores it too, because a stream follows the task to its end.
+
+### Read a task
+
+The client polls with `GetTask`:
+
+```json
+{ "jsonrpc": "2.0", "id": "2", "method": "GetTask", "params": { "id": "c11fb3e7-a681-435d-8d39-53d873d10887", "historyLength": 0 } }
+```
+
+`historyLength` limits the messages returned with the task. If you omit it, the response includes all messages. A value of `0` excludes messages.
+
+`ListTasks` returns the tasks of the client, newest first. It accepts `contextId`, `status`, `pageSize` (1 to 100, default 50), `pageToken`, `statusTimestampAfter` and `includeArtifacts`. In the REST binding, these are query parameters:
+
+```sh
+curl "https://api.example.com/ords/uc_ai/a2a/smoke/rest/tasks?pageSize=1" -H "X-API-Key: $API_KEY"
+```
+
+The answer has `tasks`, `nextPageToken` (empty on the last page), `pageSize` and `totalSize`.
+
+### Stream and subscribe
+
+`SendStreamingMessage` (REST: `message:stream`) answers with Server-Sent Events. The events are a `task` with the state `TASK_STATE_WORKING`, an `artifactUpdate`, and a final `statusUpdate`:
+
+```text
+data: {"task":{"id":"58cc662e-...","status":{"state":"TASK_STATE_WORKING",...},...}}
+
+data: {"artifactUpdate":{"taskId":"58cc662e-...","artifact":{"artifactId":"58cc662e-...-result",...},"lastChunk":true}}
+
+data: {"statusUpdate":{"taskId":"58cc662e-...","status":{"state":"TASK_STATE_COMPLETED",...}}}
+```
+
+ORDS buffers the response of a handler. All events arrive when the run ends, so a stream gives no progress while the agent works. The events are valid SSE, and SDK clients read them.
+
+`SubscribeToTask` (REST: `GET` or `POST tasks/<id>:subscribe`) follows a running task. The server reads the task row once each second, for 600 seconds at most. When the task ends, it sends the same three events. For a task in a final state, the call is refused with `UnsupportedOperation`.
+
+### Cancel a task
+
+`CancelTask` stops a task in the state `TASK_STATE_SUBMITTED` or `TASK_STATE_WORKING`. A submitted task has its job deleted. A working task has its job stopped, and its execution is marked as failed with the text `Canceled by the A2A client`. The call returns the task in the state `TASK_STATE_CANCELED`. For a task in a final state, the call is refused:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "5",
+  "error": {
+    "code": -32002,
+    "message": "The task is in a final state and cannot be canceled.",
+    "data": [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": "TASK_NOT_CANCELABLE", "domain": "a2a-protocol.org" }]
+  }
+}
+```
+
+### Push notifications
+
+A client can give a URL that the server calls when a task reaches a final state or needs input. The client registers it in `configuration.taskPushNotificationConfig` of the `SendMessage` request, or with these methods. The REST paths are below `tasks/<id>/pushNotificationConfigs`.
+
+| JSON-RPC method | REST |
+| --- | --- |
+| `CreateTaskPushNotificationConfig` | `POST tasks/<id>/pushNotificationConfigs` |
+| `GetTaskPushNotificationConfig` | `GET tasks/<id>/pushNotificationConfigs/<config id>` |
+| `ListTaskPushNotificationConfigs` | `GET tasks/<id>/pushNotificationConfigs` |
+| `DeleteTaskPushNotificationConfig` | `DELETE tasks/<id>/pushNotificationConfigs/<config id>` |
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "4",
+  "method": "CreateTaskPushNotificationConfig",
+  "params": {
+    "taskId": "9ce81c6c-b5fb-4b71-8509-2bc60b55b76b",
+    "url": "https://client.example.com/a2a/hook",
+    "token": "s3cret"
+  }
+}
+```
+
+The response has the new configuration with its generated `id`. The server sends `POST {"task": {...}}` to the URL, with `Content-Type: application/a2a+json`. When the task is in a final state already, the server sends the task to the new URL at once. It adds the header `X-A2A-Notification-Token` when the configuration has a `token`. It adds `Authorization: <scheme> <credentials>` when the configuration has `authentication`. A failed delivery is logged and stored with the configuration. It does not raise an error. Deleting a configuration that does not exist is not an error.
+
+If `p_allow_async` is `false`, the push notification methods return `PushNotificationNotSupported`.
+
+## Add card content
+
+The server builds the card from the endpoint and the agent. The card describes the agent as an A2A **skill**: an advertised capability that clients can discover. Its `id` is the agent code, and its only default tag is the agent type. `p_card_extras` adds more content as a JSON object:
+
+```sql
+begin
+  uc_ai_a2a.expose_agent(
+    p_code        => 'support',
+    p_agent_code  => 'support_bot',
+    p_card_extras => '{
+      "provider": { "organization": "Example Corp", "url": "https://example.com" },
+      "documentationUrl": "https://example.com/docs/support-agent",
+      "iconUrl": "https://example.com/icon.png",
+      "tags": ["support", "orders"],
+      "examples": ["Where is my order 4711?"]
+    }'
+  );
+  commit;
+end;
+/
+```
+
+| Key | Card field |
+| --- | --- |
+| `provider` (`organization`, `url`) | `provider` |
+| `documentationUrl`, `iconUrl` | Same names. |
+| `tags` | `tags` of the skill. Replaces the agent type tag. |
+| `examples` | `examples` of the skill. |
+| `oauthTokenUrl` | Token URL in the OAuth2 security scheme. |
+
+### Extended card
+
+`GetExtendedAgentCard` (REST: `GET extendedAgentCard`) needs authentication. It returns the card, and it appends the input schema and the output schema of the agent to the description of the skill. Clients that authenticate can then see the parameters of the agent. With mode `none`, the call answers `ExtendedAgentCardNotConfigured`.
+
+### Sign the card
+
+A signed card lets a client make sure that the card comes from the publisher. The server signs with RS256 (JWS, RFC 7515) over the canonical JSON form of the card (RFC 8785), as the A2A SDK does. Signing needs Oracle 21c or later and `execute` on `dbms_crypto`.
+
+```sql
+begin
+  uc_ai_a2a.set_card_signing_key(
+    p_endpoint_code   => 'support',
+    p_kid             => 'support-key-1',
+    p_private_key_pem => :private_key_pem,   -- RSA key, PEM, no password
+    p_jku             => 'https://example.com/.well-known/jwks.json'
+  );
+  commit;
+end;
+/
+```
+
+The procedure tries the key once and raises `-20435` if the key does not work. The public card and the extended card both carry the `signatures` field. Pass a null key to stop signing. The signature of a test card passed the signature verifier of the A2A SDK.
+
+<Aside type="caution" title="Protect the key table">
+UC AI stores the private key directly, in the column `uc_ai_a2a_endpoints.signing_key`. Restrict access to this table.
+</Aside>
+
+A card of about 24 KB or more is too large to sign. The server then serves it without a signature and logs the error.
+
+## Secure the endpoint
+
+An A2A client is a third party. Its message text and data reach the agent as input, and a model reads it. Treat all of it as untrusted. The tutorial [Secure an Agent](/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/) shows how an attack uses this input and how to limit the damage.
+
+- **Give the agent only the tools it needs.** A tool that writes data or reads private data is a risk when the input is untrusted.
+- **Scope tools with the run context.** Each A2A run has the [run context](/products/uc-ai/docs/guides/tools/#the-run-context) values `a2a_client` and `a2a_endpoint`. The first holds the identity of the client (for example `apikey:crm_system`). The second holds the endpoint code. A tool handler reads them from `_ctx` and decides which rows the client can see. The model cannot set these values.
+- **Rely on task isolation.** The server shows a client only its own tasks and contexts. This does not limit what the agent tools read. Only your tool handlers do that.
+- **Use one API key for each client.** A revoked key stops one client without effect on the others.
+
+## Known limits
+
+- The server supports A2A 1.0 only. A client for version 0.3 gets `VersionNotSupported` (`-32009`). The old method names, for example `message/send`, get the same error.
+- A request without an `A2A-Version` header is treated as version 1.0. This differs from the specification. It makes calls with curl simpler.
+- The server ignores the `A2A-Extensions` header.
+- ORDS buffers streams. All events arrive when the run ends.
+- `returnImmediately` needs the `CREATE JOB` privilege, and the job can start late on a busy database.
+- A message part of type `url` is not supported.
+- The server signs cards below about 24 KB only.
+- Error responses never contain `ORA-` text. Read the logger and the execution row for the cause.
+
+## Reference
+
+| Procedure or function | Description |
+| --- | --- |
+| `expose_agent` | Creates an endpoint, or replaces the configuration of an endpoint with the same code. Overloaded: the function returns the endpoint ID. |
+| `set_enabled` | Turns an endpoint on or off. |
+| `remove_endpoint` | Deletes an endpoint with its API keys, tasks, push notification configurations and ORDS privilege. |
+| `create_api_key` | Returns a new API key for a client. Raises `-20433` if `dbms_crypto` is not available. |
+| `revoke_api_key` | Revokes the key of a client. |
+| `install_ords_module` | Creates the ORDS module and the OAuth2 privileges. Parameters `p_base_path` (default `a2a/`) and `p_module_name` (default `uc_ai_a2a`). Raises `-20432` without ORDS. |
+| `uninstall_ords_module` | Deletes the ORDS module and the OAuth2 privileges and roles. |
+| `create_oauth_client` | Creates an ORDS OAuth2 client for an endpoint in mode `oauth2`. |
+| `set_card_signing_key` | Signs the agent card with an RSA key. |
+| `process_request` | Answers one HTTP request and returns status, content type and body. It does not read the CGI environment. Another HTTP front end can call it. |
+| `handle_request` | The ORDS entry point. It reads the headers, calls `process_request` and writes the response. |
+| `run_task` | Runs a background task. The scheduler job calls it. Do not call it directly. |
+
+| Error code | Constant | Cause |
+| --- | --- | --- |
+| `-20430` | `c_err_endpoint_not_found` | The endpoint does not exist. |
+| `-20431` | `c_err_invalid_endpoint` | A parameter of `expose_agent` is not valid, for example the auth mode or `p_card_extras`. |
+| `-20432` | `c_err_ords_missing` | ORDS is not available. |
+| `-20433` | `c_err_crypto_missing` | `dbms_crypto` is not available. |
+| `-20434` | `c_err_api_key` | A parameter of `create_api_key` is not valid, for example an empty client name. |
+| `-20435` | `c_err_signing` | The signing key does not work. |

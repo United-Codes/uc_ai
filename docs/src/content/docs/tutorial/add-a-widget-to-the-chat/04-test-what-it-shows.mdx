@@ -1,0 +1,135 @@
+---
+title: Test what the widget can show
+description: Call the package with ids that a model must not be able to use. Read which ones the widget shows, which ones it rejects, and what the user sees.
+sidebar:
+  order: 4
+---
+
+import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+
+<LessonHeader
+  lesson={4}
+  of={4}
+  minutes={20}
+  promise="you can call the package with forged invoice numbers and show which ones the widget refuses, without a model."
+  scripts={["04_prove_limits.sql", "00_teardown.sql"]}
+  course="add-a-widget-to-the-chat"
+/>
+
+## Call the package without a model
+
+Test whether the package rejects invoice numbers from another contract. The model
+can supply any number, including one suggested by a hostile instruction in a tool
+result. The package must enforce the contract restriction for those inputs too.
+
+`04_prove_limits.sql` calls `SC_WIDGET_PKG.BUILD_SPEC` directly. It passes sample widget
+specifications together with the real result of `SC_LIST_INVOICES` for
+contract 88. Contract 88 has `INV-1001`, `INV-1002`, and `INV-1003`.
+Contract 99 has `INV-2001`. The script first reads `INV-2001`, so you see that it
+exists.
+
+```sh
+sql your_user/your_password@your_db @04_prove_limits.sql
+```
+
+Recorded output:
+
+```text
+INV-2001 exists and belongs to contract 99
+
+1 invoice of the contract                     SHOWN: INV-1001
+2 two invoices, the order of the model        SHOWN: INV-1003, INV-1001
+3 an invoice of contract 99                   REJECTED: none of the invoices can be shown
+4 one of contract 88 and one of contract 99   SHOWN: INV-1002
+5 no tool ran in this answer                  REJECTED: none of the invoices can be shown
+6 a number that does not exist                REJECTED: none of the invoices can be shown
+7 text instead of numbers                     REJECTED: invoice_nos must be an array of invoice numbers
+8 SQL in a number                             REJECTED: every entry must be an invoice_no as the tool returned it
+9 no JSON                                     REJECTED: the widget is not valid JSON
+10 the tool name has a prefix and lower case  SHOWN: INV-1001
+
+11 the same spec through render:
+   part 1: kind=text
+   part 2: kind=text, rejected=none of the invoices can be shown
+```
+
+## Read the results
+
+| Case | What it establishes |
+| --- | --- |
+| 1, 2 | An invoice from the tool result is shown. The list keeps the order requested by the model |
+| 3 | `INV-2001` exists in the table, as the first line of the output shows. `SC_LIST_INVOICES` did not return it for contract 88, so the widget does not show it |
+| 4 | The package leaves out the invoice that no tool returned, and it shows the other one. The list does not say which one it left out |
+| 5 | Without a tool call in the answer, no invoice can be shown |
+| 6 | A number that does not exist gets the same reason as case 3 |
+| 7, 8, 9 | A spec in the wrong form is rejected before the package reads any table. In case 8 the pattern check rejects the text. The package passes the numbers to the query as a collection, and not as text |
+| 10 | Models of one provider write the name of a tool with a prefix and in lower case. The package finds the call anyway |
+| 11 | The whole path through `render`. The user sees the block as text. The reason is stored in the part, and the browser shows it only when `show_errors` is on |
+
+Case 3 shows the rule of the widget. The package does not know the contract of the
+run. It shows an invoice only when `SC_LIST_INVOICES` returned it, and that tool
+reads only the contract of the run context. So the widget has the same limit as
+the tool.
+
+This also defines the limit of the widget. If you change the tool so that it
+returns invoices of other contracts, the widget shows them. Keep the rule in the
+tool, and test the tool as the course Build an Agent does.
+
+<Aside type="caution" title="The package must still check access">
+An invoice identifier in a tool result is sufficient here because the tool already
+restricts results to the current contract. If your tool does not apply access
+restrictions, make sure that the current user can access each record in `build_spec`. The package runs in
+the job of the answer, after the attribute **Session Init Code** of the region has run.
+</Aside>
+
+## Read what the user sees for a rejected block
+
+A rejected block stays in the answer as text, and the user sees the JSON. The
+widget does not tell the user why, unless the flag `show_errors` is on. The stored part of a rejected widget holds the
+text of the block and the reason, and nothing else.
+
+Two more behaviors follow from how the chat renders:
+
+- **The stored list is a snapshot.** The chat renders the answer once, after the
+  run. A credit note that a user raises later does not change the badge of an
+  answer that already exists. A click opens the current data, because the page
+  reads the table.
+- **An error in the package does not fail the answer.** If `build_spec` raises an
+  error, the chat writes it to the APEX debug log, and the user sees the block as
+  text. If `get_protocol` raises an error, the chat leaves that type out of the
+  system prompt. The other types stay.
+
+## Key takeaways
+
+- Call the package directly with invoice numbers outside the current contract.
+  This tests the package's access restriction independently of model behavior.
+- The widget has the limit of the tool. It shows an invoice only when the tool
+  returned it in the same answer.
+- A rejected block shows as text. An error in the package does not fail the answer.
+
+## Remove what the course created
+
+Run the teardown script. It unregisters the type, deletes the chat rows of the
+sessions that start with `SCW_`, and drops `SC_WIDGET_PKG`. The desk stays.
+
+```sh
+sql your_user/your_password@your_db @00_teardown.sql
+```
+
+UC AI keeps the executions of the runs in its own tables, as it does for every
+agent run. The teardown does not delete them.
+
+## Where to go next
+
+<LinkCard
+  title="Chat Widgets guide"
+  description="The reference for every widget type, the item_list limits, the provider contract, and the limits of the feature."
+  href="/products/uc-ai/docs/guides/chat-widgets/"
+/>
+
+<LinkCard
+  title="Secure an Agent"
+  description="The course that closes the routes a prompt injection can use, with the tests that prove each one."
+  href="/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/"
+/>

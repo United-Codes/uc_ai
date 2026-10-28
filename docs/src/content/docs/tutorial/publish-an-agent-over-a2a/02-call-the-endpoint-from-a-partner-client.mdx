@@ -1,0 +1,196 @@
+---
+title: Call the endpoint from a partner client
+description: Call the service desk from the official A2A Python SDK and from a Google ADK agent, and continue a conversation in one context.
+sidebar:
+  order: 2
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={2}
+  of={4}
+  minutes={20}
+  promise="you can call the endpoint with the official A2A SDK and with a Google ADK agent, and continue one conversation across two questions."
+  scripts={["svc_client.py", "adk_client.py", "02_context.sql"]}
+  course="publish-an-agent-over-a2a"
+/>
+
+## Call the desk with the A2A SDK
+
+In lesson 1 you called the desk with curl. A partner system uses a client library. In this lesson,
+your client acts as Ferrolux and calls the endpoint from lesson 1 with its API key.
+
+The official `a2a-sdk` reads the agent card, selects an HTTP interface, and sends the message. The
+script `svc_client.py` wraps this in about 50 lines. Install the packages and set the
+endpoint URL and the key as environment variables. Do not write the key into a file:
+
+```sh
+pip install a2a-sdk httpx
+
+export A2A_BASE=https://api.example.com/ords/demo/a2a/service-desk
+export A2A_API_KEY=a2a_…        # the ferrolux key from lesson 1
+```
+
+The core of the script is this call. `create_client` fetches the card and builds the client.
+The `httpx` client sends the key in each request, including the request for the card:
+
+```python
+async with httpx.AsyncClient(headers={"X-API-Key": key}, timeout=300) as http:
+    client = await create_client(
+        base, client_config=ClientConfig(streaming=False, httpx_client=http)
+    )
+    request = SendMessageRequest(
+        message=Message(role=Role.ROLE_USER, message_id=str(uuid.uuid4()),
+                        context_id=context_id or "", parts=[Part(text=text)])
+    )
+    async for event in client.send_message(request):
+        if event.HasField("task"):
+            task = event.task
+```
+
+Every question after the first one sets `context_id` to the `context_id` of the first task. The
+script takes the questions as arguments. Run it with two:
+
+```sh
+python -I svc_client.py "Which of our machines are under contract?" \
+                        "When was the second one last serviced?"
+```
+
+<Aside type="note" title="A development database with a self-signed certificate">
+A development database often answers with a self-signed TLS certificate. The recorded runs used
+`--insecure`, which sets `verify=False` in `httpx`. Use `verify=False` only for a self-signed development
+certificate. A production endpoint has a certificate that the client can check.
+</Aside>
+
+Recorded output of the script, with the host of the endpoint replaced:
+
+```text
+--- question 1: Which of our machines are under contract?
+state:    TASK_STATE_COMPLETED
+context:  aefe581f-3c7c-4e62-8e6b-349e7457acff
+seconds:  2.9
+tokens:   666 in, 84 out
+Both of your machines are currently under contract:
+
+- FX-CONV-07 — Ferrolux belt conveyor 7m
+- FX-PRESS-01 — Ferrolux HP-400 hydraulic press
+
+Both are covered under GOLD contract SC-2024-088 through 2027-04-25.
+
+--- question 2: When was the second one last serviced?
+state:    TASK_STATE_COMPLETED
+context:  aefe581f-3c7c-4e62-8e6b-349e7457acff
+seconds:  2.5
+tokens:   1108 in, 53 out
+FX-PRESS-01 was last serviced on 2026-10-17 for its annual safety inspection.
+```
+
+The two tasks have the same `context`. A client that sends the `contextId` of an earlier task
+continues the conversation. The server uses the `contextId` as the agent session. It maps the
+text of the second message to the next user message. [Follow-up messages](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/#follow-up-messages)
+in the reference page lists the rules.
+
+## Read the tools that each question called
+
+The answer to question 2 is correct without the history, because the model can list the machines
+again. To see whether it used the history, read the tools that each task called. Run `@02_context.sql`.
+For each task of Ferrolux it prints the first 8 characters of the context, the question and the tools:
+
+```sql
+select substr(t.context_id, 1, 8) as context
+     , json_value(t.request_message, '$.parts[0].text') as asked
+     , listagg(m.tool_name, ', ') within group (order by m.seq) as tools
+  from uc_ai_a2a_tasks t
+  left join uc_ai_agent_messages m
+    on m.execution_id = t.execution_id
+   and m.role = 'tool_call'
+ where t.client_id = 'apikey:ferrolux'
+ group by t.task_id, t.context_id, t.created_at, json_value(t.request_message, '$.parts[0].text')
+ order by t.created_at;
+```
+
+The script ran after the SDK client, a control run, and the ADK client below. The control run sent question 2 alone, in a new context:
+
+```text
+CONTEXT     ASKED                                        TOOLS
+___________ ____________________________________________ _____________________________________________
+6a453a33    Which of our machines are under contract?    PARTNER_LIST_ASSETS
+aefe581f    Which of our machines are under contract?    PARTNER_LIST_ASSETS
+aefe581f    When was the second one last serviced?       PARTNER_ASSET_HISTORY
+5b29cc95    When was the second one last serviced?       PARTNER_LIST_ASSETS, PARTNER_ASSET_HISTORY
+37209785    Which of our machines are under contract?    PARTNER_LIST_ASSETS
+37209785    When was the second one last serviced?       PARTNER_ASSET_HISTORY
+```
+
+Context `6a453a33` is the curl call of lesson 1. Context `aefe581f` is the SDK client, and `37209785` is the ADK client below. In
+both conversations, question 2 called only `PARTNER_ASSET_HISTORY`. The model took the second
+machine of its own earlier answer. Context `5b29cc95` is the control: the same question
+without a history called `PARTNER_LIST_ASSETS` first, to find the machines.
+
+## Call the desk from Google ADK
+
+The desk is a standard A2A agent. An agent framework can use it as a remote agent without
+any UC AI code. [Google ADK](https://google.github.io/adk-docs/) wraps a card URL as
+`RemoteA2aAgent`. The script `adk_client.py` uses it as the root agent of an ADK runner. This is the
+recorded setup: ADK 2.13 on Python 3.14.
+
+```sh
+pip install "google-adk[a2a]" httpx
+
+python -I adk_client.py "Which of our machines are under contract?" \
+                        "When was the second one last serviced?"
+```
+
+The core of the script:
+
+```python
+agent = RemoteA2aAgent(
+    name="service_desk",
+    description="The partner service desk of a field-service company",
+    agent_card=base + "/.well-known/agent-card.json",
+    httpx_client=http,            # sends the X-API-Key header
+)
+runner = InMemoryRunner(agent=agent, app_name="partner")
+```
+
+The local ADK runner needs no model API key. UC AI calls the model from the database with the agent's credential. ADK keeps one session for both
+questions and sends the same `contextId` each time. ADK prints warnings about its experimental A2A support to
+`stderr`. The recorded output below shows `stdout`:
+
+```text
+--- question 1: Which of our machines are under contract?
+service_desk: These machines are currently under contract:
+
+- FX-CONV-07 — Ferrolux belt conveyor 7m
+- FX-PRESS-01 — Ferrolux HP-400 hydraulic press
+
+Both are covered under GOLD contract SC-2024-088 through 2027-04-25.
+
+--- question 2: When was the second one last serviced?
+service_desk: FX-PRESS-01 was last serviced on 2026-10-17 for its annual safety inspection.
+```
+
+The framework found the endpoint through the card and authenticated with the header that the card
+names. The desk answered through the same tools and the same `partner_clients` lookup as for curl.
+
+## Hand a key to a partner
+
+A partner needs a key and a row in `partner_clients`. You generate the key with `create_api_key`.
+The call returns the key only once. Share it through a secure channel, such as your organization's password manager.
+
+To rotate a key, create a key under a new client name, for example `ferrolux2`. Add the row
+`apikey:ferrolux2` to `partner_clients`. Revoke the old key with `revoke_api_key` after the
+partner has switched. You choose the length of the overlap. Revoking a key
+makes it fail with HTTP 401 at once. Lesson 4 shows this.
+
+The tasks of a client belong to its client name. A new client name starts without the tasks of the old one.
+[API keys](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/#api-keys) in the reference page covers keys and expiry.
+
+<LinkCard
+  title="Next lesson: Accept visit requests that the database checks"
+  description="Add a booking tool, a booking prompt and four rules, and read the trace of a refused and an accepted request."
+  href="/products/uc-ai/docs/tutorial/publish-an-agent-over-a2a/03-accept-visit-requests-the-database-checks/"
+/>

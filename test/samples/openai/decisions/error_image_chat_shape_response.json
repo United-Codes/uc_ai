@@ -1,0 +1,1 @@
+{"error":{"message":"Invalid value: 'image_url'. Supported values are: 'input_text' and 'input_image'.","type":"invalid_request_error","param":"input[0].content[0].type","code":"invalid_value"}}

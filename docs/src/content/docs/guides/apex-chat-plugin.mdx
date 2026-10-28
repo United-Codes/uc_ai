@@ -16,11 +16,9 @@ background job, it polls for the answer, and it keeps the conversation.
 ![An empty UC AI chat region: the title APEX Helper, a welcome message next to the assistant avatar, and a row of three outlined suggested-prompt buttons labelled "Try asking" directly above the message box](../../../assets/apex-chat/chat-empty-state.png)
 
 <Aside type="note" title="Where to get the plug-in">
-The plug-in is not part of the UC AI installation. Download the
-`uc-ai-chat-*.zip` file from the [latest UC AI
-release](https://github.com/United-Codes/uc_ai/releases/latest). The archive
-holds the table script, the two packages, the optional hook package, and the
-plug-in export file.
+The plug-in is part of UC AI. `install_uc_ai.sql` and `upgrade_uc_ai.sql` create
+its tables and packages. The plug-in export file is attached to the release, next
+to the scripts. The plug-in has the same version as UC AI.
 </Aside>
 
 ## Why the agent needs a background job
@@ -44,11 +42,11 @@ lists as attributes.
 
 ## Before you start
 
-You need these three things:
+You need these things:
 
-- **UC AI 26.3 or later** in the database schema. The package of the plug-in
-  calls `execute_agent` with the parameter `p_run_context`, which is new in this
-  version. On an older version the package body does not compile.
+- **UC AI 26.5 or later** in the database schema that parses the APEX
+  application. If the application parses in another schema, read [Use UC AI in a
+  different schema](#use-uc-ai-in-a-different-schema).
 - An agent with the status `active`. See
   [Profile agents](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/).
 - Permission to create a `dbms_scheduler` job in the schema.
@@ -57,33 +55,106 @@ You need these three things:
 
 <Steps>
 
-1. ### Create the table
+1. ### Install or upgrade UC AI
 
-   Run `ai_tables.sql`. This script creates `uc_ai_chat_messages`, which holds
-   every message of every conversation.
+   In the schema that parses the application, run `install_uc_ai.sql` for a new
+   installation. Run `upgrade_uc_ai.sql` for an existing installation.
 
-   If the table exists from an earlier version, run the `alter table` blocks at
-   the end of the same script instead.
+   Both scripts create the table `uc_ai_chat_messages`, the table
+   `uc_ai_chat_widget_types`, and the packages `uc_ai_chat_widgets`,
+   `uc_ai_chat`, and `uc_ai_chat_hook`. The hook package lets the chat show the name of
+   the tool that is currently active. The upgrade script adds any columns missing from
+   an earlier version of the plug-in table, for example `tool_call_id`,
+   `widgets`, and `parts`. You can run it more than once.
 
-2. ### Install the packages
+2. ### Import the plug-in
 
-   Run `uc_ai_chat.pks` and then `uc_ai_chat.pkb`. The package body calls
-   `uc_ai_agents_api`, so UC AI must be installed first.
+   Import the file `region_type_plugin_com_united_codes_uc_ai_chat.sql`
+   into your APEX application. The file is a normal APEX component export. In
+   APEX Builder, go to **Shared Components > Plug-ins > Import**.
 
-3. ### Import the plug-in
+   Import the file again after each UC AI upgrade. A region that uses an older
+   export keeps working, but it does not get the new attributes.
 
-   Import `region_type_plugin_com_united_codes_uc_ai_chat.sql` into your APEX
-   application. The file is a normal APEX component export.
+</Steps>
+
+## Use UC AI in a different schema
+
+The default is one schema: UC AI and the chat objects are in the schema that parses
+the application. If the application parses in another schema, keep UC AI in its
+own schema and put the chat objects in the schema of the application.
+
+<Steps>
+
+1. ### Install UC AI in its own schema
+
+   Run `install_uc_ai.sql` in the UC AI schema. You can leave the chat objects
+   there. The plug-in does not use them.
+
+2. ### Create the chat objects in the application schema
+
+   In the schema that parses the application, run the chat block of
+   `src/tables/install.sql`. It starts at the heading `UC AI CHAT PLUG-IN` and
+   ends at the end of the file. Then run these package files in this order:
+   `uc_ai_chat_widgets`, `uc_ai_chat`, and `uc_ai_chat_hook`. Run each
+   specification (`.pks`) before its body (`.pkb`).
+
+3. ### Give the application schema access to UC AI
+
+   In the UC AI schema, grant access to the objects that the chat packages use:
+
+   ```sql
+   grant execute on uc_ai_agents_api to app_schema;
+   grant execute on uc_ai_error to app_schema;
+   grant select on uc_ai_agent_sessions to app_schema;
+   grant select on uc_ai_agent_messages to app_schema;
+   grant select on uc_ai_agent_executions to app_schema;
+   ```
+
+   Then create a synonym for each of these objects in the application schema:
+
+   ```sql
+   create synonym uc_ai_agents_api for uc_ai_schema.uc_ai_agents_api;
+   create synonym uc_ai_error for uc_ai_schema.uc_ai_error;
+   create synonym uc_ai_agent_sessions for uc_ai_schema.uc_ai_agent_sessions;
+   create synonym uc_ai_agent_messages for uc_ai_schema.uc_ai_agent_messages;
+   create synonym uc_ai_agent_executions for uc_ai_schema.uc_ai_agent_executions;
+   ```
+
+   Replace `uc_ai_schema` and `app_schema` with the names of your schemas.
 
 4. ### Optional: show the tool progress
 
-   Run `uc_ai_chat_hook.pks` and then `uc_ai_chat_hook.pkb`. With this package,
-   the chat shows the name of the tool that runs now.
+   UC AI calls the hook package from its own schema. Grant it the right to run the
+   package of the application schema:
 
-   If UC AI is in a different schema, grant `execute` on the hook package to
-   that schema. Without the grant the plug-in leaves this feature off.
+   ```sql
+   grant execute on uc_ai_chat_hook to uc_ai_schema;
+   ```
+
+   Without this grant, the plug-in does not show tool progress.
+
+5. ### Import the plug-in
+
+   Import the plug-in file as described in [Install the
+   plug-in](#install-the-plug-in).
 
 </Steps>
+
+### Upgrade the chat objects in the application schema
+
+The script `upgrade_uc_ai.sql` changes the tables of the UC AI schema only. It does
+not change the chat tables in the application schema. Do these steps after each UC AI
+upgrade:
+
+1. Read the release notes. They name each change to the tables
+   `uc_ai_chat_messages` and `uc_ai_chat_widget_types`.
+2. Apply each change to the table in the application schema. The guarded steps in
+   `src/upgrade/upgrade_schema.sql`, under the heading `UC AI Chat plug-in`, show
+   the statements.
+3. Run the specifications and the bodies of the three chat packages again in the
+   application schema.
+4. Import the plug-in file again.
 
 ## Add a chat region to a page
 
@@ -123,7 +194,7 @@ job starts costs no tokens.
 
 ## Region attributes
 
-The plug-in has 18 attributes. **Agent Code** is the only one that you must fill
+The plug-in has 20 attributes. **Agent Code** is the only one that you must fill
 in. Six more attributes are required, but each one has a default value.
 
 ### Agent
@@ -156,7 +227,7 @@ guardrail with the audience `any` governs a chat turn.
 | Attribute | Type | Default | What it does |
 | --- | --- | --- | --- |
 | **Agent Run Context** | Textarea | — | A JSON object that binds the conversation to one record. Every tool of the run gets these values under the key `_ctx`. |
-| **Run Context Drift** | Select List | `ignore` | What the plug-in does when the values change during a conversation. |
+| **Run Context Drift** | Select List | `error` | What the plug-in does when the values change during a conversation. |
 
 The [run context](/products/uc-ai/docs/guides/tools/#the-run-context) is the way
 to make a chat region talk about one contract, one case, or one tenant. The model
@@ -198,11 +269,28 @@ that can read any table. Give the agent only the tools it needs.
 | **Suggested Prompts** | Textarea | — | Example questions, one for each line. They show as buttons above the message box, with the label "Try asking", while the conversation is empty. A click sends the question immediately. Each button shows the full question. |
 | **Auto Generate Title** | Checkbox | `N` | Names the conversation after the first answer, with the language model of the browser. |
 | **Collect Feedback** | Checkbox | `N` | Shows a row with the question "Was this helpful?" and two thumb buttons below the newest answer. |
+| **Widgets** | Checkboxes | none checked | The widget types that the agent can show in an answer: `stat_card`, `status`, `key_value`, `table`, and `chart`. Needs UC AI 26.5. |
+| **Custom Widgets** | Text | — | The names of widget types that you registered with `uc_ai_chat_widgets.register_type`. Separate several names with a comma, a colon, a semicolon, or a space. Needs UC AI 26.5. |
 
 **Auto Generate Title** uses the on-device model of the browser (Chrome 148 or
 later). No text goes to a server and the run costs no tokens. The plug-in never
 starts the download of the model. If the model is not available, the region keeps
 the configured **Header Title**.
+
+**Widgets** lets the agent show a key figure, a status notice, a short list, a
+table, or a chart in an answer. The plug-in adds widget instructions to the system
+prompt of the first turn. The server checks each widget. The browser displays the
+widget and treats its labels and values as plain text. The [Chat Widgets](/products/uc-ai/docs/guides/chat-widgets/)
+guide has the widget types, the data binding, the limits, and the security
+notes. **Custom Widgets** turns on a widget type that you wrote yourself, for
+example a list of records that the user can open. See [Custom Chat Widget
+Types](/products/uc-ai/docs/guides/chat-widgets-custom-types/).
+
+<LinkCard
+  title="Chat Widgets"
+  description="Show a stat card, a status, a key value list, a table, or a chart in the answer of an agent."
+  href="/products/uc-ai/docs/guides/chat-widgets/"
+/>
 
 The title goes to `uc_ai_agent_sessions.title`. The rating goes to
 `uc_ai_agent_sessions.feedback_rating`, with `feedback_comment` and
@@ -219,7 +307,7 @@ query gives you the conversations with a negative rating.
 | **Avatar Icon** | Icon | `fa-robot` | The icon of the assistant, and the icon of the button in dialog mode. |
 | **Min Height** | Text | `450px` | The minimum height of the region. |
 | **Thinking Animation** | Select List | `dots` | The animation during a run: `dots`, `braille`, `plasma`, or `matrix`. |
-| **Thinking Detail** | Select List | `status` | How much the indicator says: `off`, `status`, or `tools`. |
+| **Thinking Detail** | Select List | `tools` | How much the indicator says: `off`, `status`, or `tools`. |
 
 With `display_mode` set to `dialog`, the region becomes a small button. A click
 on the button opens the chat above the page.
@@ -267,7 +355,8 @@ The function returns up to five flags:
 - `show_tools` — each tool call, with its arguments, its result, and its status.
 - `show_metadata` — the token counts next to each answer.
 - `show_debug` — a panel with the details of the run.
-- `show_errors` — the text of an error, instead of a general message.
+- `show_errors` — the text of an error, instead of a general message. It also
+  shows why a widget appears as text.
 
 Every flag is `false` when the attribute is empty, when the function raises an
 error, or when the JSON is not valid.
@@ -309,6 +398,10 @@ enforcer. The notices give no figure, no percentage, and no name of a limit.
   region run any agent in the schema.
 - **One user owns one conversation.** After the first message, only the user who
   sent it can read the conversation or add to it.
+- **A widget is rebuilt on the server.** The server creates each widget specification with
+  only allowed keys. The browser treats every value as plain text, so values
+  cannot contain HTML, links, or images. The region decides which types the agent can use. See
+  [Security and trust](/products/uc-ai/docs/guides/chat-widgets/#security-and-trust).
 - **The answer is sanitized.** The plug-in shows the answer as Markdown. It
   removes dangerous HTML before the browser gets it.
 - **Errors stay in the database.** A failure of the background job writes the
@@ -317,13 +410,14 @@ enforcer. The notices give no figure, no percentage, and no name of a limit.
 
 ## Version history
 
-The current plug-in needs UC AI 26.3, because the package body calls
-`p_run_context`. This table gives the version that introduced each feature:
+The plug-in has the same version as UC AI. The first release that includes the
+plug-in is 26.5. This table gives the UC AI version that introduced each feature:
 
 | Feature | UC AI version |
 | --- | --- |
 | Chat region, tools, reasoning | 26.1 |
 | Auto Generate Title, Collect Feedback, Agent Run Context, Run Context Drift | 26.3 |
+| Widgets, Custom Widgets | 26.5 |
 
 <LinkCard
   title="The run context"

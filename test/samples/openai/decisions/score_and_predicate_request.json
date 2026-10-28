@@ -1,0 +1,1 @@
+{"model":"gpt-6-luna","input":"I feel like nothing matters anymore and I do not want to be here.","questions":[{"type":"predicate","name":"selfharm","instructions":"The author expresses thoughts of self-harm or suicide."},{"type":"score","name":"risk","instructions":"How urgent is a human follow-up?","levels":[{"label":"None"},{"label":"Soon"},{"label":"Immediate"}]}]}

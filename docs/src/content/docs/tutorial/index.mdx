@@ -20,7 +20,7 @@ repository.
 
 ## At a glance
 
-Seven courses, in the order to take them. Each row is one course, with what it
+Nine courses, in the order to take them. Each row is one course, with what it
 builds and how long it takes. The section under [the courses in
 detail](#the-courses-in-detail) says what each one teaches that no guide covers.
 
@@ -55,6 +55,12 @@ detail](#the-courses-in-detail) says what each one teaches that no guide covers.
 />
 
 <LinkCard
+  title="Add Your Own Widget to the Chat →"
+  description="4 lessons · 90 min · OpenAI. Show a list of invoices in the chat, built by a PL/SQL package of yours. The model supplies invoice numbers. Test that the package rejects invoices outside the current contract."
+  href="/products/uc-ai/docs/tutorial/add-a-widget-to-the-chat/01-render-without-a-model/"
+/>
+
+<LinkCard
   title="Secure an Agent →"
   description="7 lessons · 140 min · OpenAI. A payables desk that reads mail a supplier wrote. You watch one email redirect a payment, then close every route it used."
   href="/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/"
@@ -64,6 +70,12 @@ detail](#the-courses-in-detail) says what each one teaches that no guide covers.
   title="Analyze Data at Scale →"
   description="6 lessons · 110 min · Oracle 23ai and a DBA step. A cold-chain analyst that reads 1176 temperature readings with one tool call, because the model writes a program that runs inside your database. Recorded on Anthropic; measured on OpenAI, xAI and OpenRouter too."
   href="/products/uc-ai/docs/tutorial/analyze-data-at-scale/01-twenty-six-tool-calls/"
+/>
+
+<LinkCard
+  title="Publish an Agent over A2A →"
+  description="4 lessons · 90 min · OpenAI and ORDS. Publish a service desk with one API key per partner company. Call it through A2A clients, apply PL/SQL rules to visit requests, and track token usage per partner."
+  href="/products/uc-ai/docs/tutorial/publish-an-agent-over-a2a/01-publish-a-read-only-service-desk/"
 />
 
 ## The courses in detail
@@ -240,6 +252,32 @@ checks both.
   href="/products/uc-ai/docs/tutorial/put-an-agent-in-apex/01-a-chat-region/"
 />
 
+### Add Your Own Widget to the Chat
+
+Take this one after **Put an Agent in APEX**. It adds a widget type of your own to
+the chat of the service-contract desk. The model writes a short block with invoice
+numbers, and a PL/SQL package that you write turns it into a list that the user can
+click.
+
+The lessons run in SQL. Lesson 3 also has an optional part for an APEX page. The
+widget feature needs UC AI 26.5 or later and the plug-in of the same release.
+
+What you practise:
+
+- **A widget inherits the rule of the tool.** The package shows an invoice only
+  when the tool returned it in the same answer. The course proves this with an
+  invoice of another contract, without a model.
+- **The click is a browser event, and the page must check it again.** The widget
+  limits what the model can show. It does not limit what the browser can send.
+- **A stored widget is a snapshot.** The chat renders the answer once, so a later
+  change in the tables does not change the badges of an older answer.
+
+<LinkCard
+  title="Start: Render a widget without a model"
+  description="Call the render step of the chat with an answer that you write, and read the parts that the chat stores."
+  href="/products/uc-ai/docs/tutorial/add-a-widget-to-the-chat/01-render-without-a-model/"
+/>
+
 ### Secure an Agent
 
 Take this one after **Build an Agent**: it assumes tools, the run context and the
@@ -311,4 +349,30 @@ Lesson 1 checks both before you spend a token.
   title="Start: One question, twenty-six tool calls"
   description="Set up 1176 temperature readings, ask one batch question the ordinary way, and write down the tokens it uses."
   href="/products/uc-ai/docs/tutorial/analyze-data-at-scale/01-twenty-six-tool-calls/"
+/>
+
+### Publish an Agent over A2A
+
+Take this one after **Build an Agent**, when a system outside your database must call an agent. You publish the
+service desk of that course to two partner companies. Each partner has its own API key, sees its own machines
+only, and can ask for a service visit.
+
+The course calls the endpoint with curl, with the official Python SDK and with Google ADK, an agent framework that
+knows nothing about UC AI. It reuses the tables of Build an Agent, so run its setup first.
+
+The course covers these tasks:
+
+- **Restrict data access to one partner.** The server puts the authenticated client identity into the run
+  context. Tool handlers map it to a customer in the partner table. An unknown client gets no data.
+- **Apply booking rules in the database.** Four rules determine whether to accept a visit request. The refusal is in the `tool_result` row
+  of the trace, next to the sentence the model wrote about it.
+- **Run checks without a model.** 25 checks call the booking rule and every handler, including both sides of the
+  2-working-day boundary.
+- **Operate a partner endpoint.** Track token usage per client, set a public URL, run background requests,
+  and disable a key or the endpoint.
+
+<LinkCard
+  title="Start: Publish an agent as an A2A endpoint"
+  description="Publish a read-only service desk, create an API key for each partner, and call the endpoint with curl."
+  href="/products/uc-ai/docs/tutorial/publish-an-agent-over-a2a/01-publish-a-read-only-service-desk/"
 />

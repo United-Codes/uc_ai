@@ -7,7 +7,7 @@ License: LGPL v3.0 | Docs: https://www.united-codes.com/products/uc-ai/docs/
 ## Tech Stack
 
 - **Source code**: PL/SQL (Oracle database packages)
-- **Database**: Oracle (tables, triggers, migrations)
+- **Database**: Oracle (tables, triggers, re-runnable upgrade steps)
 - **Test framework**: utPLSQL (`ut.run()`)
 - **Documentation site**: Astro + Starlight (in `docs/`), built with Bun
 - **CI/CD**: GitLab CI (`.gitlab-ci.yml`)
@@ -20,8 +20,8 @@ src/
   packages/         PL/SQL package specs (.pks) and bodies (.pkb)
   tables/           Table DDL (install.sql)
   triggers/         Database triggers
-  views/            Reporting views (views.sql; recreated by upgrade_packages.sql)
-  migrations/       Schema migration scripts
+  views/            Reporting views (views.sql; recreated by upgrade_uc_ai.sql)
+  upgrade/          upgrade_schema.sql (guarded, re-runnable DDL steps) and verify_schema.sql; README.md explains both
   post-scripts/     Post-install verification and built-in tool registration
   dependencies/     External deps (Logger framework)
 test/
@@ -34,7 +34,8 @@ docs/
   package.json       Docs site config
 scripts/
   generate_install_script.sh         Generate install_uc_ai.sql
-  generate_upgrade_script.sh         Generate upgrade_packages.sql
+  generate_upgrade_script.sh         Generate upgrade_uc_ai.sql
+  test_upgrade.sh                    Upgrade old release tags and compare with a fresh install (make test-upgrade)
   generate_uninstall_script.sh       Generate uninstall.sql
   generate_install_script_complete.sh  Install with Logger bundled
   package_utils.sh                   Shared build utilities
@@ -45,14 +46,16 @@ scripts/
 | Package | Purpose |
 |---------|---------|
 | `uc_ai` | Main entry point: `generate_text()`, `generate_embeddings()`, provider/model constants |
-| `uc_ai_anthropic`, `uc_ai_google`, `uc_ai_openai`, `uc_ai_oci`, `uc_ai_ollama`, `uc_ai_xai`, `uc_ai_openrouter` | Provider implementations |
-| `uc_ai_agents_api` | Agent CRUD, validation, versioning |
+| `uc_ai_anthropic`, `uc_ai_google`, `uc_ai_openai`, `uc_ai_oci`, `uc_ai_ollama`, `uc_ai_xai`, `uc_ai_openrouter`, `uc_ai_typesafe` | Provider implementations (`uc_ai_typesafe` holds constants and the credential only: TypeSafe jev supports `uc_ai.decide`, not chat) |
+| `uc_ai_agents_api` | Agent CRUD, validation, versioning (agent type `decision` runs `uc_ai.decide` as an agent) |
 | `uc_ai_agent_exec_api` | Agent execution engine (sequential, conditional, parallel, loop workflows) |
 | `uc_ai_agent_workflow_api` | Workflow helpers: input mapping, condition evaluation, step execution |
 | `uc_ai_tools_api` | Tool/function-calling registration and execution |
 | `uc_ai_prompt_profiles_api` | Versioned prompt templates with `{var}` substitution |
 | `uc_ai_memory` | Agent memory: virtual filesystem behind the `MEMORY` tool, store scoping, MEMORY PROTOCOL prompt block |
 | `uc_ai_ocr` | OCR dispatcher and adapters behind `uc_ai.ocr` / `uc_ai.ocr_text` (Mistral, OCI Document Understanding, Ollama) |
+| `uc_ai_decisions` | Typed decisions dispatcher and adapters behind `uc_ai.decide` and the `decision` agent type (OpenAI Decisions, TypeSafe jev); experimental |
+| `uc_ai_chat`, `uc_ai_chat_widgets`, `uc_ai_chat_hook` | Backend of the UC AI Chat APEX plug-in. Source of truth is this repo (packages and the chat tables in `src/tables/install.sql`). Only the export file `region_type_plugin_com_united_codes_uc_ai_chat.sql` is copied from `apex-chat` with `scripts/sync_chat_plugin_export.sh` |
 | `uc_ai_message_api` | Message construction and conversation history |
 | `uc_ai_structured_output` | JSON schema-based output validation |
 | `uc_ai_logger` | Logging wrapper around OraOpenSource Logger |
@@ -67,7 +70,7 @@ Generate install/upgrade scripts (run from repo root):
 # Generate fresh install script
 bash scripts/generate_install_script.sh
 
-# Generate upgrade script (packages only, no table changes)
+# Generate the upgrade script (schema steps, triggers, packages, views; re-runnable, from v25.7 on)
 bash scripts/generate_upgrade_script.sh
 
 # Generate complete install with Logger dependency
@@ -75,6 +78,15 @@ bash scripts/generate_install_script_complete.sh
 ```
 
 You can use SQLcl with `sql -name local-23ai-uc_ai` to connect to the dev database to run queries, compile packages, and execute tests.
+
+**A DDL change needs two edits.** Change `src/tables/install.sql`, and add a guarded step to
+`src/upgrade/upgrade_schema.sql` (the header of that file lists the rules). The upgrade script is
+re-runnable: every step checks the data dictionary first, and a one-time data change runs only when
+its structural change ran in the same run. `make test-upgrade` upgrades old release tags and compares
+the result with a fresh install. It fails when the two edits disagree. The last phase of
+`upgrade_uc_ai.sql` checks every object of `install.sql` and fails when one is missing, so the
+customer run catches a forgotten step too. ADM calls `upgrade_uc_ai.sql` from its own upgrade:
+keep it free of `exit` and of other file calls (see `src/upgrade/README.md`).
 
 Installation order is dependency-aware: tables -> triggers -> specs (core first, then API, then providers) -> bodies -> post-scripts. See `install_uc_ai.sql` for exact order.
 
@@ -185,9 +197,11 @@ Check these files for context on specific topics:
 | Input mapping syntax for workflows | `docs/input-mapping-guide.md` |
 | Provider setup guides | `docs/src/content/docs/providers/*.mdx` |
 | API reference (generate_text) | `docs/src/content/docs/api/generate_text.mdx` |
+| API reference (decide) | `docs/src/content/docs/api/decide.mdx` |
 | Agent memory guide | `docs/src/content/docs/guides/agent-memory.mdx` |
 | Tools / function calling guide | `docs/src/content/docs/guides/tools.mdx` |
 | Prompt profiles guide | `docs/src/content/docs/guides/prompt-profiles.mdx` |
 | Agentic AI guide | `docs/src/content/docs/guides/agentic-ai.mdx` |
+| Decision agents guide | `docs/src/content/docs/guides/multi-agent-systems/decision-agents.mdx` |
 | Structured output guide | `docs/src/content/docs/guides/structured_output.mdx` |
 | Release history | `docs/src/content/docs/other/release-history.mdx` |

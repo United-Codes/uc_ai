@@ -98,7 +98,7 @@ This list shows the newest model of each family. The package keeps the constants
 
 ### Retired Models
 
-Oracle marks the Grok 3 and Grok 4 models, `grok-code-fast-1`, the Llama 3.1 and Llama 3.2 models, and the Command R models as deprecated. The same applies to the Cohere embedding models of version 3. The package keeps their constants, but use a current model for new code.
+Oracle retired the Grok 3, Grok 4, Grok 4 fast, and Grok 4.1 fast models, `grok-code-fast-1`, the Llama 3.1 405B and Llama 3.2 90B Vision models, and the Command R models in on-demand mode. The package keeps their constants for code that still references them, but requests with these models fail. See Oracle's [retirement dates page](https://docs.oracle.com/en-us/iaas/Content/generative-ai/deprecating-on-demand.htm) for the dates.
 
 :::tip
 If a new model is not yet available as a constant, you can pass the model name directly as a string. See the [FAQ](/products/uc-ai/docs/other/faq/#custom-model-strings) for details.
@@ -173,16 +173,8 @@ OCI supports file input through the [file analysis](/products/uc-ai/docs/guides/
 OCI provides Cohere embedding models for semantic search, clustering, and other vector-based operations:
 
 - `uc_ai_oci.c_model_cohere_embed_4` - Latest Cohere v4 embedding model
-- `uc_ai_oci.c_model_cohere_embed_english_3` - English-optimized v3 model
-- `uc_ai_oci.c_model_cohere_embed_english_light_3` - Lightweight English model
-- `uc_ai_oci.c_model_cohere_embed_multi_3` - Multilingual v3 model
-- `uc_ai_oci.c_model_cohere_embed_multi_light_3` - Lightweight multilingual model
 
-Image-capable embedding models are also available:
-
-- `uc_ai_oci.c_model_cohere_embed_english_image_3`
-- `uc_ai_oci.c_model_cohere_embed_english_light_image_3`
-- `uc_ai_oci.c_model_cohere_embed_multi_image_light_3`
+Oracle deprecated the Cohere Embed v3 models. These are the constants `c_model_cohere_embed_english_3`, `c_model_cohere_embed_english_light_3`, `c_model_cohere_embed_multi_3`, `c_model_cohere_embed_multi_light_3`, and the image-capable v3 constants such as `c_model_cohere_embed_english_image_3`. Oracle's [retirement dates page](https://docs.oracle.com/en-us/iaas/Content/generative-ai/deprecating-on-demand.htm) gives 2026-10-21 as the on-demand retirement date of several of them. Use `c_model_cohere_embed_4` for new code.
 
 Also refer to the [OCI documentation](https://docs.oracle.com/en-us/iaas/Content/generative-ai/pretrained-models.htm) for any new models that might not be listed here and region availability.
 
@@ -197,7 +189,7 @@ begin
   l_result := uc_ai.generate_embeddings(
     p_input => json_array_t('["Oracle APEX is a low-code development platform.", "UC AI allows you to easily use AI from PL/SQL."]'),
     p_provider => uc_ai.c_provider_oci,
-    p_model => uc_ai_oci.c_model_cohere_embed_english_3
+    p_model => uc_ai_oci.c_model_cohere_embed_4
   );
 
   -- l_result.get_size → 2 (one embedding per input string)
@@ -234,4 +226,4 @@ end;
 /
 ```
 
-The OCR reference describes the [options](/products/uc-ai/docs/api/ocr/#oci), the result and the errors.
+The OCR reference describes the options on the [OCI tab](/products/uc-ai/docs/api/ocr/#providers), the result and the errors.

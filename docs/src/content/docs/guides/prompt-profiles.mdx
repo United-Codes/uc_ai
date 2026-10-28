@@ -119,6 +119,8 @@ END;
   match a parameter with the name 'country'.
 </Aside>
 
+UC AI replaces each placeholder with the parameter value that you supply. It preserves the text inside that value. For example, `{other}` inside a value stays as text instead of referring to another parameter. Backslashes also stay unchanged. Parameter values can exceed 32,767 characters.
+
 In an agent run, a placeholder can also take its value from the
 [run context](/products/uc-ai/docs/guides/tools/#the-run-context). A caller that
 starts the run with `p_run_context => json_object_t('{"document_id":"7"}')` does
@@ -219,6 +221,7 @@ Each configuration option maps to a UC AI global variable:
 - `g_enable_tools`: Enable [tools/functions](/products/uc-ai/docs/guides/tools) (boolean)
 - `g_enable_programmatic_tools`: Also give the `uc_ai__run_code` meta-tool of [code mode](/products/uc-ai/docs/guides/programmatic-tool-calling) next to the normal tools (boolean). It needs `g_enable_tools` and the MLE sandbox
 - `g_max_tool_calls`: Maximum number of tool calls (number)
+- `g_transfer_timeout`: HTTP timeout in seconds for each provider request (number). The default is 180 seconds, and 300 seconds for OCR and decisions
 - `g_tool_tags`: Tool tags that filter the available tools (an array of strings, or one string)
 - `g_apex_web_credential`: APEX web credential static ID (string)
 - `g_extra_headers`: Extra HTTP request headers for every provider request (an object of name and value pairs, for example `{"X-Tenant-Id": "acme"}`)

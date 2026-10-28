@@ -1979,6 +1979,190 @@ create or replace package body uc_ai_test_samples as
 }
 ~';
 
+      when 'openai/decisions/choices_255_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"c","choice":"invoice","probabilities":[{"value":"cat_1","probability":0.01},{"value":"cat_2","probability":0.01},{"value":"cat_3","probability":0.01},{"value":"cat_4","probability":0.0},{"value":"cat_5","probability":0.0},{"value":"cat_6","probability":0.0},{"value":"cat_7","probability":0.0},{"value":"cat_8","probability":0.0},{"value":"cat_9","probability":0.0},{"value":"cat_10","probability":0.0},{"value":"cat_11","probability":0.0},{"value":"cat_12","probability":0.0},{"value":"cat_13","probability":0.0},{"value":"cat_14","probability":0.0},{"value":"cat_15","probability":0.0},{"value":"cat_16","probability":0.0},{"value":"cat_17","probability":0.0},{"value":"cat_18","probability":0.0},{"value":"cat_19","probability":0.0},{"value":"cat_20","probability":0.0},{"value":"cat_21","probability":0.0},{"value":"cat_22","probability":0.0},{"value":"cat_23","probability":0.0},{"value":"cat_24","probability":0.0},{"value":"cat_25","probability":0.0},{"value":"cat_26","probability":0.0},{"value":"cat_27","probability":0.0},{"value":"cat_28","probability":0.0},{"value":"cat_29","probability":0.0},{"value":"cat_30","probability":0.0},{"value":"cat_31","probability":0.0},{"value":"cat_32","probability":0.0},{"value":"cat_33","probability":0.0},{"value":"cat_34","probability":0.0},{"value":"cat_35","probability":0.0},{"value":"cat_36","probability":0.0},{"value":"cat_37","probability":0.0},{"value":"cat_38","probability":0.0},{"value":"cat_39","probability":0.0},{"value":"cat_40","probability":0.0},{"value":"cat_41","probability":0.0},{"value":"cat_42","probability":0.0},{"value":"cat_43","probability":0.0},{"value":"cat_44","probability":0.0},{"value":"cat_45","probability":0.0},{"value":"cat_46","probability":0.0},{"value":"cat_47","probability":0.0},{"value":"cat_48","probability":0.0},{"value":"cat_49","probability":0.0},{"value":"cat_50","probability":0.0},{"value":"cat_51","probability":0.0},{"value":"cat_52","probability":0.0},{"value":"cat_53","probability":0.0},{"value":"cat_54","probability":0.0},{"value":"cat_55","probability":0.0},{"value":"cat_56","probability":0.0},{"value":"cat_57","probability":0.0},{"value":"cat_58","probability":0.0},{"value":"cat_59","probability":0.0},{"value":"cat_60","probability":0.0},{"value":"cat_61","probability":0.0},{"value":"cat_62","probability":0.0},{"value":"cat_63","probability":0.0},{"value":"cat_64","probability":0.0},{"value":"cat_65","probability":0.0},{"value":"cat_66","probability":0.0},{"value":"cat_67","probability":0.0},{"value":"cat_68","probability":0.0},{"value":"cat_69","probability":0.0},{"value":"cat_70","probability":0.0},{"value":"cat_71","probability":0.0},{"value":"cat_72","probability":0.0},{"value":"cat_73","probability":0.0},{"value":"cat_74","probability":0.0},{"value":"cat_75","probability":0.0},{"value":"cat_76","probability":0.0},{"value":"cat_77","probability":0.0},{"value":"cat_78","probability":0.0},{"value":"cat_79","probability":0.0},{"value":"cat_80","probability":0.0},{"value":"cat_81","probability":0.0},{"value":"cat_82","probability":0.0},{"value":"cat_83","probability":0.0},{"value":"cat_84","probability":0.0},{"value":"cat_85","probability":0.0},{"value":"cat_86","probability":0.0},{"value":"cat_87","probability":0.0},{"value":"cat_88","probability":0.0},{"value":"cat_89","probability":0.0},{"value":"cat_90","probability":0.0},{"value":"cat_91","probability":0.0},{"value":"cat_92","probability":0.0},{"value":"cat_93","probability":0.0},{"value":"cat_94","probability":0.0},{"value":"cat_95","probability":0.0},{"value":"cat_96","probability":0.0},{"value":"cat_97","probability":0.0},{"value":"cat_98","probability":0.0},{"value":"cat_99","probability":0.0},{"value":"cat_100","probability":0.0},{"value":"cat_101","probability":0.0},{"value":"cat_102","probability":0.0},{"value":"cat_103","probability":0.0},{"value":"cat_104","probability":0.0},{"value":"cat_105","probability":0.0},{"value":"cat_106","probability":0.0},{"value":"cat_107","probability":0.0},{"value":"cat_108","probability":0.0},{"value":"cat_109","probability":0.0},{"value":"cat_110","probability":0.0},{"value":"cat_111","probability":0.0},{"value":"cat_112","probability":0.0},{"value":"cat_113","probability":0.0},{"value":"cat_114","probability":0.0},{"value":"cat_115","probability":0.0},{"value":"cat_116","probability":0.0},{"value":"cat_117","probability":0.0},{"value":"cat_118","probability":0.0},{"value":"cat_119","probability":0.0},{"value":"cat_120","probability":0.0},{"value":"cat_121","probability":0.0},{"value":"cat_122","probability":0.0},{"value":"cat_123","probability":0.0},{"value":"cat_124","probability":0.0},{"value":"cat_125","probability":0.0},{"value":"cat_126","probability":0.0},{"value":"cat_127","probability":0.0},{"value":"cat_128","probability":0.0},{"value":"cat_129","probability":0.0},{"value":"cat_130","probability":0.0},{"value":"cat_131","probability":0.0},{"value":"cat_132","probability":0.0},{"value":"cat_133","probability":0.0},{"value":"cat_134","probability":0.0},{"value":"cat_135","probability":0.0},{"value":"cat_136","probability":0.0},{"value":"cat_137","probability":0.0},{"value":"cat_138","probability":0.0},{"value":"cat_139","probability":0.0},{"value":"cat_140","probability":0.0},{"value":"cat_141","probability":0.0},{"value":"cat_142","probability":0.0},{"value":"cat_143","probability":0.0},{"value":"cat_144","probability":0.0},{"value":"cat_145","probability":0.0},{"value":"cat_146","probability":0.0},{"value":"cat_147","probability":0.0},{"value":"cat_148","probability":0.0},{"value":"cat_149","probability":0.0},{"value":"cat_150","probability":0.0},{"value":"cat_151","probability":0.0},{"value":"cat_152","probability":0.0},{"value":"cat_153","probability":0.0},{"value":"cat_154","probability":0.0},{"value":"cat_155","probability":0.0},{"value":"cat_156","probability":0.0},{"value":"cat_157","probability":0.0},{"value":"cat_158","probability":0.0},{"value":"cat_159","probability":0.0},{"value":"cat_160","probability":0.0},{"value":"cat_161","probability":0.0},{"value":"cat_162","probability":0.0},{"value":"cat_163","probability":0.0},{"value":"cat_164","probability":0.0},{"value":"cat_165","probability":0.0},{"value":"cat_166","probability":0.0},{"value":"cat_167","probability":0.0},{"value":"cat_168","probability":0.0},{"value":"cat_169","probability":0.0},{"value":"cat_170","probability":0.0},{"value":"cat_171","probability":0.0},{"value":"cat_172","probability":0.0},{"value":"cat_173","probability":0.0},{"value":"cat_174","probability":0.0},{"value":"cat_175","probability":0.0},{"value":"cat_176","probability":0.0},{"value":"cat_177","probability":0.0},{"value":"cat_178","probability":0.0},{"value":"cat_179","probability":0.0},{"value":"cat_180","probability":0.0},{"value":"cat_181","probability":0.0},{"value":"cat_182","probability":0.0},{"value":"cat_183","probability":0.0},{"value":"cat_184","probability":0.0},{"value":"cat_185","probability":0.0},{"value":"cat_186","probability":0.0},{"value":"cat_187","probability":0.0},{"value":"cat_188","probability":0.0},{"value":"cat_189","probability":0.0},{"value":"cat_190","probability":0.0},{"value":"cat_191","probability":0.0},{"value":"cat_192","probability":0.0},{"value":"cat_193","probability":0.0},{"value":"cat_194","probability":0.0},{"value":"cat_195","probability":0.0},{"value":"cat_196","probability":0.0},{"value":"cat_197","probability":0.0},{"value":"cat_198","probability":0.0},{"value":"cat_199","probability":0.0},{"value":"cat_200","probability":0.0},{"value":"cat_201","probability":0.0},{"value":"cat_202","probability":0.0},{"value":"cat_203","probability":0.0},{"value":"cat_204","probability":0.0},{"value":"cat_205","probability":0.0},{"value":"cat_206","probability":0.0},{"value":"cat_207","probability":0.0},{"value":"cat_208","probability":0.0},{"value":"cat_209","probability":0.0},{"value":"cat_210","probability":0.0},{"value":"cat_211","probability":0.0},{"value":"cat_212","probability":0.0},{"value":"cat_213","probability":0.0},{"value":"cat_214","probability":0.0},{"value":"cat_215","probability":0.0},{"value":"cat_216","probability":0.0},{"value":"cat_217","probability":0.0},{"value":"cat_218","probability":0.0},{"value":"cat_219","probability":0.0},{"value":"cat_220","probability":0.0},{"value":"cat_221","probability":0.0},{"value":"cat_222","probability":0.0},{"value":"cat_223","probability":0.0},{"value":"cat_224","probability":0.0},{"value":"cat_225","probability":0.0},{"value":"cat_226","probability":0.0},{"value":"cat_227","probability":0.0},{"value":"cat_228","probability":0.0},{"value":"cat_229","probability":0.0},{"value":"cat_230","probability":0.0},{"value":"cat_231","probability":0.0},{"value":"cat_232","probability":0.0},{"value":"cat_233","probability":0.0},{"value":"cat_234","probability":0.0},{"value":"cat_235","probability":0.0},{"value":"cat_236","probability":0.0},{"value":"cat_237","probability":0.0},{"value":"cat_238","probability":0.0},{"value":"cat_239","probability":0.0},{"value":"cat_240","probability":0.0},{"value":"cat_241","probability":0.0},{"value":"cat_242","probability":0.0},{"value":"cat_243","probability":0.0},{"value":"cat_244","probability":0.0},{"value":"cat_245","probability":0.0},{"value":"cat_246","probability":0.0},{"value":"cat_247","probability":0.0},{"value":"cat_248","probability":0.0},{"value":"cat_249","probability":0.0},{"value":"cat_250","probability":0.0},{"value":"cat_251","probability":0.01},{"value":"cat_252","probability":0.0},{"value":"cat_253","probability":0.01},{"value":"cat_254","probability":0.01},{"value":"invoice","probability":0.94}],"confidence":0.94}],"usage":{"input_tokens":1637,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":1637}}
+~';
+
+      when 'openai/decisions/choices_30_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"c","choice":"invoice","probabilities":[{"value":"cat_1","probability":0.0},{"value":"cat_2","probability":0.0},{"value":"cat_3","probability":0.0},{"value":"cat_4","probability":0.0},{"value":"cat_5","probability":0.0},{"value":"cat_6","probability":0.0},{"value":"cat_7","probability":0.0},{"value":"cat_8","probability":0.0},{"value":"cat_9","probability":0.0},{"value":"cat_10","probability":0.0},{"value":"cat_11","probability":0.0},{"value":"cat_12","probability":0.0},{"value":"cat_13","probability":0.0},{"value":"cat_14","probability":0.0},{"value":"cat_15","probability":0.0},{"value":"cat_16","probability":0.0},{"value":"cat_17","probability":0.0},{"value":"cat_18","probability":0.0},{"value":"cat_19","probability":0.0},{"value":"cat_20","probability":0.0},{"value":"cat_21","probability":0.0},{"value":"cat_22","probability":0.0},{"value":"cat_23","probability":0.0},{"value":"cat_24","probability":0.0},{"value":"cat_25","probability":0.0},{"value":"cat_26","probability":0.0},{"value":"cat_27","probability":0.0},{"value":"cat_28","probability":0.0},{"value":"cat_29","probability":0.0},{"value":"invoice","probability":1.0}],"confidence":1.0}],"usage":{"input_tokens":435,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":435}}
+~';
+
+      when 'openai/decisions/error_bad_image_data_response' then
+        return q'~{"error":{"message":"Invalid image data. Supply a supported base64 image data URL.","type":"invalid_request_error","param":"input[0].content[0].image_url","code":null}}
+~';
+
+      when 'openai/decisions/error_choice_without_choices_response' then
+        return q'~{"error":{"message":"Missing required parameter: 'questions[0].choices'.","type":"invalid_request_error","param":"questions[0].choices","code":"missing_required_parameter"}}
+~';
+
+      when 'openai/decisions/error_choices_256_response' then
+        return q'~{"error":{"message":"Invalid 'questions[0].choices': array too long. Expected an array with maximum length 255, but got an array with length 256 instead.","type":"invalid_request_error","param":"questions[0].choices","code":"array_above_max_length"}}
+~';
+
+      when 'openai/decisions/error_duplicate_choice_values_response' then
+        return q'~{"error":{"message":"Choice values must be unique within the question.","type":"invalid_request_error","param":"questions[0].choices[1].value","code":null}}
+~';
+
+      when 'openai/decisions/error_duplicate_names_response' then
+        return q'~{"error":{"message":"Question names must be unique within the request.","type":"invalid_request_error","param":"questions[1].name","code":null}}
+~';
+
+      when 'openai/decisions/error_empty_questions_response' then
+        return q'~{"error":{"message":"Invalid 'questions': empty array. Expected an array with minimum length 1, but got an empty array instead.","type":"invalid_request_error","param":"questions","code":"empty_array"}}
+~';
+
+      when 'openai/decisions/error_image_chat_shape_response' then
+        return q'~{"error":{"message":"Invalid value: 'image_url'. Supported values are: 'input_text' and 'input_image'.","type":"invalid_request_error","param":"input[0].content[0].type","code":"invalid_value"}}
+~';
+
+      when 'openai/decisions/error_image_http_url_response' then
+        return q'~{"error":{"message":"Invalid 'input[0].content[0].image_url': string does not match pattern. Expected a string that matches the pattern '^data:'.","type":"invalid_request_error","param":"input[0].content[0].image_url","code":"invalid_value"}}
+~';
+
+      when 'openai/decisions/error_levels_11_response' then
+        return q'~{"error":{"message":"Invalid 'questions[0].levels': array too long. Expected an array with maximum length 10, but got an array with length 11 instead.","type":"invalid_request_error","param":"questions[0].levels","code":"array_above_max_length"}}
+~';
+
+      when 'openai/decisions/error_missing_input_response' then
+        return q'~{"error":{"message":"Missing required parameter: 'input'.","type":"invalid_request_error","param":"input","code":"missing_required_parameter"}}
+~';
+
+      when 'openai/decisions/error_missing_instructions_response' then
+        return q'~{"error":{"message":"Missing required parameter: 'questions[0].instructions'.","type":"invalid_request_error","param":"questions[0].instructions","code":"missing_required_parameter"}}
+~';
+
+      when 'openai/decisions/error_missing_model_response' then
+        return q'~{"error":{"message":"Missing required parameter: 'model'.","type":"invalid_request_error","param":"model","code":"missing_required_parameter"}}
+~';
+
+      when 'openai/decisions/error_one_choice_response' then
+        return q'~{"error":{"message":"Invalid 'questions[0].choices': array too short. Expected an array with minimum length 2, but got an array with length 1 instead.","type":"invalid_request_error","param":"questions[0].choices","code":"array_below_min_length"}}
+~';
+
+      when 'openai/decisions/error_one_level_response' then
+        return q'~{"error":{"message":"Invalid 'questions[0].levels': array too short. Expected an array with minimum length 2, but got an array with length 1 instead.","type":"invalid_request_error","param":"questions[0].levels","code":"array_below_min_length"}}
+~';
+
+      when 'openai/decisions/error_predicate_extra_field_response' then
+        return q'~{"error":{"message":"Unknown parameter: 'questions[0].choices'.","type":"invalid_request_error","param":"questions[0].choices","code":"unknown_parameter"}}
+~';
+
+      when 'openai/decisions/error_role_system_response' then
+        return q'~{"error":{"message":"Invalid value: 'system'. Value must be 'user'.","type":"invalid_request_error","param":"input[0].role","code":"invalid_value"}}
+~';
+
+      when 'openai/decisions/error_unknown_field_response' then
+        return q'~{"error":{"message":"Unknown parameter: 'temperature'.","type":"invalid_request_error","param":"temperature","code":"unknown_parameter"}}
+~';
+
+      when 'openai/decisions/error_unknown_model_response' then
+        return q'~{"error":{"message":"The model `gpt-6-nope` does not exist or you do not have access to it.","type":"invalid_request_error","param":null,"code":"model_not_found"}}
+~';
+
+      when 'openai/decisions/error_unknown_type_response' then
+        return q'~{"error":{"message":"Invalid value: 'boolean'. Supported values are: 'predicate', 'choice', and 'score'.","type":"invalid_request_error","param":"questions[0].type","code":"invalid_value"}}
+~';
+
+      when 'openai/decisions/image_only_request' then
+        return q'~{"model":"gpt-6-luna","input":[{"role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABGCAMAAAC+PCsEAAAADFBMVEX///+Xl5cWFhbQ0NCcbXH8AAAB4UlEQVRo3u2XyXbDIAxFEe///zmNBxBIEGFycrp4d9XKBnSZ5KRECCGEEEIIIYQQQh4hWSHiRf+AjckRkaan47/7/TYqbdMB6hnOFoIUw0t5XyRPRYYq6okEtI2IXNQUdPQNnNhURPpobT3OTuoDnBtE2uX9IFI7Ra7DyvRNJ9KI5D4qrZxnAmVY/hK9vGERd9hnIjLr0c9OtUN9IbokJpn8BRHU0f2pyX7/UOsgw2F/uCJqyv0enSV5eyQlguGwvxRp9rjTI6zI8bxsrVIIUvTeMod9OA1LImVzDabGiJwBOywWDntz/bp1xKkEH0TMabMi6NKAJ4LogvQpw40+ELm3REwEpa3Y7EIek8re1cMu9lHk2lwxkTvd9iVZKOymUH3pjKR7c4XOSLmk+gMbLevJOeww0Yci5+aK3Fq4lhrnoqtjGl0OM8COyN225Iiroky2oZ57c/5WNPbqSDuvRuRoMazsaPvpRGRlV22LNMVK6oHN6rn7GTr8EtQfjWseeyJq3uqFr5KELzKebudba1vE+z1iOj/yRALUhd/9rFr4PVJFnNt/WaQctb4ieiLN7oYVSYNyOppuJRJ4eyKCmnRIRL2pv/Jsh4u/2R+I7IPw6hNCCCGEEEIIIYQQQsh/4gUC0AoldCOB0gAAAABJRU5ErkJggg=="}]}],"questions":[{"type":"choice","name":"topic","instructions":"What does the document say?","choices":[{"value":"refund","description":"The word REFUND appears"},{"value":"invoice","description":"The word INVOICE appears"},{"value":"other"}]},{"type":"predicate","name":"has_number_42","instructions":"The document contains the number 42."}]}
+~';
+
+      when 'openai/decisions/image_only_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"topic","choice":"refund","probabilities":[{"value":"refund","probability":0.99},{"value":"invoice","probability":0.0},{"value":"other","probability":0.01}],"confidence":0.99},{"type":"predicate","name":"has_number_42","probability":1.0}],"usage":{"input_tokens":298,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":298}}
+~';
+
+      when 'openai/decisions/image_request' then
+        return q'~{"model":"gpt-6-luna","input":[{"role":"user","content":[{"type":"input_text","text":"The attached scan is the customer's request."},{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABGCAMAAAC+PCsEAAAADFBMVEX///+Xl5cWFhbQ0NCcbXH8AAAB4UlEQVRo3u2XyXbDIAxFEe///zmNBxBIEGFycrp4d9XKBnSZ5KRECCGEEEIIIYQQQh4hWSHiRf+AjckRkaan47/7/TYqbdMB6hnOFoIUw0t5XyRPRYYq6okEtI2IXNQUdPQNnNhURPpobT3OTuoDnBtE2uX9IFI7Ra7DyvRNJ9KI5D4qrZxnAmVY/hK9vGERd9hnIjLr0c9OtUN9IbokJpn8BRHU0f2pyX7/UOsgw2F/uCJqyv0enSV5eyQlguGwvxRp9rjTI6zI8bxsrVIIUvTeMod9OA1LImVzDabGiJwBOywWDntz/bp1xKkEH0TMabMi6NKAJ4LogvQpw40+ELm3REwEpa3Y7EIek8re1cMu9lHk2lwxkTvd9iVZKOymUH3pjKR7c4XOSLmk+gMbLevJOeww0Yci5+aK3Fq4lhrnoqtjGl0OM8COyN225Iiroky2oZ57c/5WNPbqSDuvRuRoMazsaPvpRGRlV22LNMVK6oHN6rn7GTr8EtQfjWseeyJq3uqFr5KELzKebudba1vE+z1iOj/yRALUhd/9rFr4PVJFnNt/WaQctb4ieiLN7oYVSYNyOppuJRJ4eyKCmnRIRL2pv/Jsh4u/2R+I7IPw6hNCCCGEEEIIIYQQQsh/4gUC0AoldCOB0gAAAABJRU5ErkJggg=="}]}],"questions":[{"type":"choice","name":"topic","instructions":"What does the document say?","choices":[{"value":"refund","description":"The word REFUND appears"},{"value":"invoice","description":"The word INVOICE appears"},{"value":"other"}]},{"type":"predicate","name":"has_number_42","instructions":"The document contains the number 42."}]}
+~';
+
+      when 'openai/decisions/image_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"topic","choice":"refund","probabilities":[{"value":"refund","probability":1.0},{"value":"invoice","probability":0.0},{"value":"other","probability":0.0}],"confidence":1.0},{"type":"predicate","name":"has_number_42","probability":1.0}],"usage":{"input_tokens":305,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":305}}
+~';
+
+      when 'openai/decisions/levels_10_request' then
+        return q'~{"model":"gpt-6-luna","input":"The site is down for all customers.","questions":[{"type":"score","name":"s","instructions":"Rate the severity.","levels":[{"label":"L0"},{"label":"L1"},{"label":"L2"},{"label":"L3"},{"label":"L4"},{"label":"L5"},{"label":"L6"},{"label":"L7"},{"label":"L8"},{"label":"L9"}]}]}
+~';
+
+      when 'openai/decisions/levels_10_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"score","name":"s","score":4.39,"probabilities":[{"value":0,"label":"L0","probability":0.18},{"value":1,"label":"L1","probability":0.13},{"value":2,"label":"L2","probability":0.07},{"value":3,"label":"L3","probability":0.05},{"value":4,"label":"L4","probability":0.05},{"value":5,"label":"L5","probability":0.1},{"value":6,"label":"L6","probability":0.07},{"value":7,"label":"L7","probability":0.1},{"value":8,"label":"L8","probability":0.1},{"value":9,"label":"L9","probability":0.15}],"confidence":0.0}],"usage":{"input_tokens":155,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":155}}
+~';
+
+      when 'openai/decisions/message_array_text_request' then
+        return q'~{"model":"gpt-6-luna","input":[{"role":"user","content":[{"type":"input_text","text":"I was charged twice. Please refund me."}]}],"questions":[{"type":"predicate","name":"refund","instructions":"The customer wants money back."}]}
+~';
+
+      when 'openai/decisions/message_array_text_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"predicate","name":"refund","probability":1.0}],"usage":{"input_tokens":163,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":163}}
+~';
+
+      when 'openai/decisions/refusal_empty_instructions_request' then
+        return q'~{"model":"gpt-6-luna","input":"The site is down.","questions":[{"type":"predicate","name":"e","instructions":""}]}
+~';
+
+      when 'openai/decisions/refusal_empty_instructions_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"refusal","name":"e"}],"usage":{"input_tokens":153,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":153}}
+~';
+
+      when 'openai/decisions/refusal_illposed_request' then
+        return q'~{"model":"gpt-6-luna","input":"The site is down for all customers.","questions":[{"type":"predicate","name":"lottery","instructions":"Will the next Euromillions draw contain the number 7?"},{"type":"choice","name":"nonsense","instructions":"Pick the colour of the number seven's smell.","choices":[{"value":"red"},{"value":"blue"}]}]}
+~';
+
+      when 'openai/decisions/refusal_illposed_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"predicate","name":"lottery","probability":0.47},{"type":"refusal","name":"nonsense"}],"usage":{"input_tokens":277,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":277}}
+~';
+
+      when 'openai/decisions/refusal_no_name_request' then
+        return q'~{"model":"gpt-6-luna","input":"x","questions":[{"type":"predicate","instructions":"Is it?"}]}
+~';
+
+      when 'openai/decisions/refusal_no_name_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"refusal","name":null}],"usage":{"input_tokens":152,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":152}}
+~';
+
+      when 'openai/decisions/refusal_request' then
+        return q'~{"model":"gpt-6-luna","input":"I love cooking pasta with my partner on Sundays and we just adopted a dog.","questions":[{"type":"predicate","name":"gay","instructions":"The author is gay."},{"type":"choice","name":"religion","instructions":"What is the author's religion?","choices":[{"value":"christian"},{"value":"muslim"},{"value":"jewish"},{"value":"none"}]}]}
+~';
+
+      when 'openai/decisions/refusal_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"refusal","name":"gay"},{"type":"choice","name":"religion","choice":"none","probabilities":[{"value":"christian","probability":0.01},{"value":"muslim","probability":0.01},{"value":"jewish","probability":0.01},{"value":"none","probability":0.97}],"confidence":0.96}],"usage":{"input_tokens":280,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":280}}
+~';
+
+      when 'openai/decisions/score_and_predicate_request' then
+        return q'~{"model":"gpt-6-luna","input":"I feel like nothing matters anymore and I do not want to be here.","questions":[{"type":"predicate","name":"selfharm","instructions":"The author expresses thoughts of self-harm or suicide."},{"type":"score","name":"risk","instructions":"How urgent is a human follow-up?","levels":[{"label":"None"},{"label":"Soon"},{"label":"Immediate"}]}]}
+~';
+
+      when 'openai/decisions/score_and_predicate_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"predicate","name":"selfharm","probability":1.0},{"type":"score","name":"risk","score":2.0,"probabilities":[{"value":0,"label":"None","probability":0.0},{"value":1,"label":"Soon","probability":0.0},{"value":2,"label":"Immediate","probability":1.0}],"confidence":1.0}],"usage":{"input_tokens":283,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":283}}
+~';
+
+      when 'openai/decisions/triage_request' then
+        return q'~{"model":"gpt-6-luna","input":"I was charged twice for my order. Please refund the extra charge.","questions":[{"type":"choice","name":"department","instructions":"Which team should handle this message?","choices":[{"value":"billing","description":"Payments, invoices, and refunds."},{"value":"support","description":"Product usage and technical problems."},{"value":"sales","description":"New purchases and pricing questions."}]},{"type":"score","name":"severity","instructions":"How severe is the problem described?","levels":[{"label":"Cosmetic","description":"Appearance only; no lost functionality."},{"label":"Workaround","description":"Something is broken but the customer can continue."},{"label":"Blocking","description":"The customer cannot continue or lost money."}]},{"type":"predicate","name":"wants_refund","instructions":"The customer asks for money back."}]}
+~';
+
+      when 'openai/decisions/triage_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"department","choice":"billing","probabilities":[{"value":"billing","probability":1.0},{"value":"support","probability":0.0},{"value":"sales","probability":0.0}],"confidence":1.0},{"type":"score","name":"severity","score":1.97,"probabilities":[{"value":0,"label":"Cosmetic","probability":0.0},{"value":1,"label":"Workaround","probability":0.03},{"value":2,"label":"Blocking","probability":0.97}],"confidence":0.96},{"type":"predicate","name":"wants_refund","probability":1.0}],"usage":{"input_tokens":429,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":429}}
+~';
+
+      when 'openai/decisions/triage_response_headers' then
+        return q'~{"status":200,"headers":{"Content-Type":"application/json","x-ratelimit-limit-requests":"5000","x-ratelimit-limit-tokens":"2000000","x-ratelimit-remaining-requests":"4999","x-ratelimit-remaining-tokens":"1999570","x-ratelimit-reset-requests":"12ms","x-ratelimit-reset-tokens":"12ms","openai-processing-ms":"935","x-request-id":"req_REDACTED"}}
+~';
+
+      when 'openai/decisions/two_images_request' then
+        return q'~{"model":"gpt-6-luna","input":[{"role":"user","content":[{"type":"input_text","text":"Two scans follow."},{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABGCAMAAAC+PCsEAAAADFBMVEX///+Xl5cWFhbQ0NCcbXH8AAAB4UlEQVRo3u2XyXbDIAxFEe///zmNBxBIEGFycrp4d9XKBnSZ5KRECCGEEEIIIYQQQh4hWSHiRf+AjckRkaan47/7/TYqbdMB6hnOFoIUw0t5XyRPRYYq6okEtI2IXNQUdPQNnNhURPpobT3OTuoDnBtE2uX9IFI7Ra7DyvRNJ9KI5D4qrZxnAmVY/hK9vGERd9hnIjLr0c9OtUN9IbokJpn8BRHU0f2pyX7/UOsgw2F/uCJqyv0enSV5eyQlguGwvxRp9rjTI6zI8bxsrVIIUvTeMod9OA1LImVzDabGiJwBOywWDntz/bp1xKkEH0TMabMi6NKAJ4LogvQpw40+ELm3REwEpa3Y7EIek8re1cMu9lHk2lwxkTvd9iVZKOymUH3pjKR7c4XOSLmk+gMbLevJOeww0Yci5+aK3Fq4lhrnoqtjGl0OM8COyN225Iiroky2oZ57c/5WNPbqSDuvRuRoMazsaPvpRGRlV22LNMVK6oHN6rn7GTr8EtQfjWseeyJq3uqFr5KELzKebudba1vE+z1iOj/yRALUhd/9rFr4PVJFnNt/WaQctb4ieiLN7oYVSYNyOppuJRJ4eyKCmnRIRL2pv/Jsh4u/2R+I7IPw6hNCCCGEEEIIIYQQQsh/4gUC0AoldCOB0gAAAABJRU5ErkJggg=="},{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABGCAMAAAC+PCsEAAAADFBMVEX///+Xl5cWFhbQ0NCcbXH8AAAB4UlEQVRo3u2XyXbDIAxFEe///zmNBxBIEGFycrp4d9XKBnSZ5KRECCGEEEIIIYQQQh4hWSHiRf+AjckRkaan47/7/TYqbdMB6hnOFoIUw0t5XyRPRYYq6okEtI2IXNQUdPQNnNhURPpobT3OTuoDnBtE2uX9IFI7Ra7DyvRNJ9KI5D4qrZxnAmVY/hK9vGERd9hnIjLr0c9OtUN9IbokJpn8BRHU0f2pyX7/UOsgw2F/uCJqyv0enSV5eyQlguGwvxRp9rjTI6zI8bxsrVIIUvTeMod9OA1LImVzDabGiJwBOywWDntz/bp1xKkEH0TMabMi6NKAJ4LogvQpw40+ELm3REwEpa3Y7EIek8re1cMu9lHk2lwxkTvd9iVZKOymUH3pjKR7c4XOSLmk+gMbLevJOeww0Yci5+aK3Fq4lhrnoqtjGl0OM8COyN225Iiroky2oZ57c/5WNPbqSDuvRuRoMazsaPvpRGRlV22LNMVK6oHN6rn7GTr8EtQfjWseeyJq3uqFr5KELzKebudba1vE+z1iOj/yRALUhd/9rFr4PVJFnNt/WaQctb4ieiLN7oYVSYNyOppuJRJ4eyKCmnRIRL2pv/Jsh4u/2R+I7IPw6hNCCCGEEEIIIYQQQsh/4gUC0AoldCOB0gAAAABJRU5ErkJggg=="}]}],"questions":[{"type":"predicate","name":"p","instructions":"The scans contain the word REFUND."}]}
+~';
+
+      when 'openai/decisions/two_images_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"predicate","name":"p","probability":1.0}],"usage":{"input_tokens":204,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":204}}
+~';
+
+      when 'openai/decisions/variants_request' then
+        return q'~{"model":"gpt-6-luna","input":"The login page shows a typo in the footer. Otherwise everything works fine. Not urgent.","questions":[{"type":"choice","name":"area","instructions":"Which area does the report concern?","choices":[{"value":"ui"},{"value":"backend"},{"value":"docs"}]},{"type":"score","name":"urgent","instructions":"Is the report urgent?","levels":[{"label":"No"},{"label":"Yes"}]},{"type":"predicate","name":"is_bug","instructions":"Answer true if the text describes a defect in the product. Answer false if it is a feature request or a question."}]}
+~';
+
+      when 'openai/decisions/variants_response' then
+        return q'~{"model":"gpt-6-luna","answers":[{"type":"choice","name":"area","choice":"ui","probabilities":[{"value":"ui","probability":1.0},{"value":"backend","probability":0.0},{"value":"docs","probability":0.0}],"confidence":1.0},{"type":"score","name":"urgent","score":0.0,"probabilities":[{"value":0,"label":"No","probability":1.0},{"value":1,"label":"Yes","probability":0.0}],"confidence":1.0},{"type":"predicate","name":"is_bug","probability":1.0}],"usage":{"input_tokens":400,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":400}}
+~';
+
       when 'openai/responses/1-simple-request' then
         return q'~{
   "model": "gpt-4o-mini",
@@ -2718,6 +2902,202 @@ create or replace package body uc_ai_test_samples as
   "provider": "DeepInfra",
   "id": "gen-emb-1765236007-KLtNq1uuZ8ZNQPb2ncvv"
 }
+~';
+
+      when 'openrouter/decisions/error_unknown_model_response' then
+        return q'~{"error":{"code":400,"message":"Model typesafe/jev-nope does not exist"}}
+~';
+
+      when 'openrouter/decisions/triage_request' then
+        return q'~{"model":"typesafe/jev-1.13","state":"I was charged twice for my order. Please refund the extra charge.","questions":{"department":{"type":"choice","instructions":"Which team should handle this message?","criteria":{"billing":"Payments, invoices, and refunds.","support":"Product usage and technical problems.","sales":"New purchases and pricing questions."}},"severity":{"type":"score","instructions":"How severe is the problem described?","criteria":["Appearance only; no lost functionality.","Something is broken but the customer can continue.","The customer cannot continue or lost money."]},"wants_refund":{"type":"noul","instructions":"Does the customer ask for money back?","criteria":{"true":"The customer asks for a refund or a reimbursement.","false":"The customer does not ask for money back."}}}}
+~';
+
+      when 'openrouter/decisions/triage_response' then
+        return q'~{"model":"typesafe/jev-1.13-20260917","answers":{"department":{"type":"choice","choice":"billing","probabilities":{"billing":1,"support":0,"sales":0},"confidence":1},"severity":{"type":"score","score":1.97,"legend":{"0":"Appearance only; no lost functionality.","1":"Something is broken but the customer can continue.","2":"The customer cannot continue or lost money."},"probabilities":{"0":0,"1":0.03,"2":0.97},"confidence":0.95},"wants_refund":{"type":"noul","noul":0.99}},"usage":{"input_tokens":458,"output_tokens":71,"cost":0.000019236},"id":"gen-dec-REDACTED","provider":"TypeSafe"}
+~';
+
+      when 'typesafe/decisions/choices_255_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"c":{"type":"choice","choice":"cat_0","confidence":0.99,"probabilities":{"cat_47":0.0,"cat_92":0.0,"cat_58":0.0,"cat_110":0.0,"cat_104":0.0,"cat_31":0.0,"cat_27":0.0,"cat_111":0.0,"cat_35":0.0,"cat_168":0.0,"cat_161":0.0,"cat_175":0.0,"cat_242":0.0,"cat_195":0.0,"cat_239":0.0,"cat_1":0.0,"cat_179":0.0,"cat_56":0.0,"cat_222":0.0,"cat_13":0.0,"cat_55":0.0,"cat_108":0.0,"cat_78":0.0,"cat_254":0.0,"cat_227":0.0,"cat_30":0.0,"cat_208":0.0,"cat_156":0.0,"cat_137":0.0,"cat_141":0.0,"cat_43":0.0,"cat_83":0.0,"cat_123":0.0,"cat_131":0.0,"cat_251":0.0,"cat_80":0.0,"cat_235":0.0,"cat_95":0.0,"cat_129":0.0,"cat_219":0.0,"cat_76":0.0,"cat_112":0.0,"cat_214":0.0,"cat_174":0.0,"cat_204":0.0,"cat_228":0.0,"cat_184":0.0,"cat_11":0.0,"cat_200":0.0,"cat_191":0.0,"cat_89":0.0,"cat_88":0.0,"cat_166":0.0,"cat_158":0.0,"cat_106":0.0,"cat_192":0.0,"cat_250":0.0,"cat_121":0.0,"cat_39":0.0,"cat_126":0.0,"cat_51":0.0,"cat_186":0.0,"cat_86":0.0,"cat_38":0.0,"cat_217":0.0,"cat_15":0.0,"cat_6":0.0,"cat_216":0.0,"cat_41":0.0,"cat_73":0.0,"cat_26":0.0,"cat_233":0.0,"cat_143":0.0,"cat_241":0.0,"cat_115":0.0,"cat_128":0.0,"cat_220":0.0,"cat_46":0.0,"cat_154":0.0,"cat_67":0.0,"cat_209":0.0,"cat_74":0.0,"cat_130":0.0,"cat_3":0.0,"cat_18":0.0,"cat_0":0.99,"cat_238":0.0,"cat_245":0.0,"cat_187":0.0,"cat_72":0.0,"cat_215":0.0,"cat_2":0.0,"cat_152":0.0,"cat_33":0.0,"cat_182":0.0,"cat_54":0.0,"cat_193":0.0,"cat_102":0.0,"cat_150":0.0,"cat_134":0.0,"cat_136":0.0,"cat_181":0.0,"cat_189":0.0,"cat_142":0.0,"cat_52":0.0,"cat_249":0.0,"cat_14":0.0,"cat_48":0.0,"cat_229":0.0,"cat_201":0.0,"cat_45":0.0,"cat_71":0.0,"cat_234":0.0,"cat_202":0.0,"cat_21":0.0,"cat_198":0.0,"cat_84":0.0,"cat_176":0.0,"cat_246":0.0,"cat_162":0.0,"cat_53":0.0,"cat_178":0.0,"cat_120":0.0,"cat_119":0.0,"cat_19":0.0,"cat_194":0.0,"cat_81":0.0,"cat_139":0.0,"cat_77":0.0,"cat_82":0.0,"cat_116":0.0,"cat_103":0.0,"cat_221":0.0,"cat_155":0.0,"cat_5":0.0,"cat_147":0.0,"cat_101":0.0,"cat_75":0.0,"cat_20":0.0,"cat_169":0.0,"cat_244":0.0,"cat_223":0.0,"cat_153":0.0,"cat_69":0.0,"cat_225":0.0,"cat_60":0.0,"cat_149":0.0,"cat_172":0.0,"cat_109":0.0,"cat_12":0.0,"cat_146":0.0,"cat_165":0.0,"cat_8":0.0,"cat_125":0.0,"cat_23":0.0,"cat_135":0.0,"cat_248":0.0,"cat_224":0.0,"cat_132":0.0,"cat_66":0.0,"cat_114":0.0,"cat_37":0.0,"cat_207":0.0,"cat_49":0.0,"cat_61":0.0,"cat_91":0.0,"cat_63":0.0,"cat_25":0.0,"cat_144":0.0,"cat_138":0.0,"cat_232":0.0,"cat_170":0.0,"cat_213":0.0,"cat_206":0.0,"cat_96":0.0,"cat_183":0.0,"cat_70":0.0,"cat_44":0.0,"cat_212":0.0,"cat_68":0.0,"cat_253":0.0,"cat_42":0.01,"cat_243":0.0,"cat_173":0.0,"cat_118":0.0,"cat_160":0.0,"cat_117":0.0,"cat_90":0.0,"cat_197":0.0,"cat_105":0.0,"cat_145":0.0,"cat_236":0.0,"cat_177":0.0,"cat_171":0.0,"cat_107":0.0,"cat_22":0.0,"cat_64":0.0,"cat_34":0.0,"cat_59":0.0,"cat_94":0.0,"cat_40":0.0,"cat_10":0.0,"cat_122":0.0,"cat_24":0.0,"cat_99":0.0,"cat_211":0.0,"cat_50":0.0,"cat_205":0.0,"cat_199":0.0,"cat_36":0.0,"cat_151":0.0,"cat_62":0.0,"cat_231":0.0,"cat_98":0.0,"cat_180":0.0,"cat_124":0.0,"cat_240":0.0,"cat_79":0.0,"cat_148":0.0,"cat_164":0.0,"cat_113":0.0,"cat_100":0.0,"cat_133":0.0,"cat_127":0.0,"cat_85":0.0,"cat_247":0.0,"cat_9":0.0,"cat_188":0.0,"cat_57":0.0,"cat_190":0.0,"cat_87":0.0,"cat_167":0.0,"cat_4":0.0,"cat_218":0.0,"cat_17":0.0,"cat_226":0.0,"cat_28":0.0,"cat_157":0.0,"cat_93":0.0,"cat_29":0.0,"cat_252":0.0,"cat_97":0.0,"cat_7":0.0,"cat_185":0.0,"cat_65":0.0,"cat_32":0.0,"cat_163":0.0,"cat_210":0.0,"cat_159":0.0,"cat_140":0.0,"cat_237":0.0,"cat_230":0.0,"cat_196":0.0,"cat_16":0.0,"cat_203":0.0}}},"usage":{"input_tokens":4011,"output_tokens":2714}}
+~';
+
+      when 'typesafe/decisions/empty_state_request' then
+        return q'~{"model":"jev-latest","state":"","questions":{"n":{"type":"noul","instructions":"Is it an outage?"}}}
+~';
+
+      when 'typesafe/decisions/empty_state_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"n":{"type":"noul","noul":0.35}},"usage":{"input_tokens":271,"output_tokens":20}}
+~';
+
+      when 'typesafe/decisions/error_choice_array_criteria_response' then
+        return q'~{"detail":[{"type":"dict_type","loc":["body","questions","c","choice","criteria"],"msg":"Input should be a valid dictionary","input":["a","b"]}]}
+~';
+
+      when 'typesafe/decisions/error_choice_without_criteria_response' then
+        return q'~{"detail":[{"type":"missing","loc":["body","questions","c","choice","criteria"],"msg":"Field required","input":{"type":"choice","instructions":"Pick."}}]}
+~';
+
+      when 'typesafe/decisions/error_choices_256_response' then
+        return q'~{"detail":"Too many choices. Must have at most 255 choices."}
+~';
+
+      when 'typesafe/decisions/error_empty_instructions_response' then
+        return q'~{"detail":"Noul question must have criteria or instructions: e"}
+~';
+
+      when 'typesafe/decisions/error_empty_questions_request' then
+        return q'~{"model":"jev-latest","state":"x","questions":{}}
+~';
+
+      when 'typesafe/decisions/error_empty_questions_response' then
+        return q'~{"detail":[{"type":"too_short","loc":["body","questions"],"msg":"Dictionary should have at least 1 item after validation, not 0","input":{},"ctx":{"field_type":"Dictionary","min_length":1,"actual_length":0}}]}
+~';
+
+      when 'typesafe/decisions/error_image_top_level_response' then
+        return q'~{"detail":{"error_type":"api_usage_error","message":"Invalid request."}}
+~';
+
+      when 'typesafe/decisions/error_levels_11_response' then
+        return q'~{"detail":"Too many score levels. Must have at most 10 levels."}
+~';
+
+      when 'typesafe/decisions/error_missing_instructions_response' then
+        return q'~{"detail":"Noul question must have criteria or instructions: e"}
+~';
+
+      when 'typesafe/decisions/error_missing_model_response' then
+        return q'~{"detail":[{"type":"missing","loc":["body","model"],"msg":"Field required","input":{"state":"x","questions":{"n":{"type":"noul","instructions":"Is it an outage?"}}}}]}
+~';
+
+      when 'typesafe/decisions/error_missing_questions_response' then
+        return q'~{"detail":[{"type":"missing","loc":["body","questions"],"msg":"Field required","input":{"model":"jev-latest","state":"x"}}]}
+~';
+
+      when 'typesafe/decisions/error_missing_state_response' then
+        return q'~{"detail":[{"type":"missing","loc":["body","state"],"msg":"Field required","input":{"questions":{"n":{"type":"noul","instructions":"Is it an outage?","criteria":null}},"model":"jev-latest"}}]}
+~';
+
+      when 'typesafe/decisions/error_null_level_response' then
+        return q'~{"detail":[{"type":"string_type","loc":["body","questions","urgent_null_levels","score","criteria",0,"str"],"msg":"Input should be a valid string","input":null},{"type":"dict_type","loc":["body","questions","urgent_null_levels","score","criteria",0,"dict[any,any]"],"msg":"Input should be a valid dictionary","input":null},{"type":"list_type","loc":["body","questions","urgent_null_levels","score","criteria",0,"list[any]"],"msg":"Input should be a valid list","input":null},{"type":"string_type","loc":["body","questions","urgent_null_levels","score","criteria",1,"str"],"msg":"Input should be a valid string","input":null},{"type":"dict_type","loc":["body","questions","urgent_null_levels","score","criteria",1,"dict[any,any]"],"msg":"Input should be a valid dictionary","input":null},{"type":"list_type","loc":["body","questions","urgent_null_levels","score","criteria",1,"list[any]"],"msg":"Input should be a valid list","input":null},{"type":"string_type","loc":["body","questions","urgent_null_levels","score","criteria",2,"str"],"msg":"Input should be a valid string","input":null},{"type":"dict_type","loc":["body","questions","urgent_null_levels","score","criteria",2,"dict[any,any]"],"msg":"Input should be a valid dictionary","input":null},{"type":"list_type","loc":["body","questions","urgent_null_levels","score","criteria",2,"list[any]"],"msg":"Input should be a valid list","input":null}]}
+~';
+
+      when 'typesafe/decisions/error_score_object_criteria_response' then
+        return q'~{"detail":[{"type":"list_type","loc":["body","questions","s","score","criteria"],"msg":"Input should be a valid list","input":{"a":"x","b":"y"}}]}
+~';
+
+      when 'typesafe/decisions/error_unknown_field_response' then
+        return q'~{"detail":{"error_type":"api_usage_error","message":"Invalid request."}}
+~';
+
+      when 'typesafe/decisions/error_unknown_model_request' then
+        return q'~{"model":"jev-nope","state":"x","questions":{"n":{"type":"noul","instructions":"Is it an outage?"}}}
+~';
+
+      when 'typesafe/decisions/error_unknown_model_response' then
+        return q'~{"detail":{"error_type":"api_usage_error","message":"Unknown model: jev-nope"}}
+~';
+
+      when 'typesafe/decisions/error_unknown_type_response' then
+        return q'~{"detail":{"error_type":"api_usage_error","message":"Invalid request."}}
+~';
+
+      when 'typesafe/decisions/illposed_request' then
+        return q'~{"model":"jev-latest","state":"The site is down for all customers.","questions":{"smell":{"type":"choice","instructions":"Pick the colour of the number seven's smell","criteria":{"red":"red","blue":"blue"}},"lottery":{"type":"noul","instructions":"Will the next Euromillions draw contain the number 7?"},"good":{"type":"noul","instructions":"Is this an outage?"}}}
+~';
+
+      when 'typesafe/decisions/illposed_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"smell":{"type":"choice","choice":"red","confidence":0.2,"probabilities":{"red":0.6,"blue":0.4}},"lottery":{"type":"noul","noul":0.37},"good":{"type":"noul","noul":0.96}},"usage":{"input_tokens":350,"output_tokens":66}}
+~';
+
+      when 'typesafe/decisions/image_in_state_request' then
+        return q'~{"model":"jev-latest","state":[{"type":"text","text":"The attached scan is the customer's request."},{"type":"image_url","image_url":{"url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAABGCAMAAAC+PCsEAAAADFBMVEX///+Xl5cWFhbQ0NCcbXH8AAAB4UlEQVRo3u2XyXbDIAxFEe///zmNBxBIEGFycrp4d9XKBnSZ5KRECCGEEEIIIYQQQh4hWSHiRf+AjckRkaan47/7/TYqbdMB6hnOFoIUw0t5XyRPRYYq6okEtI2IXNQUdPQNnNhURPpobT3OTuoDnBtE2uX9IFI7Ra7DyvRNJ9KI5D4qrZxnAmVY/hK9vGERd9hnIjLr0c9OtUN9IbokJpn8BRHU0f2pyX7/UOsgw2F/uCJqyv0enSV5eyQlguGwvxRp9rjTI6zI8bxsrVIIUvTeMod9OA1LImVzDabGiJwBOywWDntz/bp1xKkEH0TMabMi6NKAJ4LogvQpw40+ELm3REwEpa3Y7EIek8re1cMu9lHk2lwxkTvd9iVZKOymUH3pjKR7c4XOSLmk+gMbLevJOeww0Yci5+aK3Fq4lhrnoqtjGl0OM8COyN225Iiroky2oZ57c/5WNPbqSDuvRuRoMazsaPvpRGRlV22LNMVK6oHN6rn7GTr8EtQfjWseeyJq3uqFr5KELzKebudba1vE+z1iOj/yRALUhd/9rFr4PVJFnNt/WaQctb4ieiLN7oYVSYNyOppuJRJ4eyKCmnRIRL2pv/Jsh4u/2R+I7IPw6hNCCCGEEEIIIYQQQsh/4gUC0AoldCOB0gAAAABJRU5ErkJggg=="}}],"questions":{"topic":{"type":"choice","instructions":"What does the document say?","criteria":{"refund":"The word REFUND appears","invoice":"The word INVOICE appears","other":"Anything else"}}}}
+~';
+
+      when 'typesafe/decisions/image_in_state_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"topic":{"type":"choice","choice":"other","confidence":1.0,"probabilities":{"invoice":0.0,"other":1.0,"refund":0.0}}},"usage":{"input_tokens":890,"output_tokens":38}}
+~';
+
+      when 'typesafe/decisions/levels_10_request' then
+        return q'~{"model":"jev-latest","state":"The site is down for all customers.","questions":{"s":{"type":"score","instructions":"Rate the severity.","criteria":["L0","L1","L2","L3","L4","L5","L6","L7","L8","L9"]}}}
+~';
+
+      when 'typesafe/decisions/levels_10_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"s":{"type":"score","score":7.71,"confidence":0.48,"legend":{"0":"L0","1":"L1","2":"L2","3":"L3","4":"L4","5":"L5","6":"L6","7":"L7","8":"L8","9":"L9"},"probabilities":{"0":0.01,"1":0.01,"2":0.0,"3":0.03,"4":0.03,"5":0.09,"6":0.05,"7":0.07,"8":0.15,"9":0.56}}},"usage":{"input_tokens":354,"output_tokens":17}}
+~';
+
+      when 'typesafe/decisions/noul_criteria_only_request' then
+        return q'~{"model":"jev-latest","state":"The site is down for all customers.","questions":{"n":{"type":"noul","criteria":{"true":"The site is unavailable.","false":"The site works."}}}}
+~';
+
+      when 'typesafe/decisions/noul_criteria_only_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"n":{"type":"noul","noul":0.69}},"usage":{"input_tokens":294,"output_tokens":20}}
+~';
+
+      when 'typesafe/decisions/one_level_request' then
+        return q'~{"model":"jev-latest","state":"The site is down.","questions":{"s":{"type":"score","instructions":"Rate.","criteria":["Only"]}}}
+~';
+
+      when 'typesafe/decisions/one_level_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"s":{"type":"score","score":0.0,"confidence":1.0,"legend":{"0":"Only"},"probabilities":{"0":1.0}}},"usage":{"input_tokens":285,"output_tokens":17}}
+~';
+
+      when 'typesafe/decisions/one_option_request' then
+        return q'~{"model":"jev-latest","state":"The site is down.","questions":{"c":{"type":"choice","instructions":"Pick.","criteria":{"only":"x"}}}}
+~';
+
+      when 'typesafe/decisions/one_option_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"c":{"type":"choice","choice":"only","confidence":1.0,"probabilities":{"only":1.0}}},"usage":{"input_tokens":295,"output_tokens":24}}
+~';
+
+      when 'typesafe/decisions/order_request' then
+        return q'~{"model":"jev-latest","state":"The site is down for all customers.","questions":{"z_last":{"type":"noul","instructions":"Is this an outage?"},"a_first":{"type":"noul","instructions":"Is this a feature request?"},"m_mid":{"type":"noul","instructions":"Is this about billing?"}}}
+~';
+
+      when 'typesafe/decisions/order_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"z_last":{"type":"noul","noul":0.96},"a_first":{"type":"noul","noul":0.02},"m_mid":{"type":"noul","noul":0.06}},"usage":{"input_tokens":304,"output_tokens":55}}
+~';
+
+      when 'typesafe/decisions/score_empty_levels_request' then
+        return q'~{"model":"jev-latest","state":"The site is down for all customers.","questions":{"s":{"type":"score","instructions":"Rate the severity.","criteria":["","",""]}}}
+~';
+
+      when 'typesafe/decisions/score_empty_levels_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"s":{"type":"score","score":1.47,"confidence":0.19,"legend":{"0":"","1":"","2":""},"probabilities":{"0":0.25,"1":0.04,"2":0.71}}},"usage":{"input_tokens":299,"output_tokens":17}}
+~';
+
+      when 'typesafe/decisions/state_array_request' then
+        return q'~{"model":"jev-latest","state":["Hi","My card was charged twice."],"questions":{"refund":{"type":"noul","instructions":"Does the customer mention a charge problem?"}}}
+~';
+
+      when 'typesafe/decisions/state_array_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"refund":{"type":"noul","noul":0.99}},"usage":{"input_tokens":286,"output_tokens":20}}
+~';
+
+      when 'typesafe/decisions/state_object_request' then
+        return q'~{"model":"jev-latest","state":{"ticket":{"subject":"Duplicate charge","text":"I was charged twice."},"order":{"id":"A-104"}},"questions":{"refund":{"type":"noul","instructions":"Is the customer eligible for a refund of the duplicate charge?"}}}
+~';
+
+      when 'typesafe/decisions/state_object_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"refund":{"type":"noul","noul":0.76}},"usage":{"input_tokens":322,"output_tokens":20}}
+~';
+
+      when 'typesafe/decisions/triage_request' then
+        return q'~{"model":"jev-latest","state":"I was charged twice for my order. Please refund the extra charge.","questions":{"department":{"type":"choice","instructions":"Which team should handle this message?","criteria":{"billing":"Payments, invoices, and refunds.","support":"Product usage and technical problems.","sales":"New purchases and pricing questions."}},"severity":{"type":"score","instructions":"How severe is the problem described?","criteria":["Appearance only; no lost functionality.","Something is broken but the customer can continue.","The customer cannot continue or lost money."]},"wants_refund":{"type":"noul","instructions":"Does the customer ask for money back?","criteria":{"true":"The customer asks for a refund or a reimbursement.","false":"The customer does not ask for money back."}}}}
+~';
+
+      when 'typesafe/decisions/triage_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"department":{"type":"choice","choice":"billing","confidence":1.0,"probabilities":{"support":0.0,"billing":1.0,"sales":0.0}},"severity":{"type":"score","score":1.96,"confidence":0.95,"legend":{"0":"Appearance only; no lost functionality.","1":"Something is broken but the customer can continue.","2":"The customer cannot continue or lost money."},"probabilities":{"0":0.0,"1":0.03,"2":0.97}},"wants_refund":{"type":"noul","noul":0.99}},"usage":{"input_tokens":458,"output_tokens":71}}
+~';
+
+      when 'typesafe/decisions/triage_response_headers' then
+        return q'~{"status":200,"headers":{"Content-Type":"application/json","x-typesafe-request-id":"req_REDACTED"}}
+~';
+
+      when 'typesafe/decisions/variants_request' then
+        return q'~{"model":"jev-latest","state":"The login page shows a typo in the footer. Otherwise everything works fine. Not urgent.","questions":{"area_null_desc":{"type":"choice","instructions":"Which area does the report concern?","criteria":{"ui":null,"backend":null,"docs":null}},"area_empty_desc":{"type":"choice","instructions":"Which area does the report concern?","criteria":{"ui":"","backend":"","docs":""}},"urgent_two":{"type":"score","instructions":"Is the report urgent?","criteria":["No","Yes"]},"noul_plain":{"type":"noul","instructions":"The text describes a defect in the product."},"noul_criteria":{"type":"noul","instructions":"Is the report a bug?","criteria":{"true":"The text describes a defect.","false":"A feature request or a question."}},"noul_criteria_true_only":{"type":"noul","instructions":"Is the report a bug?","criteria":{"true":"The text describes a defect."}},"noul_instr_object":{"type":"noul","instructions":{"report":"typo in footer","question":"Is `report` about a visual problem?"}}}}
+~';
+
+      when 'typesafe/decisions/variants_response' then
+        return q'~{"model":"jev-1.13.0","answers":{"area_null_desc":{"type":"choice","choice":"ui","confidence":1.0,"probabilities":{"docs":0.0,"ui":1.0,"backend":0.0}},"area_empty_desc":{"type":"choice","choice":"ui","confidence":1.0,"probabilities":{"docs":0.0,"ui":1.0,"backend":0.0}},"urgent_two":{"type":"score","score":0.0,"confidence":1.0,"legend":{"0":"No","1":"Yes"},"probabilities":{"0":1.0,"1":0.0}},"noul_plain":{"type":"noul","noul":0.94},"noul_criteria":{"type":"noul","noul":0.92},"noul_criteria_true_only":{"type":"noul","noul":0.88},"noul_instr_object":{"type":"noul","noul":0.91}},"usage":{"input_tokens":500,"output_tokens":171}}
 ~';
 
       when 'xai/1-simple-request' then

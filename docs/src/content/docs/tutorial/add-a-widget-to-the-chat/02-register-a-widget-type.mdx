@@ -1,0 +1,238 @@
+---
+title: Register an invoice list widget type
+description: Write the PL/SQL package that turns invoice numbers into a list, register it as the widget type sc_invoices, and render it without a model.
+sidebar:
+  order: 2
+---
+
+import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+
+<LessonHeader
+  lesson={2}
+  of={4}
+  minutes={25}
+  promise="the chat accepts a widget of the type sc_invoices, and a package of yours builds the list from your tables."
+  scripts={["02_invoice_widget.sql", "02_try_widget.sql"]}
+  course="add-a-widget-to-the-chat"
+/>
+
+## Choose a custom type for the invoice list
+
+Lesson 1 showed the invoices in a `table` widget. A table shows the columns of the
+tool result as they are. A custom type adds three things that a table does not
+have:
+
+| | `table` widget | Custom type `sc_invoices` |
+| --- | --- | --- |
+| What the model writes | Column names and a source | Invoice numbers |
+| Where the values come from | The tool result | Your package, from your tables |
+| A badge from a rule of yours | No | Yes. This lesson adds a credit status |
+| A row the user can click | No | Yes. The row raises an event in your page |
+
+The chat calls your package in the step that renders the answer. Your package
+returns a list, and the browser draws it. The built-in list component needs no custom JavaScript.
+
+## The two members of a provider package
+
+A widget **provider package** supplies the `get_protocol` function and `build_spec`
+procedure. This package builds widgets. It does not connect to an AI provider.
+Use the exact routine and parameter names shown here, because the chat calls
+them by name.
+`register_type` does not check the parameters, so test `build_spec` by calling it,
+as lesson 4 does.
+
+| Member | Called | Job |
+| --- | --- | --- |
+| `get_protocol(p_type)` | When the chat builds the system prompt | Returns the text that tells the model how to write this type |
+| `build_spec(p_type, p_spec, p_tool_calls, po_spec, po_reason)` | For each widget block of this type | Returns the list to show, or a reason to reject the block |
+
+`build_spec` gets the JSON that the model wrote in `p_spec`. It gets the tool calls
+of the answer in `p_tool_calls`, as a JSON array of objects with the keys `name`,
+`args`, and `output`.
+
+It returns the list in `po_spec`. The list is a JSON object of the render type
+`item_list`: a title, and 1 to 20 items. Each item has a title, and it can have a
+subtitle, an icon, badges, short texts, and one action. The
+[guide](/products/uc-ai/docs/guides/chat-widgets-custom-types/#the-item_list-render-type) has
+the exact limits.
+
+The chat keeps only allowed keys from your package's result. Your package cannot
+add HTML or links to the list. A value outside the limits makes
+the widget invalid, and the user sees the block as text.
+
+The chat passes the registered name in `p_type`. One package can serve several
+types if you register it under several names.
+
+## Write the package
+
+`02_invoice_widget.sql` creates the package `SC_WIDGET_PKG`. The model writes this:
+
+```json
+{"type":"sc_invoices","invoice_nos":["INV-1003","INV-1001"],"title":"Two invoices"}
+```
+
+`build_spec` applies three rules. The complete package is in the script.
+
+**1. The package shows an invoice only when a tool returned it.** The query looks
+for the invoice number in the result of `SC_LIST_INVOICES` in the same answer:
+
+```sql
+and exists (
+  select 1
+    from json_table(
+           p_tool_calls
+         , '$[*]'
+           columns (
+             tool_name varchar2(100 char) path '$.name'
+           , nested path '$.output.invoices[*]' columns (returned_no varchar2(20 char) path '$.invoice_no')
+           )
+         ) tc
+   where upper(tc.tool_name) like '%SC_LIST_INVOICES'
+     and tc.returned_no = i.invoice_no
+)
+```
+
+`SC_LIST_INVOICES` reads only the contract of the run, which comes from the run
+context. An invoice that this tool did not return cannot appear in the list. The
+widget uses the rule of the tool, and the package does not repeat it. The package uses `upper` and `like` to match tool names regardless of letter case
+or provider-added prefixes.
+
+**2. The database writes every visible value.** The package reads the amounts and
+the date from `sc_invoices`, and the credit total from `sc_credit_notes`. It sets
+the badge from the amounts:
+
+```sql
+if rec.credited_amount = 0 then
+  l_badge.put('text', 'Not credited');
+  l_badge.put('tone', 'info');
+elsif l_uncredited <= 0 then
+  l_badge.put('text', 'Fully credited');
+  l_badge.put('tone', 'ok');
+else
+  l_badge.put('text', 'Partly credited');
+  l_badge.put('tone', 'warn');
+end if;
+```
+
+**3. Every case of "not shown" gets the same reason.** An invoice that no tool
+returned, and a number that does not exist, get the same text: `none of the
+invoices can be shown`. The widget does not tell a user whether an invoice number
+exists.
+
+The script ends with the registration:
+
+```sql
+uc_ai_chat_widgets.register_type(
+  p_type             => sc_widget_pkg.c_type_invoices
+, p_provider_package => 'sc_widget_pkg'
+);
+```
+
+`register_type` writes a row to the table `UC_AI_CHAT_WIDGET_TYPES`. It accepts a
+type name that has 2 to 30 characters, with `a-z`, `0-9`, and `_`, and that starts
+with a letter. It refuses the names of the built-in types, and it refuses a
+package that does not have both members. The registry is a table because a
+job renders the answer, and the job does not share package state with your
+session. The [guide](/products/uc-ai/docs/guides/chat-widgets-custom-types/#register-a-type)
+has all rules.
+
+Run the script:
+
+```sh
+sql your_user/your_password@your_db @02_invoice_widget.sql
+```
+
+```text
+Package SC_WIDGET_PKG compiled
+
+Package Body SC_WIDGET_PKG compiled
+
+No errors.
+Registered the widget type sc_invoices
+```
+
+## Render the new type
+
+`02_try_widget.sql` does what the chat does, with a hand-written answer. It
+enables `chart:sc_invoices`, prints the line that describes the new type to the
+model, and renders an answer with one `sc_invoices` block.
+
+```sh
+sql your_user/your_password@your_db @02_try_widget.sql
+```
+
+The first lines of the recorded output. The length of the protocol text depends on
+the types that you enable, so your number can differ if you change them:
+
+```text
+Enabled types : chart:sc_invoices
+Protocol text : 1944 characters. The line of the new type:
+- sc_invoices: {"type":"sc_invoices","invoice_nos":["INV-1001"],"title":"..."} Shows invoices of this contract as a list that the user can open. Use it whenever you name invoices: put it instead of a list of invoice numbers in the text. "invoice_nos" are invoice_no values that SC_LIST_INVOICES returned while you write this answer (1 to 10). Do not write amounts or dates: the system fills them in. "title" is optional.
+```
+
+The chat adds this text to the system prompt for each type that the region
+enables. You do not copy it into the prompt profile. The text `chart:sc_invoices`
+is the list that a region stores when the box **Chart** is checked and **Custom
+Widgets** holds `sc_invoices`.
+
+The widget part, shortened to two items and joined on fewer lines:
+
+```text
+{
+  "kind" : "widget",
+  "type" : "item_list",
+  "spec" : {
+    "type" : "item_list",
+    "title" : "Two invoices",
+    "items" : [
+      {
+        "title" : "INV-1003",
+        "subtitle" : "Invoiced on 2026-09-02",
+        "icon" : "text",
+        "badges" : [ { "text" : "Fully credited", "tone" : "ok" } ],
+        "meta" : [ "Total 200.00", "Parts 0.00", "Labour 200.00" ],
+        "action" : { "name" : "sc-open-invoice", "id" : "INV-1003", "label" : "Open" }
+      },
+      {
+        "title" : "INV-1001",
+        "subtitle" : "Invoiced on 2026-08-23",
+        "icon" : "text",
+        "badges" : [ { "text" : "Not credited", "tone" : "info" } ],
+        "meta" : [ "Total 780.00", "Parts 480.00", "Labour 300.00" ],
+        "action" : { "name" : "sc-open-invoice", "id" : "INV-1001", "label" : "Open" }
+      }
+    ]
+  }
+}
+```
+
+The dates depend on the day on which you set up the schema, because the setup
+script sets each date relative to `sysdate`. The amounts and the badges come from
+the seed data. A new credit note changes the badge the next time the package builds the list.
+
+The part has the type `item_list`, and not `sc_invoices`. `sc_invoices` is the
+name that the model uses. `item_list` is the type that the browser draws. The
+items come in the order in which the model named them.
+
+## Turn on the type in a region
+
+A region enables a custom type in the attribute **Custom Widgets**, in the group
+**Conversation**. Enter the type name `sc_invoices`. The plug-in keeps only the names
+that are registered and enabled, so a typo switches off that one type. The
+[guide](/products/uc-ai/docs/guides/chat-widgets-custom-types/#turn-on-a-custom-type) has the
+details.
+
+## Key takeaways
+
+- A custom type has two parts: the name that the model writes, and a package that
+  builds a list.
+- The model names the records, and the package reads the values. The package shows
+  only what a tool returned in the same answer.
+- The chat validates what your package returns. The package cannot add markup.
+
+<LinkCard
+  title="Next: Ask the desk and handle the click"
+  description="Send a message to the desk, read the stored widget, and receive the click on a row in your page."
+  href="/products/uc-ai/docs/tutorial/add-a-widget-to-the-chat/03-ask-the-desk/"
+/>

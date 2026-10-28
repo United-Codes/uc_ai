@@ -19,16 +19,12 @@ as
   c_model_llama_4_maverick          constant uc_ai.model_type := 'meta.llama-4-maverick-17b-128e-instruct-fp8';
   c_model_llama_4_scout             constant uc_ai.model_type := 'meta.llama-4-scout-17b-16e-instruct';
   c_model_llama_3_3_70b             constant uc_ai.model_type := 'meta.llama-3.3-70b-instruct';
-  c_model_llama_3_2_90b_vision      constant uc_ai.model_type := 'meta.llama-3.2-90b-vision-instruct';
   c_model_llama_3_2_11b_vision      constant uc_ai.model_type := 'meta.llama-3.2-11b-vision-instruct';
-  c_model_llama_3_1_405b            constant uc_ai.model_type := 'meta.llama-3.1-405b-instruct';
   
   -- Cohere Command models
   c_model_cohere_command_a_reasoning constant uc_ai.model_type := 'cohere.command-a-reasoning';
   c_model_cohere_command_a_vision    constant uc_ai.model_type := 'cohere.command-a-vision';
   c_model_cohere_command_a_03_2025   constant uc_ai.model_type := 'cohere.command-a-03-2025';
-  c_model_cohere_command_r_plus      constant uc_ai.model_type := 'cohere.command-r-plus-08-2024';
-  c_model_cohere_command_r           constant uc_ai.model_type := 'cohere.command-r-08-2024';
 
   -- Google models (on OCI)
   c_model_google_gemini_2_5_pro        constant uc_ai.model_type := 'google.gemini-2.5-pro';
@@ -41,6 +37,18 @@ as
   c_model_grok_4_3                  constant uc_ai.model_type := 'xai.grok-4.3';
   c_model_grok_4_20_multi_agent     constant uc_ai.model_type := 'xai.grok-4.20-multi-agent';
   c_model_grok_4_20                 constant uc_ai.model_type := 'xai.grok-4.20';
+
+  -- OpenAI models
+  c_model_gpt_oss_120b              constant uc_ai.model_type := 'openai.gpt-oss-120b';
+  c_model_gpt_oss_20b               constant uc_ai.model_type := 'openai.gpt-oss-20b';
+
+  -- Oracle retired these models in on-demand mode. Requests to them fail.
+  -- They stay here for backward compatibility of code that references the constants.
+  -- See https://docs.oracle.com/en-us/iaas/Content/generative-ai/deprecating-on-demand.htm
+  c_model_llama_3_2_90b_vision      constant uc_ai.model_type := 'meta.llama-3.2-90b-vision-instruct';
+  c_model_llama_3_1_405b            constant uc_ai.model_type := 'meta.llama-3.1-405b-instruct';
+  c_model_cohere_command_r_plus     constant uc_ai.model_type := 'cohere.command-r-plus-08-2024';
+  c_model_cohere_command_r          constant uc_ai.model_type := 'cohere.command-r-08-2024';
   c_model_grok_code_fast_1          constant uc_ai.model_type := 'xai.grok-code-fast-1';
   c_model_grok_4_1_fast             constant uc_ai.model_type := 'xai.grok-4.1-fast';
   c_model_grok_4_fast               constant uc_ai.model_type := 'xai.grok-4-fast';
@@ -49,10 +57,6 @@ as
   c_model_grok_3_mini               constant uc_ai.model_type := 'xai.grok-3-mini';
   c_model_grok_3_fast               constant uc_ai.model_type := 'xai.grok-3-fast';
   c_model_grok_3_mini_fast          constant uc_ai.model_type := 'xai.grok-3-mini-fast';
-
-  -- OpenAI models
-  c_model_gpt_oss_120b              constant uc_ai.model_type := 'gpt-oss-120b';
-  c_model_gpt_oss_20b               constant uc_ai.model_type := 'gpt-oss-20b';
 
   -- Cohere Embedding models
   -- See https://docs.oracle.com/en-us/iaas/api/#/en/generative-ai-inference/20231130/EmbedTextResult/EmbedText

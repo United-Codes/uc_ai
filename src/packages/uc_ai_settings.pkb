@@ -30,6 +30,7 @@ as
     l_s.reasoning_level                := null;
     l_s.tool_tags                      := apex_t_varchar2();
     l_s.max_tool_calls                 := null;
+    l_s.transfer_timeout               := null;
     l_s.extra_headers.delete();
     l_s.extra_body                     := null;
     l_s.provider_tools                 := null;
@@ -73,6 +74,9 @@ as
 
     -- mistral
     l_s.ms_apex_web_credential         := null;
+
+    -- typesafe
+    l_s.ts_apex_web_credential         := null;
 
     -- responses api
     l_s.ra_base_url                    := null;
@@ -119,6 +123,7 @@ as
     l_s.reasoning_level                := uc_ai.g_reasoning_level;
     l_s.tool_tags                      := uc_ai.g_tool_tags;
     l_s.max_tool_calls                 := uc_ai.g_max_tool_calls;
+    l_s.transfer_timeout               := uc_ai.g_transfer_timeout;
     l_s.extra_headers                  := uc_ai.g_extra_headers;
     l_s.extra_body                     := uc_ai.g_extra_body;
     l_s.provider_tools                 := uc_ai.g_provider_tools;
@@ -162,6 +167,9 @@ as
 
     -- mistral
     l_s.ms_apex_web_credential         := uc_ai_mistral.g_apex_web_credential;
+
+    -- typesafe
+    l_s.ts_apex_web_credential         := uc_ai_typesafe.g_apex_web_credential;
 
     -- responses api
     l_s.ra_base_url                    := uc_ai_responses_api.g_base_url;
@@ -242,6 +250,10 @@ as
           if l_value.is_number then
             l_s.max_tool_calls := p_config.get_number(l_key);
           end if;
+        when 'g_transfer_timeout' then
+          if l_value.is_number then
+            l_s.transfer_timeout := p_config.get_number(l_key);
+          end if;
         when 'g_apex_web_credential' then
           if l_value.is_string then
             l_s.apex_web_credential := p_config.get_string(l_key);
@@ -303,6 +315,7 @@ as
           , uc_ai.c_provider_xai
           , uc_ai.c_provider_openrouter
           , uc_ai.c_provider_mistral
+          , uc_ai.c_provider_typesafe
           ) and l_value.is_object then
             null;
           else
@@ -491,6 +504,28 @@ as
                 );
             end case;
           end loop mistral_keys_loop;
+        end if;
+
+      when uc_ai.c_provider_typesafe then
+        if p_config.has(uc_ai.c_provider_typesafe) and p_config.get(uc_ai.c_provider_typesafe).is_object then
+          l_provider_obj := treat(p_config.get(uc_ai.c_provider_typesafe) as json_object_t);
+          l_provider_key_arr := l_provider_obj.get_keys;
+          <<typesafe_keys_loop>>
+          for i in 1 .. l_provider_key_arr.count loop
+            l_key := l_provider_key_arr(i);
+            case l_key
+              when 'g_apex_web_credential' then
+                l_s.ts_apex_web_credential := l_provider_obj.get_string(l_key);
+              else
+                uc_ai_error.raise_error(
+                  p_error_code => uc_ai_error.c_err_invalid_config
+                , p_scope      => l_scope
+                , p0           => 'TypeSafe provider config key'
+                , p1           => l_key
+                , p_extra      => p_config.to_clob
+                );
+            end case;
+          end loop typesafe_keys_loop;
         end if;
 
       when uc_ai.c_provider_oci then

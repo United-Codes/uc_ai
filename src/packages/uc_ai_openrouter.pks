@@ -15,6 +15,11 @@ as
 
   -- get models from https://openrouter.ai/models
 
+  -- Decisions (uc_ai.decide with uc_ai.c_provider_openrouter), alpha endpoint
+  -- POST /api/alpha/decisions. Text only. Default model for decisions.
+  -- Chat models do not apply: decisions need a model that OpenRouter lists for the endpoint.
+  c_decision_model_jev constant uc_ai.model_type := 'typesafe/jev-1.13';
+
   -- How many reasoning tokens to generate before creating a response
   -- More info at https://openrouter.ai/docs/api/api-reference/chat/send-chat-completion-request#request.body.reasoning
   g_reasoning_effort varchar2(32 char) := 'low'; -- 'minimal', 'low', 'medium', 'high'

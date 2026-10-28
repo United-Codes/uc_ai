@@ -1,0 +1,232 @@
+---
+title: Custom Chat Widget Types
+description: Add a widget type of your own to the APEX Chat plug-in. A PL/SQL package turns identifiers from the model into a list of your records that the user can open.
+sidebar:
+  order: 19
+---
+
+import { LinkCard } from "@astrojs/starlight/components";
+
+A custom widget type shows your own records in the answer of an agent, for example
+a list of invoices that the user can open. The model supplies record identifiers in a widget block.
+Your PL/SQL package reads the matching records from your tables and builds a
+list. The browser displays that list with the built-in `item_list` component.
+
+The model does not write the values that the user sees. Your package writes them,
+so it can add a status or a badge that only your data has.
+
+A custom type has three parts:
+
+1. A [provider package](#the-provider-package) with a function and a procedure.
+2. A [registration](#register-a-type) of the type name.
+3. An entry in the attribute **Custom Widgets** of each region that uses the type.
+   See [Turn on a custom type](#turn-on-a-custom-type).
+
+This page assumes that you installed [Chat
+Widgets](/products/uc-ai/docs/guides/chat-widgets/#requirements-and-upgrade). A
+tutorial builds a custom type step by step: [Add Your Own Widget to the
+Chat](/products/uc-ai/docs/tutorial/add-a-widget-to-the-chat/01-render-without-a-model/).
+
+## Register a type
+
+Call `register_type` once, for example in an installation script:
+
+```sql
+begin
+  uc_ai_chat_widgets.register_type(
+    p_type             => 'sc_invoices'
+  , p_provider_package => 'sc_widget_pkg'
+  );
+  commit;
+end;
+/
+```
+
+The procedure writes one row to the table `UC_AI_CHAT_WIDGET_TYPES`. It does not
+commit. The name of the type has 2 to 30 characters (`a-z`, `0-9`, and `_`) and
+starts with a letter. The names `stat_card`, `status`, `key_value`, `table`,
+`chart`, and `item_list` are reserved.
+
+`register_type` makes sure that the package has the members `get_protocol` and
+`build_spec`. It does not check their parameters. If you register a type again, the
+row is updated and the type is enabled.
+
+`unregister_type(p_type)` deletes the row. A message that already holds a widget of
+the type keeps it. To switch off a type for all regions without deleting it, set
+`enabled` to `N` in `UC_AI_CHAT_WIDGET_TYPES`.
+
+## The provider package
+
+Your provider package supplies `get_protocol` and `build_spec`, with the signatures
+shown here. This package builds widgets. It does not connect to an AI provider.
+
+The plug-in calls these routines with named parameters. Use the exact parameter
+names shown here. Registration does not detect a misspelled parameter name. The
+widget then fails with `the widget could not be processed`. Call `build_spec`
+directly to test the package.
+
+```sql
+function get_protocol(p_type in varchar2) return clob;
+
+procedure build_spec(
+  p_type       in  varchar2
+, p_spec       in  clob
+, p_tool_calls in  clob
+, po_spec      out nocopy clob
+, po_reason    out nocopy varchar2
+);
+```
+
+| Parameter | Content |
+| --- | --- |
+| `p_type` | The registered type name |
+| `p_spec` | The JSON object that the model wrote |
+| `p_tool_calls` | A JSON array of the tool calls of this answer, in call order. Each object has `name`, `args`, and `output` |
+| `po_spec` | Your result: a JSON object of the type `item_list` |
+| `po_reason` | A text of at most 500 characters. If you set it, the plug-in rejects the widget and shows the block as text |
+
+`get_protocol` returns instructions that tell the model when and how to use the
+widget type. Include its name, JSON structure, and rules for the values. The text goes
+into the system prompt of every model call of the conversation, so keep it short.
+
+In `p_tool_calls`, the `name` of a tool can differ in case and can have a prefix
+such as `functions.`, so match it in a tolerant way. The key `output` is missing
+when the result is not JSON. The calls of earlier answers are not in the array.
+
+The package runs in the job that runs the agent, after the Session Init Code of the
+region. The context of your application is available.
+
+The package decides what the user can see, so it must do these things:
+
+- **Search the `output` of the tool calls for each identifier.** A model can write
+  any identifier. An identifier in document text alone does not establish that the
+  user can access that record.
+- **Make sure that the current user can access each record** unless the tool
+  already applies that access restriction.
+- **Read every value that the user sees from your tables.** Do not copy a value of
+  the model into the result. Never put a value of the model into SQL as text.
+- **Return one reason for "not shown".** A different reason for "does not exist"
+  and "not allowed" tells a user which identifiers exist.
+
+An error that your package raises does not fail the answer. The plug-in writes the
+error to the APEX debug log, and the user sees the block as text. An error in
+`get_protocol` removes only that type from the system prompt.
+
+## The item_list render type
+
+The plug-in creates the final widget specification from the result of
+`build_spec`. It keeps only the keys listed in these tables.
+A value that breaks a rule makes the widget invalid. The model cannot ask for
+`item_list` itself.
+
+| Key | Required | Rule |
+| --- | --- | --- |
+| `title` | No | At most 120 characters |
+| `items` | Yes | 1 to 20 objects |
+
+Each item has these keys:
+
+| Key | Required | Rule |
+| --- | --- | --- |
+| `title` | Yes | At most 200 characters |
+| `subtitle` | No | At most 200 characters |
+| `icon` | No | `file`, `pdf`, `image`, `sheet`, `text`, `archive`, or `folder` |
+| `badges` | No | At most 3 objects. Each object has `text` (required, at most 40 characters) and `tone` (`neutral`, `info`, `ok`, `warn`, or `error`; the default is `neutral`) |
+| `meta` | No | At most 4 texts or numbers, with at most 60 characters each |
+| `action` | No | An object that makes the row a button. It has `name` (required, 1 to 40 characters: `a-z`, `0-9`, `_`, `.`, and `-`), `id` (required, at most 100 characters), and `label` (at most 40 characters) |
+
+```json
+{
+  "type": "item_list",
+  "title": "Two invoices",
+  "items": [
+    {
+      "title": "INV-1003",
+      "subtitle": "Invoiced on 2026-09-02",
+      "icon": "text",
+      "badges": [ { "text": "Fully credited", "tone": "ok" } ],
+      "meta": [ "Total 200.00" ],
+      "action": { "name": "sc-open-invoice", "id": "INV-1003", "label": "Open" }
+    }
+  ]
+}
+```
+
+The browser draws the values as plain text. A row with an `action` is a button that
+users can reach with the keyboard.
+
+![A chat answer with the text Two invoices of this contract still have an uncredited amount, and a list titled Invoices with an uncredited amount. The list has two rows, INV-1001 and INV-1002. Each row has a document icon, the invoice date, the total, parts and labour amounts, a Not credited badge, and an Open button](../../../assets/apex-chat/chat-widgets-item-list.png)
+
+## Turn on a custom type
+
+Open the region, go to the group **Conversation**, and enter the type name in
+**Custom Widgets**. Separate several names with a comma, a colon, a semicolon, or a
+space.
+
+The plug-in keeps a name only when the type is registered and enabled. An unknown or disabled type
+does not raise an error. The plug-in leaves it off and writes a warning with the
+name to the APEX debug log. The stored list has at most 200 characters.
+
+## Handle the click
+
+A click on a row with an `action` raises the browser event `uc-ai-chat-action` on
+the button of the row. The event bubbles up to the chat region. It carries these
+values:
+
+| Value | Content |
+| --- | --- |
+| `action` | The `name` of the `action` |
+| `id` | The `id` of the `action` |
+| `label` | The `label` of the `action`, or `null` |
+| `title` | The title of the item |
+
+In APEX, create a dynamic action with the event **Custom Event** `uc-ai-chat-action`
+and the selection type **Region**. Add an action of the type **Execute JavaScript
+Code**. In this code, `this.data` holds the values:
+
+```js
+if (this.data.action === "sc-open-invoice") {
+  apex.item("P10_INVOICE_NO").setValue(this.data.id);
+  apex.region("invoice-details").refresh();
+}
+```
+
+In APEX, the event goes through jQuery, so a listener that you add with
+`addEventListener` does not receive it. Use `apex.jQuery(document).on("uc-ai-chat-action",
+(event, data) => { ... })`. Outside APEX, the plug-in raises a native `CustomEvent`
+that bubbles, and the values are in `event.detail`.
+
+The click comes from the browser, so a user can raise the same event with any
+`id`. The page process or the query that handles the event must check the `id` on
+the server.
+
+## Invalid custom widgets
+
+An invalid custom widget shows as text, as described in [Invalid
+widgets](/products/uc-ai/docs/guides/chat-widgets/#invalid-widgets). Reasons that
+apply to custom types:
+
+- `widget type sc_invoices is not enabled`, also when you unregistered or disabled
+  the type after the conversation started
+- The reason that your package sets in `po_reason`
+- `the provider of sc_invoices did not return a JSON object`
+- `items must hold 1 to 20 entries` and the other rules of [The item_list render
+  type](#the-item_list-render-type)
+- `the widget could not be processed`, when the package raised an error
+
+## Known limitations
+
+- **A custom type can use only the render type `item_list`.** The plug-in has no
+  extension point for components of your own.
+- **A custom type has no checkbox.** You write the names in **Custom Widgets** by
+  hand.
+- **A stored list is a snapshot.** The plug-in renders the answer once, after the
+  run. Later changes to your tables do not update lists in stored answers.
+- **Tool calls are passed as JSON text.** Large tool results increase the size of
+  the `p_tool_calls` CLOB that your package must process.
+
+<LinkCard
+  title="Add Your Own Widget to the Chat"
+  description="A tutorial that builds an invoice list widget on the service-contract desk."
+  href="/products/uc-ai/docs/tutorial/add-a-widget-to-the-chat/01-render-without-a-model/"
+/>

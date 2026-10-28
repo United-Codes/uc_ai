@@ -1,0 +1,1 @@
+{"model":"gpt-6-luna","input":"I love cooking pasta with my partner on Sundays and we just adopted a dog.","questions":[{"type":"predicate","name":"gay","instructions":"The author is gay."},{"type":"choice","name":"religion","instructions":"What is the author's religion?","choices":[{"value":"christian"},{"value":"muslim"},{"value":"jewish"},{"value":"none"}]}]}

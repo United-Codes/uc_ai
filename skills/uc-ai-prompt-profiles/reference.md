@@ -127,7 +127,7 @@ l_profile_id := uc_ai_prompt_profiles_api.create_prompt_profile(
 , p_system_prompt_template => 'You are an analytical assistant.'
 , p_user_prompt_template   => 'Analyze: {scenario}'
 , p_provider               => uc_ai.c_provider_anthropic
-, p_model                  => uc_ai_anthropic.c_model_claude_4_5_haiku
+, p_model                  => uc_ai_anthropic.c_model_claude_5_5_haiku
 , p_model_config_json      => l_config_clob
 );
 ```

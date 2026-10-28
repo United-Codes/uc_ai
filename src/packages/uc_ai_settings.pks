@@ -60,6 +60,7 @@ as
   , reasoning_level                varchar2(10 char)
   , tool_tags                      apex_t_varchar2
   , max_tool_calls                 pls_integer
+  , transfer_timeout               pls_integer
   , extra_headers                  uc_ai.t_extra_headers
   , extra_body                     json_object_t
   , provider_tools                 json_array_t
@@ -95,6 +96,8 @@ as
   , or_apex_web_credential         varchar2(255 char)
     -- mistral
   , ms_apex_web_credential         varchar2(255 char)
+    -- typesafe
+  , ts_apex_web_credential         varchar2(255 char)
     -- responses api (populated by openai/ollama/oci before delegating)
   , ra_base_url                    varchar2(4000 char)
   , ra_apex_web_credential         varchar2(255 char)

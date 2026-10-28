@@ -29,27 +29,45 @@ Spot-check any commit whose message is ambiguous with `git show <sha> --stat` (a
 - **New models** (usually grouped as one bullet)
 - **Internal** (triggers, authid changes, refactors worth calling out)
 
-### 2. Decide: migration script or package-only?
+### 2. Check the schema upgrade steps
+
+There is one upgrade script for every release: `upgrade_uc_ai.sql`. It is generated, and it works from v25.7 on. There are no per-release migration scripts.
 
 ```bash
-git diff v<PREV>..HEAD --stat -- src/tables/ src/triggers/ src/migrations/
+git diff v<PREV>..HEAD --stat -- src/tables/ src/triggers/ src/upgrade/
 ```
 
-- **No DDL changes** → package-only release. Users run `upgrade_packages.sql`.
-- **DDL changes** (new/altered tables, new triggers, new columns):
-  - Ask the user whether the DDL was a hotfix to the previous release (and thus already in users' schemas) or genuinely new.
-  - If genuinely new, create `src/migrations/v<PREV>_to_v<NEW>.sql` with the DDL and reference it in the changelog as the first-run step before `upgrade_packages.sql`.
-  - Confirm with `grep -n "trigger\|table" scripts/generate_upgrade_script.sh` that `upgrade_packages.sql` still skips DDL (it should).
-  - Views are the exception: `src/views/views.sql` is `create or replace`, so
-    `upgrade_packages.sql` ships it. A new view on a new table still needs the
-    table in the migration script, which users run first.
+- **No change in `src/tables/`** → nothing to add. The upgrade script still recompiles packages, triggers, views and post-scripts.
+- **A change in `src/tables/`** → `src/upgrade/upgrade_schema.sql` must have a matching guarded step in the section of the new release (add a `release_vYY_N` procedure and call it at the end of the main block). The rules are in the header of that file: one column per `ensure_column` call, backfills through `execute immediate` and guarded with `if g_changed then`.
+  - Ask the user whether the DDL was a hotfix to the previous release (and thus already in users' schemas). The guarded step is safe either way.
+  - Run `make test-upgrade`. It installs the v25.7 ... previous release tags, runs the upgrade, and compares the schema with a fresh install. Add the tag of the release you just shipped to the default list in `scripts/test_upgrade.sh`. `make test-upgrade TAGS="v<PREV>"` tests one baseline. The generated script also ends with a verify phase that fails on any object of `install.sql` the steps did not create.
+  - Table and column comments need no step: the generator takes the `comment on` lines from `install.sql`.
+- Triggers, views and post-scripts are `create or replace` and always run.
+- The release notes say what a change does to existing data. The upgrade script itself needs no mention as a first-run step.
+
+### 2a. Sync the chat plug-in export
+
+The UC AI Chat plug-in ships with UC AI. This repository is the source of its database side:
+the packages `src/packages/uc_ai_chat*` and the tables in `src/tables/install.sql`. Edit them
+here, never in the `apex-chat` repository. Only the APEX export file
+(`region_type_plugin_com_united_codes_uc_ai_chat.sql` in the repository root) comes from
+`apex-chat`.
+
+```bash
+bash scripts/sync_chat_plugin_export.sh   # default source: ../apex-chat
+```
+
+Run it before the generators. `release.yml` attaches the export file to the release. A change to `uc_ai_chat_messages` or
+`uc_ai_chat_widget_types` needs a guarded step (section 2) and a line in the release notes
+for the readers of the guide section "Use UC AI in a different schema". These readers
+change the tables in their application schema by hand.
 
 ### 2b. Register any new package with the generators
 
 `scripts/package_utils.sh` drives every generator from three hardcoded arrays
 (`API_PACKAGES`, `PROVIDER_PACKAGES`, `SANDBOX_PACKAGES`). A `.pks`/`.pkb` pair that
 is in none of them is silently left out of `install_uc_ai.sql`,
-`upgrade_packages.sql` and `uninstall.sql` — the generators only print
+`upgrade_uc_ai.sql` and `uninstall.sql` — the generators only print
 `WARNING: Unknown package found`, and nothing fails.
 
 ```bash
@@ -119,88 +137,34 @@ If provider model constants changed, also run `bash scripts/generate_uc_ai_utils
 
 Connection: `sql -name local-23ai-uc_ai`. Use `set serveroutput on size unlimited; set feedback off;` in each session.
 
-There is **no full-suite runner and no LLM-free entry point**. `ut.run` with no
+There is **no full-suite runner for the LLM-backed suites**. `ut.run` with no
 argument hits every live provider suite, and the `--%suitepath` coverage is partial
-(16 of the 37 suites carry none), so `ut.run('uc_ai')` silently reaches about half.
-Run the LLM-free suites by name.
+(16 of the suites carry none), so `ut.run('uc_ai')` silently reaches about half.
 
-**LLM-free suites** — verified: none of these calls `generate_text`,
-`generate_embeddings`, `execute_agent` or `execute_profile` in a way that reaches a
-provider. 612 tests, all of them fast and free:
+The LLM-free suites have a runner. It runs a curated list, pins the NLS
+separators and enables the test HTTP transport:
 
-```sql
-begin ut.run('test_uc_ai_toon'); end;                    -- 22
-/
-begin ut.run('test_uc_ai_error'); end;                   -- 10
-/
-begin ut.run('test_uc_ai_utils'); end;                   --  6
-/
-begin ut.run('test_uc_ai_message_api'); end;             -- 17
-/
-begin ut.run('test_uc_ai_structured_output'); end;       -- 37
-/
-begin ut.run('test_uc_ai_tools_api'); end;               -- 12
-/
-begin ut.run('test_uc_ai_settings'); end;                -- 11
-/
-begin ut.run('test_uc_ai_reset_globals'); end;           --  3
-/
-begin ut.run('test_uc_ai_passthrough'); end;             --  8
-/
-begin ut.run('test_uc_ai_reasoning_replay'); end;        -- 14
-/
-begin ut.run('test_uc_ai_workflow_mapping'); end;        -- 33
-/
-begin ut.run('test_uc_ai_agent_session_meta'); end;      -- 28
-/
-begin ut.run('test_uc_ai_agent_validation'); end;        -- 41
-/
-begin ut.run('test_uc_ai_agent_as_tool'); end;           -- 20
-/
-begin ut.run('test_uc_ai_agent_purge'); end;             --  9
-/
-begin ut.run('test_uc_ai_memory'); end;                  -- 84
-/
-begin ut.run('test_uc_ai_run_context'); end;             -- 46
-/
-begin ut.run('test_uc_ai_hook'); end;                    -- 12
-/
-begin ut.run('test_uc_ai_wire'); end;                    -- 24
-/
-begin ut.run('test_uc_ai_wire_2'); end;                  -- 22 (5 disabled: known bugs, see the spec)
-/
-begin ut.run('test_uc_ai_wire_3'); end;                  -- 17
-/
-begin ut.run('test_uc_ai_anthropic_wire'); end;          -- 13
-/
-begin ut.run('test_uc_ai_google_wire'); end;             -- 13
-/
-begin ut.run('test_uc_ai_openai_wire'); end;             --  7
-/
-begin ut.run('test_uc_ai_responses_wire'); end;          -- 13
-/
-begin ut.run('test_uc_ai_oci_wire'); end;                -- 14
-/
-begin ut.run('test_uc_ai_ollama_wire'); end;             --  8
-/
-begin ut.run('test_uc_ai_ocr_wire'); end;                -- 37
-/
-begin ut.run('test_uc_ai_tools_wire'); end;              -- 11
-/
-begin ut.run('test_uc_ai_spec_wire'); end;               --  5
-/
+```bash
+make test-free     # sql -name local-23ai-uc_ai @scripts/run_tests_free.sql
 ```
+
+`scripts/run_tests_free.sql` is the list. Add a new LLM-free suite there, and
+keep the property that none of its tests reaches a provider. Read the end of the
+output for the failure count. Do not count on the exit code alone.
 
 The last two of the wire suites do call `execute_agent`, but only on an agent that
 must fail first — uncommitted, or pointing at a missing prompt profile — so no
 provider is reached.
 
-The four agent suites in this set reach no provider either, each for its own
+The five agent suites in this set reach no provider either, each for its own
 reason: `agent_as_tool` and `agent_purge` run workflows built from `plsql` steps
 only, `run_context` pins an offline OCI model so `generate_text` raises before it
 opens a connection, and `memory` drives `uc_ai_memory.execute_command` directly —
 its one `execute_agent` call is the test that expects the run to fail at start.
+`agent_prompt_addendum` answers every request from `uc_ai_test_http_mock`.
 Keep that property when you add a test to them.
+`test_uc_ai_a2a` (the A2A server) is in the set too: it calls `uc_ai_a2a.process_request`
+on workflow agents with `plsql` steps only, and catches push notifications with `uc_ai_test_http_mock`.
 
 **Do not** put these in the LLM-free set: `test_uc_ai_prompt_profiles_api` calls
 `execute_profile` 25 times, and every `test_uc_ai_agent_*` suite not named above
@@ -267,7 +231,7 @@ Any link validator failures need to be fixed before release.
 
 ### 9. Final regen pass
 
-Rerun all `generate_*.sh` scripts once more after any package changes made during test triage or audits. Commit the regenerated `install_uc_ai.sql`, `upgrade_packages.sql`, `install_uc_ai_complete*.sql`, `uninstall.sql`, and `src/packages/uc_ai_utils.pkb` alongside the code changes.
+Rerun all `generate_*.sh` scripts once more after any package changes made during test triage or audits. Commit the regenerated `install_uc_ai.sql`, `upgrade_uc_ai.sql`, `install_uc_ai_complete*.sql`, `uninstall.sql`, and `src/packages/uc_ai_utils.pkb` alongside the code changes.
 
 ## Do not
 

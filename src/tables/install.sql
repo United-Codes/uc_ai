@@ -188,6 +188,9 @@ create table uc_ai_agents (
   -- For agent_type = 'orchestrator'/'handoff'/'conversation'
   orchestration_config   clob,
   
+  -- For agent_type = 'decision'
+  decision_config        clob,
+  
   -- Shared configuration
   input_schema           clob,
   output_schema          clob,
@@ -204,7 +207,7 @@ create table uc_ai_agents (
   constraint uc_ai_agents_uk unique (code, version),
   constraint uc_ai_agents_status_ck check (status in ('draft', 'active', 'archived')),
   constraint uc_ai_agents_type_ck check (agent_type in
-    ('profile', 'workflow', 'orchestrator', 'handoff', 'conversation')),
+    ('profile', 'workflow', 'orchestrator', 'handoff', 'conversation', 'decision')),
   -- Each agent type requires its own configuration column to be populated
   constraint uc_ai_agents_profile_ck check (
     agent_type <> 'profile' or prompt_profile_code is not null),
@@ -212,8 +215,12 @@ create table uc_ai_agents (
     agent_type <> 'workflow' or workflow_definition is not null),
   constraint uc_ai_agents_orch_ck check (
     agent_type not in ('orchestrator', 'handoff', 'conversation')
-    or orchestration_config is not null)
+    or orchestration_config is not null),
+  constraint uc_ai_agents_decision_ck check (
+    agent_type <> 'decision' or decision_config is not null)
 );
+
+comment on column uc_ai_agents.decision_config is 'For agent_type = ''decision'': JSON object with provider, model, state_template, questions and optional options and model_config. Run through uc_ai.decide';
 
 -- Ensure only one active version per code
 create unique index uc_ai_agents_active_uk on uc_ai_agents(
@@ -417,6 +424,9 @@ create table uc_ai_agent_messages (
   tool_output            clob,
   tool_status            varchar2(50 char),
 
+  -- Provider tool call id; pairs a tool_call row with its tool_result row
+  tool_call_id           varchar2(255 char),
+
   created_at             timestamp not null,
 
   constraint uc_ai_agent_messages_pk primary key (id),
@@ -434,6 +444,7 @@ create index uc_ai_agent_msg_exec_idx on uc_ai_agent_messages(execution_id);
 comment on table uc_ai_agent_messages is 'Normalized, untrimmed per-message conversation log (one row per content item)';
 comment on column uc_ai_agent_messages.seq is 'Ordering within the session; assigned as running max(seq)+1 per persisted message';
 comment on column uc_ai_agent_messages.agent_code is 'Agent that produced this message (sub-agent for wrapper turns; the turn''s own agent otherwise); null for caller user/system input';
+comment on column uc_ai_agent_messages.tool_call_id is 'Provider tool call id, set on tool_call and tool_result rows (null on all other roles and on rows written before v26.5). Pairs a tool_call row with its tool_result row. Google and Ollama synthesize ids such as tool_call_1 from a per-run counter, so an id is unique only within one execution_id. Pair rows on (execution_id, tool_call_id), never on tool_call_id alone';
 
 
 -- ============================================================================
@@ -533,3 +544,237 @@ comment on column uc_ai_memory_config.context_key is 'Required for scope = conte
 comment on column uc_ai_memory_config.max_file_chars is 'Cap for a single file''s content length (enforced on create/insert/str_replace)';
 comment on column uc_ai_memory_config.max_store_chars is 'Optional cap for the summed content length of the resolved store (null = unlimited)';
 comment on column uc_ai_memory_config.max_files is 'Cap for the number of files in the resolved store';
+
+
+-- ============================================================================
+-- A2A SERVER
+-- ============================================================================
+-- Agent2Agent protocol 1.0: publishes uc_ai_agents agents over HTTP (ORDS).
+-- See the package uc_ai_a2a.
+
+create sequence uc_ai_a2a_endpoints_seq;;
+
+create table uc_ai_a2a_endpoints (
+  id                number default on null uc_ai_a2a_endpoints_seq.nextval not null,
+  code              varchar2(100 char)  not null,
+  agent_code        varchar2(255 char)  not null,
+  agent_version     number,
+  name              varchar2(255 char)  not null,
+  description       varchar2(4000 char),
+  card_version      varchar2(50 char)   default on null '1.0.0' not null,
+  text_input_param  varchar2(255 char),
+  auth_mode         varchar2(20 char)   default on null 'api_key' not null,
+  accept_files      varchar2(1 char)    default on null 'Y' not null,
+  allow_async       varchar2(1 char)    default on null 'Y' not null,
+  enabled           varchar2(1 char)    default on null 'Y' not null,
+  base_url          varchar2(1000 char),
+  card_extras       clob,
+  signing_kid       varchar2(255 char),
+  signing_key       clob,
+  signing_jku       varchar2(1000 char),
+  created_by  varchar2(255 char) default on null coalesce(sys_context('APEX$SESSION','APP_USER'), user) not null,
+  created_at  timestamp          default on null systimestamp not null,
+  updated_by  varchar2(255 char) default on null coalesce(sys_context('APEX$SESSION','APP_USER'), user) not null,
+  updated_at  timestamp          default on null systimestamp not null,
+  constraint uc_ai_a2a_endpoints_pk primary key (id),
+  constraint uc_ai_a2a_endpoints_uk unique (code),
+  constraint uc_ai_a2a_endpoints_code_ck check (regexp_like(code, '^[a-z0-9][a-z0-9_-]*$')),
+  constraint uc_ai_a2a_endpoints_auth_ck check (auth_mode in ('api_key', 'oauth2', 'none')),
+  constraint uc_ai_a2a_endpoints_files_ck check (accept_files in ('Y', 'N')),
+  constraint uc_ai_a2a_endpoints_async_ck check (allow_async in ('Y', 'N')),
+  constraint uc_ai_a2a_endpoints_en_ck check (enabled in ('Y', 'N')),
+  constraint uc_ai_a2a_endpoints_extras_ck check (card_extras is json)
+);
+
+create sequence uc_ai_a2a_api_keys_seq;;
+
+create table uc_ai_a2a_api_keys (
+  id            number default on null uc_ai_a2a_api_keys_seq.nextval not null,
+  endpoint_id   number              not null,
+  client_name   varchar2(255 char)  not null,
+  key_prefix    varchar2(20 char)   not null,
+  key_hash      varchar2(64 char)   not null,
+  expires_at    timestamp,
+  revoked_at    timestamp,
+  last_used_at  timestamp,
+  created_by  varchar2(255 char) default on null coalesce(sys_context('APEX$SESSION','APP_USER'), user) not null,
+  created_at  timestamp          default on null systimestamp not null,
+  constraint uc_ai_a2a_api_keys_pk primary key (id),
+  constraint uc_ai_a2a_api_keys_hash_uk unique (key_hash),
+  constraint uc_ai_a2a_api_keys_client_uk unique (endpoint_id, client_name),
+  constraint uc_ai_a2a_api_keys_ep_fk foreign key (endpoint_id)
+    references uc_ai_a2a_endpoints(id) on delete cascade
+);
+
+create table uc_ai_a2a_tasks (
+  task_id         varchar2(36 char)   not null,
+  context_id      varchar2(255 char)  not null,
+  endpoint_id     number              not null,
+  client_id       varchar2(255 char)  not null,
+  message_id      varchar2(255 char),
+  execution_id    number,
+  state           varchar2(30 char)   not null,
+  status_message  varchar2(4000 char),
+  request_message clob,
+  pending_request clob,
+  result          clob,
+  job_name        varchar2(128 char),
+  created_at      timestamp           not null,
+  updated_at      timestamp           not null,
+  constraint uc_ai_a2a_tasks_pk primary key (task_id),
+  constraint uc_ai_a2a_tasks_msg_uk unique (endpoint_id, client_id, message_id),
+  constraint uc_ai_a2a_tasks_ep_fk foreign key (endpoint_id)
+    references uc_ai_a2a_endpoints(id) on delete cascade,
+  constraint uc_ai_a2a_tasks_exec_fk foreign key (execution_id)
+    references uc_ai_agent_executions(id) on delete cascade,
+  constraint uc_ai_a2a_tasks_state_ck check (state in (
+    'TASK_STATE_SUBMITTED', 'TASK_STATE_WORKING', 'TASK_STATE_COMPLETED', 'TASK_STATE_FAILED',
+    'TASK_STATE_CANCELED', 'TASK_STATE_INPUT_REQUIRED', 'TASK_STATE_REJECTED', 'TASK_STATE_AUTH_REQUIRED')),
+  constraint uc_ai_a2a_tasks_reqmsg_ck check (request_message is json),
+  constraint uc_ai_a2a_tasks_pending_ck check (pending_request is json),
+  constraint uc_ai_a2a_tasks_result_ck check (result is json)
+);
+
+create index uc_ai_a2a_tasks_ctx_idx on uc_ai_a2a_tasks(context_id);
+create index uc_ai_a2a_tasks_client_idx on uc_ai_a2a_tasks(endpoint_id, client_id, updated_at);
+create index uc_ai_a2a_tasks_exec_idx on uc_ai_a2a_tasks(execution_id);
+
+create table uc_ai_a2a_push_configs (
+  id                varchar2(36 char)   not null,
+  task_id           varchar2(36 char)   not null,
+  config_id         varchar2(255 char)  not null,
+  url               varchar2(4000 char) not null,
+  token             varchar2(4000 char),
+  auth_scheme       varchar2(100 char),
+  auth_credentials  varchar2(4000 char),
+  last_status       number,
+  last_error        varchar2(4000 char),
+  last_attempt_at   timestamp,
+  created_at        timestamp           not null,
+  constraint uc_ai_a2a_push_configs_pk primary key (id),
+  constraint uc_ai_a2a_push_configs_uk unique (task_id, config_id),
+  constraint uc_ai_a2a_push_configs_task_fk foreign key (task_id)
+    references uc_ai_a2a_tasks(task_id) on delete cascade
+);
+
+comment on table  uc_ai_a2a_endpoints is 'One row = one agent published over the A2A protocol (agent card + JSON-RPC and REST bindings)';
+comment on column uc_ai_a2a_endpoints.code is 'URL slug of the endpoint: lowercase letters, digits, underscore and hyphen';
+comment on column uc_ai_a2a_endpoints.agent_code is 'Code of the uc_ai_agents agent to run. No foreign key: resolved at run time';
+comment on column uc_ai_a2a_endpoints.agent_version is 'Agent version to run; null = the active version';
+comment on column uc_ai_a2a_endpoints.text_input_param is 'Input parameter of the agent that the text of a message fills on the first turn';
+comment on column uc_ai_a2a_endpoints.auth_mode is 'api_key (X-API-Key header) | oauth2 (ORDS OAuth2 client credentials) | none';
+comment on column uc_ai_a2a_endpoints.accept_files is 'Y = raw file parts of a message are passed to the agent';
+comment on column uc_ai_a2a_endpoints.allow_async is 'Y = returnImmediately and push notifications are available';
+comment on column uc_ai_a2a_endpoints.base_url is 'Public URL of the endpoint behind a reverse proxy; null = derived from each request';
+comment on column uc_ai_a2a_endpoints.card_extras is 'JSON: provider {organization, url}, documentationUrl, iconUrl, tags [], examples [], oauthTokenUrl';
+comment on column uc_ai_a2a_endpoints.signing_kid is 'Key ID in the protected header of the agent card signature';
+comment on column uc_ai_a2a_endpoints.signing_key is 'PEM private key that signs the agent card. Null = unsigned card';
+comment on column uc_ai_a2a_endpoints.signing_jku is 'URL of the JWK set that holds the public key of the card signature';
+
+comment on table  uc_ai_a2a_api_keys is 'API keys of the clients of an A2A endpoint. Only the SHA-256 hash of a key is stored';
+comment on column uc_ai_a2a_api_keys.key_prefix is 'First characters of the key, for display';
+comment on column uc_ai_a2a_api_keys.key_hash is 'Lowercase hex SHA-256 of the key';
+
+comment on table  uc_ai_a2a_tasks is 'A2A tasks. One task = one agent run for one client of an endpoint';
+comment on column uc_ai_a2a_tasks.task_id is 'Lowercase UUID';
+comment on column uc_ai_a2a_tasks.context_id is 'A2A context. Equals uc_ai_agent_sessions.session_id (no foreign key: the session row appears when the run starts)';
+comment on column uc_ai_a2a_tasks.client_id is 'Owner of the task: apikey:<client_name> | OAuth client ID | anonymous';
+comment on column uc_ai_a2a_tasks.message_id is 'messageId of the client message, for duplicate detection';
+comment on column uc_ai_a2a_tasks.status_message is 'Text of the status message, e.g. the reason of a failure';
+comment on column uc_ai_a2a_tasks.request_message is 'Client message as JSON, with raw file bytes removed';
+comment on column uc_ai_a2a_tasks.pending_request is 'Full SendMessageRequest of an async run; null once the run starts';
+comment on column uc_ai_a2a_tasks.result is 'The Artifact as JSON, once the task is completed';
+comment on column uc_ai_a2a_tasks.job_name is 'Scheduler job of an async run';
+comment on column uc_ai_a2a_tasks.updated_at is 'Time of the latest state change (the status timestamp)';
+
+comment on table  uc_ai_a2a_push_configs is 'Push notification configurations of A2A tasks';
+comment on column uc_ai_a2a_push_configs.config_id is 'ID of the configuration as the client sees it; unique per task';
+comment on column uc_ai_a2a_push_configs.last_status is 'HTTP status of the latest delivery';
+comment on column uc_ai_a2a_push_configs.last_error is 'Error of the latest delivery; null when it worked';
+
+
+-- ============================================================================
+-- UC AI CHAT PLUG-IN
+-- ============================================================================
+-- Tables of the AI mode of the UC AI Chat region plug-in (plugin/). See the
+-- package uc_ai_chat.
+
+create sequence uc_ai_chat_messages_seq;
+
+create table uc_ai_chat_messages (
+  id                    number default on null uc_ai_chat_messages_seq.nextval not null,
+  execution_id          number,
+  session_id            varchar2(255 char) not null,
+  role                  varchar2(20 char) not null,
+  content               clob,
+  reasoning_content     clob,
+  tool_name             varchar2(255 char),
+  -- Id the provider gave the tool call, copied from uc_ai_agent_messages.tool_call_id
+  -- on tool_call / tool_result rows. Unique only per execution_id: pair a call with
+  -- its result on (execution_id, tool_call_id).
+  tool_call_id          varchar2(255 char),
+  tool_input            clob,
+  tool_output           clob,
+  tool_status           varchar2(50 char),
+  input_tokens          number,
+  output_tokens         number,
+  agent_code            varchar2(255 char),
+  agent_version         number,
+  agent_request_params  clob,
+  session_init_code     clob,
+  -- Effective UC AI run context for this turn (JSON object), resolved from the
+  -- agent_run_context region attribute while the APEX session is still live.
+  -- Doubles as the drift baseline: a later turn's context is compared against
+  -- the newest non-null value on this session's user rows.
+  run_context           clob,
+  -- Turn lifecycle, tracked only on the 'user' row (one turn = one user row).
+  -- pending -> processing -> done | error | cancelled
+  turn_status           varchar2(20 char),
+  -- Widget types enabled for this turn (colon separated, e.g. 'stat_card:chart'),
+  -- tracked only on the 'user' row. Resolved from the widgets region attribute in
+  -- AI_SEND_MESSAGE, never from the client; null = widgets off.
+  widgets               varchar2(200 char),
+  -- Widget snapshot of the answer (JSON array of parts), tracked only on the
+  -- 'assistant' row. Rendered once by execute_agent_job and stored only when the
+  -- answer holds a widget or a rejected one; null for a plain answer.
+  parts                 clob,
+  -- sqlerrm of a failed turn (no backtrace); exposed to clients only when the
+  -- show_errors debug flag is on
+  error_detail          varchar2(4000 char),
+  created_by            varchar2(255 char) not null,
+  created_at            timestamp default on null systimestamp not null,
+  constraint uc_ai_chat_messages_pk primary key (id),
+  constraint uc_ai_chat_msg_parts_ck check (parts is json),
+  constraint uc_ai_chat_msg_role_ck check (role in ('user', 'assistant', 'tool_call', 'tool_result')),
+  constraint uc_ai_chat_msg_tool_ck check (tool_status is null or tool_status in ('running', 'success', 'error')),
+  constraint uc_ai_chat_msg_tstatus_ck check (
+    turn_status is null
+    or (role = 'user' and turn_status in ('pending', 'processing', 'done', 'error', 'cancelled'))
+  )
+);
+
+create index uc_ai_chat_msg_session_idx on uc_ai_chat_messages(session_id, created_at);
+create index uc_ai_chat_msg_exec_idx on uc_ai_chat_messages(execution_id);
+-- Supports the session-ownership authorization check (assert_session_owner)
+create index uc_ai_chat_msg_session_user_idx on uc_ai_chat_messages(session_id, created_by);
+
+-- To show your own kind of widget (for example a list of files) you register the
+-- model-facing type name here together with the package that checks and builds it.
+-- See uc_ai_chat_widgets.register_type. A table, not a package global: the answer
+-- is rendered by a scheduler job, which does not share package state with the
+-- session that registered the type.
+create table uc_ai_chat_widget_types (
+  type_code         varchar2(30 char) not null,
+  provider_package  varchar2(261 char) not null,
+  enabled           varchar2(1 char) default on null 'Y' not null,
+  created_at        timestamp default on null systimestamp not null,
+  constraint uc_ai_chat_wtypes_pk primary key (type_code),
+  constraint uc_ai_chat_wtypes_code_ck check (regexp_like(type_code, '^[a-z][a-z0-9_]{1,29}$')),
+  constraint uc_ai_chat_wtypes_en_ck check (enabled in ('Y', 'N'))
+);
+
+comment on table  uc_ai_chat_messages is 'Messages of the AI mode of the UC AI Chat plug-in: one row per user message, answer, tool call and tool result';
+comment on column uc_ai_chat_messages.session_id is 'Chat session. Equals uc_ai_agent_sessions.session_id';
+comment on column uc_ai_chat_messages.execution_id is 'Agent execution (uc_ai_agent_executions.id) that produced the row';
+
+comment on table  uc_ai_chat_widget_types is 'Custom widget types of the UC AI Chat plug-in and the package that checks and builds each one';

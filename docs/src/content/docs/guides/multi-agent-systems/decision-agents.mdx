@@ -1,0 +1,328 @@
+---
+title: Decision Agents
+description: Run uc_ai.decide as an agent. Get choices, scores, and probabilities, track token usage, and use the answers in workflow conditions.
+sidebar:
+  order: 15
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+<Aside type="caution" title="Experimental">
+  A decision agent uses [`uc_ai.decide`](/products/uc-ai/docs/api/decide/), which is experimental. The provider APIs behind it are in beta, so the result can still change. Test your agents again after you upgrade UC AI.
+</Aside>
+
+A decision agent runs [`uc_ai.decide`](/products/uc-ai/docs/api/decide/) as an agent. You configure a text template and questions about that text. Each run replaces the template placeholders with your input values, then asks the model all questions. Each question returns a choice, a score, or a probability.
+
+The answers are a JSON object and not free text. A [workflow](/products/uc-ai/docs/guides/multi-agent-systems/workflows/) condition can therefore read an answer, for example `{$.steps.route.answers.department.choice}`.
+
+UC AI records each run and its token usage in an agent session. Decision agents also have versions and a status, like other agents. Three providers support it: OpenAI, TypeSafe and OpenRouter.
+
+## When to use a decision agent
+
+| You need | Use |
+| --- | --- |
+| A branch on an answer, with the probability of the answer | A decision agent |
+| A free-text answer, tools, or a conversation | A [profile agent](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/) |
+| One call from your own PL/SQL code, outside an agent run | [`uc_ai.decide`](/products/uc-ai/docs/api/decide/) |
+
+## Decision configuration
+
+A decision agent has no prompt profile. Its `decision_config` column holds one JSON object:
+
+| Key | Required | Description |
+| --- | --- | --- |
+| `provider` | Yes | `openai`, `typesafe` or `openrouter`. These are the values of `uc_ai.c_provider_openai`, `uc_ai.c_provider_typesafe` and `uc_ai.c_provider_openrouter`. |
+| `model` | No | The model name. If you omit it, UC AI uses the default model of the provider. |
+| `state_template` | Yes | The text that the questions refer to. It is not empty. A `{name}` placeholder takes the value of the input parameter `name`. |
+| `questions` | Yes | An object with at least one question. It has the same format as `p_questions` of `uc_ai.decide`. See [Questions](/products/uc-ai/docs/api/decide/#questions). |
+| `options` | No | The `p_options` of `uc_ai.decide`: `safety_identifier` and `extra_body`. |
+| `model_config` | No | The web credential and the base URL of the agent. See [Set the credential and the base URL](#set-the-credential-and-the-base-url). |
+
+A key that is not in this table is an error. UC AI checks the keys, the provider, and the structure of `model_config` when you save the agent. `uc_ai.decide` checks each question when the agent runs.
+
+The placeholders follow the rules of a [prompt profile](/products/uc-ai/docs/guides/prompt-profiles/). UC AI replaces each placeholder with your input value and preserves the text inside that value. For example, `{other}` inside a value stays as text instead of referring to another input parameter. Backslashes stay unchanged, and input values can exceed 32,767 characters. If an input parameter is missing, the run raises `ORA-20506`.
+
+## Create a decision agent
+
+Pass the configuration to `create_agent` with `uc_ai_agents_api.c_type_decision`. The example creates the agent `ticket_router`. It asks one question about a customer message, and it reads the web credential `OPENAI`.
+
+```sql
+DECLARE
+  l_agent_id NUMBER;
+  l_config   CLOB;
+BEGIN
+  l_config := q'[{
+    "provider": "openai",
+    "model": "gpt-6-luna",
+    "state_template": "{message}",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this message?",
+        "criteria": {
+          "billing": "Payments, invoices, and refunds.",
+          "support": "Product usage and technical problems."
+        }
+      }
+    },
+    "model_config": {
+      "g_apex_web_credential": "OPENAI"
+    }
+  }]';
+
+  l_agent_id := uc_ai_agents_api.create_agent(
+    p_code            => 'ticket_router',
+    p_description     => 'Decides which team handles a ticket',
+    p_agent_type      => uc_ai_agents_api.c_type_decision,
+    p_decision_config => l_config,
+    p_status          => uc_ai_agents_api.c_status_active
+  );
+
+  COMMIT; -- agents must be committed before they can be executed
+END;
+/
+```
+
+A decision agent takes `p_decision_config` only. If you also pass `p_prompt_profile_code`, `p_workflow_definition`, or `p_orchestration_config`, `create_agent` raises an error. The same is true in the other direction: `p_decision_config` is not valid for another agent type.
+
+An invalid configuration raises `ORA-20503` when you save the agent. These errors are from a call on 2026-10-07:
+
+```text
+ORA-20503: Invalid decision config: has an unknown key: temperature. Allowed: provider, model, state_template, questions, options, model_config
+ORA-20503: Invalid decision config: has a provider without decision support: anthropic. Allowed: openai, typesafe, openrouter
+```
+
+Versions, the status, and `change_status` work the same as for other agents. See [Removing an agent](/products/uc-ai/docs/guides/multi-agent-systems/#removing-an-agent) to delete one.
+
+## Run a decision agent
+
+`execute_agent` runs the agent. The input parameter `message` fills the placeholder `{message}`. The block prints every key of the result.
+
+```sql
+DECLARE
+  l_result json_object_t;
+  l_keys   json_key_list;
+BEGIN
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'ticket_router',
+    p_input_parameters => json_object_t('{"message": "I was charged twice for my order. Please refund the extra charge."}'),
+    p_session_id       => 'doc_decision_standalone'
+  );
+
+  l_keys := l_result.get_keys;
+  FOR i IN 1 .. l_keys.count LOOP
+    DBMS_OUTPUT.PUT_LINE(l_keys(i) || ' = ' || l_result.get(l_keys(i)).to_string);
+  END LOOP;
+END;
+/
+```
+
+Output of a call on 2026-10-07. The output is complete. The `execution_id` and the probabilities can be different in your call:
+
+```text
+final_message = {"answers":{"department":{"type":"choice","choice":"billing","probabilities":{"billing":1,"support":0}}},"warnings":[],"model":"gpt-6-luna","provider_metadata":{"usage":{"input_tokens":135,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":135},"confidence":{"department":1}}}
+usage = {"prompt_tokens":135,"completion_tokens":0}
+model = "gpt-6-luna"
+provider = "openai"
+tool_calls_count = 0
+execution_id = 9234
+agent_code = "ticket_router"
+agent_version = 1
+session_id = "doc_decision_standalone"
+status = "completed"
+```
+
+`final_message` is a JSON object and not a string. Use `get_object('final_message')`. `get_clob('final_message')` returns null for it. The object has these keys:
+
+| Key | Description |
+| --- | --- |
+| `answers` | One answer for each question id. See [Answers](/products/uc-ai/docs/api/decide/#answers). |
+| `warnings` | Problems that did not stop the call. The array is empty when there are none. |
+| `model` | The model that the provider reports. |
+| `provider_metadata` | `confidence` and `usage` of the provider. The key is not present when the provider sends none. |
+
+The result has no `raw` key. A refused question stays `{"type": "refused"}` and has no `choice`. Read `type` before you read `choice`.
+
+## Use a decision agent in a workflow
+
+A decision agent is a normal `agent` step. Give it an `input_mapping` and an `output_key`. A later step reads the answers with a path:
+
+```json
+{
+  "agent_code": "billing_reply",
+  "condition": "'{$.steps.route.answers.department.choice}' = 'billing'",
+  "input_mapping": { "message": "{$.input.message}" },
+  "output_key": "billing_draft"
+}
+```
+
+The section [Route a ticket with a workflow](/products/uc-ai/docs/api/decide/#route-a-ticket-with-a-workflow) shows a complete workflow. It routes a ticket to a billing agent or a support agent.
+
+### Branch on a refused answer
+
+OpenAI can refuse a question. The answer has no `choice` then. If a condition refers to a missing value, the condition is false. This also applies to the not-equal operator, `!=`. A condition such as `'{$.steps.route.answers.department.choice}' != 'billing'` therefore does not catch a refusal. Use a condition on `type`.
+
+The next example shows this. The agent `odd_question` asks a question that has no answer. The workflow `refusal_demo` has two conditional steps after it. The first condition uses `!=` on the `choice`. The second condition tests for `refused`. Both steps run the agent `human_review_note` from the [ticket example](/products/uc-ai/docs/api/decide/#route-a-ticket-with-a-workflow).
+
+```sql
+DECLARE
+  l_id     NUMBER;
+  l_config CLOB;
+  l_def    CLOB;
+  l_result json_object_t;
+  l_keys   json_key_list;
+BEGIN
+  l_config := q'[{
+    "provider": "openai",
+    "model": "gpt-6-luna",
+    "state_template": "{message}",
+    "questions": {
+      "smell": {
+        "type": "choice",
+        "instructions": "Pick the colour of the number seven's smell.",
+        "criteria": { "red": "Red.", "blue": "Blue." }
+      }
+    },
+    "model_config": { "g_apex_web_credential": "OPENAI" }
+  }]';
+  l_id := uc_ai_agents_api.create_agent(
+    p_code            => 'odd_question',
+    p_description     => 'Asks a question that has no answer',
+    p_agent_type      => uc_ai_agents_api.c_type_decision,
+    p_decision_config => l_config,
+    p_status          => uc_ai_agents_api.c_status_active
+  );
+
+  l_def := q'[{
+    "workflow_type": "conditional",
+    "steps": [
+      {
+        "agent_code": "odd_question",
+        "input_mapping": { "message": "{$.input.message}" },
+        "output_key": "odd"
+      },
+      {
+        "agent_code": "human_review_note",
+        "condition": "'{$.steps.odd.answers.smell.choice}' != 'red'",
+        "input_mapping": { "message": "{$.input.message}" },
+        "output_key": "not_red_note"
+      },
+      {
+        "agent_code": "human_review_note",
+        "condition": "'{$.steps.odd.answers.smell.type}' = 'refused'",
+        "input_mapping": { "message": "{$.input.message}" },
+        "output_key": "refused_note"
+      }
+    ]
+  }]';
+  l_id := uc_ai_agents_api.create_agent(
+    p_code                => 'refusal_demo',
+    p_description         => 'Shows how a workflow reads a refused answer',
+    p_agent_type          => uc_ai_agents_api.c_type_workflow,
+    p_workflow_definition => l_def,
+    p_status              => uc_ai_agents_api.c_status_active
+  );
+  COMMIT;
+
+  l_result := uc_ai_agents_api.execute_agent(
+    p_agent_code       => 'refusal_demo',
+    p_input_parameters => json_object_t('{"message": "I was charged twice for my order."}'),
+    p_session_id       => 'doc_decision_refusal'
+  );
+
+  DBMS_OUTPUT.PUT_LINE('status: ' || l_result.get_string('status'));
+  l_keys := l_result.get_object('steps').get_keys;
+  FOR i IN 1 .. l_keys.count LOOP
+    DBMS_OUTPUT.PUT_LINE('step ' || l_keys(i) || ': ' || l_result.get_object('steps').get(l_keys(i)).to_string);
+  END LOOP;
+END;
+/
+```
+
+Output of a call on 2026-10-07. The output is complete. OpenAI refused the question in this call. The model decides which questions it refuses, so a call can be different:
+
+```text
+status: completed
+step odd: {"answers":{"smell":{"type":"refused"}},"warnings":[],"model":"gpt-6-luna","provider_metadata":{"usage":{"input_tokens":123,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":123}}}
+step refused_note: "Automatic routing gave no answer.  \nThe customer reports being charged twice for their order."
+```
+
+The step `not_red_note` did not run, although the answer is not `red`. Only the condition on `type` ran its step.
+
+## Read the tokens
+
+A decision agent writes the tokens of its call to its own row in `uc_ai_agent_executions`. The session totals in `uc_ai_agent_sessions` include them. The query is the same as for other agents. See [Execution tracking](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/#execution-tracking).
+
+OpenAI reports no output tokens for a decision, so `total_output_tokens` is 0 for an OpenAI decision agent. TypeSafe and OpenRouter report both counts.
+
+The [ticket workflow](/products/uc-ai/docs/api/decide/#route-a-ticket-with-a-workflow) ran with one billing message. These rows are from the session of that run on 2026-10-07:
+
+| Agent | `total_input_tokens` | `total_output_tokens` |
+| --- | --- | --- |
+| `ticket_workflow` | 0 | 0 |
+| `ticket_router` (decision agent) | 135 | 0 |
+| `billing_reply` (profile agent) | 52 | 102 |
+
+The session row had 187 input tokens and 102 output tokens: the sum of the rows of the two steps. The workflow row has 0, because it makes no call itself.
+
+A decision agent writes one `assistant` row to `uc_ai_agent_messages`. Its `content` is the JSON text of `final_message`, and its `agent_code` is the code of the agent.
+
+## Send images
+
+A decision agent takes images through the `p_files` parameter of `execute_agent`. Build the collection with `uc_ai_message_api.t_files`, as for a [profile agent](/products/uc-ai/docs/guides/multi-agent-systems/profile-agents/#attaching-files-documents--images). OpenAI reads `image/png`, `image/jpeg`, and `image/webp`. TypeSafe reads `image/png` and `image/jpeg`. OpenRouter reads text only, and a file raises `ORA-20508`.
+
+```sql
+-- excerpt: l_files is a uc_ai_message_api.t_files with one image
+l_result := uc_ai_agents_api.execute_agent(
+  p_agent_code       => 'ticket_router',
+  p_input_parameters => json_object_t('{"message": "Look at the attached screenshot."}'),
+  p_files            => l_files
+);
+```
+
+## Set the credential and the base URL
+
+A decision agent does not read the session globals. `uc_ai.g_base_url`, `uc_ai.g_apex_web_credential`, and `uc_ai_openai.g_apex_web_credential` have no effect on it. A decision agent therefore behaves the same in every session, and a value that an earlier step set cannot change its request.
+
+Put the credential and the base URL of the agent in `model_config`. The keys are the keys of the [model configuration of a prompt profile](/products/uc-ai/docs/guides/prompt-profiles/#model-configuration):
+
+```json
+{
+  "model_config": {
+    "g_apex_web_credential": "OPENAI",
+    "g_base_url": "https://llm-proxy.example.com/v1"
+  }
+}
+```
+
+You can also group provider-specific configuration in an object named after the provider:
+
+```json
+{
+  "model_config": {
+    "openai": { "g_apex_web_credential": "OPENAI" }
+  }
+}
+```
+
+If `model_config` has no web credential, UC AI reads the key with your function `uc_ai_get_key`. See [Set up API Keys](/products/uc-ai/docs/guides/installation/#set-up-api-keys).
+
+## Use a decision agent as a tool or a delegate
+
+An [agent as tool](/products/uc-ai/docs/guides/multi-agent-systems/agent-as-tool/) can run a decision agent. The tool returns the `final_message` as JSON text. A call to `run_agent_as_tool('ticket_router', ...)` returned this text on 2026-10-07:
+
+```text
+{"answers":{"department":{"type":"choice","choice":"billing","probabilities":{"billing":1,"support":0}}},"warnings":[],"model":"gpt-6-luna","provider_metadata":{"usage":{"input_tokens":135,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},"output_tokens":0,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":135},"confidence":{"department":1}}}
+```
+
+An [orchestrator](/products/uc-ai/docs/guides/multi-agent-systems/orchestrator/) registers each delegate as such a tool. A decision agent can therefore be a delegate. Give it an `input_schema` with a property for each placeholder of `state_template`.
+
+## Limits
+
+- **No chat.** A decision agent cannot be a handoff target or a conversation participant. `create_agent` raises `ORA-20503` for these configurations. `p_follow_up_message` raises `ORA-20503` too. The [APEX chat plug-in](/products/uc-ai/docs/guides/apex-chat-plugin/) cannot use a decision agent.
+- **No profile features.** A decision agent has no response schema, no tools, no tool tags, no `p_prompt_addendum`, and no follow-up message.
+- **Transfer timeout.** The HTTP timeout of a decision call is 300 seconds. To change it, set `g_transfer_timeout` (in seconds) in the `model_config` of the agent. The `timeout_seconds` value of the agent row has no effect on a decision agent.
+- **Cost limits.** UC AI Pro [budgets](/products/uc-ai/docs/guides/guardrails/budget/) do not yet calculate the costs of decision agents. The budget hook reads the model from the prompt profile, and a decision agent has none. The tokens are in `uc_ai_agent_executions`.
+- **Providers.** Only OpenAI, TypeSafe and OpenRouter support decisions. OpenAI and TypeSafe read images. Only OpenAI can refuse a question.
+
+See [Decide](/products/uc-ai/docs/api/decide/) for the question types, the checks, and the limits of the providers.

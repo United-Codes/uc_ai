@@ -46,7 +46,7 @@ For productive systems, fine-tune the provider global instead of (or in addition
 | Google | `uc_ai_google.g_reasoning_budget` | thinking token budget; `-1` = dynamic, `0` = off; min/max are model-dependent, 2.5 Pro cannot disable reasoning |
 | xAI | `uc_ai_xai.g_reasoning_effort` | `'low'`, `'high'` — default `'low'` |
 | OpenRouter | `uc_ai_openrouter.g_reasoning_effort` | `'minimal'`, `'low'`, `'medium'`, `'high'` — default `'low'` |
-| Mistral | — | no effort parameter; the magistral models reason by default |
+| Mistral | — | UC AI sends no effort parameter |
 
 Anthropic example — leave room for thinking plus the answer:
 

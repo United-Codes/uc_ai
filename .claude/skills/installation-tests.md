@@ -73,6 +73,14 @@ Invalid objects must be 0. If counts drift, cross-check against `install_uc_ai.s
 Update this table whenever a release adds a table, a sequence, a trigger, or a
 package. The counts went stale between v26.2 and v26.3 and then failed step 3.
 
+### 4. Run the upgrade tests
+
+```bash
+make test-upgrade        # or: bash scripts/test_upgrade.sh v25.7 v26.4
+```
+
+This installs each baseline release tag into the throwaway schema, runs `upgrade_uc_ai.sql`, and compares a dictionary snapshot (`scripts/test_upgrade_snapshot.sql`) with a fresh install of the working tree. It also checks that a second run prints `Nothing to change`, that a seeded v26.2 schema is backfilled exactly once, and that a deliberately damaged schema is healed. Look for `All upgrade tests passed.`
+
 ## Important notes
 
 - The install/uninstall wrapper command is `local-26ai.sh` (the script names contain `23ai` for historical reasons — the actual wrapper points at the 26ai instance). The created connection name is `local-23ai-uc_testinstall_1`.

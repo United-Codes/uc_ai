@@ -63,3 +63,87 @@ sup {
 		text-underline-offset: 2.1px;
 	}
 }
+/* Tabs as pills: gray track, raised active tab. */
+starlight-tabs [role='tablist'] {
+	width: fit-content;
+	gap: 0.25rem;
+	padding: 0.25rem;
+	border-bottom: 0;
+	border-radius: 0.75rem;
+	background-color: var(--sl-color-gray-6);
+}
+
+starlight-tabs .tab > [role='tab'] {
+	padding: 0.35rem 1rem;
+	border-radius: 0.5rem;
+	box-shadow: none;
+	font-size: var(--sl-text-sm);
+	transition:
+		background-color 0.15s,
+		color 0.15s;
+}
+
+starlight-tabs .tab > [role='tab']:hover {
+	color: var(--sl-color-white);
+}
+
+starlight-tabs .tab [role='tab'][aria-selected='true'] {
+	color: var(--sl-color-white);
+	background-color: var(--sl-color-gray-5);
+}
+
+:root[data-theme='light'] starlight-tabs .tab [role='tab'][aria-selected='true'] {
+	background-color: #ffffff;
+	box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+}
+
+/* Collapsible blocks in page content */
+.sl-markdown-content details {
+	margin-top: 3rem;
+	border: 1px solid var(--sl-color-hairline);
+	border-radius: var(--pagefind-ui-border-radius, 8px);
+	padding: 0.5rem 0.75rem;
+	font-size: 1.1rem;
+}
+
+.sl-markdown-content details > summary {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+	cursor: pointer;
+	list-style: none;
+	padding-left: 1rem;
+	font-weight: 600;
+}
+
+.sl-markdown-content details > summary::-webkit-details-marker {
+	display: none;
+}
+
+.sl-markdown-content details > summary::before {
+	content: '';
+	flex: none;
+	width: 1rem;
+	height: 1rem;
+	background-color: var(--sl-color-accent-high);
+	-webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E") center / contain no-repeat;
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 5l7 7-7 7'/%3E%3C/svg%3E") center / contain no-repeat;
+	transition: transform 0.2s ease;
+}
+
+.sl-markdown-content details[open] > summary::before {
+	transform: rotate(90deg);
+}
+
+.sl-markdown-content details > summary:hover::before {
+	background-color: var(--sl-color-white);
+}
+
+/* Sidebar: more room around the collapsible group headings. */
+.sidebar-content details > summary {
+	padding-block: 0.5rem;
+}
+
+.sidebar-content details {
+	margin-block: 0.15rem;
+}

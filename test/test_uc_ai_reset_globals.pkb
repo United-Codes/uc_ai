@@ -13,6 +13,7 @@ create or replace package body test_uc_ai_reset_globals as
     uc_ai.g_enable_tools       := true;
     uc_ai.g_tool_tags          := apex_t_varchar2('dirty');
     uc_ai.g_max_tool_calls     := 99;
+    uc_ai.g_transfer_timeout   := 99;
     uc_ai.g_apex_web_credential := 'DIRTY';
     uc_ai.g_provider_override  := uc_ai.c_provider_xai;
     uc_ai.g_request_id         := 'dirtyreqid';
@@ -67,6 +68,9 @@ create or replace package body test_uc_ai_reset_globals as
 
     -- Mistral
     uc_ai_mistral.g_apex_web_credential := 'DIRTY';
+
+    -- TypeSafe
+    uc_ai_typesafe.g_apex_web_credential := 'DIRTY';
   end dirty_all_globals;
 
   procedure resets_uc_ai_core
@@ -81,6 +85,7 @@ create or replace package body test_uc_ai_reset_globals as
     ut.expect(uc_ai.g_enable_tools).to_be_false();
     ut.expect(uc_ai.g_tool_tags.count).to_equal(0);
     ut.expect(uc_ai.g_max_tool_calls).to_be_null();
+    ut.expect(uc_ai.g_transfer_timeout).to_be_null();
     ut.expect(uc_ai.g_apex_web_credential).to_be_null();
     ut.expect(uc_ai.g_provider_override).to_be_null();
     ut.expect(uc_ai.g_request_id).to_be_null();
@@ -148,6 +153,9 @@ create or replace package body test_uc_ai_reset_globals as
 
     -- Mistral
     ut.expect(uc_ai_mistral.g_apex_web_credential).to_be_null();
+
+    -- TypeSafe
+    ut.expect(uc_ai_typesafe.g_apex_web_credential).to_be_null();
   end resets_providers;
 
 end test_uc_ai_reset_globals;

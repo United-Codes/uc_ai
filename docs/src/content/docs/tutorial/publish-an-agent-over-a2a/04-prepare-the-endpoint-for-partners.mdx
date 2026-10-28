@@ -1,0 +1,249 @@
+---
+title: Prepare the endpoint for partners
+description: Operate the endpoint for two partners. Track token usage, set a public URL, run background requests, and disable access.
+sidebar:
+  order: 4
+---
+
+import { Aside, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={4}
+  of={4}
+  minutes={20}
+  promise="you can read the tokens of each partner, put the endpoint behind a proxy URL, run a request in the background, and turn off a key or the whole endpoint."
+  scripts={["04_operate.sql", "svc_client.py", "00_teardown.sql"]}
+  course="publish-an-agent-over-a2a"
+/>
+
+## Run the whole job as Northwind
+
+The desk has two jobs: answer a question about a machine, and take a visit request. Run both in
+one message, as the second partner. Set the key of Northwind and use the client of lesson 2. Use the date
+from lesson 3:
+
+```sh
+export A2A_API_KEY=a2a_…        # the northwind key from lesson 1
+
+python -I svc_client.py \
+  "When was NW-CHILL-02 last serviced, and can you book a visit for it on 2026-11-03?"
+```
+
+<AiOutput model="gpt-5.6-terra" date="2026-10-27" seconds={3.6}>
+NW-CHILL-02 was last serviced on 2026-10-12: compressor fan motor replaced.
+
+A service visit has been requested for 2026-11-03. It still needs planner confirmation.
+</AiOutput>
+
+The run used 1131 input tokens and 139 output tokens. The next section shows the tools that the run called.
+
+## Read the tools and the tokens of each partner
+
+`04_operate.sql` has five read-only queries. Run `@04_operate.sql`. The first query lists the tools of
+the last task of each client, in the order of the calls. The second lists the visit requests:
+
+```text
+CLIENT_ID           ASKED                                                                                 TOOLS
+___________________ _____________________________________________________________________________________ ______________________________________________
+apikey:acme         Which of our machines are under contract?                                             PARTNER_LIST_ASSETS
+apikey:ferrolux     Please book a visit for the press FX-PRESS-01 on 2026-11-03.                          PARTNER_BOOK_VISIT
+apikey:northwind    When was NW-CHILL-02 last serviced, and can you book a visit for it on 2026-11-03?    PARTNER_ASSET_HISTORY -> PARTNER_BOOK_VISIT
+
+   ID ASSET_TAG      REQUESTED_FOR    STATUS       CLIENT_ID
+_____ ______________ ________________ ____________ ___________________
+    1 FX-CONV-07     2026-11-10       REQUESTED    apikey:ferrolux
+    2 FX-PRESS-01    2026-11-03       REQUESTED    apikey:ferrolux
+    4 NW-CHILL-02    2026-11-03       REQUESTED    apikey:northwind
+```
+
+The Northwind task called `PARTNER_ASSET_HISTORY`, and then `PARTNER_BOOK_VISIT`. The table has one request for each partner.
+ID 3 is missing because `99_check.sql` inserted a test booking and then rolled it back.
+A rollback does not reuse the number assigned by the identity column.
+
+The next queries sum the tokens of each client. Each task has an `execution_id`. The query uses `connect by` to include the
+execution and all its child runs. This gives the same totals as `metadata.usage`:
+
+```text
+CLIENT_ID              TASKS    COMPLETED    FAILED    INPUT_TOKENS    OUTPUT_TOKENS
+___________________ ________ ____________ _________ _______________ ________________
+apikey:acme                1            1         0             941               44
+apikey:ferrolux            8            8         0            7453              597
+apikey:northwind           1            1         0            1131              139
+```
+
+Ferrolux has 8 tasks. These are the curl call of lesson 1 (1), the SDK client (2), the control run (1), the ADK client (2),
+and the two booking requests of lesson 3 (2). UC AI records tokens. It has no price column, so multiply the
+tokens by the rate of your provider.
+
+### Check the tokens of one day against a limit
+
+UC AI has no rate limit for an endpoint. Put one in front of it, in ORDS or in the reverse
+proxy. The third query is a check that you run from a job or by hand. It reports the tokens of the
+last 24 hours for each client, and it marks a client over the limit. Change `50000` in the script to your limit:
+
+```text
+CLIENT_ID              TOKENS_24H    DAILY_LIMIT VERDICT
+___________________ _____________ ______________ __________
+apikey:ferrolux              8050          50000 ok
+apikey:northwind             1270          50000 ok
+apikey:acme                   985          50000 ok
+```
+
+The query reports tokens after a client used them. It does not stop a call. The last query gives the seconds
+of the completed tasks. Ferrolux had 8 tasks with 2.5 s as the shortest, 2.9 s on average and 4.1 s as the longest.
+
+```text
+CLIENT_ID              TASKS MIN_SECONDS    AVG_SECONDS    MAX_SECONDS
+___________________ ________ ______________ ______________ ______________
+apikey:acme                1 2.1            2.1            2.1
+apikey:ferrolux            8 2.5            2.9            4.1
+apikey:northwind           1 3.6            3.6            3.6
+```
+
+## Limit what a hostile key can do
+
+Consider what happens if someone obtains a partner's API key. In this course:
+
+- The key lets that person spend tokens on your provider account and use the tools available to that customer.
+- The agent card is public. It shows the name, the description and the URLs.
+- UC AI has no endpoint rate limit. Configure one in ORDS or the reverse proxy.
+
+Revoke the key of one client to stop it. The other clients keep working.
+[Secure the endpoint](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/#secure-the-endpoint) in the reference page lists the measures.
+
+## Put the endpoint behind a reverse proxy
+
+A client calls the URLs of the card. Without `p_base_url`, the server builds them from the
+request that ORDS received. Behind a reverse proxy, that request has the internal host and path, and the client
+cannot reach them.
+
+`expose_agent` replaces the configuration of an endpoint with the same code, so call it again with all the values
+and add `p_base_url`. The keys and the tasks stay:
+
+```sql
+begin
+  uc_ai_a2a.expose_agent(
+    p_code             => 'service-desk',
+    p_agent_code       => 'partner_desk',
+    p_name             => 'Partner service desk',
+    p_description      => 'Answers questions of a partner company about its machines and service contracts.',
+    p_text_input_param => 'question',
+    p_base_url         => 'https://api.example.com/ords/demo/a2a/service-desk'
+  );
+  commit;
+end;
+/
+```
+
+The recorded request reached ORDS through `localhost:8443`, so the original card
+advertises that host. The card before the call:
+
+```text
+https://localhost:8443/ords/uc_ai/a2a/service-desk/jsonrpc
+https://localhost:8443/ords/uc_ai/a2a/service-desk/rest
+```
+
+And after the call, from the same request to the same endpoint:
+
+```text
+https://api.example.com/ords/demo/a2a/service-desk/jsonrpc
+https://api.example.com/ords/demo/a2a/service-desk/rest
+```
+
+The key of Ferrolux still worked after the call. Only the path of the endpoint, `/ords/<alias>/a2a/service-desk/`, must be
+reachable from the internet. The proxy needs no other path of ORDS. To remove the URL, call `expose_agent` again without
+`p_base_url`.
+
+## Run a request in the background
+
+This section is optional. It needs the `CREATE JOB` privilege. Without it, the task is `TASK_STATE_FAILED`.
+
+A client that sets `returnImmediately` gets the task at once, and the agent run continues in a scheduler job. The client polls with
+`GetTask`. `svc_client.py --background` does this. It prints the state at each poll, every 2 s:
+
+```sh
+python -I svc_client.py --background "When was the press last serviced?"
+```
+
+```text
+--- question 1: When was the press last serviced?
+first answer after 0.0 s: TASK_STATE_SUBMITTED
+    2.1 s  TASK_STATE_WORKING
+    4.1 s  TASK_STATE_COMPLETED
+state:    TASK_STATE_COMPLETED
+context:  16e5ad9f-480e-4393-8e1c-b97c97f9c59a
+seconds:  4.1
+tokens:   1820 in, 82 out
+The press was last serviced on 2026-10-17 for its annual safety inspection.
+```
+
+Three recorded runs gave the same result. In each run, the first answer came after less than 0.1 s, and the first poll at 2.1 s already
+showed `TASK_STATE_WORKING`. All three tasks completed after 4.1 s. In these recordings, a background request took about 1 s longer than a blocking
+call (2.5 s to 2.9 s in lesson 2). Job scheduling and the poll interval affect this time. A busy database starts a job later: the
+reference page says a minute or more. The advantage is that no ORDS connection waits for the run.
+
+A push notification sends the final task to a URL that the client registers, so the client does not poll. The
+database makes the call to that URL, so the schema needs a network ACL for the host.
+[Push notifications](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/#push-notifications) in the reference page covers the methods.
+
+## Turn off a key or the endpoint
+
+In lesson 3 you created a key for the client `acme`. Revoke it:
+
+```sql
+begin
+  uc_ai_a2a.revoke_api_key('service-desk', 'acme');
+  commit;
+end;
+/
+```
+
+A request with this key now fails at once. The recorded response:
+
+```text
+{"jsonrpc":"2.0","id":"1","error":{"code":-32000,"message":"The API key is not valid.","data":[]}}
+HTTP 401
+```
+
+To turn off the whole endpoint, call `set_enabled`. A disabled endpoint answers 404 on every route, the card included:
+
+```sql
+exec uc_ai_a2a.set_enabled('service-desk', false)
+commit;
+```
+
+```text
+{"error":{"code":404,"status":"NOT_FOUND","message":"The A2A endpoint does not exist."}}
+HTTP 404
+```
+
+Call `set_enabled('service-desk', true)` to turn it on again. The recorded card request then returned HTTP 200.
+
+## Remove the course objects
+
+When you finish the course, run `@00_teardown.sql`. It deletes the endpoint, its
+keys and tasks, the tools, both profile versions, and the agent with its history.
+It also drops the package and the two `partner_` tables. It prints
+this when all the objects are gone:
+
+```text
+Teardown finished. Every number below must be 0.
+
+   ENDPOINTS    TOOLS    AGENTS    PROFILES    PACKAGES    TABLES
+____________ ________ _________ ___________ ___________ _________
+           0        0         0           0           0         0
+```
+
+It does not remove the ORDS module `uc_ai_a2a`, because other endpoints of the schema use it. To remove it, call
+`uc_ai_a2a.uninstall_ords_module`. It does not remove the tables of Build an Agent either. Run the teardown of that course for them.
+
+**Full reference:** [A2A Server](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/) covers streaming, push
+notifications, OAuth2 and card signing, which this course does not use.
+
+<LinkCard
+  title="Next course: Secure an Agent"
+  description="A payables desk that reads mail a supplier wrote. Watch one email redirect a payment, then close every route it used."
+  href="/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/"
+/>

@@ -3,13 +3,15 @@ title: Mistral
 description: UC AI provider documentation for Mistral AI models
 ---
 
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
 The UC AI Mistral package integrates Mistral AI's models (La Plateforme) into your Oracle database applications.
 
 ## Features
 
-- Support for the latest Mistral models (Mistral Large, Medium, Small, Magistral, Codestral, Ministral)
+- Support for the latest Mistral models (Mistral Large, Medium, Small, Codestral, Ministral, Z.ai GLM)
 - Full function calling (tools) support
-- Reasoning models (Magistral)
+- Reasoning in Mistral Small 4
 - Multi-modal support (text, images)
 - Structured output support
 - Embeddings support (`mistral-embed`, `codestral-embed`)
@@ -25,13 +27,52 @@ You can get an API key by signing up at [Mistral La Plateforme](https://console.
 
 ## Creating a Web Credential
 
-To use your Mistral key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following configuration:
+To use your Mistral key with APEX Web Credentials, create a web credential in your APEX workspace. You can use the APEX user interface or PL/SQL.
+
+<Tabs>
+<TabItem label="APEX user interface">
+
+Go to Workspace Utilities → Web Credentials and create a web credential with the following configuration:
 
 - Authentication Type: HTTP Header
 - Credential Name: `Authorization`
 - Credential Secret: `Bearer <your_api_key>`
 
 Also set `Valid for URLs` to the Mistral API (https://api.mistral.ai/) to limit the scope of the credential.
+
+</TabItem>
+<TabItem label="PL/SQL">
+
+Connect to the schema that holds UC AI, then run this block. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the Mistral API.
+
+Outside an APEX session, for example in SQLcl, uncomment the `apex_util.set_workspace` call. Replace `MY_WORKSPACE` with the name of the APEX workspace associated with your schema.
+
+```sql
+begin
+  -- apex_util.set_workspace(p_workspace => 'MY_WORKSPACE');
+
+  apex_credential.create_credential(
+    p_credential_name      => 'MISTRAL',
+    p_credential_static_id => 'MISTRAL',
+    p_authentication_type  => apex_credential.C_TYPE_HTTP_HEADER,
+    p_allowed_urls         => apex_t_varchar2('https://api.mistral.ai/'),
+    p_prompt_on_install    => false,
+    p_credential_comment   => 'Credential for Mistral'
+  );
+
+  apex_credential.set_persistent_credentials(
+    p_credential_static_id => 'MISTRAL',
+    p_key                  => 'Authorization',
+    p_value                => 'Bearer <your_api_key>'
+  );
+
+  commit;
+end;
+/
+```
+
+</TabItem>
+</Tabs>
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_mistral.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
@@ -48,13 +89,12 @@ Mistral offers a range of models optimized for different use cases. The UC AI Mi
 - `uc_ai_mistral.c_model_mistral_large` - Mistral Large
 - `uc_ai_mistral.c_model_mistral_medium` - Mistral Medium, a multimodal model
 - `uc_ai_mistral.c_model_mistral_small` - Mistral Small, a multimodal model
+- `uc_ai_mistral.c_model_zai_glm_5_3_flash` - Z.ai GLM 5.3 Flash, a smaller and cheaper model, served on the Mistral platform
 - `uc_ai_mistral.c_model_zai_glm_5_3` - Z.ai GLM 5.3, served on the Mistral platform
 
 ### Edge Models
 
 - `uc_ai_mistral.c_model_ministral_3_14b` - Ministral 3 14B
-- `uc_ai_mistral.c_model_ministral_8b` - Ministral 8B
-- `uc_ai_mistral.c_model_ministral_3b` - Ministral 3B
 
 ### Specialized Models
 
@@ -65,13 +105,17 @@ Mistral offers a range of models optimized for different use cases. The UC AI Mi
 - `uc_ai_mistral.c_model_mistral_embed` - General purpose text embeddings
 - `uc_ai_mistral.c_model_codestral_embed` - Code-specific embeddings
 
-Most of these constants hold a `-latest` name, such as `mistral-small-latest`. Mistral resolves such a name to the newest version of that model family. The two embedding constants hold a fixed name. `c_model_ministral_3_14b` and `c_model_zai_glm_5_3` hold a fixed name too, because Mistral documents no `-latest` alias for them.
+Most constants use an alias ending in `-latest`, such as `mistral-small-latest`. Mistral maps this alias to the newest version of that model family.
+
+The two embedding constants use fixed model IDs. So do `c_model_ministral_3_14b`, `c_model_zai_glm_5_3`, and `c_model_zai_glm_5_3_flash`, because Mistral documents no `-latest` alias for them.
 
 This list shows the newest model of each family. The package keeps the constants of older models for code that still references them.
 
 ### Retired Models
 
-Mistral marks the Magistral, Devstral, and Pixtral models as deprecated. The package keeps the constants `c_model_magistral_medium`, `c_model_magistral_small`, `c_model_devstral_medium`, `c_model_devstral_small`, and `c_model_pixtral_large` for code that still references them.
+Mistral retired the Magistral, Devstral, Pixtral, Ministral 8B, and Ministral 3B models. Requests to them fail. The package keeps the constants `c_model_magistral_medium`, `c_model_magistral_small`, `c_model_devstral_medium`, `c_model_devstral_small`, `c_model_pixtral_large`, `c_model_ministral_8b`, and `c_model_ministral_3b` for code that still references them.
+
+Mistral deprecated Z.ai GLM 5.2 on 2026-09-29 and retires it on 2026-10-31. Use `c_model_zai_glm_5_3` instead of `c_model_zai_glm_5_2`.
 
 See [Mistral's models documentation](https://docs.mistral.ai/models) for the latest model information and capabilities.
 
@@ -224,7 +268,7 @@ See the [file analysis guide](/products/uc-ai/docs/guides/file_analysis/) for mo
 
 ### Reasoning / Thinking
 
-Mistral handles reasoning through dedicated models instead of a request parameter: pick a Magistral model and it reasons by default. There is no reasoning effort setting for Mistral — `uc_ai.g_enable_reasoning` and `uc_ai.g_reasoning_level` are ignored for this provider.
+UC AI does not send a reasoning effort parameter to Mistral. The variables `uc_ai.g_enable_reasoning` and `uc_ai.g_reasoning_level` have no effect for this provider. Mistral retired the dedicated Magistral reasoning models. Mistral Small 4 supports instruction tasks, reasoning, and coding.
 
 ```sql
 declare
@@ -233,7 +277,7 @@ begin
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why.',
     p_provider => uc_ai.c_provider_mistral,
-    p_model => uc_ai_mistral.c_model_magistral_small
+    p_model => uc_ai_mistral.c_model_mistral_small
   );
 
   dbms_output.put_line('AI Response: ' || l_result.get_string('final_message'));

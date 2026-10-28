@@ -1,0 +1,308 @@
+---
+title: Accept visit requests that the database checks
+description: Let a partner request a service visit through the agent, with four rules in PL/SQL that refuse a request, and read the trace of a refused and an accepted request.
+sidebar:
+  order: 3
+---
+
+import { Aside, Steps, LinkCard } from "@astrojs/starlight/components";
+import LessonHeader from "../../../../components/LessonHeader.astro";
+import AiOutput from "../../../../components/AiOutput.astro";
+
+<LessonHeader
+  lesson={3}
+  of={4}
+  minutes={25}
+  promise="you can let a partner request a service visit through the agent, with four PL/SQL rules that refuse a request, and read the trace of a refused and an accepted request."
+  scripts={["03_booking.sql", "03_booking_trace.sql", "99_check.sql"]}
+  course="publish-an-agent-over-a2a"
+/>
+
+## Four rules decide a visit request
+
+A partner can now ask for a service visit on one of its machines. The model collects the machine and
+the date. The database applies four rules. `partner_desk_pkg.check_visit` returns the reason code
+for the first failed rule, or `null` if all rules pass:
+
+| Order | Rule | Reason code |
+| --- | --- | --- |
+| 1 | The machine belongs to the customer of the client. A machine of another customer and a machine that does not exist get the same answer: `There is no asset <tag> for your company.` | `NO_ASSET` |
+| 2 | The date is inside the coverage window of the contract of the machine. | `OUT_OF_COVERAGE` |
+| 3 | The machine has no visit with the status `REQUESTED`. | `OPEN_REQUEST` |
+| 4 | The date is at least 2 working days after today. | `TOO_SOON` |
+
+Working days are Monday to Friday. The course does not model holidays. The weekday test is
+`trunc(d) - trunc(d, 'IW')`, where 0 is Monday and 5 and 6 are the weekend. It does not
+depend on the NLS parameters of the session. Today is a parameter, `p_today`, so a test can fix it.
+
+A booking creates a `partner_visits` row with the status `REQUESTED`. A planner at the service company must accept the request before the visit is
+confirmed.
+
+## Test the booking rule without a model
+
+`03_booking.sql` starts with a call of the rule with a fixed `p_today`: the Friday of this
+week. Every date is relative to the Monday of this week, so the result is the same on every day.
+Run `@03_booking.sql`. The recorded output of the first block:
+
+```text
+Today is Fri 2026-10-30 (fixed).
+Monday, one working day     Mon 2026-11-02  ->  TOO_SOON
+Tuesday, two working days   Tue 2026-11-03  ->  allowed
+The day after the contract  Mon 2027-04-26  ->  OUT_OF_COVERAGE
+```
+
+The Monday is one working day after the Friday, and the rule refuses it. The Tuesday is
+two working days after, and the rule accepts it. The press `FX-PRESS-01` has no open request, so rule 3 does not refuse it.
+
+## Register the booking tool and the prompt of version 2
+
+The script registers `PARTNER_BOOK_VISIT` with the tag `partner`. It takes two arguments, `asset_tag`
+and `visit_date` (`YYYY-MM-DD`). It has no customer argument. It reads the customer from `a2a_client`,
+calls `check_visit`, and inserts the request row. It does not commit. The next section describes why.
+
+The agent needs a prompt that tells it how to book. The script creates **version 2** of the prompt profile
+with `create_new_version`, which copies version 1 as a draft. It changes the system prompt, activates version 2,
+and pins the agent to it:
+
+```sql
+l_new_id := uc_ai_prompt_profiles_api.create_new_version(
+  p_code => 'PARTNER_DESK_PROFILE', p_source_version => 1, p_new_version => 2);
+
+-- … update the system prompt of version 2, then:
+uc_ai_prompt_profiles_api.change_status('PARTNER_DESK_PROFILE', 2, uc_ai_prompt_profiles_api.c_status_active);
+uc_ai_agents_api.update_agent(p_id => l_agent_id, p_prompt_profile_version => 2);
+```
+
+The new rules of the prompt are these:
+
+- To request a visit, the agent needs the machine tag and a date as `YYYY-MM-DD`. If the partner gives no clear date, the agent asks. It never guesses a date.
+- The database decides. When a tool refuses, the agent tells the partner the reason.
+- A visit is a request until a planner confirms it. The agent never says that a visit is confirmed.
+
+Profile version 1 stays active, so you can restore it with `update_agent` and
+`p_prompt_profile_version => 1`.
+
+The endpoint does not specify an agent version, so it runs the active agent.
+That agent now uses profile version 2. The next message to the endpoint uses the new prompt.
+
+<Aside type="tip" title="Pin the profile version of a published agent">
+An agent without a pinned profile version runs the latest active version. A newly activated profile version then
+affects all partners. To control when the agent changes prompts, assign a specific
+profile version with `update_agent`. To restore an earlier prompt, call it again
+with the old version.
+</Aside>
+
+The verification output of the script:
+
+```text
+CODE                       VERSION STATUS    TOOL_TAG       PROMPT_CHARS
+_______________________ __________ _________ ___________ _______________
+PARTNER_DESK_PROFILE             1 active    partner                 441
+PARTNER_DESK_PROFILE             2 active    partner                 881
+
+CODE               VERSION STATUS    PROMPT_PROFILE_CODE        PROMPT_PROFILE_VERSION
+_______________ __________ _________ _______________________ _________________________
+partner_desk             1 active    PARTNER_DESK_PROFILE                            2
+
+CODE
+________________________
+PARTNER_ASSET_HISTORY
+PARTNER_BOOK_VISIT
+PARTNER_LIST_ASSETS
+```
+
+## Send a refused and an accepted request
+
+Pick a date for the visit. The query returns the date that is five working days from today:
+
+```sql
+select to_char(partner_desk_pkg.add_working_days(trunc(sysdate), 5), 'YYYY-MM-DD') as visit_date
+  from dual;
+```
+
+The recorded date is `2026-11-03`. Use the date of your own query in the messages below.
+The setup of this course inserted one `REQUESTED` visit for the conveyor `FX-CONV-07`. Ask for a second visit on the conveyor:
+
+```sh
+curl -X POST "$A2A_BASE/jsonrpc" \
+  -H "X-API-Key: $A2A_API_KEY" -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"SendMessage","params":{"message":{
+        "messageId":"m-3001","role":"ROLE_USER",
+        "parts":[{"text":"Please book a visit for the conveyor FX-CONV-07 on 2026-11-03."}]}}}'
+```
+
+The artifact text of the recorded response:
+
+<AiOutput model="gpt-5.6-terra" date="2026-10-27" seconds={2.8}>
+I can’t submit another request: FX-CONV-07 already has an open visit request. Only one open request is allowed per machine.
+</AiOutput>
+
+The task state is `TASK_STATE_COMPLETED`: the run finished, and the answer is a refusal. Now ask for the press,
+with a new `messageId`:
+
+```sh
+curl -X POST "$A2A_BASE/jsonrpc" \
+  -H "X-API-Key: $A2A_API_KEY" -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"1","method":"SendMessage","params":{"message":{
+        "messageId":"m-3002","role":"ROLE_USER",
+        "parts":[{"text":"Please book a visit for the press FX-PRESS-01 on 2026-11-03."}]}}}'
+```
+
+<AiOutput model="gpt-5.6-terra" date="2026-10-27" seconds={2.6}>
+Visit requested for FX-PRESS-01 on 2026-11-03. A planner still needs to confirm it.
+</AiOutput>
+
+The wording can change between runs. The database still rejects a second open
+request for the same machine.
+
+## Read the tool result next to the answer
+
+The answer of a model is text. The tool result is what the handler returned. Run `@03_booking_trace.sql`.
+For the last two tasks of `apikey:ferrolux`, it prints the request, the `tool_result` row of the run, and the artifact text:
+
+```text
+Task 1
+  asked:        Please book a visit for the conveyor FX-CONV-07 on 2026-11-03.
+  tool_result:  PARTNER_BOOK_VISIT {"status":"refused","reason":"OPEN_REQUEST","message":"A visit request for FX-CONV-07 is already open. Only one open request is allowed for each asset."}
+  artifact:     I can’t submit another request: FX-CONV-07 already has an open visit request. Only one open request is allowed per machine.
+Task 2
+  asked:        Please book a visit for the press FX-PRESS-01 on 2026-11-03.
+  tool_result:  PARTNER_BOOK_VISIT {"status":"requested","visit_id":2,"asset_tag":"FX-PRESS-01","requested_for":"2026-11-03","note":"This is a request. A planner at the service company confirms the visit."}
+  artifact:     Visit requested for FX-PRESS-01 on 2026-11-03. A planner still needs to confirm it.
+
+The rows of partner_visits:
+
+   ID ASSET_TAG      REQUESTED_FOR    STATUS       CLIENT_ID
+_____ ______________ ________________ ____________ __________________
+    1 FX-CONV-07     2026-11-10       REQUESTED    apikey:ferrolux
+    2 FX-PRESS-01    2026-11-03       REQUESTED    apikey:ferrolux
+```
+
+The `tool_result` row has the reason `OPEN_REQUEST` and a message. The artifact text is the model's explanation of that result. The artifact does not show the reason code. To see why a request failed, read the
+`tool_result` row. The table has exactly one new row, for the press, with `client_id` `apikey:ferrolux`.
+
+The press now has an open request. To repeat this lesson, delete that row, or run `00_setup.sql` again:
+
+```sql
+delete from partner_visits where asset_id = 1001;
+commit;
+```
+
+## A booking is a request
+
+The model can request the wrong machine even if the machine and date pass all rules.
+A successful run commits that request. The row has the status `REQUESTED`. A planner at the service company sees it and
+decides. The database checks the rules. A person confirms the visit.
+
+## The run is one transaction
+
+The server owns the transaction of a run. When a run completes, the server commits the changes of the
+tools, and then the task shows `TASK_STATE_COMPLETED`. When a run fails, the server rolls them back. A
+tool that commits by itself defeats this, so `book_visit` does not commit.
+[Transactions](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/#transactions) in the reference page covers the rules.
+
+## Separate the data of two partners
+
+The server and the tools isolate the partners at two levels.
+
+**The task.** Northwind asks for the press booking task of Ferrolux with its own key. The server treats a
+task of another client like a missing task:
+
+```sh
+curl -X POST "$A2A_BASE/jsonrpc" -H "X-API-Key: $NORTHWIND_KEY" -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"2","method":"GetTask","params":{"id":"f761e24e-5666-4229-8f18-fc1c76a22da5","historyLength":0}}'
+```
+
+```json
+{"jsonrpc":"2.0","id":"2","error":{"code":-32001,"message":"The task does not exist.","data":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"TASK_NOT_FOUND","domain":"a2a-protocol.org"}]}}
+```
+
+The same request with the key of Ferrolux returns the task in the state `TASK_STATE_COMPLETED`.
+
+**The tools.** Task isolation does not limit what a tool reads. The handlers do. In lesson 1, the handler
+refused the machine of Northwind for the client of Ferrolux with no model in the run. `99_check.sql` below does this for every handler.
+
+A key without a `partner_clients` row shows a third case. Create a key for a client named `acme`:
+
+```sql
+select uc_ai_a2a.create_api_key('service-desk', 'acme') from dual;
+commit;
+```
+
+Send `Which of our machines are under contract?` with this key. The task completes, and the handler
+refuses every tool call:
+
+<AiOutput model="gpt-5.6-terra" date="2026-10-27" seconds={2.2}>
+I can’t find your company as a known partner, so I can’t list its machines or contract status.
+</AiOutput>
+
+A valid key authenticates the client at the endpoint. The handlers use
+`partner_clients` to determine which customer's data that client can access.
+Lesson 4 revokes this key.
+
+## The text of a partner is untrusted input
+
+The text of a message reaches the model as input. A partner that you trust can still forward text from a
+third party, for example an email. The tools limit the worst result of a hostile message. `book_visit` can create a `REQUESTED` row
+for the machines of one customer. The four rules still apply.
+The course [Secure an Agent](/products/uc-ai/docs/tutorial/secure-an-agent/01-the-attack-surface/) shows how an attack works and how to limit the damage.
+[Secure the endpoint](/products/uc-ai/docs/guides/multi-agent-systems/a2a-server/#secure-the-endpoint) lists the measures that apply to an A2A endpoint.
+
+## Run the model-free checks
+
+`99_check.sql` runs 25 checks without a model. The checks exercise each rejection rule, requests that pass the rules, and
+both sides of the 2-working-day boundary. They also call the handlers with `ferrolux`, `northwind`,
+an unknown client, a forged asset and a forged `customer_id` argument. The script rolls back its test booking, so it keeps no changes to the visit data.
+Run `@99_check.sql`:
+
+```text
+Savepoint created.
+Working days (today is the Friday 2026-10-30)
+PASS  1 working day after a Friday is the Monday
+PASS  2 working days after a Friday is the Tuesday
+PASS  5 working days after a Monday is the next Monday
+Booking rule
+PASS  rule 1: the asset of another customer is refused (forged id 2001 for customer 1)
+PASS  rule 1: an asset that does not exist is refused
+PASS  rule 2: the day after the contract is refused
+PASS  rule 2: the day before the contract is refused
+PASS  rule 3: a second request on the conveyor is refused
+PASS  rule 4: the Monday after a Friday is refused
+PASS  rule 4: the Tuesday after a Friday is accepted (boundary)
+PASS  accept: the last day of the contract is accepted
+PASS  order: rule 2 comes before rule 3 (conveyor, date after the contract)
+Tool handlers
+PASS  list_assets for ferrolux returns 2 assets
+PASS  list_assets for northwind returns 1 asset
+PASS  list_assets for ferrolux does not name an asset of northwind
+PASS  a forged customer_id in the arguments is ignored
+PASS  an unknown client is refused, not given an empty list
+PASS  a run without a client is refused
+PASS  history of an asset of another customer is refused
+PASS  history of the press returns its service calls
+PASS  a foreign asset and a missing asset get the same answer
+book_visit
+PASS  ferrolux asks for the chiller of northwind: refused, no row
+PASS  ferrolux asks for a second visit on the conveyor: refused, no row
+PASS  a date that is not YYYY-MM-DD is refused
+PASS  northwind asks for its chiller: one new REQUESTED row for apikey:northwind
+
+25 of 25 checks passed.
+
+PL/SQL procedure successfully completed.
+
+Rollback complete.
+
+NORTHWIND_ROWS_AFTER_ROLLBACK
+________________________________
+                               0
+```
+
+The check ran after the press booking of this lesson. It does not depend on that row: the accepted test requests use Northwind's
+chiller, which has no open request at this point.
+
+<LinkCard
+  title="Next lesson: Prepare the endpoint for partners"
+  description="Read the tokens of each partner, put the endpoint behind a proxy URL, run a request in the background, and turn off an endpoint and a key."
+  href="/products/uc-ai/docs/tutorial/publish-an-agent-over-a2a/04-prepare-the-endpoint-for-partners/"
+/>

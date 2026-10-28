@@ -1,3 +1,6 @@
 [submodule "ext/uc-ai-pro"]
 	path = ext/uc-ai-pro
 	url = https://github.com/United-Codes/uc-ai-pro.git
+[submodule "videos/generator"]
+	path = videos/generator
+	url = ../uc-ai-videos.git

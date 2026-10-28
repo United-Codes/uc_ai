@@ -1,0 +1,1 @@
+{"model":"jev-1.13.0","answers":{"smell":{"type":"choice","choice":"red","confidence":0.2,"probabilities":{"red":0.6,"blue":0.4}},"lottery":{"type":"noul","noul":0.37},"good":{"type":"noul","noul":0.96}},"usage":{"input_tokens":350,"output_tokens":66}}

@@ -17,6 +17,7 @@ as
   -- See https://platform.claude.com/docs/en/about-claude/models/overview
   c_model_claude_5_5_opus   constant uc_ai.model_type := 'claude-opus-5-5';
   c_model_claude_5_5_sonnet constant uc_ai.model_type := 'claude-sonnet-5-5';
+  c_model_claude_5_5_haiku  constant uc_ai.model_type := 'claude-haiku-5-5';
   c_model_claude_5_1_fable  constant uc_ai.model_type := 'claude-fable-5-1';
   c_model_claude_5_fable    constant uc_ai.model_type := 'claude-fable-5';
   c_model_claude_5_opus     constant uc_ai.model_type := 'claude-opus-5';

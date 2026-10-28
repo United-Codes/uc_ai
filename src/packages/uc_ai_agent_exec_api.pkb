@@ -1,4 +1,5 @@
 create or replace package body uc_ai_agent_exec_api as
+  -- @dblinter ignore(G-7210): one execute_*_agent function per agent type shares the private helpers (effective_prompt_params, transfer state); splitting the body would need a new public package, which is a spec change
 
   gc_scope_prefix constant varchar2(31 char) := lower($$plsql_unit) || '.';
 
@@ -397,7 +398,12 @@ create or replace package body uc_ai_agent_exec_api as
     
     -- Copy final message from last step
     if l_last_output is not null and l_last_output.has('final_message') then
-      l_workflow_state.put('final_message', l_last_output.get_clob('final_message'));
+      -- get_clob returns null for the JSON object of a decision agent
+      if l_last_output.get('final_message').is_object then
+        l_workflow_state.put('final_message', l_last_output.get('final_message'));
+      else
+        l_workflow_state.put('final_message', l_last_output.get_clob('final_message'));
+      end if;
     end if;
     
     return l_workflow_state;
@@ -552,7 +558,11 @@ create or replace package body uc_ai_agent_exec_api as
       -- Default final message from last executed step. l_step_output is null when
       -- no step ran (e.g. zero iterations / empty step list) - guard against it.
       if l_step_output is not null and l_step_output.has('final_message') then
-        l_workflow_state.put('final_message', l_step_output.get_clob('final_message'));
+        if l_step_output.get('final_message').is_object then
+          l_workflow_state.put('final_message', l_step_output.get('final_message'));
+        else
+          l_workflow_state.put('final_message', l_step_output.get_clob('final_message'));
+        end if;
       end if;
     end if;
 
@@ -670,7 +680,8 @@ create or replace package body uc_ai_agent_exec_api as
     p_session_id        in varchar2 default null,
     p_files             in uc_ai_message_api.t_files default null,
     p_extra_tool_tag    in varchar2 default null,
-    p_run_context       in clob default null
+    p_run_context       in clob default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t
   as
     l_scope           uc_ai_logger.scope := gc_scope_prefix || 'execute_profile_agent';
@@ -788,17 +799,23 @@ create or replace package body uc_ai_agent_exec_api as
       p_version         => p_agent.prompt_profile_version,
       p_parameters      => effective_prompt_params(p_input_params, p_run_context),
       p_config_override => l_config,
-      p_files           => p_files
+      p_files           => p_files,
+      p_prompt_addendum => p_prompt_addendum
     );
 
     if p_response_schema is not null then
       l_has_schema := 1;
     else
-      select case when response_schema is not null then 1 else 0 end as has_schema
-        into l_has_schema
-        from uc_ai_prompt_profiles
-       where code = p_agent.prompt_profile_code
-         and (p_agent.prompt_profile_version is null or version = p_agent.prompt_profile_version);
+      -- Resolve the profile the way execute_profile did: an unpinned agent uses the
+      -- latest active version, so a plain filter on the code finds every version.
+      l_has_schema := case
+                        when uc_ai_prompt_profiles_api.get_prompt_profile(
+                               p_code    => p_agent.prompt_profile_code
+                             , p_version => p_agent.prompt_profile_version
+                             ).response_schema is not null
+                        then 1
+                        else 0
+                      end;
     end if;
 
     if l_has_schema = 1 then
@@ -812,6 +829,137 @@ create or replace package body uc_ai_agent_exec_api as
       uc_ai_logger.log_error('Error executing profile agent', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
       raise;
   end execute_profile_agent;
+
+
+  /*
+   * Executes a decision-type agent
+   */
+  function execute_decision_agent(
+    p_agent        in uc_ai_agents%rowtype,
+    p_input_params in json_object_t,
+    p_exec_id      in uc_ai_agent_executions.id%type,
+    p_files        in uc_ai_message_api.t_files default null,
+    p_run_context  in clob default null
+  ) return json_object_t
+  as
+    l_scope          uc_ai_logger.scope := gc_scope_prefix || 'execute_decision_agent';
+    l_config         json_object_t;
+    l_provider       varchar2(255 char);
+    l_model          varchar2(255 char);
+    l_state          clob;
+    l_questions      json_object_t;
+    l_options        json_object_t;
+    l_model_cfg      json_object_t;
+    l_settings       uc_ai_settings.t_settings;
+    l_files          json_array_t;
+    l_decision       json_object_t;
+    l_decision_usage json_object_t;
+    l_final          json_object_t := json_object_t();
+    l_usage          json_object_t := json_object_t();
+    l_result         json_object_t := json_object_t();
+  begin
+    uc_ai_logger.log('Executing decision agent: ' || p_agent.code || ' (execution ' || p_exec_id || ')', l_scope);
+
+    -- decision_config was checked when the agent was saved; it can still have
+    -- been edited by hand since, so fail with a clear error and not a NPE
+    begin
+      l_config    := json_object_t.parse(p_agent.decision_config);
+      l_provider  := l_config.get_string('provider');
+      l_model     := l_config.get_string('model');
+      l_questions := l_config.get_object('questions');
+      l_options   := l_config.get_object('options');
+      l_model_cfg := l_config.get_object('model_config');
+      if l_provider is null or l_questions is null or l_config.get_string('state_template') is null then
+        raise value_error;
+      end if;
+    exception
+      when others then -- @dblinter ignore(g-5040): the parse or access error becomes a configuration error
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'decision_config of agent ' || p_agent.code
+        , p1           => 'it is not a valid decision config: ' || sqlerrm
+        , p_extra      => sys.dbms_utility.format_error_backtrace
+        );
+    end;
+
+    -- Same {name} rules as a prompt profile, including the error for a
+    -- placeholder without a value
+    l_state := uc_ai_prompt_profiles_api.render_template(
+      p_template   => l_config.get_clob('state_template')
+    , p_parameters => effective_prompt_params(p_input_params, p_run_context)
+    );
+
+    -- The settings come from model_config alone and the call goes to
+    -- uc_ai_decisions directly, not through uc_ai.decide, which would read the
+    -- session globals. So a credential or base URL set by an earlier profile
+    -- step or by the session has no effect here: put what the agent needs
+    -- (g_base_url, g_apex_web_credential, ...) into model_config.
+    l_settings := uc_ai_settings.build_from_config(
+      p_config   => l_model_cfg
+    , p_provider => l_provider
+    );
+
+    -- t_files to the create_file_content objects that decide takes
+    if p_files is not null and p_files.count > 0 then
+      l_files := json_array_t();
+      <<file_loop>>
+      for i in 1 .. p_files.count loop
+        l_files.append(
+          uc_ai_message_api.create_file_content(
+            p_media_type => p_files(i).media_type
+          , p_data_blob  => p_files(i).data_blob
+          , p_filename   => p_files(i).filename
+          )
+        );
+      end loop file_loop;
+    end if;
+
+    -- The HTTP timeout of a decision call is g_transfer_timeout of the settings
+    -- (300 seconds if not set). timeout_seconds of the agent row is not passed
+    -- on: put g_transfer_timeout into model_config.
+    l_decision := uc_ai_decisions.decide(
+      p_state     => l_state
+    , p_questions => l_questions
+    , p_provider  => l_provider
+    , p_model     => l_model
+    , p_files     => l_files
+    , p_options   => l_options
+    , p_settings  => l_settings
+    );
+
+    -- final_message is an object (like a profile agent with a response schema),
+    -- so a workflow can read {$.steps.<key>.answers.<id>.choice}. The raw
+    -- provider response stays out: it would bloat the stored execution.
+    l_final.put('answers', l_decision.get_object('answers'));
+    l_final.put('warnings', l_decision.get_array('warnings'));
+    l_final.put('model', l_decision.get_string('model'));
+    if l_decision.has('provider_metadata') then
+      l_final.put('provider_metadata', l_decision.get_object('provider_metadata'));
+    end if;
+
+    -- execute_agent records prompt_tokens and completion_tokens
+    l_decision_usage := l_decision.get_object('usage');
+    if l_decision_usage is not null then
+      l_usage.put('prompt_tokens', nvl(l_decision_usage.get_number('input_tokens'), 0));
+      l_usage.put('completion_tokens', nvl(l_decision_usage.get_number('output_tokens'), 0));
+    else
+      l_usage.put('prompt_tokens', 0);
+      l_usage.put('completion_tokens', 0);
+    end if;
+
+    l_result.put('final_message', l_final);
+    l_result.put('usage', l_usage);
+    l_result.put('model', l_decision.get_string('model'));
+    l_result.put('provider', l_provider);
+    l_result.put('tool_calls_count', 0);
+
+    return l_result;
+  exception
+    when others then
+      uc_ai_logger.log_error('Error executing decision agent', l_scope, sqlerrm || ' - Backtrace: ' || sys.dbms_utility.format_error_backtrace);
+      raise;
+  end execute_decision_agent;
 
 
   /*
@@ -1050,7 +1198,8 @@ end;!';
     p_exec_id           in uc_ai_agent_executions.id%type,
     p_follow_up_message in clob default null,
     p_files             in uc_ai_message_api.t_files default null,
-    p_run_context       in clob default null
+    p_run_context       in clob default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t
   as
     l_scope            uc_ai_logger.scope := gc_scope_prefix || 'execute_orchestrator_agent';
@@ -1160,7 +1309,8 @@ end;!';
           p_code              => l_profile_code,
           p_parameters        => effective_prompt_params(p_input_params, p_run_context),
           p_config_override   => l_profile_config,
-          p_files             => p_files
+          p_files             => p_files,
+          p_prompt_addendum   => p_prompt_addendum
         );
       end if;
 

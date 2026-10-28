@@ -383,6 +383,59 @@ create or replace package body uc_ai_agents_api as
 
 
   /*
+   * Raises an error if an orchestration config names a decision agent as a
+   * participant or target. A decision agent answers typed questions and cannot
+   * chat, so it cannot take part in a handoff or a conversation.
+   * Reads the keys the engines read (handoff_agents, agents) and the key the
+   * conversation validator names (participant_agents), plus initial_agent_code.
+   * A config that is not valid JSON names nothing: the other validators report it.
+   */
+  procedure check_no_decision_agents(
+    p_orchestration_config in clob,
+    p_what                 in varchar2,
+    p_scope                in varchar2
+  )
+  as
+    l_found varchar2(4000 char);
+  begin
+    select listagg(distinct n.code, ', ') within group (order by n.code)
+      into l_found
+      from (
+             select j.code
+               from json_table(p_orchestration_config, '$.handoff_agents[*]'
+                      columns (code varchar2(255 char) path '$.agent_code')) j
+             union all
+             select j.code
+               from json_table(p_orchestration_config, '$.agents[*]'
+                      columns (code varchar2(255 char) path '$.agent_code')) j
+             union all
+             select j.code
+               from json_table(p_orchestration_config, '$.participant_agents[*]'
+                      columns (code varchar2(255 char) path '$.agent_code')) j
+             union all
+             select j.code
+               from json_table(p_orchestration_config, '$'
+                      columns (code varchar2(255 char) path '$.initial_agent_code')) j
+           ) n
+     where exists (
+             select 1
+               from uc_ai_agents a
+              where a.code = n.code
+                and a.agent_type = c_type_decision
+           );
+
+    if l_found is not null then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => p_scope
+      , p0           => p_what
+      , p1           => 'a decision agent cannot chat; invalid: ' || l_found
+      );
+    end if;
+  end check_no_decision_agents;
+
+
+  /*
    * Snapshots the caller's environment/session context.
    * Must run BEFORE uc_ai_agent_exec_api.create_apex_session_if_needed —
    * the synthetic APEX session persists for the DB session and would
@@ -852,17 +905,18 @@ create or replace package body uc_ai_agents_api as
       p_tool_name   in varchar2 default null,
       p_tool_input  in clob     default null,
       p_tool_output in clob     default null,
-      p_tool_status in varchar2 default null
+      p_tool_status in varchar2 default null,
+      p_tool_call_id in varchar2 default null
     )
     as
     begin
       l_seq := l_seq + 1;
       insert into uc_ai_agent_messages (
         session_id, execution_id, seq, role, content, agent_code,
-        tool_name, tool_input, tool_output, tool_status
+        tool_name, tool_input, tool_output, tool_status, tool_call_id
       ) values (
         p_session_id, p_exec_id, l_seq, p_role, p_content, p_agent_code,
-        p_tool_name, p_tool_input, p_tool_output, p_tool_status
+        p_tool_name, p_tool_input, p_tool_output, p_tool_status, p_tool_call_id
       );
     end ins;
   begin
@@ -893,7 +947,13 @@ create or replace package body uc_ai_agents_api as
     -- final_message as a single assistant row so the turn is not lost.
     if not p_result.has('messages') then
       if p_result.has('final_message') then
-        ins(p_role => 'assistant', p_content => p_result.get_clob('final_message'),
+        -- get_clob returns null for the JSON object of a decision agent
+        ins(p_role => 'assistant',
+            p_content => case
+                           when p_result.get('final_message').is_object
+                             then p_result.get('final_message').to_clob
+                           else p_result.get_clob('final_message')
+                         end,
             p_agent_code => l_exec_agent);
         commit;
       end if;
@@ -956,7 +1016,8 @@ create or replace package body uc_ai_agents_api as
               p_role       => 'tool_call',
               p_agent_code => l_msg_agent,
               p_tool_name  => l_item.get_string('toolName'),
-              p_tool_input => l_item.get_clob('args')
+              p_tool_input => l_item.get_clob('args'),
+              p_tool_call_id => l_item.get_string('toolCallId')
             );
           when 'tool_result' then
             ins(
@@ -964,7 +1025,8 @@ create or replace package body uc_ai_agents_api as
               p_agent_code  => l_msg_agent,
               p_tool_name   => l_item.get_string('toolName'),
               p_tool_output => l_item.get_clob('result'),
-              p_tool_status => 'success'
+              p_tool_status => 'success',
+              p_tool_call_id => l_item.get_string('toolCallId')
             );
           else
             null; -- ignore unknown content types
@@ -1201,7 +1263,8 @@ create or replace package body uc_ai_agents_api as
     p_max_iterations         in uc_ai_agents.max_iterations%type default null,
     p_max_history_messages   in uc_ai_agents.max_history_messages%type default null,
     p_version                in uc_ai_agents.version%type default 1,
-    p_status                 in uc_ai_agents.status%type default c_status_draft
+    p_status                 in uc_ai_agents.status%type default c_status_draft,
+    p_decision_config        in uc_ai_agents.decision_config%type default null
   ) return uc_ai_agents.id%type
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'create_agent';
@@ -1324,7 +1387,43 @@ create or replace package body uc_ai_agents_api as
           , p1           => 'orchestration_config'
           );
         end if;
-        
+        check_no_decision_agents(p_orchestration_config, 'conversation participants', l_scope);
+
+      when c_type_decision then
+        if p_decision_config is null then
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_missing_config
+          , p_scope      => l_scope
+          , p0           => 'Decision agent'
+          , p1           => 'decision_config'
+          );
+        end if;
+        -- a decision agent has no prompt profile, no steps and no delegates
+        if p_prompt_profile_code is not null
+           or p_prompt_profile_version is not null
+           or p_workflow_definition is not null
+           or p_orchestration_config is not null then
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_invalid_config
+          , p_scope      => l_scope
+          , p0           => 'decision agent'
+          , p1           => 'it takes decision_config only, not prompt_profile_code, prompt_profile_version, workflow_definition or orchestration_config'
+          );
+        end if;
+        declare
+          l_validation t_validation_result;
+        begin
+          l_validation := validate_decision_config(p_decision_config);
+          if not l_validation.is_valid then
+            uc_ai_error.raise_error(
+              p_error_code => uc_ai_error.c_err_invalid_config
+            , p_scope      => l_scope
+            , p0           => 'decision config'
+            , p1           => l_validation.error_reason
+            );
+          end if;
+        end;
+
       else
         uc_ai_error.raise_error(
           p_error_code => uc_ai_error.c_err_unknown_agent_type
@@ -1332,6 +1431,16 @@ create or replace package body uc_ai_agents_api as
         , p0           => p_agent_type
         );
     end case;
+
+    -- decision_config belongs to decision agents only
+    if p_decision_config is not null and p_agent_type != c_type_decision then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'decision_config'
+      , p1           => 'can only be used with decision agents, not ' || p_agent_type
+      );
+    end if;
     
     -- Validate agent references in configs
     declare
@@ -1358,6 +1467,7 @@ create or replace package body uc_ai_agents_api as
       prompt_profile_version,
       workflow_definition,
       orchestration_config,
+      decision_config,
       input_schema,
       output_schema,
       timeout_seconds,
@@ -1373,6 +1483,7 @@ create or replace package body uc_ai_agents_api as
       p_prompt_profile_version,
       p_workflow_definition,
       p_orchestration_config,
+      p_decision_config,
       p_input_schema,
       p_output_schema,
       p_timeout_seconds,
@@ -1403,11 +1514,62 @@ create or replace package body uc_ai_agents_api as
     p_output_schema          in uc_ai_agents.output_schema%type default null,
     p_timeout_seconds        in uc_ai_agents.timeout_seconds%type default null,
     p_max_iterations         in uc_ai_agents.max_iterations%type default null,
-    p_max_history_messages   in uc_ai_agents.max_history_messages%type default null
+    p_max_history_messages   in uc_ai_agents.max_history_messages%type default null,
+    p_decision_config        in uc_ai_agents.decision_config%type default null
   )
   as
-    l_scope uc_ai_logger.scope := gc_scope_prefix || 'update_agent';
+    l_scope      uc_ai_logger.scope := gc_scope_prefix || 'update_agent';
+    l_agent_type uc_ai_agents.agent_type%type;
   begin
+    -- The type is fixed at creation. A missing agent leaves it null and is
+    -- reported by the update below.
+    select max(agent_type)
+      into l_agent_type
+      from uc_ai_agents
+     where id = p_id;
+
+    if p_decision_config is not null then
+      if l_agent_type != c_type_decision then
+        uc_ai_error.raise_error(
+          p_error_code => uc_ai_error.c_err_invalid_config
+        , p_scope      => l_scope
+        , p0           => 'decision_config'
+        , p1           => 'can only be used with decision agents, not ' || l_agent_type
+        );
+      end if;
+
+      declare
+        l_validation t_validation_result;
+      begin
+        l_validation := validate_decision_config(p_decision_config);
+        if not l_validation.is_valid then
+          uc_ai_error.raise_error(
+            p_error_code => uc_ai_error.c_err_invalid_config
+          , p_scope      => l_scope
+          , p0           => 'decision config'
+          , p1           => l_validation.error_reason
+          );
+        end if;
+      end;
+    end if;
+
+    if l_agent_type = c_type_decision
+       and (p_prompt_profile_code is not null
+            or p_prompt_profile_version is not null
+            or p_workflow_definition is not null
+            or p_orchestration_config is not null) then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'decision agent'
+      , p1           => 'it takes decision_config only, not prompt_profile_code, prompt_profile_version, workflow_definition or orchestration_config'
+      );
+    end if;
+
+    if l_agent_type = c_type_conversation and p_orchestration_config is not null then
+      check_no_decision_agents(p_orchestration_config, 'conversation participants', l_scope);
+    end if;
+
     -- Validate agent references if configs are being updated
     if p_workflow_definition is not null or p_orchestration_config is not null then
       declare
@@ -1431,6 +1593,7 @@ create or replace package body uc_ai_agents_api as
         prompt_profile_version = coalesce(p_prompt_profile_version, prompt_profile_version),
         workflow_definition    = coalesce(p_workflow_definition, workflow_definition),
         orchestration_config   = coalesce(p_orchestration_config, orchestration_config),
+        decision_config        = coalesce(p_decision_config, decision_config),
         input_schema           = coalesce(p_input_schema, input_schema),
         output_schema          = coalesce(p_output_schema, output_schema),
         timeout_seconds        = coalesce(p_timeout_seconds, timeout_seconds),
@@ -1774,6 +1937,7 @@ create or replace package body uc_ai_agents_api as
       prompt_profile_version,
       workflow_definition,
       orchestration_config,
+      decision_config,
       input_schema,
       output_schema,
       timeout_seconds,
@@ -1789,6 +1953,7 @@ create or replace package body uc_ai_agents_api as
       l_source_agent.prompt_profile_version,
       l_source_agent.workflow_definition,
       l_source_agent.orchestration_config,
+      l_source_agent.decision_config,
       l_source_agent.input_schema,
       l_source_agent.output_schema,
       l_source_agent.timeout_seconds,
@@ -2277,6 +2442,134 @@ create or replace package body uc_ai_agents_api as
 
 
   /*
+   * Validates the decision_config of a decision agent
+   */
+  function validate_decision_config(
+    p_decision_config in clob
+  ) return t_validation_result
+  as
+    l_result    t_validation_result;
+    l_element   json_element_t;
+    l_json      json_object_t;
+    l_keys      json_key_list;
+    l_value     json_element_t;
+    l_questions json_object_t;
+    l_model_cfg json_object_t;
+    l_provider  varchar2(255 char);
+    -- @dblinter ignore(G-2135): build_from_config is called for its checks, the record is not needed
+    l_settings  uc_ai_settings.t_settings;
+
+    function fail(
+      p_reason in varchar2,
+      p_extra  in varchar2 default null
+    ) return t_validation_result
+    as
+      l_failed t_validation_result;
+    begin
+      l_failed.is_valid := false;
+      l_failed.error_reason := p_reason;
+      uc_ai_logger.log_error(
+        'decision_config ' || p_reason
+      , gc_scope_prefix || 'validate_decision_config'
+      , p_extra
+      );
+      return l_failed;
+    end fail;
+  begin
+    l_result.is_valid := true;
+    l_result.error_reason := null;
+
+    if p_decision_config is null then
+      return fail('is null');
+    end if;
+
+    begin
+      l_element := json_element_t.parse(p_decision_config);
+    exception
+      when others then -- @dblinter ignore(g-5040): the parse error becomes the validation result
+        return fail('is not valid JSON: ' || sqlerrm, sys.dbms_utility.format_error_backtrace);
+    end;
+
+    if not l_element.is_object then
+      return fail('must be a JSON object');
+    end if;
+    l_json := treat(l_element as json_object_t);
+
+    -- A key that is not known is most likely a typo (question for questions)
+    l_keys := l_json.get_keys;
+    <<key_loop>>
+    for i in 1 .. l_keys.count loop
+      if l_keys(i) not in ('provider', 'model', 'state_template', 'questions', 'options', 'model_config') then
+        return fail('has an unknown key: ' || substr(l_keys(i), 1, 100)
+          || '. Allowed: provider, model, state_template, questions, options, model_config');
+      end if;
+    end loop key_loop;
+
+    -- provider: required. The same providers as the dispatcher of uc_ai_decisions
+    l_value := l_json.get('provider');
+    if l_value is null or not l_value.is_string then
+      return fail('requires provider (string): ' || uc_ai.c_provider_openai || ', ' || uc_ai.c_provider_typesafe || ' or ' || uc_ai.c_provider_openrouter);
+    end if;
+    l_provider := l_json.get_string('provider');
+    if l_provider not in (uc_ai.c_provider_openai, uc_ai.c_provider_typesafe, uc_ai.c_provider_openrouter) then
+      return fail('has a provider without decision support: ' || substr(l_provider, 1, 100)
+        || '. Allowed: ' || uc_ai.c_provider_openai || ', ' || uc_ai.c_provider_typesafe || ', ' || uc_ai.c_provider_openrouter);
+    end if;
+
+    -- model: optional, null selects the default model of the provider
+    if l_json.has('model') then
+      l_value := l_json.get('model');
+      if not l_value.is_string and not l_value.is_null then
+        return fail('model must be a string');
+      end if;
+    end if;
+
+    -- state_template: required, not empty
+    l_value := l_json.get('state_template');
+    if l_value is null or not l_value.is_string
+       or regexp_like(l_json.get_clob('state_template'), '^\s*$') then
+      return fail('requires state_template (a string that is not empty)');
+    end if;
+
+    -- questions: required, at least one. uc_ai.decide checks each question when the agent runs
+    l_value := l_json.get('questions');
+    if l_value is null or not l_value.is_object then
+      return fail('requires questions (an object with at least one question)');
+    end if;
+    l_questions := treat(l_value as json_object_t);
+    if l_questions.get_size = 0 then
+      return fail('questions must have at least one question');
+    end if;
+
+    -- options: optional object, checked by uc_ai.decide when the agent runs
+    if l_json.has('options') and not l_json.get('options').is_object then
+      return fail('options must be an object');
+    end if;
+
+    -- model_config: optional object. The keys are those of a prompt profile
+    -- model_config; the builder of the settings record rejects an unknown key
+    if l_json.has('model_config') then
+      l_value := l_json.get('model_config');
+      if not l_value.is_object then
+        return fail('model_config must be an object');
+      end if;
+      l_model_cfg := treat(l_value as json_object_t);
+      begin
+        l_settings := uc_ai_settings.build_from_config(
+          p_config   => l_model_cfg
+        , p_provider => l_provider
+        );
+      exception
+        when others then -- @dblinter ignore(g-5040): the error of the builder becomes the validation result
+          return fail('has an invalid model_config: ' || sqlerrm, sys.dbms_utility.format_error_backtrace);
+      end;
+    end if;
+
+    return l_result;
+  end validate_decision_config;
+
+
+  /*
    * Creates a sequential workflow agent
    */
   function create_sequential_workflow(
@@ -2387,7 +2680,8 @@ create or replace package body uc_ai_agents_api as
     p_response_schema   in json_object_t default null,
     p_files             in uc_ai_message_api.t_files default null,
     p_extra_tool_tag    in varchar2 default null,
-    p_run_context       in json_object_t default null
+    p_run_context       in json_object_t default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t
   as
     l_scope          uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -2453,6 +2747,19 @@ create or replace package body uc_ai_agents_api as
       );
     end if;
 
+    -- Validate prompt_addendum usage: only agents that render their system
+    -- prompt through a prompt profile can honour it
+    if p_prompt_addendum is not null
+       and sys.dbms_lob.getlength(p_prompt_addendum) > 0
+       and l_agent.agent_type not in (c_type_profile, c_type_orchestrator) then
+      uc_ai_error.raise_error(
+        p_error_code => uc_ai_error.c_err_invalid_config
+      , p_scope      => l_scope
+      , p0           => 'prompt_addendum'
+      , p1           => 'can only be used with profile or orchestrator agents, not ' || l_agent.agent_type
+      );
+    end if;
+
     -- Validate follow_up_message usage
     if p_follow_up_message is not null then
       if l_agent.agent_type not in (c_type_profile, c_type_orchestrator, c_type_handoff) then
@@ -2474,14 +2781,15 @@ create or replace package body uc_ai_agents_api as
       end if;
     end if;
 
-    -- Validate file input usage (only profile/orchestrator agents build a user message)
+    -- Validate file input usage (only profile/orchestrator agents build a user
+    -- message; a decision agent sends the files as images with its state)
     if p_files is not null and p_files.count > 0
-       and l_agent.agent_type not in (c_type_profile, c_type_orchestrator) then
+       and l_agent.agent_type not in (c_type_profile, c_type_orchestrator, c_type_decision) then
       uc_ai_error.raise_error(
         p_error_code => uc_ai_error.c_err_invalid_config
       , p_scope      => l_scope
       , p0           => 'files'
-      , p1           => 'can only be used with profile or orchestrator agents, not ' || l_agent.agent_type
+      , p1           => 'can only be used with profile, orchestrator or decision agents, not ' || l_agent.agent_type
       );
     end if;
 
@@ -2577,19 +2885,22 @@ create or replace package body uc_ai_agents_api as
       -- Execute based on agent type (delegating to sub-package)
       case l_agent.agent_type
         when c_type_profile then
-          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema, p_follow_up_message, l_session_id, p_files, p_extra_tool_tag, l_run_context);
+          l_result := uc_ai_agent_exec_api.execute_profile_agent(l_agent, p_input_parameters, l_exec_id, p_response_schema, p_follow_up_message, l_session_id, p_files, p_extra_tool_tag, l_run_context, p_prompt_addendum);
 
         when c_type_workflow then
           l_result := uc_ai_agent_exec_api.execute_workflow_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
 
         when c_type_orchestrator then
-          l_result := uc_ai_agent_exec_api.execute_orchestrator_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message, p_files, l_run_context);
+          l_result := uc_ai_agent_exec_api.execute_orchestrator_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message, p_files, l_run_context, p_prompt_addendum);
 
         when c_type_handoff then
           l_result := uc_ai_agent_exec_api.execute_handoff_agent(l_agent, p_input_parameters, l_session_id, l_exec_id, p_follow_up_message);
 
         when c_type_conversation then
           l_result := uc_ai_agent_exec_api.execute_conversation_agent(l_agent, p_input_parameters, l_session_id, l_exec_id);
+
+        when c_type_decision then
+          l_result := uc_ai_agent_exec_api.execute_decision_agent(l_agent, p_input_parameters, l_exec_id, p_files, l_run_context);
 
         else
           uc_ai_error.raise_error(
@@ -2721,7 +3032,8 @@ create or replace package body uc_ai_agents_api as
     p_response_schema   in json_object_t default null,
     p_files             in uc_ai_message_api.t_files default null,
     p_extra_tool_tag    in varchar2 default null,
-    p_run_context       in json_object_t default null
+    p_run_context       in json_object_t default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t
   as
     l_scope uc_ai_logger.scope := gc_scope_prefix || 'execute_agent';
@@ -2739,7 +3051,8 @@ create or replace package body uc_ai_agents_api as
       p_response_schema   => p_response_schema,
       p_files             => p_files,
       p_extra_tool_tag    => p_extra_tool_tag,
-      p_run_context       => p_run_context
+      p_run_context       => p_run_context,
+      p_prompt_addendum   => p_prompt_addendum
     );
   exception
     when others then
@@ -3035,7 +3348,8 @@ create or replace package body uc_ai_agents_api as
              m.tool_input,
              m.tool_output,
              m.tool_status,
-             m.created_at
+             m.created_at,
+             m.tool_call_id
       from uc_ai_agent_messages m
       where m.session_id = p_session_id
       order by m.seq;

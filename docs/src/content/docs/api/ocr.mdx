@@ -5,6 +5,8 @@ sidebar:
   order: 15
 ---
 
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
 `uc_ai.ocr` reads a PDF or an image and returns its text as Markdown. It also returns the pages, the text blocks with their positions, the usage, and the response of the provider. All providers return the same result shape, so the code that reads the result does not depend on the provider.
 
 Three providers support OCR:
@@ -66,7 +68,11 @@ function ocr_text (
 | `p_model` | `model_type` | Depends on the provider | `null` selects the default model of the provider. OCI ignores it. Ollama requires it. |
 | `p_options` | `json_object_t` | No | Options for the call. See [Options](#options). |
 
-The configuration that `generate_text` reads from the package globals applies to OCR too. This includes `uc_ai.g_apex_web_credential`, the credential of the provider, `uc_ai.g_extra_headers` and `uc_ai.g_base_url`. `uc_ai.g_base_url` applies to Mistral and Ollama only. OCI builds its URL from `uc_ai_oci.g_region`, as `uc_ai_oci` does. Without `uc_ai.g_base_url`, a Mistral OCR request goes to `https://api.mistral.ai/v1/ocr`. `uc_ai.g_extra_body` does not apply to OCR. Use the `extra_body` option instead.
+OCR uses the same package variables as `generate_text` for credentials, extra headers, and the transfer timeout. These include `uc_ai.g_apex_web_credential`, the provider's credential variable, `uc_ai.g_extra_headers`, and `uc_ai.g_transfer_timeout`.
+
+For Mistral and Ollama, `uc_ai.g_base_url` sets a custom base URL. By default, Mistral OCR requests go to `https://api.mistral.ai/v1/ocr`. OCI builds its URL from `uc_ai_oci.g_region` instead.
+
+An OCR request has a default HTTP timeout of 300 seconds. To change it, set `uc_ai.g_transfer_timeout` to a number of seconds. For extra request fields, use the `extra_body` option. OCR does not use `uc_ai.g_extra_body`.
 
 UC AI checks the provider, the media type and the options before it sends a request. A document with an unsupported media type costs no request. UC AI never writes the request body to the log, because the body holds the whole document in Base64. The log holds the provider, the media type, the size in bytes and the names of the options.
 
@@ -150,7 +156,10 @@ If OCI reports an error and returns no page, the call raises `ORA-20302`. A page
 | URL overload | Yes | No | No |
 | Limit | | UC AI checks the size only: 8 MB of raw bytes | One image, one page. An image with transparency is flattened on a black background. |
 
-### Mistral
+Select a provider to see how UC AI uses it and which options it accepts.
+
+<Tabs syncKey="ocr-provider">
+<TabItem label="Mistral">
 
 Mistral reads the document with the model in `p_model`. The default is `uc_ai_mistral.c_model_mistral_ocr`. The constant `uc_ai_mistral.c_model_mistral_ocr_4_1` selects the `mistral-ocr-4-1` model.
 
@@ -167,7 +176,8 @@ UC AI passes every option that it does not use itself on to the request. See the
 
 If `table_format` is set, Mistral puts a link such as `[tbl-0.md](tbl-0.md)` in the Markdown and lists the table separately. UC AI replaces the link with the table.
 
-### OCI
+</TabItem>
+<TabItem label="OCI">
 
 OCI Document Understanding needs a compartment. Set `uc_ai_oci.g_compartment_id` and the region in `uc_ai_oci.g_region`. If the compartment is not set, the call raises `ORA-20502`. The setup of the credential and of the policy for Document Understanding is in the [OCI provider page](/products/uc-ai/docs/providers/oci/#ocr-with-document-understanding).
 
@@ -183,7 +193,8 @@ UC AI builds `markdown` from the text lines of each page. A larger gap between t
 
 Without `features`, UC AI requests `TEXT_EXTRACTION`. The option `tables` adds `TABLE_EXTRACTION`. The keys `compartmentId` and `document` are set by UC AI.
 
-### Ollama
+</TabItem>
+<TabItem label="Ollama">
 
 Ollama reads one image with a vision model. Ollama has no OCR model by default, so `p_model` is required. A null model raises `ORA-20502`.
 
@@ -201,6 +212,9 @@ The prompt asks for Markdown and for tables as Markdown tables. It also asks the
 | `options` | Model options such as `{"temperature":0}`. Passed on. |
 | `keep_alive` | How long Ollama keeps the model loaded. Passed on. |
 | `think` | Turns thinking on or off. Passed on. |
+
+</TabItem>
+</Tabs>
 
 ## Options
 

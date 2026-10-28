@@ -54,6 +54,7 @@ export default defineConfig({
 				{
 					label: "UC AI",
 					items: ["index"],
+					collapsed: true,
 				},
 				{
 					// ONE menu entry for everything: tutorial/index.mdx lists the
@@ -63,49 +64,73 @@ export default defineConfig({
 					// under tutorial/ plus a card on that index page — no config
 					// change at all.
 					label: "Tutorials",
-					collapsed: false,
 					badge: {
 						text: "New",
 						variant: "success",
 					},
 					items: ["tutorial"],
+					collapsed: true,
 				},
 				{
 					label: "Guides",
 					collapsed: false,
+					// The groups only shape the menu. The files stay flat in
+					// guides/, so no URL changes when a page moves between groups.
 					items: [
-						"guides/installation",
-						"guides/network-setup",
-						"guides/quickstart",
-						"guides/use-cases",
-						"guides/providers",
-						"guides/tools",
-						"guides/programmatic-tool-calling",
-						"guides/file_analysis",
-						"guides/reasoning",
-						"guides/structured_output",
-						"guides/prompt-profiles",
-						"guides/toon",
-						"guides/event-callbacks",
-						"guides/agentic-ai",
 						{
-							label: "Multi-Agent Systems",
+							label: "Getting Started",
 							items: [
-								{ autogenerate: { directory: "guides/multi-agent-systems" } },
+								"guides/installation",
+								"guides/network-setup",
+								"guides/quickstart",
+								"guides/use-cases",
+								"guides/providers",
 							],
 						},
 						{
-							label: "APEX Chat Plug-in",
-							link: "guides/apex-chat-plugin",
-							badge: {
-								text: "New",
-								variant: "success",
-							},
+							label: "Core Features",
+							items: [
+								"guides/tools",
+								"guides/programmatic-tool-calling",
+								"guides/file_analysis",
+								"guides/reasoning",
+								"guides/structured_output",
+								"guides/prompt-profiles",
+								"guides/toon",
+								"guides/event-callbacks",
+							],
+							collapsed: true,
 						},
-						"guides/execution-hooks",
-						"guides/agent-memory",
+						{
+							label: "Agents",
+							collapsed: true,
+							items: [
+								"guides/agentic-ai",
+								{
+									label: "Multi-Agent Systems",
+									collapsed: true,
+									items: [
+										{
+											autogenerate: { directory: "guides/multi-agent-systems" },
+										},
+									],
+								},
+								"guides/agent-memory",
+								"guides/execution-hooks",
+							],
+						},
+						{
+							label: "APEX Chat",
+							collapsed: true,
+							items: [
+								"guides/apex-chat-plugin",
+								"guides/chat-widgets",
+								"guides/chat-widgets-custom-types",
+							],
+						},
 						{
 							label: "Guardrails",
+							collapsed: true,
 							badge: {
 								text: "Pro",
 								variant: "tip",
@@ -117,10 +142,12 @@ export default defineConfig({
 				{
 					label: "Provider Setup",
 					items: [{ autogenerate: { directory: "providers" } }],
+					collapsed: true,
 				},
 				{
 					label: "API Reference",
 					items: [{ autogenerate: { directory: "api" } }],
+					collapsed: true,
 				},
 				{
 					label: "Other",

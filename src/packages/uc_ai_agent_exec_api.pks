@@ -81,6 +81,8 @@ as
    *                            own model config (used by handoff agents to expose transfer tools)
    * @param p_run_context       Run context of this run (JSON object as a CLOB). Fills prompt
    *                            placeholders the input parameters do not supply.
+   * @param p_prompt_addendum   Optional text appended to the rendered system prompt of the first
+   *                            turn (ignored on a follow-up turn, which reuses the stored system message)
    * @return JSON result from prompt profile execution
    */
   function execute_profile_agent(
@@ -92,7 +94,46 @@ as
     p_session_id        in varchar2 default null,
     p_files             in uc_ai_message_api.t_files default null,
     p_extra_tool_tag    in varchar2 default null,
-    p_run_context       in clob default null
+    p_run_context       in clob default null,
+    p_prompt_addendum   in clob default null
+  ) return json_object_t;
+
+
+  /*
+   * Executes a decision-type agent: renders state_template with the input
+   * parameters (and the run context, like a profile agent), asks the typed
+   * questions through uc_ai_decisions.decide and returns the answers.
+   *
+   * The provider settings come from decision_config.model_config only. The
+   * session globals (uc_ai.g_base_url, uc_ai.g_apex_web_credential, ...) are not
+   * read and not changed, so a decision agent behaves the same in every
+   * session. A credential or a base URL for the agent goes into model_config.
+   *
+   * Result (execute_agent adds execution_id, status and the other keys):
+   *   final_message     JSON object: answers, warnings, model, provider_metadata
+   *                     (provider_metadata only when the provider sent some).
+   *                     A refused question stays {"type":"refused"} with no choice.
+   *   usage             {prompt_tokens, completion_tokens}: the input_tokens and
+   *                     output_tokens of the provider, which execute_agent records
+   *   model, provider   the model the provider reports and the configured provider
+   *   tool_calls_count  0
+   * The raw provider response is not part of the result.
+   *
+   * @param p_agent        Agent rowtype record
+   * @param p_input_params Input parameters; fill the {name} placeholders of state_template
+   * @param p_exec_id      Execution ID for tracking
+   * @param p_files        Optional images, sent with the state (OpenAI and TypeSafe;
+   *                       OpenRouter raises -20508)
+   * @param p_run_context  Run context of this run (JSON object as a CLOB). Fills the
+   *                       placeholders the input parameters do not supply.
+   * @return JSON result of the decision
+   */
+  function execute_decision_agent(
+    p_agent        in uc_ai_agents%rowtype,
+    p_input_params in json_object_t,
+    p_exec_id      in uc_ai_agent_executions.id%type,
+    p_files        in uc_ai_message_api.t_files default null,
+    p_run_context  in clob default null
   ) return json_object_t;
 
 
@@ -124,6 +165,8 @@ as
    * @param p_files             Optional files (documents/images) to attach to the user message
    * @param p_run_context       Run context of this run (JSON object as a CLOB). Fills prompt
    *                            placeholders the input parameters do not supply.
+   * @param p_prompt_addendum   Optional text appended to the rendered system prompt of the first
+   *                            turn (ignored on a follow-up turn, which reuses the stored system message)
    * @return JSON result from orchestration
    */
   function execute_orchestrator_agent(
@@ -133,7 +176,8 @@ as
     p_exec_id           in uc_ai_agent_executions.id%type,
     p_follow_up_message in clob default null,
     p_files             in uc_ai_message_api.t_files default null,
-    p_run_context       in clob default null
+    p_run_context       in clob default null,
+    p_prompt_addendum   in clob default null
   ) return json_object_t;
 
 

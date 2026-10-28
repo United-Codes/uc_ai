@@ -1,0 +1,1 @@
+{"model":"gpt-6-luna","input":"The site is down for all customers.","questions":[{"type":"score","name":"s","instructions":"Rate the severity.","levels":[{"label":"L0"},{"label":"L1"},{"label":"L2"},{"label":"L3"},{"label":"L4"},{"label":"L5"},{"label":"L6"},{"label":"L7"},{"label":"L8"},{"label":"L9"}]}]}

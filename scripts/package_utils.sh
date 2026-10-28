@@ -33,10 +33,22 @@ declare -a API_PACKAGES=(
     # ocr is called by the uc_ai body (bodies of API packages precede it) and its
     # body uses the mistral constants (all specs exist before any body).
     "uc_ai_ocr"
+    # decisions is called by the uc_ai body like ocr and uses the openai constants
+    # (all specs exist before any body).
+    "uc_ai_decisions"
     "uc_ai_agents_api"
     "uc_ai_agent_exec_api"
     "uc_ai_agent_workflow_api"
     "uc_ai_utils"
+    # a2a_core before a2a: the a2a body calls the core. Both call agents_api and the
+    # message api (all specs exist before any body). Only dynamic SQL touches ORDS.
+    "uc_ai_a2a_core"
+    "uc_ai_a2a"
+    # The UC AI Chat plug-in (export file in the repository root). widgets before chat: the chat body calls
+    # the widgets package. The hook is called by UC AI through dynamic SQL only.
+    "uc_ai_chat_widgets"
+    "uc_ai_chat"
+    "uc_ai_chat_hook"
 )
 
 # Provider packages (alphabetical order)
@@ -47,6 +59,7 @@ declare -a PROVIDER_PACKAGES=(
     "uc_ai_oci"
     "uc_ai_ollama"
     "uc_ai_openai"
+    "uc_ai_typesafe"
     "uc_ai_xai"
     "uc_ai_openrouter"
     "uc_ai_responses_api"
@@ -131,11 +144,17 @@ get_package_description() {
         "uc_ai_mistral")
             echo "Mistral AI Provider Package"
             ;;
+        "uc_ai_typesafe")
+            echo "TypeSafe Decisions Provider Package"
+            ;;
         "uc_ai_oci")
             echo "OCI AI Provider Package"
             ;;
         "uc_ai_ocr")
             echo "OCR Package"
+            ;;
+        "uc_ai_decisions")
+            echo "Decisions Package"
             ;;
         "uc_ai_ollama")
             echo "Ollama AI Provider Package"
@@ -148,6 +167,15 @@ get_package_description() {
             ;;
         "uc_ai_settings")
             echo "Per-call Settings/Run-state Types Package"
+            ;;
+        "uc_ai_chat")
+            echo "UC AI Chat Plug-in Package"
+            ;;
+        "uc_ai_chat_widgets")
+            echo "UC AI Chat Widgets Package"
+            ;;
+        "uc_ai_chat_hook")
+            echo "UC AI Chat Progress Hook Package"
             ;;
         *)
             echo "$package_name Package"

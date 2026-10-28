@@ -716,7 +716,8 @@ create or replace package body uc_ai_oci as
     l_resp := uc_ai_http.post(
       p_url => l_api_url,
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => coalesce(p_settings.apex_web_credential, p_settings.oc_apex_web_credential)
+      p_credential_static_id => coalesce(p_settings.apex_web_credential, p_settings.oc_apex_web_credential),
+      p_transfer_timeout => p_settings.transfer_timeout
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);
@@ -1427,7 +1428,8 @@ create or replace package body uc_ai_oci as
     l_resp := uc_ai_http.post(
       p_url => l_api_url,
       p_body => l_input_obj.to_clob,
-      p_credential_static_id => coalesce(l_settings.apex_web_credential, l_settings.oc_apex_web_credential)
+      p_credential_static_id => coalesce(l_settings.apex_web_credential, l_settings.oc_apex_web_credential),
+      p_transfer_timeout => l_settings.transfer_timeout
     );
 
     uc_ai_logger.log('Response', l_scope, l_resp);

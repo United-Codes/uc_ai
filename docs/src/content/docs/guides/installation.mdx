@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import { Card, CardGrid, LinkCard, Tabs, TabItem } from "@astrojs/starlight/components";
 
 ## Prerequisites
 
@@ -17,17 +17,22 @@ import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
 
 UC AI writes debug information to a log. If you do not have [Logger](https://github.com/OraOpenSource/Logger) installed, UC AI logs through the `apex_debug` package.
 
-### Option 1: GitHub release scripts
+Install UC AI with the scripts of a GitHub release, or with the source code of the repository.
+
+<Tabs>
+<TabItem label="Release scripts">
 
 The GitHub release page of each UC AI version contains scripts. These scripts install the UC AI packages and their dependencies.
 
 - `install_uc_ai_complete.sql` installs all UC AI objects
 - `install_uc_ai_complete_with_logger.sql` installs all UC AI objects and the [Logger](https://github.com/OraOpenSource/Logger) package
-- `upgrade_packages.sql` upgrades the UC AI packages. Most releases change only the packages. For these releases, run this script to get the new version. Read the [release notes](https://github.com/United-Codes/uc_ai/releases) also. A release can contain changes that need the complete installation script.
+- `upgrade_uc_ai.sql` upgrades an existing UC AI installation to the new version. See [Upgrades](#upgrades).
+- `region_type_plugin_com_united_codes_uc_ai_chat.sql` is the export file of the [APEX Chat plug-in](/products/uc-ai/docs/guides/apex-chat-plugin/). The installation and upgrade scripts create the database objects of the plug-in. You import this file into your APEX application.
 
 Run the script that you need in your SQL client. It installs the UC AI packages and their dependencies.
 
-### Option 2: Install GitHub repository
+</TabItem>
+<TabItem label="Repository">
 
 Download the source code of the latest release from the [GitHub releases page](https://github.com/United-Codes/uc_ai/releases/), or clone the [GitHub repository](https://github.com/United-Codes/uc_ai).
 
@@ -53,6 +58,9 @@ cd ./src/dependencies/logger_3.1.1
 sql ./logger_install_no_op.sql
 ```
 
+</TabItem>
+</Tabs>
+
 ## Set up API Keys
 
 You can manage your API keys for the AI providers in two ways: a key function, or APEX Web Credentials.
@@ -77,6 +85,8 @@ begin
       return '...';
     when uc_ai.c_provider_google then
       return '...';
+    when uc_ai.c_provider_typesafe then
+      return '...';
     else
       raise e_unhandled_provider;
   end case;
@@ -91,7 +101,7 @@ end uc_ai_get_key;
 
 ### Option 2: APEX Web Credentials
 
-You can also store your secret API keys as APEX Web Credentials. This needs an APEX workspace for the schema that holds UC AI. Log in to that workspace. Then go to Workspace Utilities → Web Credentials ([guide with screenshots](/products/uc-ai/docs/help/create-oci-key/#create-apex-web-credential)). These guides show how to create the web credential of each provider:
+You can also store your secret API keys as APEX Web Credentials. This needs an APEX workspace for the schema that holds UC AI. Create each web credential in the APEX user interface (Workspace Utilities → Web Credentials, [guide with screenshots](/products/uc-ai/docs/help/create-oci-key/#create-apex-web-credential)) or with the `apex_credential` PL/SQL API. These guides show both ways for each provider:
 
 - [Anthropic](/products/uc-ai/docs/providers/anthropic/#creating-a-web-credential)
 - [Google](/products/uc-ai/docs/providers/google/#creating-a-web-credential)
@@ -99,6 +109,7 @@ You can also store your secret API keys as APEX Web Credentials. This needs an A
 - [OCI](/products/uc-ai/docs/providers/oci/#prerequisites)
 - [OpenAI](/products/uc-ai/docs/providers/openai/#creating-a-web-credential)
 - [OpenRouter](/products/uc-ai/docs/providers/openrouter/#creating-a-web-credential)
+- [TypeSafe](/products/uc-ai/docs/providers/typesafe/#creating-a-web-credential)
 - [xAI](/products/uc-ai/docs/providers/xai/#creating-a-web-credential)
 
 Before you call a UC AI function, set the package variable of your provider to the static ID of the web credential. For example, an OpenAI web credential with the static ID `OPENAI` needs this code:
@@ -130,9 +141,17 @@ END;
 
 ## Upgrades
 
-For most versions, run only the `upgrade_packages.sql` script. It upgrades the packages that changed since the last version.
+Run the `upgrade_uc_ai.sql` script of the new release. It upgrades an installation of v25.7 or later. The script does these tasks in order:
 
-Read the [release notes](https://github.com/United-Codes/uc_ai/releases) also. A release can contain changes that need the complete installation script.
+1. It adds the tables, columns, constraints, and indexes that the installation does not have yet.
+2. It sets the table and column comments and creates the triggers again.
+3. It compiles the packages and creates the views again.
+
+Before each schema change, the script checks whether that change is necessary. You can run it more than once. If an earlier upgrade did not finish, run the script again. It completes missing schema changes and recreates the code objects.
+
+Run the script in the UC AI schema, in SQLcl or SQL*Plus. Do this when no one uses UC AI, because a table change needs a lock on the table. The script prints each change that it makes. If a schema step fails, the script prints the failed step and the error, and then stops. Correct the cause and run the script again.
+
+If the schema is older than v25.7, upgrade it to v25.7 first. Read the [release notes](/products/uc-ai/docs/other/release-history/) also. A release can contain a behavior change that needs your attention.
 
 ## Next steps
 

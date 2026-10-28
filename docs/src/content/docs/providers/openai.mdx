@@ -3,6 +3,8 @@ title: OpenAI
 description: UC AI provider documentation for OpenAI GPT models
 ---
 
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
 The UC AI OpenAI package integrates OpenAI's GPT models into your Oracle database applications.
 
 ## Features
@@ -11,6 +13,7 @@ The UC AI OpenAI package integrates OpenAI's GPT models into your Oracle databas
 - Full function calling (tools) support
 - Reasoning capabilities with reasoning effort control
 - Multi-modal support (text, images, PDFs)
+- Typed decisions with `uc_ai.decide` (see [Decisions](#decisions))
 
 ## Responses API
 
@@ -31,13 +34,52 @@ You can get an API key by signing up at [OpenAI Platform](https://platform.opena
 
 ## Creating a Web Credential
 
-To use your OpenAI key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following configuration:
+To use your OpenAI key with APEX Web Credentials, create a web credential in your APEX workspace. You can use the APEX user interface or PL/SQL.
+
+<Tabs>
+<TabItem label="APEX user interface">
+
+Go to Workspace Utilities → Web Credentials and create a web credential with the following configuration:
 
 - Authentication Type: HTTP Header
 - Credential Name: `Authorization`
 - Credential Secret: `Bearer <your_api_key>`
 
 Also set `Valid for URLs` to the OpenAI API (https://api.openai.com/) to limit the scope of the credential.
+
+</TabItem>
+<TabItem label="PL/SQL">
+
+Connect to the schema that holds UC AI, then run this block. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the OpenAI API.
+
+Outside an APEX session, for example in SQLcl, uncomment the `apex_util.set_workspace` call. Replace `MY_WORKSPACE` with the name of the APEX workspace associated with your schema.
+
+```sql
+begin
+  -- apex_util.set_workspace(p_workspace => 'MY_WORKSPACE');
+
+  apex_credential.create_credential(
+    p_credential_name      => 'OPENAI',
+    p_credential_static_id => 'OPENAI',
+    p_authentication_type  => apex_credential.C_TYPE_HTTP_HEADER,
+    p_allowed_urls         => apex_t_varchar2('https://api.openai.com/'),
+    p_prompt_on_install    => false,
+    p_credential_comment   => 'Credential for OpenAI'
+  );
+
+  apex_credential.set_persistent_credentials(
+    p_credential_static_id => 'OPENAI',
+    p_key                  => 'Authorization',
+    p_value                => 'Bearer <your_api_key>'
+  );
+
+  commit;
+end;
+/
+```
+
+</TabItem>
+</Tabs>
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_openai.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
@@ -69,7 +111,16 @@ This list shows the newest model of each family. The package keeps the constants
 
 All GPT-5.x models reason internally. You control the amount of reasoning with `uc_ai_openai.g_reasoning_effort`, as described in the [Reasoning / Thinking](#reasoning--thinking) section.
 
-The package also has constants for the older `o` series (`c_model_gpt_o1`, `c_model_gpt_o3`, `c_model_gpt_o4_mini`, and more) and for the GPT-4 and GPT-3.5 generations. These models are legacy. OpenAI can retire them at any time, so use a GPT-5.x model for new code.
+The package also has constants for older models that are legacy. OpenAI announced shutdown dates for them: 2026-12-11 for GPT-5 (including mini, nano, and pro), `o3`, and `o3-pro`, and 2027-01-14 for GPT-4o, GPT-4o mini, GPT-4.1, and GPT-4.1 mini. Use a GPT-5.6 or GPT-6 model for new code. See [OpenAI's deprecations page](https://developers.openai.com/api/docs/deprecations) for the full list.
+
+### Retired Models
+
+OpenAI shut down these models. Requests to them fail. The package keeps the constants for code that still references them.
+
+- The `o` series: `c_model_gpt_o1`, `c_model_gpt_o1_pro`, `c_model_gpt_o1_mini`, `c_model_gpt_o3_mini`, `c_model_gpt_o4_mini`, `c_model_gpt_o3_deep_research`, and `c_model_gpt_o4_mini_deep_research`
+- GPT-4.5 preview: `c_model_gpt_4_5`
+- GPT-4 and earlier: `c_model_gpt_4`, `c_model_gpt_4_32k`, `c_model_gpt_4_turbo`, `c_model_chatgpt_4o`, `c_model_gpt_3_5_turbo`
+- GPT-4.1 nano: `c_model_gpt_4_1_nano`
 
 See [OpenAI's pricing page](https://developers.openai.com/api/docs/pricing) for the latest model information and costs. Also see [Artificial Analysis](https://artificialanalysis.ai/providers/openai) for a comparison of intelligence, speed, and price.
 
@@ -208,6 +259,37 @@ end;
 ```
 
 For more information about the `generate_embeddings` function, visit its [documentation page](/products/uc-ai/docs/api/generate_embeddings/).
+
+## Decisions
+
+`uc_ai.decide` uses the OpenAI Decisions API (`/v1/decisions`). It answers several named questions about one text or image with typed answers and probabilities. The default model is `uc_ai_openai.c_model_gpt_6_luna`. The call uses the same web credential as the chat calls. OpenAI reads images in PNG, JPEG and WebP format for decisions.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai_openai.g_apex_web_credential := 'OPENAI';
+
+  l_result := uc_ai.decide(
+    p_state     => 'I was charged twice for my order. Please refund the extra charge.'
+  , p_questions => json_object_t('{"wants_refund": {"type": "boolean", "instructions": "Does the customer ask for money back?"}}')
+  , p_provider  => uc_ai.c_provider_openai
+  );
+
+  sys.dbms_output.put_line(l_result.get_object('answers').to_string);
+end;
+/
+```
+
+Output of a call on 2026-10-07. The output is complete. The probability can differ between calls:
+
+```text
+{"wants_refund":{"type":"boolean","probability":1}}
+```
+
+A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) with the provider `openai` runs `uc_ai.decide` as an agent.
+
+The feature is experimental. OpenAI can refuse a question, and the answer then has the type `refused`. See the [decide reference](/products/uc-ai/docs/api/decide/) for the result and the checks.
 
 ## Using OpenAI API compliant providers
 

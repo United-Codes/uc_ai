@@ -5,7 +5,7 @@ sidebar:
   order: 40
 ---
 
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
 
 AI reasoning means that an AI system can **work through a problem step by step**. The model analyzes the information logically and reaches a conclusion by deliberate thought, and not only by a pattern match. The AI therefore solves a complex problem better, explains its decisions better, and handles a new situation that its training data does not hold.
 
@@ -23,7 +23,7 @@ Each provider implements reasoning in its own way. UC AI therefore has provider-
 - [Mistral](/products/uc-ai/docs/providers/mistral/#reasoning--thinking)
 
 <Aside type="caution">
-Anthropic removed the extended thinking parameter for Claude Opus 4.7 and later models. These models think adaptively, and UC AI cannot set a reasoning budget for them. Use Claude Sonnet 4.5 or Claude Haiku 4.5 if you want to control the budget.
+Anthropic removed the extended thinking parameter for Claude Opus 4.7 and later models. These models control how much reasoning they use. UC AI cannot set a reasoning token budget for them. Use Claude Haiku 4.5 if you want to control the budget. Claude Sonnet 4.5 also takes a budget, but Anthropic retires it on 2026-11-30.
 </Aside>
 
 ## Basic Usage
@@ -32,7 +32,12 @@ To enable reasoning, set the global flag `uc_ai.g_enable_reasoning := true;`. Th
 
 A provider-specific parameter controls how much the AI reasons. More effort gives a more detailed thought process, but it also increases the response time and the token usage. The complexity of the task and the model also control this effect.
 
-### Example1: Reasoning with Google Gemini
+### Provider-specific examples
+
+Each example enables reasoning and sets the provider-specific parameter.
+
+<Tabs syncKey="reasoning-provider">
+<TabItem label="Google Gemini">
 
 ```sql
 DECLARE
@@ -49,7 +54,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why?',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_3_7_flash
+    p_model => uc_ai_google.c_model_gemini_3_8_flash
   );
 
   l_final_message := l_result.get_clob('final_message');
@@ -58,7 +63,8 @@ END;
 /
 ```
 
-### Example2: Reasoning with OpenAI
+</TabItem>
+<TabItem label="OpenAI">
 
 ```sql
 DECLARE
@@ -82,6 +88,9 @@ BEGIN
 END;
 /
 ```
+
+</TabItem>
+</Tabs>
 
 ## Generic Reasoning Settings
 
@@ -155,7 +164,7 @@ BEGIN
   l_result := uc_ai.generate_text(
     p_user_prompt => 'Answer in one sentence. If there is a great filter, are we before or after it and why?',
     p_provider => uc_ai.c_provider_google,
-    p_model => uc_ai_google.c_model_gemini_3_7_flash
+    p_model => uc_ai_google.c_model_gemini_3_8_flash
   );
 
   l_messages := treat(l_result.get('messages') as json_array_t);

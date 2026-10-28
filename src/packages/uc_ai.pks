@@ -12,8 +12,8 @@ as
   * https://www.united-codes.com
   */
 
-  c_version     constant varchar2(16 char) := '26.4';
-  c_version_num constant number := 20260400;
+  c_version     constant varchar2(16 char) := '26.5';
+  c_version_num constant number := 20260500;
 
   subtype provider_type is varchar2(64 char);
   c_provider_openai     constant provider_type := 'openai';
@@ -24,6 +24,8 @@ as
   c_provider_xai        constant provider_type := 'xai';
   c_provider_openrouter constant provider_type := 'openrouter';
   c_provider_mistral    constant provider_type := 'mistral';
+  -- not a chat provider: TypeSafe jev only answers uc_ai.decide (no generate_text)
+  c_provider_typesafe   constant provider_type := 'typesafe';
 
   -- not a real provider, but usable for any provider that supports Responses API
   c_provider_responses_api constant provider_type := 'responses_api';
@@ -77,6 +79,11 @@ as
   g_enable_tools boolean := false;
   g_tool_tags apex_t_varchar2;
   g_max_tool_calls pls_integer;
+
+  -- HTTP transfer timeout in seconds for every provider REST request (chat,
+  -- embeddings, OCR, decisions). null keeps the default: 180 seconds, or 300
+  -- for OCR and decisions.
+  g_transfer_timeout pls_integer;
   -- Programmatic tool calling ("code mode"): when true (and tools are enabled),
   -- generate_text also offers the uc_ai__run_code meta-tool, letting the model
   -- author a JS program that orchestrates the other tools in-database via Oracle
@@ -285,6 +292,49 @@ as
   , p_model      in model_type default null
   , p_options    in json_object_t default null
   ) return clob;
+
+  /*
+   * EXPERIMENTAL. Decide typed answers to named questions against one shared
+   * state. The provider APIs behind it are in beta, so the shape of the result can
+   * still change.
+   *
+   * p_state is text (or JSON serialised with to_clob). p_questions is an object
+   * keyed by question id; each question has a type (boolean, choice or score),
+   * instructions and criteria (see uc_ai_decisions for the full shape). p_files
+   * holds uc_ai_message_api.create_file_content objects; only images (png, jpeg,
+   * webp) are supported, by OpenAI (png, jpeg, webp) and TypeSafe jev (png, jpeg). OpenRouter takes text only.
+   *
+   * Returns a provider-neutral JSON object: answers (keyed by question id, with
+   * probabilities), usage, model, provider_metadata (confidence), warnings and raw
+   * (the provider response). See uc_ai_decisions for the full shape. A question the
+   * provider refuses gets the answer {"type": "refused"} and the call does not
+   * raise; check the answer type before you read choice, score or probability.
+   *
+   * p_provider is required; the supported providers are c_provider_openai,
+   * c_provider_typesafe and c_provider_openrouter. p_model null uses the provider
+   * default (OpenAI: uc_ai_openai.c_model_gpt_6_luna, TypeSafe:
+   * uc_ai_typesafe.c_model_jev_latest, OpenRouter:
+   * uc_ai_openrouter.c_decision_model_jev).
+   * p_options: safety_identifier (OpenAI only) and extra_body (an object merged
+   * into the request; the keys model, input/state and questions always win). Other
+   * keys are ignored with a warning.
+   *
+   * Malformed questions or input raise -20503, input the provider cannot take
+   * raises -20508 (both before any request is sent). A provider error raises
+   * -20302, answers that do not match the questions -20304. Probabilities that do not
+   * add up are not errors: they add a text to warnings.
+   *
+   * Settings such as g_apex_web_credential and g_base_url come from the package
+   * globals, like in generate_text.
+   */
+  function decide (
+    p_state     in clob
+  , p_questions in json_object_t
+  , p_provider  in provider_type
+  , p_model     in model_type default null
+  , p_files     in json_array_t default null
+  , p_options   in json_object_t default null
+  ) return json_object_t;
 
   /*
    * Resets all global variables in uc_ai and provider packages to their default values.

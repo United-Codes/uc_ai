@@ -144,6 +144,8 @@ A condition can also reference the output of an earlier step. A common pattern s
 "condition": "'{$.steps.classification.category}' = 'complaint'"
 ```
 
+A [decision agent](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/) is a good classifier step. It returns the answers as a JSON object, so a condition can read `{$.steps.route.answers.department.choice}` without a response schema. See [Route a ticket with a workflow](/products/uc-ai/docs/api/decide/#route-a-ticket-with-a-workflow).
+
 The condition is a PL/SQL expression, so every boolean expression works. Examples are a numeric comparison such as `"{$.steps.classification.confidence} >= 0.8"`, and a function call.
 
 Put single quotes around a **string** reference, as in `'{$.steps.x}'` above. Leave a **numeric** reference without quotes, as in `{$.steps.x} >= 8`. The same convention applies to `exit_condition`, and to an `input_mapping` entry with `"is_plsql_expression": true`.
@@ -154,6 +156,13 @@ Put single quotes around a **string** reference, as in `'{$.steps.x}'` above. Le
   break out of its quotes and inject PL/SQL. This content includes model output,
   tool results, and user input. Write the surrounding quotes yourself, as shown
   above. The escaping protects only the substituted value.
+</Aside>
+
+<Aside type="caution" title="A refused answer">
+  OpenAI can refuse a question of a decision agent. The answer then has no
+  `choice`. If a condition refers to a missing value, it is false. This also applies to
+   the not-equal operator, `!=`. Branch on `answers.<id>.type = 'refused'`. See [Branch on a refused
+  answer](/products/uc-ai/docs/guides/multi-agent-systems/decision-agents/#branch-on-a-refused-answer).
 </Aside>
 
 <Aside type="caution">

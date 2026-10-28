@@ -3,6 +3,8 @@ title: OpenRouter
 description: UC AI provider documentation for OpenRouter - unified API for hundreds of AI models
 ---
 
+import { Tabs, TabItem } from "@astrojs/starlight/components";
+
 The UC AI OpenRouter integration gives you access to hundreds of AI models from different providers (OpenAI, Anthropic, Google, Meta, and many more) through a single API endpoint.
 
 ## Features
@@ -26,13 +28,52 @@ You can get an API key by signing up at [OpenRouter](https://openrouter.ai/).
 
 ## Creating a Web Credential
 
-To use your OpenRouter key with APEX Web Credentials, create a new web credential in your APEX workspace (Workspace Utilities → Web Credentials) with the following configuration:
+To use your OpenRouter key with APEX Web Credentials, create a web credential in your APEX workspace. You can use the APEX user interface or PL/SQL.
+
+<Tabs>
+<TabItem label="APEX user interface">
+
+Go to Workspace Utilities → Web Credentials and create a web credential with the following configuration:
 
 - Authentication Type: HTTP Header
 - Credential Name: `Authorization`
 - Credential Secret: `Bearer <your_api_key>`
 
 Also set `Valid for URLs` to the OpenRouter API (https://openrouter.ai/) to limit the scope of the credential.
+
+</TabItem>
+<TabItem label="PL/SQL">
+
+Connect to the schema that holds UC AI, then run this block. Replace `<your_api_key>` with your API key. The `p_allowed_urls` parameter limits the credential to the OpenRouter API.
+
+Outside an APEX session, for example in SQLcl, uncomment the `apex_util.set_workspace` call. Replace `MY_WORKSPACE` with the name of the APEX workspace associated with your schema.
+
+```sql
+begin
+  -- apex_util.set_workspace(p_workspace => 'MY_WORKSPACE');
+
+  apex_credential.create_credential(
+    p_credential_name      => 'OPENROUTER',
+    p_credential_static_id => 'OPENROUTER',
+    p_authentication_type  => apex_credential.C_TYPE_HTTP_HEADER,
+    p_allowed_urls         => apex_t_varchar2('https://openrouter.ai/'),
+    p_prompt_on_install    => false,
+    p_credential_comment   => 'Credential for OpenRouter'
+  );
+
+  apex_credential.set_persistent_credentials(
+    p_credential_static_id => 'OPENROUTER',
+    p_key                  => 'Authorization',
+    p_value                => 'Bearer <your_api_key>'
+  );
+
+  commit;
+end;
+/
+```
+
+</TabItem>
+</Tabs>
 
 To use the web credential in your PL/SQL code, set the package variable `uc_ai_openrouter.g_apex_web_credential` to the static ID of your web credential before calling any UC AI functions:
 
@@ -243,6 +284,29 @@ end;
 ```
 
 Check the [OpenRouter models page](https://openrouter.ai/models) and filter by "Embeddings" output modality to see available embedding models.
+
+## Typed Decisions
+
+OpenRouter supports [typed decisions](/products/uc-ai/docs/api/decide/) with `uc_ai.decide`. The endpoint is in alpha, and it reads text only. Use a model that OpenRouter lists for decisions. The default model is `uc_ai_openrouter.c_decision_model_jev`.
+
+```sql
+declare
+  l_result json_object_t;
+begin
+  uc_ai_openrouter.g_apex_web_credential := 'OPENROUTER';
+
+  l_result := uc_ai.decide(
+    p_state     => 'I was charged twice for my order. Please refund the extra charge.'
+  , p_questions => json_object_t('{"wants_refund":{"type":"boolean","instructions":"Does the customer ask for money back?"}}')
+  , p_provider  => uc_ai.c_provider_openrouter
+  );
+
+  sys.dbms_output.put_line(l_result.get_object('answers').to_string);
+end;
+/
+```
+
+To set routing preferences such as `zdr` or `only`, pass them in `extra_body`. See [The p_options parameter](/products/uc-ai/docs/api/decide/#the-p_options-parameter).
 
 ## Benefits of Using OpenRouter
 
