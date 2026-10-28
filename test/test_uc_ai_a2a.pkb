@@ -2017,10 +2017,12 @@ dnMpQo4Q+8D6VN6swnKkB64=
   begin
     select job_name into l_job from uc_ai_a2a_tasks where task_id = p_task_id;
     begin
-      sys.dbms_scheduler.drop_job(job_name => l_job, force => true);
+      -- force => false: a job that runs already raises ORA-27478 and finishes on
+      -- its own. force => true would kill it and leave the task WORKING for good.
+      sys.dbms_scheduler.drop_job(job_name => l_job, force => false);
     exception
       when others then
-        null; -- already gone: the job ran or was dropped
+        null; -- already gone (the job ran), or running (the caller waits for it)
     end;
   end drop_task_job;
 
@@ -2040,7 +2042,8 @@ dnMpQo4Q+8D6VN6swnKkB64=
 
   procedure async_submitted_then_run
   as
-    c_wait_loops constant pls_integer := 20;
+    -- up to 60 s: a job that started before the drop finishes on its own
+    c_wait_loops constant pls_integer := 120;
     c_async constant varchar2(400 char) := '{"returnImmediately":true,"taskPushNotificationConfig":{"url":"https://push.example/async","token":"async-token"}}';
     l_task   json_object_t;
     l_id     varchar2(36 char);
@@ -2069,9 +2072,9 @@ dnMpQo4Q+8D6VN6swnKkB64=
 
     -- the job of this session must not race the test
     drop_task_job(l_id);
-    ut.expect(job_count(l_id), 'job dropped').to_equal(0);
 
-    if db_state(l_id) = uc_ai_a2a_core.c_state_submitted then
+    -- a job that is gone and a task still SUBMITTED: run it here
+    if job_count(l_id) = 0 and db_state(l_id) = uc_ai_a2a_core.c_state_submitted then
       uc_ai_a2a.run_task(l_id);
     end if;
 

@@ -487,6 +487,39 @@ create or replace package body test_uc_ai_agent_prompt_addendum as
   end orchestrator_honours_addendum;
 
 
+  procedure unpinned_agent_uses_latest_profile
+  as
+    c_prof   constant varchar2(50 char) := 'TEST_PADD_V2_PROF';
+    c_agent  constant varchar2(50 char) := 'TEST_PADD_V2_AGENT';
+    c_system constant varchar2(100 char) := 'You are version two.';
+    l_id     number;
+    l_result json_object_t;
+  begin
+    create_profile(c_prof);
+    l_id := uc_ai_prompt_profiles_api.create_prompt_profile(
+      p_code                   => c_prof,
+      p_description            => 'Prompt addendum test profile, version 2',
+      p_system_prompt_template => c_system,
+      p_user_prompt_template   => 'hello',
+      p_provider               => uc_ai.c_provider_openai,
+      p_model                  => 'gpt-4o-mini',
+      p_model_config_json      => profile_config(false),
+      p_version                => 2,
+      p_status                 => uc_ai_prompt_profiles_api.c_status_active
+    );
+    ut.expect(l_id, 'version 2 created').to_be_not_null();
+    create_profile_agent(c_agent, c_prof);
+    -- agents must be committed before execution (autonomous telemetry)
+    commit;
+
+    uc_ai_test_http_mock.enqueue(text_response('ok'));
+    l_result := uc_ai_agents_api.execute_agent(p_agent_code => c_agent);
+
+    ut.expect(l_result.get_string('status')).to_equal('completed');
+    ut.expect(system_message_of(1), 'the system prompt of version 2').to_equal(to_clob(c_system));
+  end unpinned_agent_uses_latest_profile;
+
+
   procedure workflow_rejects_addendum
   as
     l_before number;

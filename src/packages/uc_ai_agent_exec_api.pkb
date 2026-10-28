@@ -806,11 +806,16 @@ create or replace package body uc_ai_agent_exec_api as
     if p_response_schema is not null then
       l_has_schema := 1;
     else
-      select case when response_schema is not null then 1 else 0 end as has_schema
-        into l_has_schema
-        from uc_ai_prompt_profiles
-       where code = p_agent.prompt_profile_code
-         and (p_agent.prompt_profile_version is null or version = p_agent.prompt_profile_version);
+      -- Resolve the profile the way execute_profile did: an unpinned agent uses the
+      -- latest active version, so a plain filter on the code finds every version.
+      l_has_schema := case
+                        when uc_ai_prompt_profiles_api.get_prompt_profile(
+                               p_code    => p_agent.prompt_profile_code
+                             , p_version => p_agent.prompt_profile_version
+                             ).response_schema is not null
+                        then 1
+                        else 0
+                      end;
     end if;
 
     if l_has_schema = 1 then

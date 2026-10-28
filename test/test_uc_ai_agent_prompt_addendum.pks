@@ -44,6 +44,9 @@ create or replace package test_uc_ai_agent_prompt_addendum as
   --%test(An orchestrator agent honours the addendum)
   procedure orchestrator_honours_addendum;
 
+  --%test(An agent without a pinned profile version runs the latest active of two versions)
+  procedure unpinned_agent_uses_latest_profile;
+
   --%test(A workflow agent with an addendum raises ORA-20503 before it creates a run)
   procedure workflow_rejects_addendum;
 
