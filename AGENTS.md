@@ -55,6 +55,7 @@ scripts/
 | `uc_ai_memory` | Agent memory: virtual filesystem behind the `MEMORY` tool, store scoping, MEMORY PROTOCOL prompt block |
 | `uc_ai_ocr` | OCR dispatcher and adapters behind `uc_ai.ocr` / `uc_ai.ocr_text` (Mistral, OCI Document Understanding, Ollama) |
 | `uc_ai_decisions` | Typed decisions dispatcher and adapters behind `uc_ai.decide` and the `decision` agent type (OpenAI Decisions, TypeSafe jev); experimental |
+| `uc_ai_chat`, `uc_ai_chat_widgets`, `uc_ai_chat_hook` | Backend of the UC AI Chat APEX plug-in. Source of truth is this repo (packages and the chat tables in `src/tables/install.sql`). Only the export file `region_type_plugin_com_united_codes_uc_ai_chat.sql` is copied from `apex-chat` with `scripts/sync_chat_plugin_export.sh` |
 | `uc_ai_message_api` | Message construction and conversation history |
 | `uc_ai_structured_output` | JSON schema-based output validation |
 | `uc_ai_logger` | Logging wrapper around OraOpenSource Logger |
