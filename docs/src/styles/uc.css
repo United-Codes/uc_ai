@@ -138,3 +138,12 @@ starlight-tabs .tab [role='tab'][aria-selected='true'] {
 .sl-markdown-content details > summary:hover::before {
 	background-color: var(--sl-color-white);
 }
+
+/* Sidebar: more room around the collapsible group headings. */
+.sidebar-content details > summary {
+	padding-block: 0.5rem;
+}
+
+.sidebar-content details {
+	margin-block: 0.15rem;
+}
